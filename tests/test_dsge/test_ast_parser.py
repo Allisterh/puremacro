@@ -542,7 +542,7 @@ def test_sw07_canonical_benchmark_parse_and_residuals():
     assert dag.is_linear is True
     assert len(dag.equation_tags) == 38
 
-    # Check that model-local '#' variables were evaluated and inlined
+    # Check that model-local '#' variables were inlined symbolically
     assert len(dag.local_variables) >= 15
     for eq in dag.equations:
         # No equation should reference unresolved _LocalRef

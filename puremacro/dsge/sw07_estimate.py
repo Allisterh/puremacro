@@ -33,11 +33,23 @@ _FIXED_PARAMS = {
 
 
 def _load_bundled_data() -> pd.DataFrame:
+    """The bundled SW07 observables, 1966Q1-2004Q4 (156 quarters).
+
+    Built by ``tools/build_sw07_data.py`` from FRED following the SW07 data
+    appendix (ECB WP 722, printed p. 47): per-capita real GDP, consumption
+    and investment growth and real-wage growth in percent (100 x log
+    differences), ``log_hours`` = 100 x log of per-capita hours (NFB average
+    hours x civilian employment / population 16+, demeaned), ``infl`` = 100 x
+    log difference of the GDP deflator, ``ffr`` = federal funds rate / 4. The
+    index is the first day of each quarter.
+    """
     pkg = importlib.resources.files("puremacro.dsge")
-    return pd.read_csv(
-        pkg / "_sw07_data.csv",
-        comment="#", parse_dates=["date"], index_col="date",
-    )
+    with (pkg / "_sw07_data.csv").open("r", encoding="utf-8") as fh:
+        df = pd.read_csv(fh, comment="#", index_col="date")
+    # "1966Q1" labels -> first day of the quarter (no dateutil fallback warning).
+    idx = pd.PeriodIndex(df.index, freq="Q").to_timestamp()
+    df.index = pd.DatetimeIndex(idx.to_numpy(), name="date")
+    return df
 
 
 def _validate_data(df: pd.DataFrame) -> None:
@@ -65,7 +77,10 @@ def estimate_sw07(
     Parameters
     ----------
     data : DataFrame with columns OBSERVED_VARS; if None, loads the
-        bundled 1966Q1-2004Q4 US dataset (156 quarterly obs × 7 cols).
+        bundled 1966Q1-2004Q4 US dataset (156 quarterly obs x 7 cols, SW07
+        data-appendix definitions; see ``_load_bundled_data``). User data
+        must use the same units: growth rates and hours in 100 x log,
+        inflation and the interest rate in quarterly percent.
     n_draws, n_chains, burn_in, seed : MCMC controls.
     """
     df = _load_bundled_data() if data is None else data.copy()

@@ -419,7 +419,8 @@ class TestTier1_F01_HawkinsSimon:
     def test_t1_f01_01_spectral_radius_baseline(self, synthetic_3c_3s_calib):
         """Baseline tariff schedule tau=1.0 must have spectral radius rho < 1.0."""
         if HAS_R1_SOLVERS and hasattr(check_hawkins_simon_viability, "__call__"):
-            rho, lower, upper = check_hawkins_simon_viability(synthetic_3c_3s_calib)
+            res = check_hawkins_simon_viability(synthetic_3c_3s_calib)
+            rho, lower, upper = res.rho, res.cw_lower, res.cw_upper
             assert 0.0 <= rho < 1.0
             assert lower <= rho <= upper
         else:
@@ -1400,7 +1401,12 @@ class TestTier2_F02_KellerPACBoundaries:
     """Tier 2: Boundary & Corner Cases for Keller PAC."""
 
     def test_t2_f02_01_fold_bifurcation_sigma_fold(self):
-        """Traverses saddle-node fold bifurcation sigma_fold ~ 0.1238 where det(J) -> 0."""
+        """Bordered tangent at a toy 2x2 simple fold (det J = 0, F_s outside range J).
+
+        The tangent is the null vector of J with t_s = 0. Purely algebraic: it
+        makes no claim about the CGE model (on notebook 64's calibration at
+        sigma = 0.1238, PAC records no fold and plain Newton converges).
+        """
         J_sing = np.array([[0.0, 0.0], [0.0, 1.0]])  # det = 0
         F_s = np.array([1.0, 0.0])  # linearly independent of range(J)
         t_x, t_s = oracle_bordered_jacobian_tangent(J_sing, F_s)

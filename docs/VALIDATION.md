@@ -46,18 +46,18 @@ Tolerance tiers: `EXACT` (rtol 1e-10) · `TIGHT` (1e-6) · `NUMERIC` (1e-2) ·
 
 ## Coverage
 
-**107 cases across 15 subsystems — all passing.** By mechanism: internal 59,
-analytical 29, package 13, scipy 5, published 1.
+**110 cases across 15 subsystems — all passing.** By mechanism: internal 59,
+analytical 31, package 13, scipy 5, published 2.
 
 | Subsystem | Cases | Reference(s) |
 |---|---|---|
-| `var` | 15 | Cholesky IRF vs statsmodels `orth_irfs`; FEVD-sums-to-1 and stability ⇔ companion spectral radius < 1 (identities); narrative sign restrictions; Minnesota BVAR analytical posterior; GVAR identities — zero trade weights decouple the country blocks, the solved global system reproduces them, the persistence profile is 1 at impact, normalised GFEVD rows sum to 1, and a one-country GVAR's GIRFs equal the `var` generalised IRFs |
+| `var` | 15 | Cholesky IRF vs statsmodels `orth_irfs`; FEVD-sums-to-1 and stability ⇔ companion spectral radius < 1 (identities); narrative sign restrictions; Minnesota BVAR posterior means vs hand-built Theil (λ₂ = 0.5) and Bańbura–Giannone–Reichlin eq. (5) Normal-inverse-Wishart closed forms; GVAR identities — zero trade weights decouple the country blocks, the solved global system reproduces them, the persistence profile is 1 at impact, normalised GFEVD rows sum to 1, and a one-country GVAR's GIRFs equal the `var` generalised IRFs |
 | `lp` | 6 | Jordà LP coefficients/HAC SE vs statsmodels OLS-HAC; LP-IV vs linearmodels `IV2SLS`; two-way FE vs `PanelOLS`; IV-reduces-to-OLS identity |
 | `garch` | 7 | GARCH(1,1) params/vols vs `arch`; simulate-then-recover; GARCH-MIDAS variance decomposition identity |
-| `inference` | 8 | Newey–West / OLS-HAC SE vs statsmodels HAC; Stock–Yogo critical-value table (published); sup-t plug-in critical value vs its i.i.d. closed form; sup-t monotonicity over pointwise critical values |
+| `inference` | 9 | Newey–West / OLS-HAC SE vs statsmodels HAC; Stock–Yogo critical-value table (published); Kiefer–Vogelsang (2005) Table I Bartlett fixed-b critical values (published); sup-t plug-in critical value vs its i.i.d. closed form; sup-t monotonicity over pointwise critical values |
 | `state_space` | 6 | Kalman filter/smoother states + log-likelihood vs statsmodels state space; smoother-variance identities |
-| `dynpanel` | 7 | Arellano–Bond / Blundell–Bond GMM recover known ρ; exact-identification J = 0; Windmeijer finite-sample variance inflation |
-| `did` | 9 | Callaway–Sant'Anna recovers 2x2 DiD analytically; Sun–Abraham equals Callaway–Sant'Anna on 2x2; Borusyak–Jaravel–Spiess imputation recovers 2x2; Synthetic DiD recovers treatment effect; spatial DiD with every unit beyond the outermost ring reduces exactly to two-way FE, and the ring adjustment beats the contaminated naive estimate on a planted-spillover DGP |
+| `dynpanel` | 7 | Arellano–Bond / Blundell–Bond GMM recover known ρ; exact-identification J = 0; Windmeijer WC-robust SEs equal an independent finite-difference evaluation (uncollapsed `lags(2)` layout) |
+| `did` | 11 | Callaway–Sant'Anna recovers 2x2 DiD analytically; Sun–Abraham equals Callaway–Sant'Anna on 2x2; on a staggered design with unequal cohort sizes the Callaway–Sant'Anna event study and overall ATTs equal CS (2021) eqs. 3.4/3.7/3.10–3.12 and the Sun–Abraham IW event study equals SA eq. 27; Borusyak–Jaravel–Spiess imputation recovers 2x2; Synthetic DiD recovers treatment effect; spatial DiD with every unit beyond the outermost ring reduces exactly to two-way FE, and the ring adjustment beats the contaminated naive estimate on a planted-spillover DGP |
 | `unit_root` | 3 | ERS GLS detrending recovers deterministic trend & constant mean analytically; Ng–Perron MZt = MZa · MSB cross-statistic identity |
 | `spectral` | 6 | Welch PSD / cross-spectrum / coherence vs `scipy.signal`; band-power partition-of-unity; coherence ∈ [0,1] |
 | `forecast` | 6 | Gaussian CRPS closed form (Gneiting–Raftery); fair-ensemble convergence; PIT calibration; Diebold–Mariano sign/tie; MCS retention |
@@ -71,7 +71,9 @@ Each case carries its full citation in the code (`ValidationCase.citation`), sho
 in the `citation` column of `scorecard()`. Key references include Lütkepohl (2005),
 Newey & West (1987), Stock & Yogo (2005), Gneiting & Raftery (2007), Diebold &
 Mariano (1995), Brock & Mirman (1972), Rouwenhorst (1995), Tauchen (1986), Engle
-(2002), Arellano & Bond (1991), and Blundell & Bond (1998).
+(2002), Arellano & Bond (1991), Blundell & Bond (1998), Windmeijer (2005),
+Kiefer & Vogelsang (2005), Callaway & Sant'Anna (2021), Sun & Abraham (2021) and
+Bańbura, Giannone & Reichlin (2010).
 
 ## Native X-11/ARIMA vs the real X-13ARIMA-SEATS binary
 
@@ -108,9 +110,12 @@ reason** rather than rubber-stamped with a circular check. Documented examples:
 `inference.kleibergen_paap_f` (the rk Wald F has no independent closed form for
 two or more endogenous regressors; the `k = 1` case, where it equals the
 HC0-robust first-stage F, is pinned in `tests/test_inference/test_weak_iv_values.py`
-rather than in the gallery), the heavy `dsge` estimation routines, an external
-Arellano–Bond coefficient cross-check (no offline dataset / Python GMM package),
-and the narrative LLM and live-fetch paths. The gallery validates what can be
+rather than in the gallery), the heavy `dsge` estimation routines, the external
+Arellano–Bond check against Stata `xtabond` Examples 1, 2 and 4 (it lives in
+`tests/test_dynpanel/` and runs only when a copy of `abdata` is available,
+through `PUREMACRO_ABDATA` or as `tests/fixtures/abdata.dta` or `.csv`; the file
+is third-party data and not bundled), and the narrative LLM
+and live-fetch paths. The gallery validates what can be
 validated independently, and says so when it cannot.
 
 ## Re-verifying

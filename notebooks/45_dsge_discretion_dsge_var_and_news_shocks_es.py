@@ -236,7 +236,7 @@ print(f"Sesgo de Estabilización          : {policy_res.stabilization_bias:.6f}"
 # Aserciones analíticas
 assert policy_res.converged, "La iteración de Riccati debe converger"
 assert policy_res.inflation_bias > 0.0, "Un y* positivo debe generar sesgo de inflación positivo"
-assert policy_res.stabilization_bias > 0.0, "La falta de compromiso debe generar sesgo de estabilización positivo"
+assert policy_res.stabilization_bias > 0.0, "Con beta = 0.99 la discreción también pierde en promedio (pérdida incondicional)"
 
 # %% [markdown]
 # Graficamos las funciones de impulso-respuesta ante un choque de costos ($u_t$) comparando Discreción frente a Compromiso:

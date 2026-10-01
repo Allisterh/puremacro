@@ -72,7 +72,11 @@ class TestMRIOAdapters:
         res = load_figaro(year=2019, custom_c=4, custom_s=3, seed=42, fallback_to_synthetic=True)
         assert res.nc == 4
         assert res.ns == 3
-        assert res.theta.shape == (1, 5, 4)
+        # Native FIGARO final uses are condensed to (C, I, Cx) so that the
+        # foreign-balance closure lands on I = P51G (4.3.0 kept 5 categories
+        # and put it on P3_S15 = NPISH).
+        assert res.theta.shape == (1, 3, 4)
+        assert res.metadata["final_use_mapping"] == {"C": ["P3_S14", "P3_S15", "P3_S13"], "I": ["P51G"], "Cx": ["P5M"]}
         assert np.all(res.a >= 0.0)
         assert np.all(res.beta > 0.0)
         inv = verify_accounting_invariants(res)
@@ -85,7 +89,9 @@ class TestMRIOAdapters:
         res = load_exiobase(year=2019, model="ixi", custom_c=4, custom_s=3, seed=42, fallback_to_synthetic=True)
         assert res.nc == 4
         assert res.ns == 3
-        assert res.theta.shape == (1, 7, 4)  # 7 FD categories in EXIOBASE
+        # 7 native EXIOBASE categories condensed to (C, I, Cx); closure on I = GFCF.
+        assert res.theta.shape == (1, 3, 4)
+        assert res.metadata["source_fd_categories"] == list(EXIOBASE_FD_CATEGORIES)
         inv = verify_accounting_invariants(res)
         assert inv["valid"]
 
@@ -94,7 +100,7 @@ class TestMRIOAdapters:
         res = load_exiobase(year=2019, model="pxp", custom_c=4, custom_s=3, seed=42, fallback_to_synthetic=True)
         assert res.nc == 4
         assert res.ns == 3
-        assert res.theta.shape == (1, 7, 4)
+        assert res.theta.shape == (1, 3, 4)
         inv = verify_accounting_invariants(res)
         assert inv["valid"]
 
@@ -103,7 +109,8 @@ class TestMRIOAdapters:
         res = load_wiod(year=2014, custom_c=4, custom_s=3, seed=42, fallback_to_synthetic=True)
         assert res.nc == 4
         assert res.ns == 3
-        assert res.theta.shape == (1, 5, 4)
+        assert res.theta.shape == (1, 3, 4)
+        assert res.metadata["final_use_mapping"]["I"] == ["GFCF"]
         inv = verify_accounting_invariants(res)
         assert inv["valid"]
 
@@ -112,7 +119,8 @@ class TestMRIOAdapters:
         res = load_eora(year=2015, custom_c=4, custom_s=3, seed=42, fallback_to_synthetic=True)
         assert res.nc == 4
         assert res.ns == 3
-        assert res.theta.shape == (1, 6, 4)
+        assert res.theta.shape == (1, 3, 4)
+        assert res.metadata["final_use_mapping"]["I"] == ["GFCF"]
         inv = verify_accounting_invariants(res)
         assert inv["valid"]
 
@@ -121,7 +129,9 @@ class TestMRIOAdapters:
         res = load_oecd_icio_granular(year=2019, custom_c=4, custom_s=3, seed=42, fallback_to_synthetic=True)
         assert res.nc == 4
         assert res.ns == 3
-        assert res.theta.shape == (1, 6, 4)
+        # The synthetic branch shares the native path's C/I/Cx mapping (4.3.0: 6 categories).
+        assert res.theta.shape == (1, 3, 4)
+        assert res.metadata["fd_categories"] == ("C", "I", "Cx")
         inv = verify_accounting_invariants(res)
         assert inv["valid"]
 

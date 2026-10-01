@@ -129,7 +129,13 @@ class TestSummaryMarkupsEmpirical:
         cfg = FlexibleTradeModelConfig(
             market_structure=FlexibleMarketStructureConfig(variable_markups=True, sigma_j=6.0, theta_j=2.0)
         )
-        res = solve_flexible_trade_equilibrium(empirical_calib, config=cfg, tol=2.5e-3, max_iter=5)
+        # Active flexible settings above 100 cells need the quasi-condensed route; before the
+        # fix this call silently solved the legacy Cobb-Douglas/Leontief equilibrium.
+        res = solve_flexible_trade_equilibrium(
+            empirical_calib, config=cfg, method="quasi_condensed", tol=2.5e-3, max_iter=5
+        )
+        assert res.converged
+        assert res.metadata["flexible_settings_applied"] is True
         df_sec = res.summary_markups(by_sector=True)
         assert len(df_sec) == 11
         assert np.all(df_sec["mean"] >= 1.0)

@@ -46,13 +46,17 @@ from puremacro.dsge._results import DSGEPosteriorResult
 from puremacro.dsge.priors import (
     log_prior, prior_stds, param_bounds, param_names, _validate_priors,
 )
-from puremacro.dsge.build import LinearModel, ModelError
+from puremacro.dsge.build import LinearModel, ModelError, SteadyStateError
+from puremacro.dsge.klein import BlanchardKahnError, KleinResidualError
 from puremacro.dsge.occbin import (
     OccBinConstraint,
     PiecewiseKalmanResult,
     piecewise_kalman_filter,
     DifferentiableOccBinResult,
     solve_differentiable_occbin,
+    # Every constrained regime at the reference's steady state; shared with
+    # solve_differentiable_occbin's finite-difference gradient.
+    _constrained_regime_at,
 )
 from puremacro.mcmc import random_walk_metropolis
 from puremacro.numerics import numerical_hessian
@@ -80,6 +84,22 @@ _OPT_PENALTY = 1e10
 
 # Below this spectral radius the Lyapunov solve for P0 is trusted.
 _STATIONARITY_TOL = 1e-8
+
+# Exceptions that mean "this parameter draw has no likelihood" in the
+# particle-SMC route: no unique stable solution (BlanchardKahnError,
+# KleinResidualError, the QZ residual check's ModelError), a steady state
+# that cannot be found (SteadyStateError, including StructuralSingularityError),
+# a singular or non-finite linear-algebra step (LinAlgError, ArithmeticError:
+# FloatingPointError, OverflowError, ZeroDivisionError). Such a draw scores
+# -inf; any other exception is a defect, not a draw (see estimate_dsge).
+_PF_DRAW_FAILURES: tuple[type[BaseException], ...] = (
+    np.linalg.LinAlgError,
+    ArithmeticError,
+    BlanchardKahnError,
+    KleinResidualError,
+    SteadyStateError,
+    ModelError,
+)
 
 
 def _stationary_init(model: StateSpaceModel) -> tuple[np.ndarray, np.ndarray] | tuple[None, None]:
@@ -247,7 +267,7 @@ def _make_piecewise_neg_log_posterior(
     failure: _LikelihoodFailure | None = None,
 ):
     from typing import Mapping
-    from puremacro.dsge.dynare import build_dynare
+    from puremacro.dsge.dynare import _resolve_dynare_model, _shock_scale_overrides
 
     base_params = dict(getattr(m_unconstrained, "_params", None) or getattr(m_unconstrained, "params", None) or {})
     if fixed_params:
@@ -267,40 +287,42 @@ def _make_piecewise_neg_log_posterior(
         curr_params.update(par_dict)
 
         try:
+            # SE_<shock> / CORR_<s1>_<s2> draws are not parameters of the
+            # equations: they set the shock covariance, the declared
+            # correlations kept (Dynare's rule). Handed to the re-solve as
+            # parameters they changed nothing, and Q stayed the declared
+            # covariance at every draw.
+            structural, cov = _shock_scale_overrides(m_unconstrained, curr_params)
+            draw = {k: v for k, v in par_dict.items() if k in structural}
             if getattr(m_unconstrained, "_dynare_equations", None) is not None:
-                ref_m = build_dynare(
-                    m_unconstrained._dynare_equations,
-                    variables=m_unconstrained.variables,
-                    shocks=m_unconstrained.shocks,
-                    params=curr_params,
-                    steady_state=m_unconstrained.steady_state,
-                    check_steady_state=False,
-                    strict=False,
-                )
+                # The shared re-solve: the reference steady state follows the
+                # parameters, the draw's (else the declared) shock covariance
+                # is carried and a lag calibrated to 0 stays a state.
+                ref_m = _resolve_dynare_model(m_unconstrained, structural, strict=False,
+                                              shock_cov=cov)
             else:
                 ref_m = m_unconstrained
 
+            # Every constrained regime is linearised at the reference's steady
+            # state at this draw (OccBin's single linearisation point), never
+            # at the calibration's.
             if isinstance(m_constrained_dict, Mapping):
-                cons_dict = {}
-                for k, m_k in m_constrained_dict.items():
-                    if getattr(m_k, "_dynare_equations", None) is not None:
-                        k_base = dict(getattr(m_k, "_params", None) or getattr(m_k, "params", None) or base_params)
-                        k_params = dict(k_base)
-                        k_params.update(par_dict)
-                        cons_dict[k] = build_dynare(
-                            m_k._dynare_equations,
-                            variables=m_k.variables,
-                            shocks=m_k.shocks,
-                            params=k_params,
-                            steady_state=m_k.steady_state,
-                            check_steady_state=False,
-                            strict=False,
-                        )
-                    else:
-                        cons_dict[k] = m_k
+                cons_dict = {
+                    k: _constrained_regime_at(m_k, ref_m, draw, base_params)
+                    for k, m_k in m_constrained_dict.items()
+                }
+            elif isinstance(m_constrained_dict, (list, tuple)):
+                cons_dict = [
+                    _constrained_regime_at(m_k, ref_m, draw, base_params)
+                    for m_k in m_constrained_dict
+                ]
             else:
-                cons_dict = m_constrained_dict
+                cons_dict = _constrained_regime_at(m_constrained_dict, ref_m, draw, base_params)
 
+            # The draw's shock covariance, else the declared one (a .mod
+            # ``shocks;`` block), never piecewise_kalman_filter's identity
+            # default.
+            q_cov = cov if cov is not None else getattr(ref_m, "_shock_cov", None)
             pkf_res = piecewise_kalman_filter(
                 ref_m,
                 cons_dict,
@@ -308,6 +330,7 @@ def _make_piecewise_neg_log_posterior(
                 varobs=observed_vars,
                 constraints=constraints,
                 horizon=horizon,
+                Q=None if q_cov is None else np.asarray(q_cov, dtype=float),
             )
             ll = pkf_res.log_likelihood
         except Exception as exc:
@@ -351,8 +374,13 @@ def _auto_build_pegged_model(ref_model: Any, constraint: OccBinConstraint) -> An
         res[eq_row] = val - thresh
         return res
 
-    ss = dict(ref_model.steady_state)
-    ss[var_name] = thresh
+    # Linearised at the reference's steady state, OccBin's single
+    # linearisation point: the peg enters through the constant
+    # ``var_ss - thresh`` evaluated there. Moving ``var_name`` to ``thresh``
+    # in the linearisation point (as up to 4.3.0) changed the Jacobian of
+    # every other row in which it enters nonlinearly, and those rows were
+    # then spliced into the binding regime as if the peg had rewritten them.
+    ss = {str(k): float(v) for k, v in ref_model.steady_state.items()}
     return build_dynare(
         constrained_eqs,
         variables=ref_model.variables,
@@ -360,6 +388,7 @@ def _auto_build_pegged_model(ref_model: Any, constraint: OccBinConstraint) -> An
         params=ref_model._params or {},
         steady_state=ss,
         check_steady_state=False,
+        method=getattr(ref_model, "method", "complex"),
         strict=False,
     )
 
@@ -381,11 +410,41 @@ def _make_differentiable_occbin_neg_log_posterior(
     shock_sequence: np.ndarray | None = None,
     **kwargs: Any,
 ):
-    from puremacro.dsge.dynare import build_dynare
+    from typing import Mapping
+    from puremacro.dsge.dynare import _resolve_dynare_model, _shock_scale_overrides
 
     base_params = dict(getattr(m_unconstrained, "_params", None) or getattr(m_unconstrained, "params", None) or {})
     if fixed_params:
         base_params.update({k: float(v) for k, v in fixed_params.items()})
+
+    # This likelihood conditions on the shock sequence (Gaussian measurement
+    # error ``sigma_meas`` around the path it produces), so neither the shock
+    # covariance nor an observable's measurement-error scale enters it: an
+    # estimated SE_/CORR_ (or stderr of an observable) has its prior as its
+    # posterior. Said once, by name, rather than left to look estimated.
+    probe = {str(nm): 1.0 for nm in names}
+    probe_structural, _ = _shock_scale_overrides(m_unconstrained, probe)
+    unused = [str(nm) for nm in names if str(nm) not in probe_structural]
+    if unused:
+        warnings.warn(
+            f"estimate_dsge: {unused} scale the shocks or an observable's "
+            "measurement error, but the differentiable OccBin likelihood "
+            "(NUTS with constraint=) conditions on the shock sequence and "
+            "uses sigma_meas for the measurement error, so it does not "
+            "depend on them and their posterior is their prior. Fix them "
+            "(fixed_params), or use method='piecewise_kalman', whose "
+            "likelihood takes the shock covariance from each draw.",
+            UserWarning,
+            stacklevel=3,
+        )
+
+    # estimate_dsge hands over ``m_constrained_dict or occbin_regimes``; the
+    # smooth relaxation takes one constrained regime, so a one-entry mapping
+    # or sequence is unwrapped rather than passed on as a container.
+    if isinstance(constrained_model, Mapping) and len(constrained_model) == 1:
+        constrained_model = next(iter(constrained_model.values()))
+    elif isinstance(constrained_model, (list, tuple)) and len(constrained_model) == 1:
+        constrained_model = constrained_model[0]
 
     obs_list = list(observed_vars)
     y_target = data[obs_list].to_numpy(dtype=float)
@@ -416,34 +475,25 @@ def _make_differentiable_occbin_neg_log_posterior(
         curr_params.update(par_dict)
 
         try:
+            # SE_/CORR_ draws set the shock covariance the re-solved reference
+            # carries (as in the piecewise likelihood); they are kept out of
+            # the parameters the equations see.
+            structural, cov = _shock_scale_overrides(m_unconstrained, curr_params)
+            draw = {k: v for k, v in par_dict.items() if k in structural}
             if getattr(m_unconstrained, "_dynare_equations", None) is not None:
-                ref_m = build_dynare(
-                    m_unconstrained._dynare_equations,
-                    variables=m_unconstrained.variables,
-                    shocks=m_unconstrained.shocks,
-                    params=curr_params,
-                    steady_state=m_unconstrained.steady_state,
-                    check_steady_state=False,
-                    strict=False,
-                )
+                # The shared re-solve: the reference steady state follows the
+                # parameters, the draw's (else the declared) shock covariance
+                # is carried and a lag calibrated to 0 stays a state.
+                ref_m = _resolve_dynare_model(m_unconstrained, structural, strict=False,
+                                              shock_cov=cov)
             else:
                 ref_m = m_unconstrained
 
-            if constrained_model is not None and getattr(constrained_model, "_dynare_equations", None) is not None:
-                k_base = dict(getattr(constrained_model, "_params", None) or getattr(constrained_model, "params", None) or base_params)
-                k_params = dict(k_base)
-                k_params.update(par_dict)
-                cons_m = build_dynare(
-                    constrained_model._dynare_equations,
-                    variables=constrained_model.variables,
-                    shocks=constrained_model.shocks,
-                    params=k_params,
-                    steady_state=constrained_model.steady_state,
-                    check_steady_state=False,
-                    strict=False,
-                )
-            elif constrained_model is not None:
-                cons_m = constrained_model
+            if constrained_model is not None:
+                # Linearised at the reference's steady state at this draw,
+                # OccBin's single linearisation point (the calibration's
+                # steady state used to be kept here).
+                cons_m = _constrained_regime_at(constrained_model, ref_m, draw, base_params)
             else:
                 cons_m = _auto_build_pegged_model(ref_m, constraint)
 
@@ -806,41 +856,109 @@ def estimate_dsge(
         pf_method = kwargs.pop("pf_method", "bootstrap")
         pf_resampling = kwargs.pop("resampling_method", "systematic")
         stoch_vol = kwargs.pop("stochastic_volatility", None)
+        # Measurement-error standard deviations by observable, as in
+        # ``particle_filter``; None keeps its default (15% of each series'
+        # standard deviation).
+        pf_measurement_error = kwargs.pop("measurement_error", None)
         n_particles_smc = int(kwargs.pop("n_particles_smc", min(n_draws, 200)))
         n_stages = int(kwargs.pop("n_stages", 15))
 
-        def pf_log_lik(theta_vec_or_dict):
+        # ``smc_estimate`` turns every exception its likelihood raises into
+        # -inf, and this closure used to catch every exception itself and
+        # return -1e10: a model the filter could not read (every covariance of
+        # two or more shocks, before the particle_filter fix) scored the same
+        # at every particle, and the "posterior" was the prior. Only draw-level
+        # failures -- no unique stable solution, a steady state that cannot be
+        # found, a singular or overflowing linear-algebra step -- now score
+        # -inf silently. Anything else is evaluated once at initial_params
+        # outside smc_estimate (so it raises), and counted and reported in a
+        # warning when it happens at later draws.
+        pf_stats = {"calls": 0, "finite": 0, "other": 0,
+                    "first_other": None, "last_failure": None}
+
+        def pf_log_lik(theta_vec_or_dict, _raise_other: bool = False):
+            pf_stats["calls"] += 1
             try:
-                if isinstance(theta_vec_or_dict, (list, np.ndarray)):
-                    theta_d = _vec_to_dict(theta_vec_or_dict, names, fixed)
+                val = _pf_log_lik_at(theta_vec_or_dict)
+            except _PF_DRAW_FAILURES as exc:
+                pf_stats["last_failure"] = exc
+                return -np.inf
+            except Exception as exc:
+                if _raise_other:
+                    raise
+                pf_stats["other"] += 1
+                if pf_stats["first_other"] is None:
+                    pf_stats["first_other"] = exc
+                pf_stats["last_failure"] = exc
+                return -np.inf
+            if not np.isfinite(val):
+                return -np.inf
+            pf_stats["finite"] += 1
+            return val
+
+        def _pf_log_lik_at(theta_vec_or_dict):
+            if isinstance(theta_vec_or_dict, (list, np.ndarray)):
+                theta_d = _vec_to_dict(theta_vec_or_dict, names, fixed)
+            else:
+                theta_d = dict(theta_vec_or_dict)
+                theta_d.update(fixed)
+
+            if isinstance(target_model, LinearModel) and (
+                getattr(target_model, "_dynare_equations", None) is not None
+                or getattr(target_model, "_equations", None) is not None
+            ):
+                # The shared re-solves: the particle's parameters reach
+                # the equations, the steady state follows them, SE_/CORR_
+                # draws go into the shock covariance and the declared one
+                # is kept otherwise. LinearModel has no set_params, so
+                # every particle used to be filtered through the
+                # calibrated model: a flat likelihood.
+                from puremacro.dsge.dynare import _shock_scale_overrides
+
+                structural, cov = _shock_scale_overrides(target_model, theta_d)
+                if getattr(target_model, "_dynare_equations", None) is not None:
+                    from puremacro.dsge.dynare import _resolve_dynare_model
+
+                    solved_m = _resolve_dynare_model(
+                        target_model, structural, strict=False, shock_cov=cov,
+                    )
                 else:
-                    theta_d = dict(theta_vec_or_dict)
-                    theta_d.update(fixed)
+                    from puremacro.dsge.build import _resolve_build_model
 
-                if hasattr(target_model, "set_params"):
-                    solved_m = target_model.set_params(theta_d)
-                elif hasattr(target_model, "params") and hasattr(target_model, "first_order") and hasattr(target_model.first_order, "set_params"):
-                    solved_m = target_model.first_order.set_params(theta_d)
-                elif observation_eq is not None:
-                    solved_m = observation_eq(theta_d)
-                else:
-                    solved_m = target_model
+                    solved_m = _resolve_build_model(
+                        target_model, structural, strict=False, shock_cov=cov,
+                    )
+                if not solved_m.is_determinate:
+                    # No unique stable solution at this draw.
+                    return -np.inf
+            elif hasattr(target_model, "set_params"):
+                solved_m = target_model.set_params(theta_d)
+            elif hasattr(target_model, "params") and hasattr(target_model, "first_order") and hasattr(target_model.first_order, "set_params"):
+                solved_m = target_model.first_order.set_params(theta_d)
+            elif observation_eq is not None:
+                solved_m = observation_eq(theta_d)
+            else:
+                solved_m = target_model
 
-                res = particle_filter(
-                    solved_m,
-                    data,
-                    observed_vars,
-                    n_particles=n_particles_pf,
-                    method=pf_method,
-                    resampling_method=pf_resampling,
-                    stochastic_volatility=stoch_vol,
-                )
-                val = float(res.log_likelihood)
-                return val if np.isfinite(val) else -1e10
-            except Exception:
-                return -1e10
+            res = particle_filter(
+                solved_m,
+                data,
+                observed_vars,
+                n_particles=n_particles_pf,
+                method=pf_method,
+                resampling_method=pf_resampling,
+                stochastic_volatility=stoch_vol,
+                measurement_error=pf_measurement_error,
+            )
+            return float(res.log_likelihood)
 
-        return smc_estimate(
+        # Outside smc_estimate: an error that is not a draw-level failure
+        # (a model the filter cannot read, an observable the model does not
+        # have, a covariance of the wrong shape) raises here instead of
+        # flattening the likelihood.
+        pf_log_lik(init_vec, _raise_other=True)
+
+        smc_res = smc_estimate(
             pf_log_lik,
             priors,
             n_particles=n_particles_smc,
@@ -850,6 +968,26 @@ def estimate_dsge(
             data_n_obs=len(data),
             **kwargs,
         )
+        if pf_stats["finite"] == 0:
+            raise RuntimeError(
+                f"estimate_dsge(method='particle_smc'): none of the "
+                f"{pf_stats['calls']} particle-filter likelihood evaluations "
+                "was finite, so the SMC 'posterior' is the prior. The last "
+                "failure is chained below."
+            ) from pf_stats["last_failure"]
+        if pf_stats["other"]:
+            exc = pf_stats["first_other"]
+            warnings.warn(
+                f"estimate_dsge(method='particle_smc'): {pf_stats['other']} of "
+                f"{pf_stats['calls']} particle-filter likelihood evaluations "
+                f"raised an error that is not a draw-level failure (no stable "
+                f"solution, no steady state, a singular or overflowing linear "
+                f"algebra step) and were scored -inf. The first was "
+                f"{type(exc).__name__}: {exc}",
+                UserWarning,
+                stacklevel=2,
+            )
+        return smc_res
 
     else:
         if observation_eq is None:
@@ -1148,6 +1286,21 @@ def _linear_model_estimate_with_method(
     **kwargs,
 ):
     """Bayesian estimation supporting method='kalman', 'piecewise_kalman', 'particle_smc', and 'nuts' with constraints."""
+    # Checked here, before the method branch, so that every route rejects it
+    # (the Kalman route used to be the only one): a fixed value for a name
+    # the model does not have changes nothing the solver sees, and silently
+    # ignoring it would estimate a different model from the one asked for.
+    unknown_fixed = sorted(
+        str(k) for k in (fixed_params or {}) if k not in (getattr(self, "_params", None) or {})
+    )
+    if unknown_fixed:
+        raise ValueError(
+            f"estimate(): fixed_params names {unknown_fixed}, which are not "
+            f"parameters of this model, so holding them fixed could not change "
+            f"the model that is estimated. Model parameters: "
+            f"{sorted(getattr(self, '_params', None) or {})}."
+        )
+
     active_constraint = constraint or (constraints if isinstance(constraints, OccBinConstraint) else None)
 
     if method in ("piecewise_kalman", "particle_smc") or (method == "nuts" and active_constraint is not None):
@@ -1193,6 +1346,11 @@ def _linear_model_estimate_with_method(
             list(observed_vars) if observed_vars is not None else
             (list(self._varobs) if getattr(self, "_varobs", None) else list(data.columns))
         )
+
+        if method == "particle_smc" and measurement_error is not None:
+            # The particle filter's measurement-error standard deviations
+            # (it was dropped on this route).
+            kwargs["measurement_error"] = measurement_error
 
         return estimate_dsge(
             data,

@@ -136,8 +136,10 @@ TUTORIAL_SPECS: list[dict[str, Any]] = [
         "ipynb_en": NB_DIR / "65_gvc_cascades_and_welfare_decomposition.ipynb",
         "ipynb_es": NB_DIR / "65_gvc_cascades_and_welfare_decomposition_es.ipynb",
         "required_symbols": [
-            "generate_synthetic_mrio",
-            "package_mrio_to_calibration_result",
+            "load_oecd_icio_granular",
+            "load_figaro",
+            "load_exiobase",
+            "fallback_to_synthetic=True",
         ],
         "thematic_terms": ["icio", "figaro", "exiobase", "equivalent variation"],
     },
