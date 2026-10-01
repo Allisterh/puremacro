@@ -223,7 +223,6 @@ ax_w.text(T_treat - 0.4, 0.2, f"dashed line:\nuniform 1/{T_treat} (DiD)", ha="ri
 ax_w.set_title(r"(b) Time weights $\hat{\lambda}_t$", loc="left", fontsize=9.5, fontweight="bold")
 ax_w.set_xlabel("Pre-treatment period t")
 ax_w.set_ylabel(r"Weight $\hat{\lambda}_t$")
-plt.show()
 
 # %% [markdown]
 # ## What the time weights do

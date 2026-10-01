@@ -141,7 +141,6 @@ ax.fill_between(np.arange(len(Y)), Y[:, 0].min(), Y[:, 0].max(),
 ax.set_xlabel("Quarter")
 ax.set_ylabel("Financial conditions index $z_t$")
 ax.set_title("Simulated FCI — shaded spans are stress quarters ($z_t > 0$)")
-plt.show()
 
 # %% [markdown]
 # ## Fit the threshold VAR
@@ -254,7 +253,6 @@ axes[1].set_title("Regime-dependent transmission test")
 axes[1].legend(fontsize=8)
 for a in axes:
     a.set_xticks(h[::4])
-plt.show()
 
 # %% [markdown]
 # **Read the output.** Left panel: the same +1 sd financial shock costs
@@ -309,7 +307,6 @@ ax.set_xlabel("Horizon (quarters)")
 ax.set_ylabel("Scaled growth response  $GI(\\delta)/\\delta$")
 ax.set_title("Kilian-Vigfusson size/sign check: one curve iff linear")
 ax.legend(fontsize=8)
-plt.show()
 
 # %% [markdown]
 # **Read the output.** At $h=0$ all four curves coincide *exactly* — the
@@ -365,7 +362,6 @@ ax.set_xlabel("Horizon (quarters)")
 ax.set_ylabel("Response to a +1 sd FCI shock")
 ax.set_title("Linear limit: the GIRF collapses onto the closed form")
 ax.legend(fontsize=8)
-plt.show()
 
 # %% [markdown]
 # **The validation moment.** This is the discipline the notebook wants you

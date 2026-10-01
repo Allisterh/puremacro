@@ -128,7 +128,6 @@ for rho, color, dash in zip(elasticities, colors, dashes):
 ax.set(xlabel="Wage / rental rate (relative to baseline)", ylabel="Capital per worker / baseline",
        title="Country A manufacturing: conditional CES factor substitution")
 ax.legend()
-plt.show()
 
 # %% [markdown]
 # ### 2. Demand at fixed prices
@@ -170,7 +169,6 @@ for (label, pref), color, dash in zip(preferences.items(), colors, dashes):
 ax.set(xlabel="Income / baseline income", ylabel="Food share of household budget (%)",
        title="Country A: demand block at fixed unit prices")
 ax.legend()
-plt.show()
 
 # %% [markdown]
 # ### 3. Markups at given market shares
@@ -198,7 +196,6 @@ ax.annotate(f"share 30% -> 20%: markup x{markup_ratio:.4f}", xy=(25, new_markup[
             xytext=(27, new_markup[0] - .03), color=_nbstyle.TEXTO)
 ax.set(xlabel="Assumed destination market share (%)", ylabel="Gross markup",
        title=rf"Pricing block: markup against market share ($\sigma_j={sigma_j:g}$, $\theta_j={theta_j:g}$)")
-plt.show()
 
 # %% [markdown]
 # ### 4. A benchmark tariff equilibrium
@@ -308,7 +305,6 @@ ax_share.annotate(rf"$\sigma^*={sigma_star:.3f}$: singular Jacobian", xy=(sigma_
 ax_share.set(title="Share of the tariff borne by B's producer prices",
              xlabel=r"Intermediate-sourcing elasticity $\sigma$", ylabel=r"$-\Delta\ln p_B\,/\,\ln(1+t)$")
 ax_share.legend(loc="lower right")
-plt.show()
 
 # %% [markdown]
 # ### 6. The closure or the flexible blocks?

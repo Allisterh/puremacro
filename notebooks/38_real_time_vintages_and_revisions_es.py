@@ -145,7 +145,6 @@ ax.set_yticklabels([f"{d.year}Q{d.quarter}" for d in tri_usa.index[:24:4]])
 
 cbar = fig.colorbar(im, ax=ax)
 cbar.set_label("Simulated growth rate (%)", color=_nbstyle.TEXTO)
-plt.show()
 
 # %% [markdown]
 # ## 4. Primera Publicación contra Última Estimación
@@ -177,7 +176,6 @@ ax2.set_xlabel("Reference quarter", color=_nbstyle.TEXTO)
 ax2.set_ylabel("Revision (pp)", color=_nbstyle.TEXTO)
 ax2.legend(frameon=True, facecolor=_nbstyle.FONDO, edgecolor=_nbstyle.SPINE)
 ax2.grid(True, linestyle=":", color=_nbstyle.REJILLA, alpha=0.8)
-plt.show()
 
 # %% [markdown]
 # ## 5. La Prueba de Mankiw-Shapiro (1986) sobre un Proceso de Ruido Conocido
@@ -290,7 +288,6 @@ ax.set_xlabel("First release $y_{0,t}$ (%)", color=_nbstyle.TEXTO)
 ax.set_ylabel("Revision $y_{T,t} - y_{0,t}$ (pp)", color=_nbstyle.TEXTO)
 ax.legend(loc="lower left", frameon=True, facecolor=_nbstyle.FONDO, edgecolor=_nbstyle.SPINE, fontsize=8)
 ax.grid(True, linestyle=":", color=_nbstyle.REJILLA, alpha=0.8)
-plt.show()
 
 # %% [markdown]
 # ## 7. Conjuntos de Datos en un Punto del Tiempo (`.as_of()`)

@@ -264,7 +264,6 @@ ax4.set_title("Terminal Debt Distribution: Baseline vs. Stress", fontsize=10)
 ax4.set_xlabel("Debt-to-GDP at Year 5 (%)")
 ax4.set_ylabel("Probability Density")
 ax4.legend(loc="upper right", fontsize=7.5, frameon=True)
-plt.show()
 
 # %% [markdown]
 # **Interpreta los resultados.** A dos años, las tres estimaciones puntuales son −1.21 (SVAR de BP), −2.86 (LP de RR aumentada con rezagos) y −5.98 (LP-IV), cada una por un aumento de impuestos de 1% del PIB. El primer panel compara estimaciones puntuales condicionales, no una jerarquía verificada de multiplicadores causales. El instrumento narrativo observado es débil en esta especificación ($F$ efectivo de impacto $= 1.35$, frente al valor crítico mostrado de 23.11), y el conjunto de Anderson-Rubin no está acotado en ningún horizonte: dos semirrectas hasta $h=11$ y toda la recta real desde $h=12$. La comprobación de influencia explica por qué. La primera etapa descansa en un solo trimestre, 2003T3 (−2.86% del PIB en la serie no anticipada); si se pone en cero, la $F$ de impacto cae a 0.002. Desde $h=14$ ese trimestre sale de la muestra de estimación, porque su resultado caería después de 2006T4, y por eso la columna de $F$ se desploma ahí. Lea la senda de la LP-IV como no informativa, no como evidencia de un multiplicador grande. El segundo panel promedia respuestas del nivel del PIB, no multiplicadores fiscales acumulados.

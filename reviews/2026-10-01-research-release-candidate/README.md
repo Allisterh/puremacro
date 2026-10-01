@@ -1,8 +1,9 @@
 # Unpublished research release candidate
 
-Status: source freeze, artifact checks, installed-wheel checks and strict
-documentation build passed. The full release gate is running; no release-ready
-claim is made before its result.
+Status: artifacts, installed-wheel checks and strict documentation passed.
+The first complete release gate passed four of five gates and identified three
+unexpected notebook integrity failures. Notebook repairs and a second complete
+gate are pending; this candidate is not yet release-ready.
 
 The candidate retains package version **4.3.0** and is identified separately by
 a unique artifact directory, Git base and complete source hashes. It includes
@@ -63,6 +64,22 @@ test-regenerated PNGs under `puremacro/examples/output/` are recorded separately
 and are absent from the wheel. The full gate runs this frozen checkout,
 preserving its fixture paths; package artifacts are built from a separate
 copied source directory.
+
+The [first full release gate](release-gate.log) completed in 2,096.77 seconds:
+**18,438 passed, 14 failed, 139 skipped, 202 deselected and 276 xfailed**.
+All eleven listed known failures remained, and three notebook-integrity checks
+failed unexpectedly. The other four gates passed: Pyodide contract, public API,
+all five 4.3.0 version pins and Python 3.11 syntax for 1,653 files.
+[Original validation summary](original-validation-summary.json).
+
+The [targeted traceback rerun](unexpected-notebook-failures.log) confirmed an
+uncommented Spanish Markdown paragraph in notebook 00, section-order drift in
+notebook 10 and mismatched English/Spanish cell counts in notebook 45. Fixing
+the syntax also exposes the existing styling check's later assertion against
+redundant display calls. These notebook repairs leave the package artifacts and
+known-failure whitelist unchanged. Their complete path/hash manifest and the
+second full-gate result will be recorded separately; the original failure
+evidence remains intact.
 
 - Wheel and source distribution both passed Twine. The wheel has 884 entries;
   all package Python modules are present, and 878 shipped source/resource files

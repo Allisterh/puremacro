@@ -209,7 +209,6 @@ for ts, txt in [("1964-04-01", "'64 Kennedy-\nJohnson cut"),
                      xytext=(pd.Timestamp(ts), -2.6), fontsize=7, color=_nbstyle.TEXTO,
                      ha="center", arrowprops=dict(arrowstyle="-", color=_nbstyle.SPINE, lw=0.7))
 axes[1].set_xlabel("Quarter")
-plt.show()
 
 # %% [markdown]
 # ## 1. Blanchard-Perotti (2002): la elasticidad institucional
@@ -435,7 +434,6 @@ ax.set_title("The US tax multiplier under three identification schemes\n"
              "(one dataset: 1950Q1-2006Q4)")
 # Legend below the axes, so it does not hide the weak-proxy line.
 ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.15), ncol=2, fontsize=8)
-plt.show()
 
 # %% [markdown]
 # ## 4. La curva de especificaciones — ¿de verdad es la identificación?
@@ -537,7 +535,6 @@ for dim, values in rows:
     yy -= 0.6
 ax2.set_yticks(ytick); ax2.set_yticklabels(ylab, fontsize=7)
 ax2.set_xlabel("Specification (sorted)")
-plt.show()
 
 # %% [markdown]
 # **La moraleja.** Lee el panel inferior contra el superior: la curva ordenada

@@ -303,7 +303,6 @@ cbar.set_label("Change in mass per grid node (pp)")
 ax_heat.set_title("Change in wealth mass since year 0, all years", fontsize=11)
 ax_heat.set_xlabel("Assets $k$ (grid nodes up to 15)")
 ax_heat.set_ylabel("Year $t$")
-plt.show()
 
 # %%
 # --- Experiment 4: Broyden quasi-Newton against damped shooting ---

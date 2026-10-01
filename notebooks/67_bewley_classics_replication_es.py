@@ -368,7 +368,6 @@ handles, labels = ax2.get_legend_handles_labels()
 order = [labels.index(name) for name in names + ["Kirkby (2023), Tauchen 27"]]   # bars first, then the marker
 ax2.legend([handles[i] for i in order], [labels[i] for i in order], loc="upper right", ncol=2, frameon=True,
            facecolor=_nbstyle.FONDO, edgecolor=_nbstyle.SPINE)
-plt.show()
 
 # %% [markdown]
 # ### 4. Las Tablas 1 y 2 de Huggett
@@ -459,7 +458,6 @@ for ax, mu in zip(axes, (1.5, 3.0)):
     ax.set(xlabel="Credit limit (bond units)", title=f"Huggett, relative risk aversion μ = {mu}")
 axes[0].set_ylabel("Annual interest rate (%)")
 axes[0].legend(loc="lower left", frameon=True, facecolor=_nbstyle.FONDO, edgecolor=_nbstyle.SPINE)
-plt.show()
 
 # %% [markdown]
 # ### Cuadro de verificación de la replicación

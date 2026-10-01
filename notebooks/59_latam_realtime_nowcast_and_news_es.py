@@ -281,7 +281,6 @@ pit_res.plot(ax=axes[1, 1], title="PIT histogram: a forecaster calibrated by con
 
 fig.suptitle("Real-Time Nowcasting Dashboard (simulated Mexico and Brazil panels)")
 fig.tight_layout()
-plt.show()
 
 # %% [markdown]
 # ## Lectura de los resultados

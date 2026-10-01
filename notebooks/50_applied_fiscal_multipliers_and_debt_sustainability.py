@@ -264,7 +264,6 @@ ax4.set_title("Terminal Debt Distribution: Baseline vs. Stress", fontsize=10)
 ax4.set_xlabel("Debt-to-GDP at Year 5 (%)")
 ax4.set_ylabel("Probability Density")
 ax4.legend(loc="upper right", fontsize=7.5, frameon=True)
-plt.show()
 
 # %% [markdown]
 # **Read the output.** At the two-year horizon the three point estimates are −1.21 (BP SVAR), −2.86 (RR lag-augmented LP) and −5.98 (LP-IV), each per tax increase of 1% of GDP. The first panel compares conditional point estimates, not a verified ranking of causal multipliers. The observed narrative instrument is weak in this specification (impact effective $F = 1.35$, against the displayed 23.11 critical value), and the Anderson-Rubin set is unbounded at every horizon: two rays through $h=11$, the whole real line from $h=12$. The influence check shows why. The first stage rests on one quarter, 2003Q3 (−2.86% of GDP in the unanticipated series); set it to zero and the impact $F$ falls to 0.002. From $h=14$ that quarter leaves the estimation sample, because its outcome would fall after 2006Q4, which is why the $F$ column collapses there. Read the LP-IV path as uninformative, not as evidence of a large multiplier. The second panel averages GDP level responses, not cumulative fiscal multipliers.

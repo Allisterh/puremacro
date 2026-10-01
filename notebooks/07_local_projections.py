@@ -230,7 +230,6 @@ ax.set_xlabel("Horizon h (months)")
 ax.set_ylabel("Response of y to a unit shock")
 ax.set_title("Local-projection IRF (Jordà, HAC bands)")
 ax.legend(loc="lower right")
-plt.show()
 
 # %% [markdown]
 # ### Supporting — state-dependent IRFs
@@ -250,7 +249,6 @@ ax.set_xlabel("Horizon h (months)")
 ax.set_ylabel("Response of y to a unit shock")
 ax.set_title("State-dependent IRFs: shocks bite harder in recessions")
 ax.legend(loc="lower right")
-plt.show()
 
 # %% [markdown]
 # ### Supporting — the synthetic series and the state
@@ -267,7 +265,6 @@ axL.set_title("Outcome with recession shading"); axL.legend(loc="upper right")
 axR.bar(["expansion", "recession"], [(1 - rec).mean(), rec.mean()],
         color=[cols[2], cols[1]])
 axR.set_ylabel("sample share"); axR.set_title("State frequencies")
-plt.show()
 
 # %% [markdown]
 # ## Your turn — grade the local projections against a planted truth

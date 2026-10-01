@@ -97,7 +97,6 @@ ax.set_title("Marginal Propensity to Consume (MPC) by Wealth Decile", fontsize=1
 ax.set_ylabel("Quarterly MPC", color=_nbstyle.TEXTO)
 ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right")
 ax.grid(True, linestyle=":", color=_nbstyle.REJILLA, alpha=0.8)
-plt.show()
 
 # %% [markdown]
 # ## 3. Jacobianos de Consumo en Espacio de Secuencias $\mathcal{J}_{C, r}$ y $\mathcal{J}_{C, Y}$
@@ -128,7 +127,6 @@ ax2.set_xlabel("Shock Horizon s (quarters)", color=_nbstyle.TEXTO)
 ax2.set_ylabel("Response Horizon t (quarters)", color=_nbstyle.TEXTO)
 cbar2 = fig.colorbar(im2, ax=ax2, fraction=0.046, pad=0.04)
 cbar2.ax.tick_params(colors=_nbstyle.NOTA)
-plt.show()
 
 # %% [markdown]
 # ## 4. Respuestas de Equilibrio General a una Restricción Monetaria
@@ -182,7 +180,6 @@ ax.set_xlabel("Horizon (Quarters)", color=_nbstyle.TEXTO)
 ax.set_ylabel("Percent / percentage points", color=_nbstyle.TEXTO)
 ax.legend(frameon=True, facecolor=_nbstyle.FONDO, edgecolor=_nbstyle.SPINE, fontsize=8, loc="lower right")
 ax.grid(True, linestyle=":", color=_nbstyle.REJILLA, alpha=0.8)
-plt.show()
 
 # %% [markdown]
 # ## Lectura de los resultados

@@ -238,7 +238,6 @@ ax2.margins(y=0.12)
 ax2.set_xticks(x, [f"country {code}" for code in measures.index])
 ax2.set(title="A levies 10% on all imports from B (Leontief sourcing)", ylabel="Change from baseline (%)")
 ax2.legend(loc="upper right", frameon=True, facecolor=_nbstyle.FONDO, edgecolor=_nbstyle.SPINE)
-plt.show()
 
 # %% [markdown]
 # ## Lectura de los resultados

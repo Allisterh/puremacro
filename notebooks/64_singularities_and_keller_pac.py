@@ -228,7 +228,6 @@ ax1.set_xlabel(r"$x_1$ along the branch (fold at $x_1=0$)")
 ax1.set_ylabel(r"2-norm condition number $\kappa$")
 ax1.set_title("Conditioning near the fold")
 ax1.legend(loc="upper right", fontsize=8)
-plt.show()
 
 # %% [markdown]
 # ### Experiment 2: puremacro's trade model
@@ -416,7 +415,6 @@ ax1.set_xlabel(r"tariff rate $\tau$ (1 = 100%)")
 ax1.set_ylabel(r"spectral radius bound")
 ax1.set_title("Hawkins-Simon certificate, same 2x2 table")
 ax1.legend(loc="lower right", fontsize=8)
-plt.show()
 
 # %% [markdown]
 # ### Experiment 3: the certificate at scale

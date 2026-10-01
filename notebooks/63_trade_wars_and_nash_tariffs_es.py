@@ -235,7 +235,6 @@ for ax, note in zip(axes, ("30% ceiling", "Nash candidate (30%)")):
     ax.axvline(100*tariff_ceiling, color=_nbstyle.NOTA, ls=":", lw=1.2, label=note)
     ax.axhline(0, color=_nbstyle.SPINE, lw=0.8)
     ax.legend(fontsize=9, ncol=2, handlelength=3.4, loc="upper center", bbox_to_anchor=(0.5, -0.17))
-plt.show()
 
 # %% [markdown]
 # ## Lectura de los resultados

@@ -283,7 +283,6 @@ ax.set_xlabel("Event time $h$ (base period $h=-1$)")
 ax.set_ylabel("Effect on $y$")
 ax.set_title("Staggered adoption: naive TWFE vs LP-DiD")
 ax.legend(loc="upper left", fontsize=8)
-plt.show()
 
 # %% [markdown]
 # ## 3. Tres máquinas, un principio
@@ -332,7 +331,6 @@ ax.set_xlabel("Event time $h$")
 ax.set_ylabel("ATT (effect on $y$)")
 ax.set_title("LP-DiD vs Callaway-Sant'Anna vs Sun-Abraham")
 ax.legend(loc="upper left", fontsize=8)
-plt.show()
 
 # %% [markdown]
 # **Lectura de los resultados.** LP-DiD y los dos estimadores DiD difieren a lo
@@ -394,7 +392,6 @@ ax.set_xlabel("Event time $h$")
 ax.set_ylabel("Coefficient")
 ax.set_title("The leads catch the violation before you believe the lags")
 ax.legend(loc="upper left", fontsize=8)
-plt.show()
 
 # %% [markdown]
 # **Lectura de los resultados.** En el panel violado los adelantos se abren en
