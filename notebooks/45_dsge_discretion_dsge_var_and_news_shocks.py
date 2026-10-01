@@ -290,7 +290,6 @@ for ax, var, title in zip(axes, ["pi", "y", "r"],
     ax.set_xlabel("Quarters")
     ax.grid(True, linestyle=":", alpha=0.6)
     ax.legend()
-plt.show()
 
 # %% [markdown]
 # ## 3. DSGE-VAR Hybrid Modeling (Del Negro & Schorfheide 2004)
@@ -367,7 +366,6 @@ ax.set_xlabel(r"DSGE Prior Weight $\lambda$")
 ax.set_ylabel("Log Marginal Data Density")
 ax.grid(True, linestyle=":", alpha=0.6)
 ax.legend(loc="lower right")
-plt.show()
 
 print(grid_df.round(2).to_string(index=False))
 print(f"Optimal prior weight hat(lambda) : {res_dvar.hat_lambda:.4f} (largest grid value: {max(lambda_grid):.2f})")
@@ -452,7 +450,6 @@ axes[1, 1].set_title(r"Policy Interest Rate $r_t$", fontweight="bold")
 axes[1, 1].set_xlabel("Quarters")
 axes[1, 1].grid(True, linestyle=":", alpha=0.6)
 axes[1, 1].legend()
-plt.show()
 
 # %% [markdown]
 # ### Forecast Error Variance Decomposition: Surprise vs. News Leads

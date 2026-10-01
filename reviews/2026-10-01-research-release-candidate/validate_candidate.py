@@ -158,6 +158,14 @@ def main():
                          "45_dsge_discretion_dsge_var_and_news_shocks", "45_dsge_discretion_dsge_var_and_news_shocks_es")
             for suffix in (".py", ".ipynb")
         }
+        display_manifest = json.loads((EVIDENCE / "notebook-inline-display-repair.json").read_text())
+        for repair in display_manifest["files"]:
+            assert repair["non_display_ast_unchanged"] and repair["existing_outputs_unchanged"]
+            for kind in ("source", "rendered"):
+                name = repair[kind]
+                assert repair[kind + "_before_sha256"] == original["gate_source_sha256"][name]
+                assert digest(ROOT / name) == repair[kind + "_after_sha256"]
+                allowed_notebooks.add(name)
         new_hashes = {name: digest(ROOT / name) for name in original["gate_source_sha256"]}
         changed = {name: {"before": expected, "after": new_hashes[name]}
                    for name, expected in original["gate_source_sha256"].items() if new_hashes[name] != expected}

@@ -293,7 +293,6 @@ ax.set_xlabel("Event time e (periods since treatment)")
 ax.set_ylabel("ATT (outcome units)")
 ax.set_title("Staggered DiD event study (Callaway-Sant'Anna)")
 ax.legend(loc="upper left", fontsize=8)
-plt.show()
 
 # %% [markdown]
 # ### Figura complementaria — ¿qué ATT global?
@@ -316,7 +315,6 @@ ax.set_yticks(ypos, [names[a] for a in oa.index])
 ax.set_ylim(-0.5, len(oa) - 0.2)
 ax.set_xlabel("Overall ATT, estimate and 90% bootstrap CI (outcome units)")
 ax.set_title("Four overall summaries of the same ATT(g, t) cells")
-plt.show()
 
 # %% [markdown]
 # ### Figura complementaria — efectos grupo-tiempo subyacentes
@@ -342,7 +340,6 @@ ax.set_xlabel("Event time e (periods since treatment)")
 ax.set_ylabel("ATT(g, t) (outcome units)")
 ax.set_title("Group-time effects by cohort")
 ax.legend(loc="upper left", fontsize=8)
-plt.show()
 
 # %% [markdown]
 # **Lectura de los resultados.** La figura de resúmenes muestra los cuatro ATT globales entre
