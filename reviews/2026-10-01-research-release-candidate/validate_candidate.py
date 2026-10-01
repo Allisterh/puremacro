@@ -140,6 +140,49 @@ def main():
         })
     elif mode == "release-gates":
         run(base, [PYTHON, "-u", "tools/release_check.py"], "release-gate.log", cwd=ROOT, allowed=(0, 1))
+    elif mode == "release-gates-amended":
+        assert (EVIDENCE / "amended-candidate-provenance.json").exists()
+        run(base, [PYTHON, "-u", "tools/release_check.py"], "release-gate-after-notebook-repairs.log",
+            cwd=ROOT, allowed=(0, 1))
+    elif mode == "preserve-original":
+        for source, target in (("summary.json", "original-validation-summary.json"),
+                               ("final-source-match.json", "original-final-source-match.json")):
+            if (EVIDENCE / target).exists():
+                raise RuntimeError(f"Refusing to overwrite preserved original evidence: {target}")
+            shutil.copy2(EVIDENCE / source, EVIDENCE / target)
+    elif mode == "freeze-amended":
+        original = json.loads((EVIDENCE / "candidate-provenance.json").read_text())
+        allowed_notebooks = {
+            f"notebooks/{stem}{suffix}"
+            for stem in ("00_whats_new_in_puremacro_3_0_es", "10_staggered_did", "10_staggered_did_es",
+                         "45_dsge_discretion_dsge_var_and_news_shocks", "45_dsge_discretion_dsge_var_and_news_shocks_es")
+            for suffix in (".py", ".ipynb")
+        }
+        new_hashes = {name: digest(ROOT / name) for name in original["gate_source_sha256"]}
+        changed = {name: {"before": expected, "after": new_hashes[name]}
+                   for name, expected in original["gate_source_sha256"].items() if new_hashes[name] != expected}
+        notebook_changes = {name: value for name, value in changed.items() if name in allowed_notebooks}
+        unexpected = [name for name in changed if name not in allowed_notebooks
+                      and not name.startswith("docs/") and name != "mkdocs.yml"
+                      and not (name.startswith("puremacro/examples/output/") and name.endswith(".png"))]
+        assert notebook_changes and not unexpected, unexpected
+        wheel, = (base / "dist").glob("*.whl")
+        with zipfile.ZipFile(wheel) as archive:
+            shipped = {name for name in original["source_sha256"] if name.startswith("puremacro/")
+                       and name in archive.namelist()}
+        assert all(digest(ROOT / name) == original["source_sha256"][name] for name in shipped)
+        amended = {**original, "amended_at_utc": datetime.now(timezone.utc).isoformat(),
+            "gate_source_sha256": new_hashes, "notebook_repairs": notebook_changes,
+            "all_changes_since_original_freeze": changed,
+            "all_878_shipped_package_files_match_original": len(shipped) == 878,
+            "package_artifacts_rebuilt": False,
+            "scope": "Notebook-only repairs, final documentation and generated unshipped example figures; original full-suite failure evidence preserved.",
+        }
+        target = EVIDENCE / "amended-candidate-provenance.json"
+        assert not target.exists(), "Amended candidate has already been frozen"
+        write_json(target, amended)
+        shutil.copy2(target, EVIDENCE / "artifacts" / base.name / target.name)
+        print(json.dumps({"notebook_repairs": list(notebook_changes), "unchanged_shipped_files": len(shipped)}, indent=2))
     elif mode == "retain-artifacts":
         retained = EVIDENCE / "artifacts" / base.name
         retained.mkdir(parents=True, exist_ok=True)
@@ -193,8 +236,10 @@ def main():
         run(base, [PYTHON, "-u", str(base / "installed_smoke.py")], "installed-smoke.log", installed=True)
         shutil.copy2(base / "installed-smoke.json", EVIDENCE / "installed-smoke.json")
         shutil.copytree(base / "installed-evidence", EVIDENCE / "installed-evidence", dirs_exist_ok=True)
-    elif mode == "match":
-        frozen = json.loads((EVIDENCE / "candidate-provenance.json").read_text())
+    elif mode in ("match", "match-amended"):
+        amended = mode == "match-amended"
+        provenance_name = "amended-candidate-provenance.json" if amended else "candidate-provenance.json"
+        frozen = json.loads((EVIDENCE / provenance_name).read_text())
         changed = [name for name, expected in frozen["gate_source_sha256"].items()
                    if not (ROOT / name).is_file() or digest(ROOT / name) != expected]
         current = {str(path.relative_to(ROOT)) for path in files_under(ROOT,
@@ -214,7 +259,8 @@ def main():
                         if not (ROOT / name).is_file() or digest(ROOT / name) != expected]
         docs_added = sorted({str(path.relative_to(ROOT)) for path in (ROOT / "docs").rglob("*")
                             if path.is_file()} - docs.keys())
-        write_json(EVIDENCE / "final-source-match.json", {
+        match_name = "final-source-match-amended.json" if amended else "final-source-match.json"
+        write_json(EVIDENCE / match_name, {
             "all_frozen_gate_sources_match": not changed and not added,
             "changed_since_freeze": changed, "added_since_freeze": added,
             "all_frozen_package_test_tool_sources_match": not changed_code and not added_code,
@@ -231,10 +277,13 @@ def main():
         })
         print(json.dumps({"changed": changed, "added": added}, indent=2))
         assert not changed_code and not added_code and not docs_changed and not docs_added
-    elif mode == "finalize":
-        gate = json.loads((EVIDENCE / "release-gate.log.json").read_text())
-        log = (EVIDENCE / "release-gate.log").read_text()
-        match = json.loads((EVIDENCE / "final-source-match.json").read_text())
+    elif mode in ("finalize", "finalize-amended"):
+        amended = mode == "finalize-amended"
+        gate_name = "release-gate-after-notebook-repairs.log" if amended else "release-gate.log"
+        gate = json.loads((EVIDENCE / (gate_name + ".json")).read_text())
+        log = (EVIDENCE / gate_name).read_text()
+        match_name = "final-source-match-amended.json" if amended else "final-source-match.json"
+        match = json.loads((EVIDENCE / match_name).read_text())
         smoke = json.loads((EVIDENCE / "installed-smoke.json").read_text())
         docs = json.loads((EVIDENCE / "mkdocs-strict.log.json").read_text())
         twine = json.loads((EVIDENCE / "twine-check.log.json").read_text())
@@ -258,6 +307,9 @@ def main():
                            if baseline_compared else None)
         summary = {
             "candidate_kind": "unpublished current-worktree research candidate",
+            "validation_stage": "after scoped notebook repairs" if amended else "original frozen tree",
+            "release_gate_log": gate_name,
+            "original_validation_evidence": "original-validation-summary.json" if amended else None,
             "package_version": "4.3.0", "candidate_directory": str(base),
             "software_validation_passed": bool(full_gate_passed and source_match and docs_match
                 and smoke["passed"] and docs["returncode"] == 0 and twine["returncode"] == 0),

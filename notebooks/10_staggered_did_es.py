@@ -175,7 +175,7 @@ print("cohort sizes: " + ", ".join(f"g={int(g)}: {n}" for g, n in n_g.sort_index
 # controles nunca tratados, la agrega con pesos por tamaño de cohorte y remuestrea unidades
 # completas por bootstrap; `sun_abraham` reutiliza *las mismas* celdas y extracciones bootstrap.
 # El efecto constante y homogéneo de este ejemplo también permite estimar TWFE de manera válida;
-# esta sección verifica la recuperación, y *Tu turno* muestra al TWFE fallar.
+# esta sección verifica la recuperación, y el ejercicio final de efectos crecientes con la exposición muestra al TWFE fallar.
 
 # %%
 cs = callaway_santanna(panel, unit="unit", time="time", outcome="y",

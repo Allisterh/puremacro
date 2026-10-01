@@ -166,7 +166,7 @@ print("cohort sizes: " + ", ".join(f"g={int(g)}: {n}" for g, n in n_g.sort_index
 # `callaway_santanna` builds the group-time ATT(g,t) matrix off never-treated
 # controls, aggregates it with cohort-size weights and bootstraps whole units; `sun_abraham`
 # reuses the *same* cells and bootstrap draws. The constant, homogeneous effect used here also
-# permits valid TWFE estimation; this section checks recovery, and *Your turn* shows TWFE failing.
+# permits valid TWFE estimation; this section checks recovery, and the final exposure-growth exercise shows TWFE failing.
 
 # %%
 cs = callaway_santanna(panel, unit="unit", time="time", outcome="y",

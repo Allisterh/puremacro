@@ -572,7 +572,7 @@ assert irf_decay_custom[0] == 1.0 and irf_decay_custom[-1] < 1.0, "Decay must st
 assert half_life > 0.0, "Half-life must be strictly positive"
 
 # %% [markdown]
-**¿Qué tan exhaustivo es esto?** La maquinaria computacional demostrada en este recorrido constituye el núcleo numérico de `puremacro`:
+# **¿Qué tan exhaustivo es esto?** La maquinaria computacional demostrada en este recorrido constituye el núcleo numérico de `puremacro`:
 # - `puremacro.dsge.analytic_derivatives`: Solver generalizado de Sylvester, recursiones de covarianza de Lyapunov y motores de score de Kalman.
 # - `puremacro.dsge.nuts`: Monte Carlo hamiltoniano en Python puro con adaptación de covarianza online compatible con Stan.
 # - `puremacro.models.hank_sequence_space`: Algoritmos Fake-News que conectan distribuciones microeconómicas con modelos DSGE agregados (NB31).
