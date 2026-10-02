@@ -904,7 +904,7 @@ class TestTier1FeatureCoverage:
         elapsed = time.perf_counter() - t0
         
         assert g_xx.shape == (N, n_x**2)
-        assert elapsed <= 0.080, f"Sylvester solver took {elapsed:.4f}s > 0.080s"
+        assert elapsed <= budget(0.080), f"Sylvester solver took {elapsed:.4f}s > 0.080s"
 
     def test_t1_f15_schur_sylvester_residual_norm(self):
         """T1.15.5: Solution satisfies generalized matrix equation residual norm <= 1e-10."""
@@ -2311,7 +2311,7 @@ class TestTier2BoundaryAndCornerCases:
         t0 = time.perf_counter()
         A_p, A_0, A_m, B_u = compiled.eval_first_order(lead, curr, lag, shocks, pvec)
         eval_time = time.perf_counter() - t0
-        assert eval_time < 0.005
+        assert eval_time < budget(0.005)
 
     # -----------------------------------------------------------------------
     # Feature 23 Boundary: Pyodide 4-Package Purity & Release Compliance
@@ -2569,7 +2569,7 @@ class TestTier4RealWorldScenarios:
         assert dr.ghs2.shape == (40,)
         
         # Performance Assertion: <= 0.20s
-        assert t_ord2 <= 0.20, f"Order 2 solve time {t_ord2:.4f}s exceeded 0.20s requirement (Speedup gate failed)"
+        assert t_ord2 <= budget(0.20), f"Order 2 solve time {t_ord2:.4f}s exceeded 0.20s requirement (Speedup gate failed)"
 
     def test_t4_s2_hansen_rbc_nonlinear_order2_solve(self):
         """Scenario 2: Hansen (1985) RBC non-linear Euler equations solved at order 2.

@@ -2862,7 +2862,7 @@ class TestFlexibleLowSeverityFixes:
         ]
         for kwargs, expected in cases:
             assert _active_flexible_settings(FlexibleTradeModelConfig(**kwargs)) == expected, kwargs
-        src = Path(__file__).resolve().parents[1].joinpath("puremacro", "trade", "flexible.py").read_text()
+        src = Path(__file__).resolve().parents[1].joinpath("puremacro", "trade", "flexible.py").read_text(encoding="utf-8")
         assert "is_flexible = (" not in src  # no duplicated literal predicate
 
     @require_flexible

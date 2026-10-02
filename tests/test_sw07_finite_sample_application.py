@@ -47,7 +47,7 @@ def test_manifest_is_strict_json_with_provenance_and_artifact_hashes(evidence):
     output, study, _ = evidence
     def reject_constant(token):
         raise AssertionError(f"Nonstandard JSON constant {token}")
-    manifest = json.loads((output / "manifest.json").read_text(), parse_constant=reject_constant)
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"), parse_constant=reject_constant)
     assert manifest["master_seed"] == 773
     assert manifest["bandwidth"] == 4
     assert manifest["replications_per_scenario"] == 2

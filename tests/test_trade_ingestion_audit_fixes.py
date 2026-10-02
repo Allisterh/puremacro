@@ -541,13 +541,13 @@ def test_raw45_default_search_prefers_clean_releases(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     legacy = tmp_path / "computation" / "7_TIO_77c_vf" / "data_2020_SML.csv"
     legacy.parent.mkdir(parents=True)
-    legacy.write_text("0\n")
+    legacy.write_text("0\n", encoding="utf-8")
     assert trade_data._resolve_raw_45_path() == Path.cwd() / "computation" / "7_TIO_77c_vf" / "data_2020_SML.csv"
     clean_2019 = tmp_path / "ICIOextended" / "2019_SML.csv"
     clean_2019.parent.mkdir()
-    clean_2019.write_text("0\n")
+    clean_2019.write_text("0\n", encoding="utf-8")
     assert trade_data._resolve_raw_45_path().name == "2019_SML.csv"
-    (tmp_path / "ICIOextended" / "2020_SML.csv").write_text("0\n")
+    (tmp_path / "ICIOextended" / "2020_SML.csv").write_text("0\n", encoding="utf-8")
     assert trade_data._resolve_raw_45_path().name == "2020_SML.csv"
 
 
@@ -680,14 +680,14 @@ def test_exiobase_native_zip_and_labelled_tables_are_refused(tmp_path):
     with pytest.raises(ValueError, match="read_exiobase_native"):
         trade_data.load_exiobase(year=2019, file_path=archive)
     labelled = tmp_path / "Z.txt"
-    labelled.write_text("region\tAT\tAT\nsector\tA\tB\nAT\t1\t2\n")
+    labelled.write_text("region\tAT\tAT\nsector\tA\tB\nAT\t1\t2\n", encoding="utf-8")
     with pytest.raises(ValueError, match="read_exiobase_native"):
         trade_data.load_exiobase(year=2019, file_path=labelled)
 
 
 def test_ambiguous_data_directory_is_refused(tmp_path):
-    (tmp_path / "exio_ixi_2019_a.txt").write_text("1\n")
-    (tmp_path / "exio_ixi_2019_b.txt").write_text("1\n")
+    (tmp_path / "exio_ixi_2019_a.txt").write_text("1\n", encoding="utf-8")
+    (tmp_path / "exio_ixi_2019_b.txt").write_text("1\n", encoding="utf-8")
     with pytest.raises(ValueError, match="Ambiguous"):
         trade_data.load_exiobase(year=2019, data_dir=tmp_path)
 
@@ -745,7 +745,7 @@ def _write_exiobase(path: Path, monkeypatch, compress: bool = False) -> Path:
     if compress:
         path.write_bytes(gzip.compress(text.encode()))
     else:
-        path.write_text(text + "\n")
+        path.write_text(text + "\n", encoding="utf-8")
     return path
 
 

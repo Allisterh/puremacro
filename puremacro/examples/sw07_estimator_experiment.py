@@ -144,7 +144,7 @@ def run_application(output: Path, *, replications: int = 399, phase: str = "cali
         "calibration_manifest_sha256": None if calibration is None else
             hashlib.sha256((Path(calibration)/"manifest.json").read_bytes()).hexdigest(),
         "artifacts": {name: hashlib.sha256((output/name).read_bytes()).hexdigest() for name in artifacts}}
-    (output/"manifest.json").write_text(json.dumps(_json_value(manifest), indent=2, allow_nan=False)+"\n")
+    (output/"manifest.json").write_text(json.dumps(_json_value(manifest), indent=2, allow_nan=False)+"\n", encoding="utf-8")
     return study
 
 

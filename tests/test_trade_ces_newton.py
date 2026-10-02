@@ -917,7 +917,7 @@ def test_scale_77x11_random_table():
 
 def test_golden_oecd3x3(oecd3):
     calib = oecd3["calib"]; rates, _ = oecd3["tariffs"]
-    golden = json.loads(GOLDEN.read_text())
+    golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
     tech = NestedCESTechnology(**golden["technology"])
     res = solve_ces_block_newton(calib, rates, rates, technology=tech)
     i = list(calib.country_codes).index("USA")
@@ -956,7 +956,7 @@ def test_result_contract_and_renderers(hand):
 
 def test_module_imports_only_the_pyodide_core():
     import puremacro.trade.ces_newton as module
-    src = pathlib.Path(module.__file__).read_text()
+    src = pathlib.Path(module.__file__).read_text(encoding="utf-8")
     for name in ("torch", "numba", "statsmodels", "matplotlib"):
         assert f"import {name}" not in src
     heads = [ln.split()[1].split(".")[0] for ln in src.splitlines() if ln.startswith(("import ", "from "))]
