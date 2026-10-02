@@ -14,6 +14,47 @@ sin volver a correrla) y qué hacer.
 
 ---
 
+## 2026-10-02 — `vif` con datos en niveles y constante, versiones 2.6.0 a 4.3.0
+
+**Corregido en 4.4.0.** `inference.collinearity.vif` reproducía
+`variance_inflation_factor` de statsmodels operación por operación, incluidas
+sus regresiones auxiliares sobre los niveles sin centrar. Cuando la media de
+los regresores es grande respecto a su dispersión, esas regresiones sufren una
+cancelación catastrófica y el VIF pierde dígitos, o todos. Con una columna
+constante explícita el VIF es exactamente invariante a desplazar cualquier
+columna, así que las columnas no constantes se calculan ahora con datos
+centrados; el resultado coincide con la aritmética racional exacta hasta
+`0.33 * eps * max VIF` en diseños de prueba con medias de hasta `1e9`.
+
+Medido en 4.3.0 (statsmodels devuelve los mismos números): tres regresores
+normales estándar desplazados a media `1e7` daban 1.007122 frente a un exacto
+de 1.007165 (`4e-5` relativo); una tasa de interés junto a un PIB en yenes
+(escala `2e15`) daba 0.053, imposible porque todo VIF es al menos 1 (exacto:
+1.005); y diseños aleatorios desplazados erraban hasta en 99%.
+
+| Superficie | Condición afectada | No afectada cuando | Recomendación |
+|---|---|---|---|
+| `vif` | `exog` tiene una columna constante explícita y regresores cuya media es grande respecto a su desviación estándar (datos en niveles) | los regresores tienen media cercana a cero o se centran antes de la llamada; el VIF de la propia columna constante; diseños sin columna constante | Vuelva a correr con 4.4.0. En los diseños afectados los valores ahora difieren de statsmodels, que conserva el error. |
+
+### ¿Le afecta?
+
+```python
+X  # su diseño, con una columna constante
+abs(X[:, 1:].mean(axis=0) / X[:, 1:].std(axis=0)).max()   # por encima de ~1e5 → vuelva a correr
+```
+
+El error de 4.3.0 crece con esa razón: por debajo de `4e-12` relativo hasta
+`1e5`, `3e-8` en `1e6`, `1e-4` en `1e7`, y más cuando los regresores además
+son casi colineales o tienen tendencia (el ejemplo del PIB arriba).
+
+### Qué hay que volver a correr
+
+- **Cualquier diagnóstico de colinealidad con datos en niveles** (PIB, índices
+  de precios, población) calculado con `vif` y un intercepto. Los datos
+  centrados o en tasas de crecimiento no se vieron afectados.
+
+---
+
 ## 2026-09-30 — choques de margen de Smets-Wouters (2007), datos incluidos y objetivos de replicación, versiones 0.92.0 a 4.3.0
 
 **Corregido después de 4.3.0** (véase la sección Unreleased de `CHANGELOG.md`).

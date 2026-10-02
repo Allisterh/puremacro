@@ -329,13 +329,17 @@ def vif(exog, exog_idx=None):
     ``tests/test_inference_extras_parity.py`` corresponds to a VIF of order
     ``1e13``. Below that — up to VIFs of ``1e12``, which is already far past
     any interpretable range — this function evaluates statsmodels' expressions
-    operation for operation. Against the same NumPy/LAPACK build the result
-    is bit-identical; across builds the pseudo-inverse's SVD differs in the
-    last bits, and the measured agreement is within ``0.012 * eps * max VIF``
-    relative (see ``test_bit_identity_on_near_collinear_designs``). On a design
-    whose columns share a large mean (``1e7``) both libraries lose about five
-    digits to cancellation, because the auxiliary regressions run on the raw
-    levels. Above it, statsmodels
+    operation for operation, with one deliberate difference: when ``exog``
+    has an explicit constant column, the VIFs of the other columns are
+    computed on centered data (they are exactly invariant to shifting any
+    column). On data near zero mean the two agree to ``0.012 * eps * max VIF``
+    relative across NumPy/LAPACK builds (see
+    ``test_bit_identity_on_near_collinear_designs``). On levels data statsmodels
+    cancels catastrophically: about ``4e-5`` off with column means of ``1e7``,
+    ``0.053`` (below the minimum VIF of 1) for a ``2e15``-scale GDP column's
+    companion, and up to 99% off on the shifted sweep in
+    ``test_shifted_levels_match_exact_arithmetic``, where this function stays
+    within ``0.33 * eps * max VIF`` of exact rational arithmetic. Above it, statsmodels
     reports whatever the pseudo-inverse produced (``8.3e13``, ``9.0e15``, or
     ``inf`` behind a RuntimeWarning); those numbers are floating-point
     noise, not measurements, and this function raises
@@ -565,7 +569,17 @@ def vif(exog, exog_idx=None):
     # see the "Negative indices" paragraph in the Notes above.
     idxs = [i % k for i in idxs]
 
-    out = np.array([_vif_one(arr, i) for i in idxs], dtype=float)
+    # With an explicit constant, each non-constant column's VIF is invariant to
+    # shifting any column, so its auxiliary regression runs on centered data.
+    # On the raw levels the regressions cancel catastrophically: with column
+    # means of 1e7, statsmodels (and this function before 4.4.0) was about
+    # 4e-5 off the exact VIF; centered, the error is at rounding level. The
+    # constant column's own VIF comes from a regression without an intercept,
+    # which is location-dependent, so it keeps the raw data, as does a design
+    # with no explicit constant.
+    work = np.where(is_constant_col, arr, centered) if has_explicit_constant else arr
+    out = np.array([_vif_one(arr if is_constant_col[i] else work, i) for i in idxs],
+                   dtype=float)
 
     # A VIF of exactly zero can arise from one condition only: R2 = -inf,
     # i.e. a centered total sum of squares of exactly 0, i.e. a constant

@@ -14,6 +14,46 @@ without re-running it), and what to do.
 
 ---
 
+## 2026-10-02 — `vif` on levels data with a constant, versions 2.6.0 to 4.3.0
+
+**Fixed in 4.4.0.** `inference.collinearity.vif` reproduced statsmodels'
+`variance_inflation_factor` operation for operation, including its auxiliary
+regressions on the raw levels. When the regressors have means that are large
+relative to their spread, those regressions cancel catastrophically and the
+VIF loses digits, or all of them. With an explicit constant column a VIF is
+exactly invariant to shifting any column, so the non-constant columns are now
+computed on centered data; the result agrees with exact rational arithmetic
+to within `0.33 * eps * max VIF` on test designs with means up to `1e9`.
+
+Measured on 4.3.0 (statsmodels returns the same numbers): three standard-normal
+regressors shifted to mean `1e7` gave 1.007122 for an exact 1.007165 (`4e-5`
+relative); an interest rate next to a GDP series in yen (`2e15` scale) gave
+0.053, which is impossible since every VIF is at least 1 (exact: 1.005); and
+shifted random designs were up to 99% off.
+
+| Surface | Affected condition | Unaffected when | Guidance |
+|---|---|---|---|
+| `vif` | `exog` has an explicit constant column and regressors whose mean is large relative to their standard deviation (levels data) | regressors are near zero mean, or demeaned before the call; the constant column's own VIF; designs with no constant column | Re-run on 4.4.0. On affected designs the values now differ from statsmodels, which keeps the old error. |
+
+### Are you affected?
+
+```python
+X  # your design, with a constant column
+abs(X[:, 1:].mean(axis=0) / X[:, 1:].std(axis=0)).max()   # above about 1e5 → re-run
+```
+
+The 4.3.0 error grows with that ratio: below `4e-12` relative up to `1e5`,
+`3e-8` at `1e6`, `1e-4` at `1e7`, and more when regressors are also nearly
+collinear or trending (the GDP example above).
+
+### What to re-run
+
+- **Any collinearity screen on levels data** (GDP, price indices, population)
+  computed with `vif` and an intercept. Demeaned or growth-rate data were not
+  affected.
+
+---
+
 ## 2026-09-30 — Smets-Wouters (2007) markup shocks, bundled data and replication targets, versions 0.92.0 to 4.3.0
 
 **Fixed after 4.3.0** (see the Unreleased section of `CHANGELOG.md`). Found by
