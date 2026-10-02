@@ -679,13 +679,12 @@ class TestCollinearity:
             want = np.array([sm_vif(X, i) for i in range(X.shape[1])])
         with pytest.warns(UserWarning, match="are constant"):
             got = np.asarray(vif(X), dtype=float)
-        # statsmodels regresses on the 1e7 levels and is about 4e-5 off (1.007122
-        # against the exact 1.007165); the centered computation is exact to
-        # rounding.
+        # statsmodels regresses on the 1e7 levels and is 4e-5 (macOS) to 1.4e-4
+        # (Windows CI) off the exact values; the centered computation is exact
+        # to rounding, so it is compared with exact arithmetic only.
         assert got[0] == want[0]
         exact = _exact_centered_vif(X[:, 1:])
         np.testing.assert_allclose(got[1:], exact, rtol=4 * np.finfo(float).eps, atol=0.0)
-        np.testing.assert_allclose(got[1:], want[1:], rtol=1e-4, atol=0.0)
         assert np.all(got[1:] < 1.05) and np.all(got[1:] > 1.0)
 
     def test_shifted_levels_match_exact_arithmetic(self):
