@@ -40,14 +40,24 @@ if not hasattr(TradeCalibrationResult, "pfd"):
 
 
 def _get_replace_caller() -> Any | None:
-    """Inspect call stack to retrieve the original instance if called via dataclasses.replace."""
+    """Inspect call stack to retrieve the original instance if called via dataclasses.replace.
+
+    Python 3.13+ routes ``replace(obj, **changes)`` through ``obj.__replace__`` ->
+    ``dataclasses._replace(self, ...)``; Python 3.11 and 3.12 call the class directly
+    from ``dataclasses.replace(obj, ...)``. Both shapes are recognised; before 3.13
+    only the 3.13 one was, so ``replace`` on these configs failed on 3.11/3.12.
+    """
     for i in range(1, 6):
         try:
             f = sys._getframe(i)
-            if f.f_code.co_name == "_replace" and "self" in f.f_locals:
-                return f.f_locals["self"]
         except (AttributeError, ValueError):
             break
+        if f.f_globals.get("__name__") != "dataclasses":
+            continue
+        if f.f_code.co_name == "_replace" and "self" in f.f_locals:
+            return f.f_locals["self"]
+        if f.f_code.co_name == "replace" and "obj" in f.f_locals:
+            return f.f_locals["obj"]
     return None
 
 
@@ -56,7 +66,9 @@ def _get_replace_explicit_keys() -> set[str] | None:
     for i in range(1, 6):
         try:
             f = sys._getframe(i)
-            if f.f_code.co_name == "_replace":
+            if f.f_code.co_name == "_replace" and f.f_globals.get("__name__") == "dataclasses":
+                # Only 3.13+ keeps the caller's explicit keys apart; 3.11/3.12 fill
+                # ``changes`` with every field, so callers fall back to value comparison.
                 f_parent = sys._getframe(i + 1)
                 if f_parent.f_code.co_name == "replace" and "changes" in f_parent.f_locals:
                     return set(f_parent.f_locals["changes"].keys())

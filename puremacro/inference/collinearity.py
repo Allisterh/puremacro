@@ -169,7 +169,8 @@ def _vif_one(exog, idx):
     # ``pinv``, not ``lstsq`` and not a normal-equations inverse, because
     # ``pinv`` is literally what statsmodels' default
     # ``OLS.fit(method="pinv")`` calls — same SVD, same singular-value
-    # cutoff, so the residual sum of squares comes out bit-identical.
+    # cutoff, so the residual sum of squares comes out bit-identical on the
+    # same NumPy/LAPACK build.
     # ``lstsq(rcond=None)`` looks equivalent and is not: its cutoff is
     # ``max(m, n) * eps`` against numpy's ``pinv`` default of
     # ``1e-15 * max(m, n)``, which on a design whose columns differ by many
@@ -327,9 +328,14 @@ def vif(exog, exog_idx=None):
     ``cond(X'X) ≳ 1e14``, which on the reference sweep in
     ``tests/test_inference_extras_parity.py`` corresponds to a VIF of order
     ``1e13``. Below that — up to VIFs of ``1e12``, which is already far past
-    any interpretable range — this function is bit-identical to statsmodels
-    (``np.testing.assert_array_equal``, not ``assert_allclose``; see
-    ``test_bit_identity_on_near_collinear_designs``). Above it, statsmodels
+    any interpretable range — this function evaluates statsmodels' expressions
+    operation for operation. Against the same NumPy/LAPACK build the result
+    is bit-identical; across builds the pseudo-inverse's SVD differs in the
+    last bits, and the measured agreement is within ``0.012 * eps * max VIF``
+    relative (see ``test_bit_identity_on_near_collinear_designs``). On a design
+    whose columns share a large mean (``1e7``) both libraries lose about five
+    digits to cancellation, because the auxiliary regressions run on the raw
+    levels. Above it, statsmodels
     reports whatever the pseudo-inverse produced (``8.3e13``, ``9.0e15``, or
     ``inf`` behind a RuntimeWarning); those numbers are floating-point
     noise, not measurements, and this function raises

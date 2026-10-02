@@ -560,9 +560,14 @@ class TestCollinearity:
         assert got[1] == pytest.approx(1.0049732504759898, abs=1e-12)
 
     def test_bit_identity_on_near_collinear_designs(self):
-        """The module docstring claims bit-identity. Assert it, bit for bit.
+        """Parity with statsmodels to the floating-point bound, column by column.
 
-        ``assert_array_equal``, not ``assert_allclose(atol=1e-10)``: the
+        Bit-identity holds only against statsmodels on the same NumPy/LAPACK
+        build: across builds ``pinv``'s SVD differs in the last bits (CI
+        measured 4.6e-13 relative on VIF-1 columns of a VIF-5e10 design). The
+        tolerance is ``8 * eps * max VIF`` relative per design, the forward-error
+        bound of 1/(1-R2); the largest observed ratio is 0.012 of ``eps * max VIF``.
+        Still far tighter than ``atol=1e-10`` at these VIFs: the
         defect this guards against — using ``np.dot(centered, centered)``
         for the centered total sum of squares where statsmodels evaluates
         ``np.sum(weights * (endog - np.average(endog, weights=weights))**2)``
@@ -599,7 +604,8 @@ class TestCollinearity:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", RuntimeWarning)
                 want = np.array([sm_vif(X, i) for i in range(k)])
-            np.testing.assert_array_equal(got, want)
+            bound = 8.0 * np.finfo(float).eps * float(got.max())
+            np.testing.assert_allclose(got, want, rtol=bound, atol=0.0)
             checked += k
             largest = max(largest, float(got.max()))
 
@@ -642,7 +648,10 @@ class TestCollinearity:
             want = np.array([sm_vif(X, i) for i in range(X.shape[1])])
         with pytest.warns(UserWarning, match="are constant"):
             got = np.asarray(vif(X), dtype=float)
-        np.testing.assert_array_equal(got, want)
+        # Both libraries regress on the 1e7 levels and lose about five digits to
+        # cancellation (exact VIFs 1.007165, 1.001768, 1.005392), so parity, not
+        # bit-identity, is what can be asserted across numerical stacks.
+        np.testing.assert_allclose(got, want, rtol=1e-8, atol=0.0)
         assert np.all(got[1:] < 1.05) and np.all(got[1:] > 1.0)
 
     def test_constant_free_shifted_design_still_raises_with_the_right_cure(self):
