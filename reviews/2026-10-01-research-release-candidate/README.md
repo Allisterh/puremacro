@@ -15,6 +15,14 @@ the [third freeze](third-candidate-provenance.json), and the
 [final summary](summary.json) records `software_validation_passed: true`. The
 candidate is not tagged, published or deployed.
 
+**Shipped as 4.4.0 (2026-10-02).** Version 4.3.0 was already on PyPI, so this
+candidate was released as 4.4.0, together with cross-platform fixes found on
+CI, the resolution of all eleven accepted test failures and a `vif` accuracy
+fix (see the 4.4.0 changelog and `docs/ADVISORY.md`). Those later commits were
+validated by a fresh full gate (18,453 passed, 0 failed) and a clean
+`git archive` build; the evidence in this folder describes the frozen
+candidate only.
+
 All three originally unexpected failures now pass. The broader notebook checks
 report **640 passed and one unchanged known failure**, with no unexpected
 failures. Five rebuilt notebooks match their sources and contain no execution

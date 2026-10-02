@@ -2,12 +2,14 @@
 
 How to cut a release. Read §1 once; after that §3 is the whole procedure.
 
-*Release preparation rechecked for **4.3.0**, 2026-09-20: full baseline gate,
-clean artifact build, installed-wheel checks, documentation and playground build.
-See the [verification record](reviews/2026-09-20-release-4.3.0/REPORT.md) and
-[release page](https://github.com/jalonso1979/puremacro/releases/tag/v4.3.0) for
-results and publication workflows. The baseline permits eleven documented
-failures already present in 4.2.0; it is not an entirely green raw test suite.*
+*Release preparation rechecked for **4.4.0**, 2026-10-02: full baseline gate
+with an empty `tests/known_failures.json` (18,453 passed, 0 failed), clean
+`git archive` build, installed-wheel checks and CI on all nine targets. The
+research-candidate evidence is in
+[reviews/2026-10-01-research-release-candidate](reviews/2026-10-01-research-release-candidate/README.md).
+Run the gate as `python tools/release_check.py` from any environment: since
+4.4.0, Gate 3 snapshots the repository's package even when another puremacro
+is installed.*
 
 ## 1. What the setup actually is
 
@@ -38,7 +40,7 @@ If you ever see two PyPI workflows again, one of them is wrong.
 
 | gate | what it proves | notes |
 |---|---|---|
-| 1 test baseline | pytest `FAILED` + `ERROR` node ids are a subset of `tests/known_failures.json` | At 4.3.0, 11 independently confirmed previous-release failures remain: flexible configuration replacement, harmonic-mean covariance validation, legacy welfare closure and numerical parity edge cases. Each entry records a workaround and prior CI evidence; see the changelog. Recovered cases are reported for removal. Setup errors count. The wall-clock budget is 5400 s, overridable with `PUREMACRO_BASELINE_TIMEOUT_S`; complete runs take tens of minutes. |
+| 1 test baseline | pytest `FAILED` + `ERROR` node ids are a subset of `tests/known_failures.json` | Empty since 4.4.0, which resolved the eleven entries carried from 4.2.0. A new entry needs a reason, a workaround and CI evidence; prefer fixing the test or the code. CI runs plain pytest, so any entry keeps CI red on every platform. Recovered cases are reported for removal. Setup errors count. The wall-clock budget is 5400 s, overridable with `PUREMACRO_BASELINE_TIMEOUT_S`; complete runs take tens of minutes. |
 | 2 Pyodide contract | `tests/test_pyodide_compat.py` green | static check of the import contract |
 | 3 public API snapshot | regenerated API == `tests/fixtures/public_api_snapshot.json` | the fixture is the count (404 modules with `__all__`, 285 result classes at 3.4.0); the gate prints every symbol that moved |
 | 4 version sync | `pyproject.toml` == `puremacro/__init__.py` == `CHANGELOG.md` == `CITATION.cff` == the wheel pin in `playground/jupyter_lite_config.json` | all five |
