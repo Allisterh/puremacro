@@ -766,7 +766,8 @@ def test_line_search_failures_name_their_cause(rand20, hand_active):
     calib = hand_active["calib"]
     nc, ns, nfd = calib.nc, calib.ns, calib.n_final_demand
     # Whether that rounding crosses tol depends on the BLAS build (one case solved cleanly
-    # on Windows CI), so the invariant is: refuse by name, or return a certificate within tol.
+    # on Windows CI), so the invariant is: refuse by name, or meet the acceptance contract,
+    # whose independent flow certificate is bounded by certificate_tol (default 1e-8), not tol.
     for multiplier, tol in ((1e8, 2e-11), (1e8, 1e-9)):
         ta = np.ones((nc * ns, ns, nc)); tf = np.ones((nc * ns, nfd, nc))
         ta[ns:2 * ns, :, 0] = multiplier; tf[ns:2 * ns, :, 0] = multiplier
@@ -775,7 +776,7 @@ def test_line_search_failures_name_their_cause(rand20, hand_active):
         except CESNewtonError as error:
             assert "level audit" in str(error)
         else:
-            assert max(res.certificate.values()) <= tol
+            assert max(res.certificate.values()) <= 1e-8
     ta = np.ones((nc * ns, ns, nc)); tf = np.ones((nc * ns, nfd, nc))
     ta[ns:2 * ns, :, 0] = 1e6; tf[ns:2 * ns, :, 0] = 1e6
     res = solve_ces_block_newton(calib, ta, tf, technology=NestedCESTechnology(0, 4, 4, 1), tol=1e-9, max_iter=40)
