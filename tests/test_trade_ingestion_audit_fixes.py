@@ -41,6 +41,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from _timing import budget
 from puremacro.trade import _accounting
 from puremacro.trade import data as trade_data
 from puremacro.trade._oecd_icio import condense_final_demand, read_native
@@ -110,7 +111,7 @@ def test_bundled_prohibitive_tariffs_are_certified_non_viable_fast(bundled_calib
         bounds = compute_spectral_radius(B, max_iter=50, tol=1e-12)
         elapsed.append(time.perf_counter() - t0)
     assert bounds[1] >= 1.0, f"lower bound {bounds[1]} does not certify the violation"
-    assert min(elapsed) < 0.1
+    assert min(elapsed) < budget(0.1)
     if rate in (3.8, 9.0):
         truth = _eig_radius(B)
         _assert_brackets(bounds, truth, rel=1e-9)

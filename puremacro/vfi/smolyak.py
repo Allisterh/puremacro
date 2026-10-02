@@ -1094,7 +1094,10 @@ def _solve_smolyak_euler(
 
     if not converged:
         # Solve using Powell's hybrid method (hybr) with fallback to LM
-        res_root = root(residual_obj, th_opt.ravel(), method="hybr", tol=tol, options={"maxfev": max_iter * 3})
+        # hybr stops on a relative step size, not on the residual; at tol the
+        # residual lands within a factor of a few of tol and on OpenBLAS above it.
+        res_root = root(residual_obj, th_opt.ravel(), method="hybr", tol=tol * 1e-3,
+                        options={"maxfev": max_iter * 3})
         cand_th = res_root.x.reshape(N, d)
         cand_norm = float(np.max(np.abs(residual_obj(res_root.x))))
         n_iter = int(getattr(res_root, "nfev", 0))
@@ -1105,7 +1108,7 @@ def _solve_smolyak_euler(
             converged = bool(np.isfinite(residual_norm) and residual_norm <= tol)
 
         if not converged and not res_root.success:
-            res_lm = root(residual_obj, th.ravel(), method="lm", tol=tol)
+            res_lm = root(residual_obj, th_opt.ravel(), method="lm", tol=tol * 1e-3)
             n_iter += int(getattr(res_lm, "nfev", 0))
             cand_lm_norm = float(np.max(np.abs(residual_obj(res_lm.x))))
             if cand_lm_norm < residual_norm:

@@ -63,7 +63,7 @@ def test_manifest_is_strict_json_with_provenance_and_artifact_hashes(evidence):
 
 def test_report_preserves_monte_carlo_scope_and_actual_results(evidence):
     output, study, _ = evidence
-    report = (output / "report.md").read_text()
+    report = (output / "report.md").read_text(encoding="utf-8")
     assert "Requested simulations per scenario: **2**" in report
     assert "Seed: **773**" in report
     assert "**4**" in report

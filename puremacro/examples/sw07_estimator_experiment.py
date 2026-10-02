@@ -24,7 +24,7 @@ _TABLES = ("summary", "draws", "observed_fits", "paired_differences")
 def load_experiment(output: Path) -> SW07EstimatorExperiment:
     """Authenticate a complete exported phase before using it as a reference."""
     output = Path(output)
-    manifest = json.loads((output/"manifest.json").read_text())
+    manifest = json.loads((output/"manifest.json").read_text(encoding="utf-8"))
     required = {f"{name}.csv" for name in _TABLES} | {"draw_evidence.npz"}
     if not required <= set(manifest["artifacts"]):
         raise ValueError("Incomplete experiment artifact manifest")
@@ -137,7 +137,7 @@ def run_application(output: Path, *, replications: int = 399, phase: str = "cali
     report += ("All starts, seeds, sample hashes, moments and full HAC arrays are retained. "
         "Atomic checkpoints authenticate numerical sources, observed data, settings and "
         "dependency versions. A small replication count is a workflow check only.\n")
-    (output/"report.md").write_text(report)
+    (output/"report.md").write_text(report, encoding="utf-8")
     artifacts.append("report.md")
     manifest = {**study.metadata, "package_version": __version__,
         "comparison": None if comparison is None else comparison.to_dict(orient="records"),

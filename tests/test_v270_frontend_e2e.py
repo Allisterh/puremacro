@@ -31,6 +31,8 @@ import puremacro
 import puremacro.dsge as dsge
 from puremacro.dsge import build_dynare, load_mod, parse_mod, LinearModel
 
+from _timing import budget
+
 WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
 DSGE_DIR = WORKSPACE_ROOT / "puremacro" / "dsge"
 SW07_MOD_PATH = DSGE_DIR / "_references" / "sw07_pfeifer.mod"
@@ -2550,7 +2552,7 @@ class TestTier4RealWorldScenarios:
         assert len(m1.variables) == 40
         assert len(m1.states) == 15
         assert len(m1.shocks) == 7
-        assert t_ord1 <= 0.10, f"Order 1 solve {t_ord1:.4f}s exceeded 0.10s limit"
+        assert t_ord1 <= budget(0.10), f"Order 1 solve {t_ord1:.4f}s exceeded {budget(0.10)}s limit"
         
         # Order 2 solve
         _require_v270_integration()

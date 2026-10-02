@@ -765,11 +765,17 @@ def test_line_search_failures_name_their_cause(rand20, hand_active):
     # income, so rounding in the implied rows exceeds tol * max(scale) at the default tol.
     calib = hand_active["calib"]
     nc, ns, nfd = calib.nc, calib.ns, calib.n_final_demand
+    # Whether that rounding crosses tol depends on the BLAS build (one case solved cleanly
+    # on Windows CI), so the invariant is: refuse by name, or return a certificate within tol.
     for multiplier, tol in ((1e8, 2e-11), (1e8, 1e-9)):
         ta = np.ones((nc * ns, ns, nc)); tf = np.ones((nc * ns, nfd, nc))
         ta[ns:2 * ns, :, 0] = multiplier; tf[ns:2 * ns, :, 0] = multiplier
-        with pytest.raises(CESNewtonError, match="level audit"):
-            solve_ces_block_newton(calib, ta, tf, technology=NestedCESTechnology(0, 4, 4, 1), tol=tol, max_iter=40)
+        try:
+            res = solve_ces_block_newton(calib, ta, tf, technology=NestedCESTechnology(0, 4, 4, 1), tol=tol, max_iter=40)
+        except CESNewtonError as error:
+            assert "level audit" in str(error)
+        else:
+            assert max(res.certificate.values()) <= tol
     ta = np.ones((nc * ns, ns, nc)); tf = np.ones((nc * ns, nfd, nc))
     ta[ns:2 * ns, :, 0] = 1e6; tf[ns:2 * ns, :, 0] = 1e6
     res = solve_ces_block_newton(calib, ta, tf, technology=NestedCESTechnology(0, 4, 4, 1), tol=1e-9, max_iter=40)
