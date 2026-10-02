@@ -231,6 +231,7 @@ The fixes of the 30 September notebook review follow, grouped by area. Each has 
 - Quoted strings in the Dynare macro processor dropped or translated backslashes (`\U` became `U`, `\r` a carriage return), so `@#includepath "C:\Users\..."` and `@#include` with a Windows path could not find the file. As in Dynare, a backslash is now literal; only `\"`, `\'` and `\\` are collapsed.
 - `solve_smolyak` passed `tol` to SciPy's `hybr` as a relative step tolerance, so the Euler residual could stop just above `tol` and report `converged=False` (Linux and Windows). The root solve now uses `tol * 1e-3`, and the Levenberg-Marquardt fallback starts from the best iterate instead of the initial guess. The 3-capital benchmark's residual falls from 4e-9 to 6e-14.
 - `examples/sw07_estimator_experiment.py` reads and writes its report and manifest as UTF-8.
+- `fit_structural` could return an estimate an ulp outside its own bounds when the solution sat on a bound, because the fit runs in rescaled coordinates. Reusing that estimate as a start raised "theta0 lies outside bounds", which broke `fit_empirical_sw07`'s bandwidth-sensitivity refits on Linux. The estimate is now clipped into the bounds.
 
 #### The eleven accepted failures of 4.2.0 and 4.3.0
 
