@@ -191,17 +191,19 @@ class DocumentTermMatrix:
 
         ``aggregate(by="country", freq="MS")`` returns one row per country and
         month with the summed term counts, plus an ``n_docs`` column in
-        ``docs``. ``freq`` is any pandas period alias ("MS", "QS", "YS", "W").
-        Only count or binary matrices can be summed meaningfully.
+        ``docs``. ``freq`` is any pandas period alias ("MS", "QS", "YS", "W");
+        each period is labelled by its first day. Timezone-aware dates are
+        binned on their UTC date. Only count or binary matrices can be summed
+        meaningfully.
         """
         if self.weighting == "tfidf":
             raise ValueError("aggregate the count matrix, then call tfidf() on the result")
         keys = [by] if isinstance(by, str) else list(by or [])
         frame = self.docs[keys].copy() if keys else pd.DataFrame(index=self.docs.index)
         if freq is not None:
-            dates = pd.to_datetime(self.docs[date_col], utc=_has_tz(self.docs[date_col]))
-            if getattr(dates.dt, "tz", None) is not None:
-                dates = dates.dt.tz_convert("UTC").dt.tz_localize(None)
+            # Timezone-aware dates (Timestamps or ISO strings with any mix of
+            # offsets) are binned on UTC; naive ones as they are.
+            dates = pd.to_datetime(self.docs[date_col], utc=True).dt.tz_localize(None)
             frame[date_col] = dates.dt.to_period(_period_alias(freq)).dt.start_time
             keys = keys + [date_col]
         if not keys:
@@ -408,10 +410,6 @@ def _normalize_rows(X: sparse.csr_matrix, norm: str | None) -> sparse.csr_matrix
         raise ValueError(f"norm must be 'l1', 'l2' or None, got {norm!r}")
     s[s == 0] = 1.0
     return sparse.csr_matrix(sparse.diags(1.0 / s) @ X)
-
-
-def _has_tz(col: pd.Series) -> bool:
-    return any(getattr(v, "tzinfo", None) is not None for v in col)
 
 
 def _period_alias(freq: str) -> str:

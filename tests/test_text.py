@@ -254,6 +254,15 @@ def test_aggregate_mixed_timezones():
     assert p.docs["n_docs"].tolist() == [2]
 
 
+def test_aggregate_string_dates_with_different_offsets():
+    # e.g. dates kept as ISO strings from feeds in different timezones.
+    docs = pd.DataFrame({"doc_id": [0, 1], "date": [
+        "2024-01-31T23:30:00-05:00", "2024-02-10T09:00:00+01:00"]})
+    p = build_dtm(["a rate", "b rate"], docs=docs).aggregate(freq="MS")
+    assert p.docs["date"].tolist() == [pd.Timestamp("2024-02-01")]
+    assert p.docs["n_docs"].tolist() == [2]
+
+
 def test_transform_uses_fitted_vocabulary(dtm):
     t = dtm.transform(["rates and inflation, rates, and unseen words"], languages="en")
     assert t.vocab == dtm.vocab
