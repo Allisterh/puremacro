@@ -150,6 +150,46 @@ def test_store_keeps_latest_text_and_flags_revisions(tmp_path):
     assert a.text == "Rates were raised." and a.metadata["speakers"] == ["Powell"]
 
 
+def test_concurrent_upserts_into_one_store_do_not_collide(tmp_path):
+    # Two sessions harvesting into the default store at the same time: without
+    # a write lock taken before the existence check, both saw "no row" and the
+    # second INSERT failed with IntegrityError, losing that harvest.
+    import threading
+
+    docs = [_doc(f"d{i}", text=f"text {i}") for i in range(2000)]
+    path = tmp_path / "c.db"
+    CorpusStore(path).close()
+    barrier, errors, counts = threading.Barrier(2), [], []
+
+    def run():
+        with CorpusStore(path) as st:
+            barrier.wait()
+            try:
+                counts.append(st.upsert(docs))
+            except Exception as exc:  # noqa: BLE001
+                errors.append(repr(exc))
+
+    threads = [threading.Thread(target=run) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    assert sorted(c["new"] for c in counts) == [0, 2000]
+    with CorpusStore(path) as st:
+        assert len(st) == 2000
+
+
+def test_failed_upsert_leaves_no_partial_write(tmp_path):
+    bad = _doc("bad")
+    bad.date = None  # .isoformat() fails after "a" was inserted
+    with CorpusStore(tmp_path / "c.db") as st:
+        with pytest.raises(AttributeError):
+            st.upsert([_doc("a"), bad])
+        st.record_run(started_at=0, params={}, report=[])  # commits the connection
+        assert len(st) == 0
+
+
 def test_harvest_writes_to_store_and_logs_run(monkeypatch, tmp_path):
     import puremacro.narrative.sources.fed_decision as mod
     monkeypatch.setattr(mod, "iter_fed_decision",

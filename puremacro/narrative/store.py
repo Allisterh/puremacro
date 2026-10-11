@@ -166,11 +166,27 @@ class CorpusStore:
         is *updated* when its ``doc_id`` exists with a different
         ``content_hash``: the new text replaces the old one and the row's
         revision flag is set.
+
+        The call is one transaction that takes the write lock before the first
+        existence check, so concurrent harvests into the same file wait for
+        each other instead of both inserting the same ``doc_id``; if it fails,
+        nothing it wrote is kept.
         """
         ts = int(time.time()) if fetched_at is None else int(fetched_at)
         version = _version()
         counts = {"new": 0, "updated": 0, "unchanged": 0}
         cur = self._conn.cursor()
+        if not self._conn.in_transaction:
+            cur.execute("BEGIN IMMEDIATE")
+        try:
+            self._upsert_rows(cur, docs, ts, version, counts)
+        except BaseException:
+            self._conn.rollback()
+            raise
+        self._conn.commit()
+        return counts
+
+    def _upsert_rows(self, cur, docs, ts: int, version: str, counts: dict[str, int]) -> None:
         for d in docs:
             h = d.content_hash
             meta_json = dumps_metadata(d.metadata)
@@ -204,8 +220,6 @@ class CorpusStore:
                      version, d.doc_id),
                 )
                 counts["updated"] += 1
-        self._conn.commit()
-        return counts
 
     def record_run(
         self,
