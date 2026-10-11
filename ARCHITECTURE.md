@@ -701,8 +701,9 @@ and INEGI's ENIGH (strata `est_dis`, PSUs `upm`, no replicates).
 Designs with strata and PSUs use `method="taylor"`: linearised
 ultimate-cluster variance, subgroups as domains over the full design,
 Woodruff intervals for quantiles, single-PSU strata centred on the grand
-mean; means and totals match `samplics`' `TaylorEstimator` to machine
-precision on a synthetic stratified cluster sample. The design and estimators are NumPy/pandas only; provider modules load
+mean; means, totals and quantile intervals are checked against the
+formulas written out longhand in `tests/test_fetch_micro/test_design.py`
+(no external survey package is compared in the suite). The design and estimators are NumPy/pandas only; provider modules load
 lazily. Keyed requests go through `fetch._http.cached_get(...,
 secret_params=...)`, which keeps the key out of the cache path, the
 manifest and error text.
