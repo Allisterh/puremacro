@@ -111,6 +111,11 @@ def test_base_model_compiles():
     (lambda m: m.parameters(z=1.0), "already a state"),
     (lambda m: m.discount("rho"), "scalar parameter"),
     (lambda m: m.choose("b(+1)"), "chooses every state"),
+    # a second meaning for one name used to be resolved silently (locals win over
+    # parameters, parameters over aggregates in clear())
+    (lambda m: m.local("r = 0.5"), r"'r' is declared as both"),
+    (lambda m: m.parameters(A=1.0).aggregate(A="a"), r"'A' is declared as both"),
+    (lambda m: m.local("c = 1"), "local names must be unique"),
 ])
 def test_spec_errors_name_the_problem(mutate, message):
     m = _base()

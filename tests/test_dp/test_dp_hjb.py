@@ -114,6 +114,7 @@ def test_huggett_bond_market_clears_with_a_negative_limit():
     (lambda m: m.reward("crra(c, gamma) + a"), "only through 'c'"),
     (lambda m: m.control("x"), "exactly one control"),
     (lambda m: m.horizon(3), "infinite horizon"),
+    (lambda m: m.parameters(A=1.0), "'A' is declared as both a parameter and an aggregate"),
 ])
 def test_models_outside_hjb_are_rejected(change, match):
     m = household()

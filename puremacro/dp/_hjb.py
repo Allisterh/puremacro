@@ -75,6 +75,9 @@ class HJBPlan:
         names = self.state_names + self.shock_names + [self.cname]
         if len(set(names)) != len(names):
             raise ModelSpecError(f"state, shock and control names must be distinct; got {names}")
+        from puremacro.dp.model import _check_distinct_kinds
+
+        _check_distinct_kinds(m)
 
         # exogenous chain: product of independent jumps, first declared slowest
         if m._shocks:

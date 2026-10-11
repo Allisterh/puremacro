@@ -287,6 +287,17 @@ class Model:
                 f"shocks={[s for s, _ in self._shocks]}, prices={list(self._prices)})")
 
 
+def _check_distinct_kinds(m: Model) -> None:
+    """A name is at most one of parameter, price, local and aggregate; otherwise one
+    meaning would silently shadow the other."""
+    kind_of: dict[str, str] = {}
+    for kind, keys in (("a parameter", m._params), ("a price", m._prices),
+                       ("a local", [n for n, _ in m._locals]), ("an aggregate", m._aggregates)):
+        for k in keys:
+            if kind_of.setdefault(k, kind) != kind:
+                raise ModelSpecError(f"{k!r} is declared as both {kind_of[k]} and {kind}")
+
+
 class _Compiled:
     """A validated model with generated household, aggregate and clearing functions."""
 
@@ -334,9 +345,7 @@ class _Compiled:
         for k in list(m._params) + list(m._prices) + [n for n, _ in m._locals] + list(m._aggregates):
             if k in reserved:
                 raise ModelSpecError(f"name {k!r} is already a state, shock, choice or 'age'")
-        clash = set(m._params) & set(m._prices)
-        if clash:
-            raise ModelSpecError(f"{sorted(clash)} declared as both parameter and price")
+        _check_distinct_kinds(m)
 
         # exogenous chain
         jumps = [n for n, p in m._shocks if not hasattr(p, "discretize")]
