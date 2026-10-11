@@ -69,6 +69,20 @@ def test_crra_is_log_at_one():
     np.testing.assert_allclose(dp.crra(c, 1.0 + 1e-6), np.log(c), atol=1e-5)
 
 
+@pytest.mark.parametrize("gamma", [1.0, 2.0, 3.0])
+def test_crra_is_minus_infinity_without_consumption(gamma):
+    # with gamma = 2 the power formula is finite (and large) at c < 0, so a model
+    # that left out subject_to("c > 0") used to choose negative consumption
+    with np.errstate(all="ignore"):
+        assert np.all(dp.crra(np.array([-1.0, -0.1, 0.0]), gamma) == -np.inf)
+    m = _base()
+    m._constraints = []
+    m.parameters(gamma=gamma)
+    m.reward("crra(c, gamma)")
+    sol = m.solve()
+    assert np.all(sol.policy("c") > 0)
+
+
 def _base():
     m = dp.Model("base")
     m.parameters(beta=0.95, r=0.02)

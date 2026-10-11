@@ -43,11 +43,15 @@ def crra(c, gamma, xp=np):
     """CRRA felicity ``(c^(1-gamma) - 1) / (1 - gamma)``, equal to ``log(c)`` at gamma = 1.
 
     The ``-1`` makes log utility the gamma -> 1 limit; it shifts the value
-    function by a constant and leaves policies unchanged.
+    function by a constant and leaves policies unchanged. Consumption at or
+    below zero is worth ``-inf`` for every gamma (the power formula is finite
+    there for integer gamma, e.g. ``-1/c`` at gamma = 2).
     """
     if float(gamma) == 1.0:
-        return xp.log(c)
-    return (c ** (1.0 - gamma) - 1.0) / (1.0 - gamma)
+        u = xp.log(c)
+    else:
+        u = (c ** (1.0 - gamma) - 1.0) / (1.0 - gamma)
+    return xp.where(c > 0, u, -np.inf)
 
 
 def parse(text: str, variables=()) -> Node:
