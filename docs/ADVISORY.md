@@ -14,6 +14,248 @@ without re-running it), and what to do.
 
 ---
 
+## 2026-10-03 — the legacy 77x11 aggregation misplaced rest-of-world final demand, all versions; a clean table ships in 4.6.0
+
+**Not a solver defect; a second defect of the legacy data fixture, found while
+replacing it. Fixed in 4.6.0 by a new bundled table; the legacy table is kept
+unchanged for its MATLAB parity suites.**
+
+While porting the MATLAB aggregation `Agregar_11s.m` to Python
+(`tools/build_icio_77c_11s.py`, verified against the bundled
+`icio_77c_11s.npz` cell by cell: 99.92% bit-equal, maximum difference 7.6e-5 on
+values of order 1e9), two indexing defects of that script surfaced in addition
+to the decimal corruption recorded on 2026-09-22. In the block that reassembles
+the table around the rest-of-world country (ROW), the loop meant to fill ROW's
+final-demand sales to the other 76 countries writes into the intermediate block
+instead (`data7fd` written as `data7`), so those sales sit in the intermediate
+columns of the first countries while the ROW final-demand block is empty; and
+the loop meant to fill the tax and value-added cells of ROW's own final-demand
+columns writes into ROW's flow rows (`data5Tfd` written as `data5fd`). On the
+legacy table this moves 3,203 cells and 4.9e9 (corrupted-export units) between
+blocks; on the clean 2020 release it would move 1.2e5 USD million. Every
+number derived from the legacy table inherits both defects.
+
+The 4.6.0 replacement is `icio_77c_11s_oecd2020.npz`, built from the clean
+OECD ICIO 2023-edition 2020 file (MD5 `d3e0f4979d85d6c0bb7cf4c43e324287`) with
+the corrected aggregation; `MANIFEST_OECD2020.json` records the array digest,
+the recipe and the native world totals it conserves (value added 7.97e7 USD
+million; output 1.66e8). The author's legacy MATLAB model, run unchanged on the
+clean table, is bundled as `trade_reference_solutions_oecd2020.npz` so the
+parity check survives the data change, and four gallery cases (`Trade`) check
+conservation, column balance, the base equilibrium and that MATLAB parity.
+
+| Surface | Affected condition | Unaffected when | Guidance |
+|---|---|---|---|
+| `load_icio_data()` without `source=`, all versions | Returns the legacy table; from 4.6.0 with a `FutureWarning` (once per process) | `source="oecd2020"` | Pass `source="oecd2020"` for anything empirical; `source="legacy"` keeps the regression fixture explicitly. The default switches to `"oecd2020"` in 5.0. |
+| Notebooks 61, 62, 64 and their Spanish twins; the trade documentation snippets | They read the legacy table (now pinned with `source="legacy"` so their numbers are unchanged) | — | Their magnitudes remain illustrations of the solver on a regression fixture, not OECD-based estimates, exactly as the 2026-09-22 entry says. |
+| `trade_reference_solutions.npz`, `trade_results_workbook.npz` | MATLAB solutions of the legacy table | `load_reference_solution(..., source="oecd2020")` | Use the clean-table references for new parity work; `REFERENCE_MANIFEST_OECD2020.json` lists the scenarios available. |
+| `load_oecd_icio_granular`, `puremacro.trade.mrio.read_oecd_native`, `load_raw_45sector_icio` | None: they read the native files by labels | — | Unchanged. |
+
+---
+
+## 2026-10-02 — `solve_trade_equilibrium(method="quasi_condensed")` reported `converged=True` with a large residual, versions 4.2.0 to 4.4.0
+
+**Fixed after 4.4.0** (see the Unreleased section of `CHANGELOG.md`). The
+`quasi_condensed` branch of `solve_trade_equilibrium` took its convergence flag
+from the quasi-condensed (flexible) solver but its residual, flows and prices
+from the legacy post-processing, evaluated at the solver's default MATLAB
+pricing convention (`replicate_matlab_precedence=True`), which the
+quasi-condensed solve does not use. The flag and the reported residual
+therefore disagreed. On the notebook-62 2x2 calibration with a 25% tariff and
+`tol=1e-10`, 4.4.0 returned `converged=True` with `max_residual` 0.0487
+(`residual_norm` 0.155); with `sigma_y=0.5`, 0.498. The residual is now the one
+the flag was judged on, the flows are post-processed at the quasi-condensed
+convention and agree with a legacy Newton solve of the same model
+(`replicate_matlab_precedence=False`) to 1e-8, and active flexible settings
+raise `ValueError` because the legacy flow fields of `TradeEquilibriumResult`
+cannot describe them.
+
+| Surface | Affected condition | Unaffected when | Guidance |
+|---|---|---|---|
+| `solve_trade_equilibrium(..., method="quasi_condensed")` | any call | — | `x_sol` was the quasi-condensed solution and the flag was right for that model; the residual fields and the flows were not. Re-run on the fixed version, or use `solve_flexible_trade_equilibrium(..., method="quasi_condensed")`. |
+| same, with `sigma_y > 0` or an active `config` | flows, prices, CPI, terms of trade | — | These describe the legacy model, not the solved one; take the flows from `solve_flexible_trade_equilibrium`'s `metadata`. |
+| same, with `fiscal_closure`/`recycling_params`/`sigma`/`capacity_margins` | the setting was ignored by the solve | the setting was at its default | The returned equilibrium is not a solution of the requested model. |
+
+`solve_flexible_trade_equilibrium` never used this branch; its own
+`converged` and `residual_norm` were consistent.
+
+### Are you affected?
+
+```python
+res = solve_trade_equilibrium(calib, ..., method="quasi_condensed")
+res.converged and res.max_residual > res.metadata["tol"]   # True → the flag and residual disagreed
+```
+
+### What to re-run
+
+- Any table built from the flows, prices, CPI or terms of trade of a
+  `solve_trade_equilibrium(..., method="quasi_condensed")` result.
+
+---
+
+## 2026-10-02 — Flow properties of `FlexibleTradeEquilibriumResult` ignored the solved model, versions 4.2.0 to 4.4.0
+
+**Fixed after 4.4.0** (see the Unreleased section of `CHANGELOG.md`). The
+`exports`, `imports`, `cpi`, `terms_of_trade`, `gdp` and `gdp_fc` properties of
+a `solve_flexible_trade_equilibrium` result evaluated the legacy
+Cobb-Douglas/Leontief flow equations at `x_sol` with no tariffs and the MATLAB
+pricing convention, whatever the call. Measured on 4.4.0, notebook-62 2x2
+calibration, 25% tariff on intermediates from country B:
+
+- legacy route (default configuration): exports `[60.73, 68.94]` against
+  `[60.73, 69.19]` from `solve_trade_equilibrium` with the same arguments;
+- quasi-condensed route, default configuration: exports `[55.87, 63.12]`
+  against `[56.73, 64.26]` from a legacy Newton solve of the same model;
+- quasi-condensed route, `sigma_trade=5`: exports `[58.20, 59.86]` against the
+  solved bilateral flows `[62.15, 58.26]`.
+
+`cpi`, `terms_of_trade` and `gdp`/`gdp_fc` matched on the two default-
+configuration cases (they depend on the state, not on the tariff-dependent
+quantities); for an active configuration the legacy CPI and terms of trade
+describe a different model, and with `variable_markups=True` `gdp` omitted
+markup profits. The properties now describe the solved model;
+`cpi`/`terms_of_trade` raise `NotImplementedError` for an active configuration.
+4.4.0 documented the quasi-condensed half of this as a known issue; the
+legacy-route half was not known.
+
+| Surface | Affected condition | Unaffected when | Guidance |
+|---|---|---|---|
+| `exports`, `imports` | any `tau`, `tau_fd`, `tauf`, `tauf_fd`; any active configuration on the quasi-condensed route | no tariffs and the default configuration on the legacy route | Re-run, or take row/column sums of `metadata["bilateral_trade"]` (quasi-condensed route). |
+| `cpi`, `terms_of_trade` | active flexible configuration | default configuration | No replacement index exists for the flexible model; use the metadata flows. |
+| `gdp` | `variable_markups=True` | no markups | Add `metadata["markup_profits"]`, or use `metadata["household_income"]`. |
+| `welfare_decomposition` | — | always: it keeps its historical proxy and values | Unchanged. |
+
+### Are you affected?
+
+```python
+res = solve_flexible_trade_equilibrium(calib, ...)
+tariffs = any(v is not None for v in res.metadata["tariff_inputs"].values())
+tariffs or bool(res.metadata["active_flexible_settings"])   # True → re-run
+```
+
+### What to re-run
+
+- Trade volumes, trade balances and terms-of-trade effects read from these
+  properties for tariff scenarios or active flexible settings.
+
+---
+
+## 2026-10-02 — `minnesota_gibbs` Σ posterior degrees of freedom, versions 0.92.0 to 4.4.0
+
+**Fixed after 4.4.0** (see the Unreleased section of `CHANGELOG.md`).
+Bańbura, Giannone and Reichlin (2010; ECB WP 966, p. 12, eq. 7) add the
+improper prior `|Ψ|^-(n+3)/2` to the dummy observations, which gives
+`Ψ | Y ~ iW(Σ̃, T_d + 2 + T - k)`. `minnesota_gibbs` used `T_d + T - k`. The
+posterior mean of Σ, `Σ̃ / (ν - n - 1)`, was therefore too large by the factor
+`(ν - n + 1)/(ν - n - 1)`: 5.3% on a 3-variable VAR(1) with 39 observations,
+1.0% on 3 variables, 4 lags and 200 quarters. Coefficient draws inherit the
+scale through `Σ ⊗ (X*'X*)⁻¹`, so their posterior spread was too wide by about
+half that percentage. The posterior mean of the coefficients (`A_mean`,
+`intercept_mean`), `minnesota_posterior` and the marginal likelihood of
+`minnesota_optimal_lambda` are unaffected.
+
+| Surface | Affected condition | Unaffected when | Guidance |
+|---|---|---|---|
+| `minnesota_gibbs` `Sigma_draws`, `nu_post`, posterior bands of `A_draws`/`intercept_draws` | always | point estimates from `A_mean`/`intercept_mean` | Re-run; the effect shrinks as `2/(T + T_d - k - n)`. |
+
+### Are you affected?
+
+```python
+T, n = Y.shape                              # your data and lag order p
+nu_old = (T - p) + (n * p + n + 1) - (n * p + 1)   # T + T_d - k as used by 4.4.0
+(nu_old - n + 1) / (nu_old - n - 1) - 1     # relative overstatement of E[Σ | Y]
+```
+
+### What to re-run
+
+- Credible bands of impulse responses, forecasts and variance decompositions
+  computed from `minnesota_gibbs` draws, above all for short samples or large
+  systems.
+
+---
+
+## 2026-10-02 — Spline and Smolyak solvers ignored `gamma` and solved log utility in their Bellman methods, versions 3.3.0 to 4.4.0
+
+**Fixed after 4.4.0** (see the Unreleased section of `CHANGELOG.md`).
+Three related errors in the built-in growth model of `puremacro.vfi.splines`
+and `puremacro.vfi.smolyak`, checked against the Euler equation of the CRRA
+model written out by hand:
+
+1. Both read only `params["sigma"]`. `params={"gamma": 2}` (the spelling of
+   `CollocationProblem`, `FEMProblem` and the discrete engines) silently solved
+   log utility: Euler residual 0.151 (spline) and 0.0345 (Smolyak, 2 capitals)
+   at the returned policy, which reported `converged=True`.
+2. The spline Bellman solver (`method="bellman"`) used log utility for every
+   curvature: residual 0.151 at `sigma=2`.
+3. `solve_smolyak(method="bellman")` iterated on the closed-form policy
+   `k'_m = alpha_m beta Y` of log utility with full depreciation and returned
+   it with `converged=True` for any `sigma`, `gamma`, `delta` or `return_fn`
+   (residual 0.0345 at `sigma=2`). It now raises `NotImplementedError` outside
+   that case.
+
+| Surface | Affected condition | Unaffected when | Guidance |
+|---|---|---|---|
+| spline and Smolyak `method="euler"` | `params` has `gamma` and no `sigma` | `sigma` given, or curvature 1 | Re-run on the fixed version, or pass `sigma`. |
+| spline `method="bellman"` | `sigma` (or `gamma`) ≠ 1 | log utility | Re-run on the fixed version. |
+| `solve_smolyak(method="bellman")` | `sigma`/`gamma` ≠ 1, `delta` ≠ 1 or a `return_fn` | log utility with full depreciation | Use `method="euler"`. |
+
+### Are you affected?
+
+```python
+p = problem.params
+curv = p.get("sigma", p.get("gamma", 1.0))
+("gamma" in p and "sigma" not in p and curv != 1.0) \
+    or (problem.method == "bellman" and (curv != 1.0 or p.get("delta", 1.0) != 1.0))   # True → re-run
+```
+
+### What to re-run
+
+- Policies, value functions, marginal values and IFT gradients from these
+  solvers with non-log utility (and, for Smolyak Bellman, partial
+  depreciation).
+
+---
+
+## 2026-10-02 — `vif` on levels data with a constant, versions 2.6.0 to 4.3.0
+
+**Fixed in 4.4.0.** `inference.collinearity.vif` reproduced statsmodels'
+`variance_inflation_factor` operation for operation, including its auxiliary
+regressions on the raw levels. When the regressors have means that are large
+relative to their spread, those regressions cancel catastrophically and the
+VIF loses digits, or all of them. With an explicit constant column a VIF is
+exactly invariant to shifting any column, so the non-constant columns are now
+computed on centered data; the result agrees with exact rational arithmetic
+to within `0.33 * eps * max VIF` on test designs with means up to `1e9`.
+
+Measured on 4.3.0 (statsmodels returns the same numbers): three standard-normal
+regressors shifted to mean `1e7` gave 1.007122 for an exact 1.007165 (`4e-5`
+relative); an interest rate next to a GDP series in yen (`2e15` scale) gave
+0.053, which is impossible since every VIF is at least 1 (exact: 1.005); and
+shifted random designs were up to 99% off.
+
+| Surface | Affected condition | Unaffected when | Guidance |
+|---|---|---|---|
+| `vif` | `exog` has an explicit constant column and regressors whose mean is large relative to their standard deviation (levels data) | regressors are near zero mean, or demeaned before the call; the constant column's own VIF; designs with no constant column | Re-run on 4.4.0. On affected designs the values now differ from statsmodels, which keeps the old error. |
+
+### Are you affected?
+
+```python
+X  # your design, with a constant column
+abs(X[:, 1:].mean(axis=0) / X[:, 1:].std(axis=0)).max()   # above about 1e5 → re-run
+```
+
+The 4.3.0 error grows with that ratio: below `4e-12` relative up to `1e5`,
+`3e-8` at `1e6`, `1e-4` at `1e7`, and more when regressors are also nearly
+collinear or trending (the GDP example above).
+
+### What to re-run
+
+- **Any collinearity screen on levels data** (GDP, price indices, population)
+  computed with `vif` and an intercept. Demeaned or growth-rate data were not
+  affected.
+
+---
+
 ## 2026-09-30 — Smets-Wouters (2007) markup shocks, bundled data and replication targets, versions 0.92.0 to 4.3.0
 
 **Fixed after 4.3.0** (see the Unreleased section of `CHANGELOG.md`). Found by
@@ -69,7 +311,13 @@ shock from the native model, is affected.
 - **Any citation of -1673.72, -1686.09 or -2524.36 as SW07 results.** With the
   fixes, the optimised posterior mode on the bundled data has log posterior
   -822.04 and Laplace log marginal density -902.83. SW07's own -905.8 (Table 2)
-  uses a 1956-65 training-sample prior and is not a comparable target.
+  is computed over 1966-2004 with 1956:1-1965:4 as a training sample; since
+  4.6.0 `sw07_laplace_mdd` reproduces that computation on the authors' data
+  (presample and diffuse initialisation), giving -932.3, and Dynare 8 on the
+  public replication files and the authors' own mode gives -923.1 with the
+  file's options (puremacro at the same point: -922.4). The printed -905.8 is
+  reproduced by neither and remains not a comparable target (see
+  `docs/replication.md`).
 - **In this repository:** notebooks 41 and 42 (English and Spanish),
   `docs/replication.md` and the JOSS draft cite the affected numbers.
 
@@ -1121,7 +1369,7 @@ Measured against the clean OECD 2020 release (MD5 `d3e0f4979d85d6c0bb7cf4c43e324
 
 | Surface | Affected condition | Guidance |
 |---|---|---|
-| `load_icio_data()`, the bundled 77x11 calibration, notebooks 61-65, `trade_reference_solutions.npz`, `trade_results_workbook.npz` | Any economic magnitude, share or elasticity computed from the bundled table | Treat these as software regression fixtures: the parity suites compare puremacro with MATLAB solutions of the **same** table and remain internally consistent. Do not report their outputs as OECD-based estimates. |
+| `load_icio_data(source="legacy")`, the bundled 77x11 calibration, notebooks 61-65, `trade_reference_solutions.npz`, `trade_results_workbook.npz` | Any economic magnitude, share or elasticity computed from the bundled table | Treat these as software regression fixtures: the parity suites compare puremacro with MATLAB solutions of the **same** table and remain internally consistent. Do not report their outputs as OECD-based estimates. |
 | `load_raw_45sector_icio()` without a `path` (4.3.0 and earlier) | The default search list started with `computation/7_TIO_77c_vf/data_2020_SML.csv`, the corrupted export, and read it without a checksum | The fixed release searches the clean `ICIOextended/2020_SML.csv` and `2019_SML.csv` first, checks the MD5 of the resolved file, refuses the corrupted export with `MRIOIntegrityError` (a `ValueError`) naming the clean-release checksums, and warns on unknown digests. Pass the clean `2019_SML.csv` (MD5 `28cba31491177955445051d459053744`) or `2020_SML.csv` explicitly. |
 | Native readers (`load_oecd_icio_granular`, `puremacro.trade.mrio.read_oecd_native`) | None: they read the OECD 2023 regular CSV by labels | Use these for new empirical work; they record the source checksum in metadata. |
 

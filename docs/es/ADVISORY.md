@@ -14,6 +14,260 @@ sin volver a correrla) y qué hacer.
 
 ---
 
+## 2026-10-03 — la agregación 77x11 heredada colocó mal la demanda final del resto del mundo, todas las versiones; 4.6.0 incluye una tabla limpia
+
+**No es un defecto del solucionador; es un segundo defecto del fixture de datos
+heredado, hallado al reemplazarlo. Corregido en 4.6.0 con una nueva tabla
+incluida; la tabla heredada se conserva sin cambios para sus pruebas de paridad
+con MATLAB.**
+
+Al portar a Python la agregación de MATLAB `Agregar_11s.m`
+(`tools/build_icio_77c_11s.py`, verificada celda a celda contra el
+`icio_77c_11s.npz` incluido: 99.92% de celdas idénticas bit a bit, diferencia
+máxima 7.6e-5 en valores del orden de 1e9), afloraron dos defectos de indexación
+de ese script además de la corrupción decimal registrada el 2026-09-22. En el
+bloque que reensambla la tabla alrededor del resto del mundo (ROW), el bucle que
+debía llenar las ventas de demanda final de ROW a los otros 76 países escribe en
+el bloque intermedio (`data7fd` escrito como `data7`), de modo que esas ventas
+quedan en las columnas intermedias de los primeros países y el bloque de demanda
+final de ROW queda vacío; y el bucle que debía llenar las celdas de impuestos y
+valor agregado de las columnas de demanda final de ROW escribe en las filas de
+flujos de ROW (`data5Tfd` escrito como `data5fd`). En la tabla heredada esto
+mueve 3,203 celdas y 4.9e9 (unidades del export corrupto) entre bloques; en la
+versión limpia de 2020 movería 1.2e5 millones de USD. Todo número derivado de la
+tabla heredada hereda ambos defectos.
+
+El reemplazo de 4.6.0 es `icio_77c_11s_oecd2020.npz`, construido a partir del
+archivo limpio de 2020 de la edición 2023 de las ICIO de la OCDE (MD5
+`d3e0f4979d85d6c0bb7cf4c43e324287`) con la agregación corregida;
+`MANIFEST_OECD2020.json` registra el digest del arreglo, la receta y los totales
+mundiales nativos que conserva (valor agregado 7.97e7 millones de USD; producción
+1.66e8). El modelo MATLAB heredado del autor, ejecutado sin cambios sobre la
+tabla limpia, se incluye como `trade_reference_solutions_oecd2020.npz` para que
+la prueba de paridad sobreviva al cambio de datos, y cuatro casos de la galería
+(`Trade`) verifican la conservación, el cuadre de columnas, el equilibrio base y
+esa paridad con MATLAB.
+
+| Superficie | Condición afectada | No afectada cuando | Guía |
+|---|---|---|---|
+| `load_icio_data()` sin `source=`, todas las versiones | Devuelve la tabla heredada; desde 4.6.0 con un `FutureWarning` (una vez por proceso) | `source="oecd2020"` | Pase `source="oecd2020"` para cualquier uso empírico; `source="legacy"` conserva explícitamente el fixture de regresión. El valor por defecto pasa a `"oecd2020"` en 5.0. |
+| Cuadernos 61, 62, 64 y sus gemelos en español; los fragmentos de la documentación de comercio | Leen la tabla heredada (ahora fijada con `source="legacy"`, de modo que sus números no cambian) | — | Sus magnitudes siguen siendo ilustraciones del solucionador sobre un fixture de regresión, no estimaciones basadas en la OCDE, exactamente como dice la entrada del 2026-09-22. |
+| `trade_reference_solutions.npz`, `trade_results_workbook.npz` | Soluciones MATLAB de la tabla heredada | `load_reference_solution(..., source="oecd2020")` | Use las referencias de la tabla limpia para nuevo trabajo de paridad; `REFERENCE_MANIFEST_OECD2020.json` lista los escenarios disponibles. |
+| `load_oecd_icio_granular`, `puremacro.trade.mrio.read_oecd_native`, `load_raw_45sector_icio` | Ninguna: leen los archivos nativos por etiquetas | — | Sin cambios. |
+
+---
+
+## 2026-10-02 — `solve_trade_equilibrium(method="quasi_condensed")` informaba `converged=True` con un residuo grande, versiones 4.2.0 a 4.4.0
+
+**Corregido después de 4.4.0** (véase la sección Unreleased de `CHANGELOG.md`).
+La rama `quasi_condensed` de `solve_trade_equilibrium` tomaba la bandera de
+convergencia del solver cuasi-condensado (flexible), pero el residuo, los
+flujos y los precios del posprocesamiento heredado, evaluado con la convención
+de precios de MATLAB del solver (`replicate_matlab_precedence=True`), que la
+solución cuasi-condensada no usa. La bandera y el residuo informado no
+concordaban. En la calibración 2x2 del cuaderno 62 con un arancel del 25% y
+`tol=1e-10`, 4.4.0 devolvía `converged=True` con `max_residual` 0.0487
+(`residual_norm` 0.155); con `sigma_y=0.5`, 0.498. Ahora el residuo es el que
+juzgó la bandera, los flujos se posprocesan con la convención cuasi-condensada
+y coinciden hasta 1e-8 con una solución Newton heredada del mismo modelo
+(`replicate_matlab_precedence=False`), y las opciones flexibles activas
+lanzan `ValueError`, porque los campos de flujos heredados de
+`TradeEquilibriumResult` no pueden describirlas.
+
+| Superficie | Condición afectada | No afectada cuando | Recomendación |
+|---|---|---|---|
+| `solve_trade_equilibrium(..., method="quasi_condensed")` | cualquier llamada | — | `x_sol` era la solución cuasi-condensada y la bandera era correcta para ese modelo; los campos de residuo y los flujos no. Vuelva a correr con la versión corregida, o use `solve_flexible_trade_equilibrium(..., method="quasi_condensed")`. |
+| ídem, con `sigma_y > 0` o un `config` activo | flujos, precios, IPC, términos de intercambio | — | Describen el modelo heredado, no el resuelto; tome los flujos de `metadata` de `solve_flexible_trade_equilibrium`. |
+| ídem, con `fiscal_closure`/`recycling_params`/`sigma`/`capacity_margins` | la solución ignoraba la opción | la opción estaba en su valor por defecto | El equilibrio devuelto no resuelve el modelo pedido. |
+
+`solve_flexible_trade_equilibrium` nunca usó esta rama; sus `converged` y
+`residual_norm` eran coherentes.
+
+### ¿Le afecta?
+
+```python
+res = solve_trade_equilibrium(calib, ..., method="quasi_condensed")
+res.converged and res.max_residual > res.metadata["tol"]   # True → bandera y residuo discrepaban
+```
+
+### Qué hay que volver a correr
+
+- Cualquier cuadro construido con los flujos, precios, IPC o términos de
+  intercambio de un resultado de
+  `solve_trade_equilibrium(..., method="quasi_condensed")`.
+
+---
+
+## 2026-10-02 — Las propiedades de flujos de `FlexibleTradeEquilibriumResult` ignoraban el modelo resuelto, versiones 4.2.0 a 4.4.0
+
+**Corregido después de 4.4.0** (véase la sección Unreleased de `CHANGELOG.md`).
+Las propiedades `exports`, `imports`, `cpi`, `terms_of_trade`, `gdp` y
+`gdp_fc` de un resultado de `solve_flexible_trade_equilibrium` evaluaban las
+ecuaciones de flujos heredadas Cobb-Douglas/Leontief en `x_sol` sin aranceles
+y con la convención de precios de MATLAB, fuera cual fuera la llamada. Medido
+en 4.4.0, calibración 2x2 del cuaderno 62, arancel del 25% a los insumos
+intermedios del país B:
+
+- ruta heredada (configuración por defecto): exportaciones `[60.73, 68.94]`
+  frente a `[60.73, 69.19]` de `solve_trade_equilibrium` con los mismos
+  argumentos;
+- ruta cuasi-condensada, configuración por defecto: exportaciones
+  `[55.87, 63.12]` frente a `[56.73, 64.26]` de una solución Newton heredada
+  del mismo modelo;
+- ruta cuasi-condensada, `sigma_trade=5`: exportaciones `[58.20, 59.86]`
+  frente a los flujos bilaterales resueltos `[62.15, 58.26]`.
+
+`cpi`, `terms_of_trade` y `gdp`/`gdp_fc` coincidían en los dos casos con
+configuración por defecto (dependen del estado, no de las cantidades que
+dependen del arancel); con una configuración activa el IPC y los términos de
+intercambio heredados describen otro modelo, y con `variable_markups=True`
+`gdp` omitía los beneficios de margen. Las propiedades describen ahora el
+modelo resuelto; `cpi`/`terms_of_trade` lanzan `NotImplementedError` con una
+configuración activa. 4.4.0 documentaba la mitad cuasi-condensada como
+problema conocido; la mitad de la ruta heredada no se conocía.
+
+| Superficie | Condición afectada | No afectada cuando | Recomendación |
+|---|---|---|---|
+| `exports`, `imports` | cualquier `tau`, `tau_fd`, `tauf`, `tauf_fd`; cualquier configuración activa en la ruta cuasi-condensada | sin aranceles y con la configuración por defecto en la ruta heredada | Vuelva a correr, o sume filas/columnas de `metadata["bilateral_trade"]` (ruta cuasi-condensada). |
+| `cpi`, `terms_of_trade` | configuración flexible activa | configuración por defecto | No hay índice sustituto para el modelo flexible; use los flujos de `metadata`. |
+| `gdp` | `variable_markups=True` | sin márgenes | Sume `metadata["markup_profits"]`, o use `metadata["household_income"]`. |
+| `welfare_decomposition` | — | siempre: conserva su aproximación histórica y sus valores | Sin cambios. |
+
+### ¿Le afecta?
+
+```python
+res = solve_flexible_trade_equilibrium(calib, ...)
+tariffs = any(v is not None for v in res.metadata["tariff_inputs"].values())
+tariffs or bool(res.metadata["active_flexible_settings"])   # True → vuelva a correr
+```
+
+### Qué hay que volver a correr
+
+- Volúmenes de comercio, balanzas comerciales y efectos de términos de
+  intercambio leídos de estas propiedades en escenarios arancelarios o con
+  opciones flexibles activas.
+
+---
+
+## 2026-10-02 — Grados de libertad de la posterior de Σ en `minnesota_gibbs`, versiones 0.92.0 a 4.4.0
+
+**Corregido después de 4.4.0** (véase la sección Unreleased de `CHANGELOG.md`).
+Bańbura, Giannone y Reichlin (2010; ECB WP 966, p. 12, ec. 7) añaden la
+previa impropia `|Ψ|^-(n+3)/2` a las observaciones ficticias, lo que da
+`Ψ | Y ~ iW(Σ̃, T_d + 2 + T - k)`. `minnesota_gibbs` usaba `T_d + T - k`. La
+media posterior de Σ, `Σ̃ / (ν - n - 1)`, era por tanto demasiado grande en el
+factor `(ν - n + 1)/(ν - n - 1)`: 5.3% en un VAR(1) de 3 variables con 39
+observaciones, 1.0% con 3 variables, 4 rezagos y 200 trimestres. Los
+coeficientes simulados heredan la escala a través de `Σ ⊗ (X*'X*)⁻¹`, así que
+su dispersión posterior era demasiado amplia en cerca de la mitad de ese
+porcentaje. La media posterior de los coeficientes (`A_mean`,
+`intercept_mean`), `minnesota_posterior` y la verosimilitud marginal de
+`minnesota_optimal_lambda` no se ven afectadas.
+
+| Superficie | Condición afectada | No afectada cuando | Recomendación |
+|---|---|---|---|
+| `Sigma_draws`, `nu_post` y bandas posteriores de `A_draws`/`intercept_draws` de `minnesota_gibbs` | siempre | estimaciones puntuales de `A_mean`/`intercept_mean` | Vuelva a correr; el efecto decrece como `2/(T + T_d - k - n)`. |
+
+### ¿Le afecta?
+
+```python
+T, n = Y.shape                              # sus datos y el orden de rezagos p
+nu_old = (T - p) + (n * p + n + 1) - (n * p + 1)   # T + T_d - k que usaba 4.4.0
+(nu_old - n + 1) / (nu_old - n - 1) - 1     # sobreestimación relativa de E[Σ | Y]
+```
+
+### Qué hay que volver a correr
+
+- Bandas de credibilidad de respuestas al impulso, pronósticos y
+  descomposiciones de varianza calculadas con simulaciones de
+  `minnesota_gibbs`, sobre todo con muestras cortas o sistemas grandes.
+
+---
+
+## 2026-10-02 — Los solvers de splines y Smolyak ignoraban `gamma` y resolvían utilidad logarítmica en sus métodos de Bellman, versiones 3.3.0 a 4.4.0
+
+**Corregido después de 4.4.0** (véase la sección Unreleased de `CHANGELOG.md`).
+Tres errores relacionados en el modelo de crecimiento incorporado de
+`puremacro.vfi.splines` y `puremacro.vfi.smolyak`, verificados con la ecuación
+de Euler del modelo CRRA escrita a mano:
+
+1. Ambos leían solo `params["sigma"]`. `params={"gamma": 2}` (la grafía de
+   `CollocationProblem`, `FEMProblem` y los motores discretos) resolvía en
+   silencio utilidad logarítmica: residuo de Euler 0.151 (splines) y 0.0345
+   (Smolyak, 2 capitales) en la política devuelta, que informaba
+   `converged=True`.
+2. El solver de Bellman con splines (`method="bellman"`) usaba utilidad
+   logarítmica con cualquier curvatura: residuo 0.151 con `sigma=2`.
+3. `solve_smolyak(method="bellman")` iteraba sobre la política cerrada
+   `k'_m = alpha_m beta Y` de utilidad logarítmica con depreciación total y la
+   devolvía con `converged=True` para cualquier `sigma`, `gamma`, `delta` o
+   `return_fn` (residuo 0.0345 con `sigma=2`). Ahora lanza
+   `NotImplementedError` fuera de ese caso.
+
+| Superficie | Condición afectada | No afectada cuando | Recomendación |
+|---|---|---|---|
+| splines y Smolyak con `method="euler"` | `params` tiene `gamma` y no `sigma` | se da `sigma`, o curvatura 1 | Vuelva a correr con la versión corregida, o pase `sigma`. |
+| splines con `method="bellman"` | `sigma` (o `gamma`) ≠ 1 | utilidad logarítmica | Vuelva a correr con la versión corregida. |
+| `solve_smolyak(method="bellman")` | `sigma`/`gamma` ≠ 1, `delta` ≠ 1 o un `return_fn` | utilidad logarítmica con depreciación total | Use `method="euler"`. |
+
+### ¿Le afecta?
+
+```python
+p = problem.params
+curv = p.get("sigma", p.get("gamma", 1.0))
+("gamma" in p and "sigma" not in p and curv != 1.0) \
+    or (problem.method == "bellman" and (curv != 1.0 or p.get("delta", 1.0) != 1.0))   # True → vuelva a correr
+```
+
+### Qué hay que volver a correr
+
+- Políticas, funciones de valor, valores marginales y gradientes IFT de estos
+  solvers con utilidad no logarítmica (y, para Bellman con Smolyak,
+  depreciación parcial).
+
+---
+
+## 2026-10-02 — `vif` con datos en niveles y constante, versiones 2.6.0 a 4.3.0
+
+**Corregido en 4.4.0.** `inference.collinearity.vif` reproducía
+`variance_inflation_factor` de statsmodels operación por operación, incluidas
+sus regresiones auxiliares sobre los niveles sin centrar. Cuando la media de
+los regresores es grande respecto a su dispersión, esas regresiones sufren una
+cancelación catastrófica y el VIF pierde dígitos, o todos. Con una columna
+constante explícita el VIF es exactamente invariante a desplazar cualquier
+columna, así que las columnas no constantes se calculan ahora con datos
+centrados; el resultado coincide con la aritmética racional exacta hasta
+`0.33 * eps * max VIF` en diseños de prueba con medias de hasta `1e9`.
+
+Medido en 4.3.0 (statsmodels devuelve los mismos números): tres regresores
+normales estándar desplazados a media `1e7` daban 1.007122 frente a un exacto
+de 1.007165 (`4e-5` relativo); una tasa de interés junto a un PIB en yenes
+(escala `2e15`) daba 0.053, imposible porque todo VIF es al menos 1 (exacto:
+1.005); y diseños aleatorios desplazados erraban hasta en 99%.
+
+| Superficie | Condición afectada | No afectada cuando | Recomendación |
+|---|---|---|---|
+| `vif` | `exog` tiene una columna constante explícita y regresores cuya media es grande respecto a su desviación estándar (datos en niveles) | los regresores tienen media cercana a cero o se centran antes de la llamada; el VIF de la propia columna constante; diseños sin columna constante | Vuelva a correr con 4.4.0. En los diseños afectados los valores ahora difieren de statsmodels, que conserva el error. |
+
+### ¿Le afecta?
+
+```python
+X  # su diseño, con una columna constante
+abs(X[:, 1:].mean(axis=0) / X[:, 1:].std(axis=0)).max()   # por encima de ~1e5 → vuelva a correr
+```
+
+El error de 4.3.0 crece con esa razón: por debajo de `4e-12` relativo hasta
+`1e5`, `3e-8` en `1e6`, `1e-4` en `1e7`, y más cuando los regresores además
+son casi colineales o tienen tendencia (el ejemplo del PIB arriba).
+
+### Qué hay que volver a correr
+
+- **Cualquier diagnóstico de colinealidad con datos en niveles** (PIB, índices
+  de precios, población) calculado con `vif` y un intercepto. Los datos
+  centrados o en tasas de crecimiento no se vieron afectados.
+
+---
+
 ## 2026-09-30 — choques de margen de Smets-Wouters (2007), datos incluidos y objetivos de replicación, versiones 0.92.0 a 4.3.0
 
 **Corregido después de 4.3.0** (véase la sección Unreleased de `CHANGELOG.md`).
@@ -73,8 +327,13 @@ respuesta de SW07 a un choque de margen del modelo nativo, está afectado.
 - **Cualquier cita de -1673.72, -1686.09 o -2524.36 como resultados de SW07.**
   Con las correcciones, la moda a posteriori optimizada sobre los datos
   incluidos tiene log posterior -822.04 y log densidad marginal de Laplace
-  -902.83. El -905.8 del propio SW07 (cuadro 2) usa una a priori con muestra de
-  entrenamiento 1956-65 y no es un objetivo comparable.
+  -902.83. El -905.8 del propio SW07 (cuadro 2) se calcula sobre 1966-2004 con
+  1956:1-1965:4 como muestra de entrenamiento; desde 4.6.0 `sw07_laplace_mdd`
+  reproduce ese cálculo sobre los datos de los autores (presample e
+  inicialización difusa) y da -932.3, y Dynare 8 sobre los archivos públicos de
+  replicación y la moda de los autores da -923.1 con las opciones del archivo
+  (puremacro en el mismo punto: -922.4). Ninguno reproduce el -905.8 impreso,
+  que sigue sin ser un objetivo comparable (véase `docs/replication.md`).
 - **En este repositorio:** los cuadernos 41 y 42 (inglés y español),
   `docs/replication.md` y el borrador para JOSS citan los números afectados.
 
@@ -1203,7 +1462,7 @@ Medido frente a la publicación limpia OCDE 2020 (MD5 `d3e0f4979d85d6c0bb7cf4c43
 
 | Superficie | Condición afectada | Qué hacer |
 |---|---|---|
-| `load_icio_data()`, la calibración 77x11 incluida, cuadernos 61-65, `trade_reference_solutions.npz`, `trade_results_workbook.npz` | Cualquier magnitud, participación o elasticidad calculada sobre la tabla incluida | Trátelas como fixtures de regresión de software: las pruebas de paridad comparan puremacro con soluciones MATLAB de la **misma** tabla y siguen siendo internamente consistentes. No reporte sus salidas como estimaciones basadas en la OCDE. |
+| `load_icio_data(source="legacy")`, la calibración 77x11 incluida, cuadernos 61-65, `trade_reference_solutions.npz`, `trade_results_workbook.npz` | Cualquier magnitud, participación o elasticidad calculada sobre la tabla incluida | Trátelas como fixtures de regresión de software: las pruebas de paridad comparan puremacro con soluciones MATLAB de la **misma** tabla y siguen siendo internamente consistentes. No reporte sus salidas como estimaciones basadas en la OCDE. |
 | `load_raw_45sector_icio()` sin `path` (4.3.0 y anteriores) | La lista de búsqueda por defecto empezaba por `computation/7_TIO_77c_vf/data_2020_SML.csv`, la exportación dañada, y la leía sin suma de verificación | La versión corregida busca primero los archivos limpios `ICIOextended/2020_SML.csv` y `2019_SML.csv`, comprueba el MD5 del archivo resuelto, rechaza la exportación dañada con `MRIOIntegrityError` (un `ValueError`) indicando las sumas de verificación de la publicación limpia y avisa ante sumas desconocidas. Pase explícitamente `2019_SML.csv` (MD5 `28cba31491177955445051d459053744`) o `2020_SML.csv`. |
 | Lectores nativos (`load_oecd_icio_granular`, `puremacro.trade.mrio.read_oecd_native`) | Ninguna: leen el CSV regular OCDE 2023 por etiquetas | Úselos para trabajo empírico nuevo; registran la suma de verificación de la fuente en los metadatos. |
 
