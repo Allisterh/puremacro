@@ -6,8 +6,9 @@ researcher needs *before* calling one: does it need a key, may the data
 be redistributed, what shape comes back. This is that table.
 
 It follows the pattern of :mod:`puremacro.fetch.realtime.catalog` — a
-declarative table, a ``register_*`` hook for additions, a ``pytest -m
-network`` audit (``tests/test_registry_live.py``) — but not its type.
+declarative table and a ``register_*`` hook for additions — but not its
+type. (Unlike the catalog it has no live audit yet: no test checks that
+each source still answers.)
 ``SeriesSpec`` is keyed country -> variable -> series id, which is the
 right shape for vintage archives and the wrong one for microdata or text.
 
