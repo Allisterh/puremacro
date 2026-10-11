@@ -158,14 +158,15 @@ class EGMPlan:
             raise ModelSpecError(f"method='egm' needs {self.cname} + a(+1) not to depend on a(+1) "
                                  "(budget c + a(+1) = R*a + y(z))")
         coh2 = coh[:, 0, :]
-        slopes = np.diff(coh2, axis=0) / np.diff(a)[:, None]
-        Rz = np.mean(slopes, axis=0)
-        if np.max(np.abs(slopes - Rz[None, :])) > 1e-8 * (1.0 + np.max(np.abs(Rz))):
+        # slope over the whole grid and linearity as a residual in levels: slopes of
+        # neighbouring nodes are rounding noise where the grid spacing is tiny
+        Rz = (coh2[-1] - coh2[0]) / (a[-1] - a[0])
+        if np.max(np.abs(coh2 - coh2[0] - Rz * (a[:, None] - a[0]))) > 1e-9 * scale:
             raise ModelSpecError(f"method='egm' needs {self.cname} + a(+1) linear in a "
                                  "(budget c + a(+1) = R*a + y(z))")
         if np.any(Rz <= 0):
             raise ModelSpecError(f"method='egm' needs a positive gross return R; got {Rz.min():.6g}")
-        R = float(np.mean(Rz)) if np.ptp(Rz) <= 1e-12 * (1.0 + np.max(np.abs(Rz))) else Rz
+        R = float(np.mean(Rz)) if np.ptp(Rz) <= 1e-9 * (1.0 + np.max(np.abs(Rz))) else Rz
         feasible = np.isfinite(np.broadcast_to(
             self._call(self.comp.household, nxt, cur, 3, params, age, d), c3.shape))
         if not np.array_equal(feasible, c3 > 0):

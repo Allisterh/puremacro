@@ -130,6 +130,22 @@ def test_huggett_with_negative_borrowing_limit():
     assert e.prices["r"] == pytest.approx(v.prices["r"], abs=2e-3)
 
 
+@pytest.mark.parametrize("grid", [np.geomspace(1e-6, 80.0, 150),
+                                  np.r_[0.0, 1e-9, np.linspace(1e-3, 80.0, 148)]])
+@pytest.mark.parametrize("T", [None, 3])
+def test_budget_check_accepts_grids_clustered_at_the_borrowing_limit(grid, T):
+    # R was the mean of finite-difference slopes: rounding at a 1e-9 spacing
+    # failed the linearity check, and on a geometric grid R came out varying
+    # with the shock by 1e-11, which the life cycle then rejected
+    m = household(gamma=2.0)
+    m._states = [("a", grid)]
+    if T:
+        m.horizon(T)
+    sol = m.solve("egm")
+    assert np.ndim(sol.raw.R) == (1 if T else 0)
+    np.testing.assert_allclose(sol.raw.R, 1.03, rtol=0, atol=1e-12)
+
+
 @pytest.mark.parametrize("change, match", [
     (lambda m: m.state("k", np.linspace(0.1, 1.0, 5)), "exactly one state"),
     (lambda m: m.local("c = w*exp(z) + (1 + r)*a - a(+1) - 0.01*a(+1)^2"), "not to depend on a"),
