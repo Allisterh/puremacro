@@ -259,3 +259,26 @@ def test_cps_month_names_must_be_real_months():
     for bad in ("junk", "Marmalade", "decimal", "13", True, 1.9):
         with pytest.raises(ValueError, match="month"):
             census.fetch_cps_basic(2024, bad, ["PEMLR"], api_key="k")
+
+
+def test_taylor_quantile_matches_woodruff_written_out_longhand():
+    """Woodruff: SE of the CDF at the quantile by linearisation, a 95%
+    interval for q mapped through the inverse weighted CDF, se = width/(2z)."""
+    df = _clustered(5)
+    z95 = 1.959963984540054
+    order = np.argsort(df.y.to_numpy(), kind="stable")
+    ys, cw = df.y.to_numpy()[order], np.cumsum(df.w.to_numpy()[order])
+
+    def inv_cdf(p):
+        return ys[np.searchsorted(cw, p * cw[-1] * (1 - 1e-12))]
+
+    for q in (0.25, 0.5, 0.9):
+        est = inv_cdf(q)
+        below = (df.y <= est).astype(float)
+        p_hat = (df.w * below).sum() / df.w.sum()
+        se_p = np.sqrt(_psu_formula(df.w * (below - p_hat) / df.w.sum(), df))
+        lo, hi = max(q - z95 * se_p, 0.0), min(q + z95 * se_p, 1.0)
+        res = _taylor_frame(df).quantile("y", q).iloc[0]
+        assert res["estimate"] == est
+        assert res["se"] == pytest.approx((inv_cdf(hi) - inv_cdf(lo)) / (2 * z95), rel=1e-12)
+        assert res["se"] > 0
