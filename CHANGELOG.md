@@ -63,7 +63,11 @@ This file records user-visible changes per release. Internal refactors that don'
     `hackernews`, `local_csv`. Unknown source names now raise instead of being
     dropped silently.
   - Harvested `doc_id`s now also hash the record's explicit title (or `id`), and
-    records sharing a key but differing in text get distinct ids.
+    records sharing a key but differing in text all get text-qualified ids, so
+    the ids do not depend on feed order (a reordered `us_warn` feed no longer
+    shows up as revisions). A key with a single text keeps its plain id, which is
+    what lets the store flag revisions; if a second text later appears under that
+    key, both records get new ids and the old row stays in the store.
 - `kalman_smoother` uses the Durbin–Koopman backward recursion (Durbin & Koopman 2012, §4.4), which inverts only `F_t`, instead of the Rauch–Tung–Striebel gain `P_filt T' pinv(P_pred)`. The two agree algebraically, but when the state carries the structural innovation (`LinearModel.smoother`, `compute_shock_decomposition`) `P_pred` is rank-deficient and pinv's rank decision flipped between LAPACK builds: the first smoothed DSGE period differed by up to ~3e-06 across platforms, scaling `P0` by `1 + 1e-12` moved it by up to 8.8e-05, and the interior differed by ~1e-8. It is now bit-identical across the numpy 2.4 and 2.5 builds tested and continuous in `P0`, and `tests/test_dsge/test_smoother.py` uses one 1e-10 tolerance for every period (it had 1e-4 for the first and 1e-7 elsewhere). Well-conditioned models move by rounding only (about 1e-11 relative on random models with missing data). Periods under the exact-diffuse initialisation follow the exact initial smoother (next entries).
 - `qna_capital` rejects an annual depreciation rate outside [0, 1] or NaN with a `ValueError`. Above 1 the geometric quarterly conversion returned a complex number; NaN propagated silently into every stock.
 - The PBoC scraper requests `https://www.pbc.gov.cn` directly; the `http://` pages only redirect there.

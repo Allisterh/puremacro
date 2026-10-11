@@ -673,14 +673,16 @@ def _records_to_docs(
             break
 
     # Two different records with the same (source, url, date, title) key would
-    # otherwise collapse into one document and its "revision". Disambiguate them
-    # by text, keeping the first id unchanged.
-    seen: dict[str, str] = {}
+    # otherwise collapse into one document and its "revision". When a key carries
+    # more than one text, every record under it gets a text-qualified id, so the
+    # ids do not depend on the order the feed returns them in. A key with a single
+    # text keeps its plain id, which is what lets the store detect revisions.
+    texts: dict[str, set[str]] = {}
     for d in docs:
-        prev = seen.get(d.doc_id)
-        if prev is not None and prev != d.content_hash:
+        texts.setdefault(d.doc_id, set()).add(d.content_hash)
+    for d in docs:
+        if len(texts[d.doc_id]) > 1:
             d.doc_id = hashlib.sha256(f"{d.doc_id}:{d.content_hash}".encode()).hexdigest()[:16]
-        seen.setdefault(d.doc_id, d.content_hash)
     return docs, n_invalid
 
 

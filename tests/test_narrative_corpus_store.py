@@ -131,6 +131,25 @@ def test_same_key_different_text_gets_distinct_ids():
             ("2024-01-01", "strike B", "https://landing", {})]
     c = NarrativeCorpus.from_records(recs, source="x")
     assert len({d.doc_id for d in c}) == 2
+    # The ids depend on the text, not on the order the feed returns the records in.
+    flipped = NarrativeCorpus.from_records(recs[::-1], source="x")
+    assert {(d.text, d.doc_id) for d in c} == {(d.text, d.doc_id) for d in flipped}
+    # A key with one text keeps its plain id, so a later edit reads as a revision.
+    single = NarrativeCorpus.from_records(recs[:1], source="x")
+    edited = NarrativeCorpus.from_records([("2024-01-01", "strike A, revised", "https://landing", {})],
+                                          source="x")
+    assert single.docs[0].doc_id == edited.docs[0].doc_id
+    assert single.docs[0].doc_id not in {d.doc_id for d in c}
+
+
+def test_reordered_colliding_feed_reports_no_revisions(tmp_path):
+    recs = [("2024-01-01", "plant A closing", "https://warn", {}),
+            ("2024-01-01", "plant B closing", "https://warn", {}),
+            ("2024-01-01", "plant B closing", "https://warn", {})]
+    with CorpusStore(tmp_path / "c.db") as st:
+        assert st.upsert(NarrativeCorpus.from_records(recs, source="x").docs)["new"] == 2
+        again = st.upsert(NarrativeCorpus.from_records(recs[::-1], source="x").docs)
+        assert again["updated"] == 0 and len(st.revised()) == 0
 
 
 # ── store ────────────────────────────────────────────────────────────────────
