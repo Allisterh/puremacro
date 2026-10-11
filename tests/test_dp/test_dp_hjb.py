@@ -106,6 +106,27 @@ def test_huggett_bond_market_clears_with_a_negative_limit():
     assert np.all(sol.policy("c") > 0)
 
 
+@pytest.mark.parametrize("gamma", [1.0, 2.0])
+def test_cake_eating_converges_to_the_closed_form(gamma):
+    # no income: c = ((rho - (1 - gamma)*r)/gamma) * a. The upwind scheme is first
+    # order, so the error is about a constant times the grid step
+    rho, r = 0.05, 0.03
+    mu = (rho - (1 - gamma) * r) / gamma
+    errs = []
+    for n in (200, 800):
+        m = dp.Model("ct cake")
+        m.parameters(rho=rho, gamma=gamma, r=r)
+        m.state("a", np.linspace(0.0, 10.0, n))
+        m.control("c")
+        m.drift("a", "r*a - c")
+        m.reward("crra(c, gamma)")
+        sol = m.solve(distribution=False)
+        a = sol.grids["a"]
+        errs.append(np.max(np.abs(sol.policy("c")[:, 0] - mu * a)))
+        assert errs[-1] < 0.05 * a[1]
+    assert errs[1] < errs[0] / 3
+
+
 @pytest.mark.parametrize("change, match", [
     (lambda m: m.drift("a", "r*a + w*e - 2*c"), "slope -1"),
     (lambda m: m.drift("a", "r*a + w*e - c^2"), "slope -1"),

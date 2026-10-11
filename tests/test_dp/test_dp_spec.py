@@ -83,6 +83,21 @@ def test_crra_is_minus_infinity_without_consumption(gamma):
     assert np.all(sol.policy("c") > 0)
 
 
+@pytest.mark.parametrize("gamma", [1.0, 2.0])
+def test_vfi_cake_eating_policy_is_within_a_grid_step_of_the_closed_form(gamma):
+    # no income, beta*R < 1: c = (R - (beta*R)^(1/gamma)) * a. Discrete VFI picks
+    # a' on the grid, so the policy is exact up to one grid step
+    beta, R = 0.95, 1.03
+    m = dp.Model("cake").parameters(beta=beta, gamma=gamma, R=R)
+    m.state("a", np.linspace(1e-3, 10.0, 1001))
+    m.local("c = R*a - a(+1)").reward("crra(c, gamma)").subject_to("c > 0")
+    sol = m.solve(tol=1e-10, distribution=False)
+    a = sol.grids["a"]
+    inner = slice(100, 900)        # away from the grid's ends, where a' is truncated
+    kappa = R - (beta * R) ** (1 / gamma)
+    assert np.max(np.abs(sol.policy("c")[inner, 0] - kappa * a[inner])) < (a[1] - a[0])
+
+
 def _base():
     m = dp.Model("base")
     m.parameters(beta=0.95, r=0.02)

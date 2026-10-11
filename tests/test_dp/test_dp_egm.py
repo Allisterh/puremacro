@@ -148,6 +148,23 @@ def test_models_outside_egm_are_rejected(change, match):
         m.solve("egm")
 
 
+@pytest.mark.parametrize("gamma", [1.0, 2.0])
+def test_cake_eating_has_the_closed_form_policy(gamma):
+    # no income, beta*R < 1: c = (R - (beta*R)^(1/gamma)) * a exactly, and EGM's
+    # linear interpolation reproduces a linear consumption function exactly
+    r = 0.03
+    m = dp.Model("cake")
+    m.parameters(beta=BETA, gamma=gamma, r=r)
+    m.state("a", np.linspace(0.0, 10.0, 101))
+    m.local("c = (1 + r)*a - a(+1)")
+    m.reward("crra(c, gamma)")
+    m.subject_to("c > 0")
+    sol = m.solve("egm", tol=1e-12)
+    a = sol.grids["a"]
+    kappa = (1 + r) - (BETA * (1 + r)) ** (1 / gamma)
+    np.testing.assert_allclose(sol.policy("c")[1:, 0], kappa * a[1:], rtol=0, atol=1e-9)
+
+
 # ---------------------------------------------------------------- life cycle
 def two_period(survival=None, terminal=None, T=2):
     m = dp.Model("two period")
@@ -170,6 +187,9 @@ def test_two_period_log_utility_is_exact(s0):
     c0 = np.minimum((R * a + y + y / R) / (1 + b), R * a + y)     # kink where a' hits 0
     np.testing.assert_allclose(c[0], c0, rtol=0, atol=1e-12)
     np.testing.assert_allclose(sol.V[1, :, 0], np.log(R * a + y), rtol=0, atol=1e-12)
+    # V0 = log c0 + beta*s0*V1(a'), up to linear interpolation of V1 = log(R a + y)
+    v0 = np.log(c0) + b * np.log(R * (R * a + y - c0) + y)
+    np.testing.assert_allclose(sol.V[0, :, 0], v0, rtol=0, atol=2e-3)
 
 
 def test_terminal_value_enters_through_its_slope():
@@ -278,6 +298,30 @@ def test_dc_egm_life_cycle_is_closer_to_fine_vfi_than_coarse_vfi():
     np.testing.assert_allclose(e_fine.mean("h"), fine.mean("h"), atol=0.02)
     np.testing.assert_allclose(e_fine.mean("a"), fine.mean("a"), atol=0.05)
     assert e.raw.policy_d.shape == (T, 100, 5)
+
+
+@pytest.mark.parametrize("s0", [1.0, 0.5])
+def test_dc_egm_two_periods_match_brute_force(s0):
+    # without taste shocks V1 = max(work, rest) has a kink, each option's age-0
+    # continuation is non-concave, and the upper envelope decides the answer
+    # (plain EGM interpolation through the non-monotone endogenous grid is off by 0.02)
+    m = retire(2, 0.0, n_a=401)
+    m._taste = None
+    m.horizon(2, survival=[s0, 1.0])
+    sol = m.solve("egm")
+    a, R = sol.grids["a"], 1.03
+
+    def V1(x):
+        return np.maximum(np.log(R * x + 0.3), np.log(R * x + 1.2) - 0.4)
+
+    ap = np.linspace(0.0, 20.0, 100_001)
+    v0 = []
+    for y, cost in ((0.3, 0.0), (1.2, 0.4)):
+        coh = R * a[:, None] + y
+        with np.errstate(all="ignore"):
+            obj = np.where(coh - ap[None, :] > 0, np.log(coh - ap[None, :]), -np.inf) - cost
+        v0.append((obj + BETA * s0 * V1(ap)[None, :]).max(axis=1))
+    np.testing.assert_allclose(sol.V[0, :, 0], np.max(np.stack(v0), axis=0), rtol=0, atol=1e-3)
 
 
 def test_return_that_depends_on_the_discrete_choice_is_rejected():
