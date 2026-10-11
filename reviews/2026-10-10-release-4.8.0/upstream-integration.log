@@ -1,0 +1,9 @@
+........................................................................ [ 67%]
+..................................                                       [100%]
+=============================== warnings summary ===============================
+tests/test_cache_db/test_store_realtime_vintages.py::test_first_row_does_not_fix_the_format_of_the_others
+  /Users/jalonso/Documents/RESEARCH/puremacro/puremacro/_cache_db.py:280: UserWarning: Parsing dates in %d/%m/%Y format when dayfirst=False (the default) was specified. Pass `dayfirst=True` or specify a format to silence this warning.
+    parsed = pd.to_datetime(x)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+106 passed, 1 deselected, 1 warning in 3.60s

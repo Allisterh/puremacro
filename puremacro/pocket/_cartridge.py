@@ -167,19 +167,36 @@ class Cartridge:
         return next(iter(self.frames.values()))
 
     def verify(self) -> bool:
-        """Re-encode every frame and compare digests to the manifest.
+        """Check stored payload integrity and changes to the loaded frames.
 
         Returns True, or raises :class:`CartridgeError` naming the frames
         that do not match.
 
-        Note this re-encodes rather than re-reading the file, so it also
-        catches a frame mutated in memory since load — which is the
-        common case when a notebook has been running for a while.
+        The original payload digest must match the manifest. In-memory
+        frames are re-encoded against a baseline captured on this reader,
+        because ZIP creator-OS fields and compression can change serialized
+        bytes without changing frame contents. This also catches a frame
+        mutated in memory since load without re-reading the source file.
+        Version-2 frame checksums also cover metadata (``DataFrame.attrs``).
+        Old version-1 frames did not store attrs, so those checksums cannot
+        verify metadata added after loading an old cartridge.
         """
         bad = []
         for rec in self.records:
-            payload = store.dumps_frame(self.frames[rec.name])
-            if _digest(payload) != rec.sha256:
+            stored_digest = getattr(self, "_stored_frame_digests", {}).get(
+                rec.name, rec.sha256,
+            )
+            if stored_digest != rec.sha256:
+                bad.append(rec.name)
+                continue
+            version = getattr(self, "_frame_schema_versions", {}).get(
+                rec.name, store.SCHEMA_VERSION,
+            )
+            payload = store._dumps_frame(self.frames[rec.name], schema_version=version)
+            expected = getattr(self, "_frame_baseline_digests", {}).get(
+                rec.name, rec.sha256,
+            )
+            if _digest(payload) != expected:
                 bad.append(rec.name)
         if bad:
             raise CartridgeError(
@@ -375,10 +392,11 @@ def _from_zip(zf: zipfile.ZipFile, *, verify: bool) -> Cartridge:
         for f in manifest["frames"]
     )
     frames, mismatched = {}, []
-    payloads = {}
+    payloads, stored_digests = {}, {}
     for rec in records:
         payload = zf.read(f"{_FRAME_DIR}/{rec.name}.npz")
-        if verify and _digest(payload) != rec.sha256:
+        stored_digests[rec.name] = _digest(payload)
+        if verify and stored_digests[rec.name] != rec.sha256:
             mismatched.append(rec.name)
             continue
         payloads[rec.name] = payload
@@ -387,10 +405,23 @@ def _from_zip(zf: zipfile.ZipFile, *, verify: bool) -> Cartridge:
             f"corrupt cartridge: stored checksum does not match the payload "
             f"for {mismatched}"
         )
+    versions, baseline_digests = {}, {}
     for name, payload in payloads.items():
         frames[name] = store.loads_frame(payload)
+        versions[name] = store.describe(io.BytesIO(payload))["version"]
+        # Raw archive hashes include ZIP metadata and compressed bytes, which
+        # can differ across operating systems or compression implementations.
+        # Keep that integrity check separate from later in-memory changes.
+        baseline_digests[name] = _digest(store._dumps_frame(
+            frames[name], schema_version=versions[name],
+        ))
     prov = Provenance(**manifest["provenance"])
-    return Cartridge(frames=frames, provenance=prov, records=records)
+    cart = Cartridge(frames=frames, provenance=prov, records=records)
+    # Implementation detail, outside the public frozen-dataclass signature.
+    object.__setattr__(cart, "_frame_schema_versions", versions)
+    object.__setattr__(cart, "_stored_frame_digests", stored_digests)
+    object.__setattr__(cart, "_frame_baseline_digests", baseline_digests)
+    return cart
 
 
 def loads(payload: bytes, *, verify: bool = True) -> Cartridge:
@@ -409,8 +440,9 @@ def load(path, *, verify: bool = True) -> Cartridge:
     Parameters
     ----------
     verify : bool, default True
-        Check each frame's sha256 while reading. Turn it off only for a
-        very large cartridge you already trust.
+        Enforce each stored frame's sha256 while reading. False defers
+        this check until :meth:`Cartridge.verify`; loading still records
+        the stored digest and the baseline for detecting in-memory changes.
     """
     try:
         zf = zipfile.ZipFile(Path(path))
