@@ -95,7 +95,7 @@ def test_any_firm_written_as_equations():
 def test_aggregate_risk_specification_errors():
     L, a, K_grid, _ = reference_grids(n_a=10, n_K=3)
     m = ks_model(L, a, K_grid)
-    m.prices(r=(0.0, 0.01))
+    m.prices(q=(0.0, 0.01))          # not r: r is the firm's local
     with pytest.raises(ModelSpecError, match="no prices"):
         m.solve()
     m = ks_model(L, a, K_grid)
