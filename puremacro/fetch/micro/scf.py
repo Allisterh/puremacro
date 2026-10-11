@@ -28,7 +28,11 @@ the sampling variance is the variance of the 999 replicate estimates,
 only; all five implicates enter the imputation (between) term.
 Replicates are keyed by household (``yy1``).
 
-Dollar values are in the survey year's dollars.
+Dollar values are in the dollars of the latest survey the Board has
+released, not the survey year's: each new survey re-publishes the older
+summary extracts re-based with the CPI-U-RS. Since the 2025 survey came
+out (October 2026), ``fetch_scf(2022)`` returns 2025 dollars, about 9%
+above the 2022 Bulletin's figures.
 
 Files (2001 onward)::
 
