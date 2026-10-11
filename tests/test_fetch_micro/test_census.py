@@ -22,6 +22,9 @@ CODEBOOK = {"variables": {
     "AGEP": {"values": {"range": [{"min": "1", "max": "99"}], "item": {"0": "Under 1 year"}}},
     "PEMLR": {"values": {"item": {"-1": "Not in Universe", "1": "Employed-At Work"}}},
     "PEHRUSL1": {"values": {"item": {"-1": "Not in Universe", "-4": "Hours Vary"}}},
+    # CPS 2024 January, as published: implied decimals, codes served scaled.
+    "PTERNWA": {"values": {"range": [{"min": "0.0", "max": "2884.61"}],
+                           "item": {"-1": "In Universe, Met No Conditions To Assign"}}},
 }}
 
 
@@ -154,13 +157,13 @@ def test_cps_basic_is_weights_only(monkeypatch):
             return _serve_codebook(url, secret_params)
         seen["url"] = url
         get = params["get"].split(",")
-        rows = [get, ["0001", "11", "1", "1", "40", "2500.5"],
-                ["0001", "11", "2", "2", "-4", "2400.0"],
-                ["0002", "11", "1", "-1", "-1", "1000.0"]]
+        rows = [get, ["0001", "11", "1", "1", "40", "961.54", "2500.5"],
+                ["0001", "11", "2", "2", "-4", "-0.01", "2400.0"],
+                ["0002", "11", "1", "-1", "-1", "-0.01", "1000.0"]]
         return json.dumps(rows).encode()
 
     monkeypatch.setattr(census._http, "cached_get", fake)
-    mf = census.fetch_cps_basic(2024, 1, ["PEMLR", "PEHRUSL1"])
+    mf = census.fetch_cps_basic(2024, 1, ["PEMLR", "PEHRUSL1", "PTERNWA"])
     assert seen["url"].endswith("/2024/cps/basic/jan")
     assert mf.design.weight == "PWCMPWGT" and not mf.design.has_variance
     assert mf.data["HRHHID"].tolist() == ["0001", "0001", "0002"]
@@ -168,6 +171,9 @@ def test_cps_basic_is_weights_only(monkeypatch):
     # Not in Universe is missing; "Hours Vary" (-4) is a code, not a missing value.
     assert mf.data["PEMLR"].isna().tolist() == [False, False, True]
     assert mf.data["PEHRUSL1"].tolist()[:2] == [40, -4] and np.isnan(mf.data["PEHRUSL1"][2])
+    # The API serves PTERNWA's code -1 as -0.01 (two implied decimals).
+    assert mf.data["PTERNWA"].isna().tolist() == [False, True, True]
+    assert mf.data["PTERNWA"][0] == pytest.approx(961.54)
 
 
 def test_not_applicable_codes_become_nan_and_leave_the_mean(fake):
@@ -196,7 +202,7 @@ def test_not_applicable_codes_become_nan_and_leave_the_mean(fake):
 
 def test_codes_match_numerically():
     book = pd.DataFrame({"variable": ["X", "X"], "code": ["01", "N"], "label": ["N/A", "N/A (GQ)"],
-                         "not_applicable": [True, True]})
+                         "value": [1.0, np.nan], "not_applicable": [True, True]})
     df = pd.DataFrame({"X": ["1", "N", "2", "10"]})
     out = census._blank_not_applicable(df, book)
     assert out["X"].isna().tolist() == [True, True, False, False]

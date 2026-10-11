@@ -39,8 +39,10 @@ for persons under 15, ``HINCP == -60000`` for group quarters, CPS
 ``-1`` for "Not in Universe". Left alone they enter means and totals as
 real values. By default (``na_to_nan=True``) every requested variable is
 checked against the endpoint's own codebook (``variables.json``) and the
-codes labelled N/A, Not in Universe, NIU, Blank, Don't Know or Refused
-become ``NaN``, so estimates cover the variable's universe, as the
+codes labelled N/A, Not in Universe, NIU, Blank, Don't Know, Refused or
+"In Universe, Met No Conditions To Assign" become ``NaN`` (CPS earnings
+have implied decimals and the API serves their code ``-1`` as ``-0.01``;
+that is matched too), so estimates cover the variable's universe, as the
 codebook asks ("Unselect this value to get correct calculation of
 average"). Other special codes (top and bottom codes, ``0 = None``,
 CPS ``-4 = Hours Vary``) are kept. ``MicroFrame.codebook`` lists every
@@ -79,7 +81,16 @@ CPS_IDS = ("HRHHID", "HRHHID2", "PULINENO")
 # Codebook labels that mean "no value" rather than a value.
 _NOT_APPLICABLE = re.compile(
     r"^\s*(n/a\b|not\s+in\s+universe\b|niu\s*(\(|$)|blank\s*$|"
-    r"don'?t\s+know\s*$|refused\s*$)", re.IGNORECASE)
+    r"don'?t\s+know\s*$|refused\s*$|in\s+universe,\s*met\s+no\s+conditions)",
+    re.IGNORECASE)
+
+
+def _implied_decimals(ranges) -> int:
+    """CPS earnings carry implied decimals (range ``0.0``-``99.99``) and
+    the API scales the codes too: ``-1`` is served as ``-0.01``."""
+    return max((len(b.split(".", 1)[1]) for r in ranges or ()
+                for b in (str(r.get("min", "")), str(r.get("max", ""))) if "." in b),
+               default=0)
 
 
 # ---------------------------------------------------------------------------
@@ -196,18 +207,23 @@ def codebook(url: str, names: Sequence[str], *, refresh: bool = False,
 
     One row per (variable, code) with ``not_applicable`` set for codes
     whose label means no value (N/A, Not in Universe, NIU, Blank, Don't
-    Know, Refused).
+    Know, Refused, "In Universe, Met No Conditions To Assign"). ``value``
+    is the code as the API serves it: CPS variables with implied decimals
+    serve code ``-1`` as ``-0.01``.
     """
     raw = _http.cached_get(f"{url}/variables.json", refresh=refresh,
                            timeout=timeout)
     v = json.loads(raw).get("variables", {})
     rows = []
     for name in names:
-        items = (v.get(name) or {}).get("values", {}).get("item", {}) or {}
-        for code, label in items.items():
+        values = (v.get(name) or {}).get("values", {}) or {}
+        scale = 10.0 ** -_implied_decimals(values.get("range"))
+        for code, label in (values.get("item") or {}).items():
+            num = pd.to_numeric(str(code), errors="coerce")
             rows.append({"variable": name, "code": str(code), "label": label,
+                         "value": round(num * scale, 10) if pd.notna(num) else np.nan,
                          "not_applicable": bool(_NOT_APPLICABLE.match(label))})
-    return pd.DataFrame(rows, columns=["variable", "code", "label",
+    return pd.DataFrame(rows, columns=["variable", "code", "label", "value",
                                        "not_applicable"])
 
 
@@ -215,14 +231,14 @@ def _blank_not_applicable(df: pd.DataFrame, book: pd.DataFrame) -> pd.DataFrame:
     """Set the codebook's not-applicable codes to missing, matching codes
     numerically where both sides are numbers (``"01"`` == ``"1"``)."""
     na = book[book["not_applicable"]]
-    for name, codes in na.groupby("variable")["code"]:
+    for name, codes in na.groupby("variable"):
         if name not in df.columns:
             continue
         s = df[name]
-        hit = s.astype(str).str.strip().isin(set(codes))
-        num = pd.to_numeric(codes, errors="coerce").dropna()
+        hit = s.astype(str).str.strip().isin(set(codes["code"]))
+        num = codes["value"].dropna()
         if len(num):
-            hit |= pd.to_numeric(s, errors="coerce").isin(set(num))
+            hit |= pd.to_numeric(s, errors="coerce").round(10).isin(set(num))
         df[name] = s.mask(hit)
     return df
 
