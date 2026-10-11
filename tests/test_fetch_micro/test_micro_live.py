@@ -39,6 +39,11 @@ def test_acs_pums_small_state_pull():
     assert len(acs.design.replicate_weights) == 80
     res = acs.mean("AGEP")
     assert 30 < res.loc[0, "estimate"] < 45 and np.isfinite(res.loc[0, "se"])
+    # WAGP == -1 means "under 15": it must be missing, not a negative wage.
+    assert (acs.data["WAGP"] < 0).sum() == 0
+    young = acs.data["AGEP"] < 15
+    assert young.any() and acs.data.loc[young, "WAGP"].isna().all()
+    assert acs.data.loc[~young, "WAGP"].notna().all()
 
 
 def test_enigh_2022_reproduces_published_mean_income():

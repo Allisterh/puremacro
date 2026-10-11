@@ -11,6 +11,25 @@ from puremacro.fetch.micro import census
 
 KEY = "SECRETKEY0123456789"
 
+# A slice of the real 2023 ACS PUMS variables.json, labels as published.
+CODEBOOK = {"variables": {
+    "WAGP": {"values": {"range": [{"min": "4", "max": "999999"}],
+                        "item": {"0": "None",
+                                 "-1": "N/A (less than 15 years old). Unselect this value "
+                                       "to get correct calculation of average for this variable"}}},
+    "ESR": {"values": {"item": {"0": "N/A (less than 16 years old)", "1": "Civilian employed, at work",
+                                "6": "Not in Labor Force"}}},
+    "AGEP": {"values": {"range": [{"min": "1", "max": "99"}], "item": {"0": "Under 1 year"}}},
+    "PEMLR": {"values": {"item": {"-1": "Not in Universe", "1": "Employed-At Work"}}},
+    "PEHRUSL1": {"values": {"item": {"-1": "Not in Universe", "-4": "Hours Vary"}}},
+}}
+
+
+def _serve_codebook(url, secret_params):
+    assert url.endswith("/variables.json")
+    assert not secret_params, "the codebook needs no key and must not get one"
+    return json.dumps(CODEBOOK).encode()
+
 
 class FakeCensus:
     """Serves a synthetic person file, honouring get=, for= and the key."""
@@ -22,6 +41,7 @@ class FakeCensus:
                 "SPORDER": [str(i % 3 + 1) for i in range(n)],
                 "AGEP": [str(a) for a in rng.integers(18, 90, n)],
                 "WAGP": [str(a) for a in rng.integers(0, 200000, n)],
+                "ESR": [str(a) for a in rng.choice([1, 6], n)],
                 "ADJINC": ["1019518"] * n}
         for stem in ("PWGTP", "WGTP"):
             base = rng.integers(5, 60, n)
@@ -34,6 +54,9 @@ class FakeCensus:
 
     def __call__(self, url, *, params=None, secret_params=None, refresh=False,
                  timeout=60, headers=None):
+        if url.endswith("/variables.json"):
+            self.codebook_calls = getattr(self, "codebook_calls", 0) + 1
+            return _serve_codebook(url, secret_params)
         self.calls.append({"url": url, "params": dict(params or {}),
                            "secret": dict(secret_params or {})})
         assert secret_params == {"key": KEY}
@@ -126,18 +149,57 @@ def test_cps_basic_is_weights_only(monkeypatch):
     monkeypatch.setenv("CENSUS_API_KEY", KEY)
     seen = {}
 
-    def fake(url, *, params, secret_params, **k):
+    def fake(url, *, params=None, secret_params=None, **k):
+        if url.endswith("/variables.json"):
+            return _serve_codebook(url, secret_params)
         seen["url"] = url
         get = params["get"].split(",")
-        rows = [get, ["0001", "11", "1", "1", "2500.5"], ["0001", "11", "2", "2", "2400.0"]]
+        rows = [get, ["0001", "11", "1", "1", "40", "2500.5"],
+                ["0001", "11", "2", "2", "-4", "2400.0"],
+                ["0002", "11", "1", "-1", "-1", "1000.0"]]
         return json.dumps(rows).encode()
 
     monkeypatch.setattr(census._http, "cached_get", fake)
-    mf = census.fetch_cps_basic(2024, 1, ["PEMLR"])
+    mf = census.fetch_cps_basic(2024, 1, ["PEMLR", "PEHRUSL1"])
     assert seen["url"].endswith("/2024/cps/basic/jan")
     assert mf.design.weight == "PWCMPWGT" and not mf.design.has_variance
-    assert mf.data["HRHHID"].tolist() == ["0001", "0001"]
+    assert mf.data["HRHHID"].tolist() == ["0001", "0001", "0002"]
     assert np.isnan(mf.mean("PEMLR").loc[0, "se"])
+    # Not in Universe is missing; "Hours Vary" (-4) is a code, not a missing value.
+    assert mf.data["PEMLR"].isna().tolist() == [False, False, True]
+    assert mf.data["PEHRUSL1"].tolist()[:2] == [40, -4] and np.isnan(mf.data["PEHRUSL1"][2])
+
+
+def test_not_applicable_codes_become_nan_and_leave_the_mean(fake):
+    fake.table.loc[[0, 1, 2], "WAGP"] = "-1"
+    fake.table.loc[[0, 1], "ESR"] = "0"
+    fake.table.loc[[3], "WAGP"] = "0"          # "None" is a real zero
+    mf = census.fetch_acs_pums(2023, ["AGEP", "WAGP", "ESR"], replicate_weights=False)
+    by_id = mf.data.set_index(["SERIALNO", "SPORDER"])
+    assert by_id["WAGP"].isna().sum() == 3 and by_id["ESR"].isna().sum() == 2
+    assert (mf.data["WAGP"] == 0).sum() == (fake.table["WAGP"] == "0").sum()
+    assert mf.data["AGEP"].notna().all()
+    w = fake.table["PWGTP"].astype(float)
+    x = fake.table["WAGP"].astype(float)
+    ok = x != -1
+    assert mf.mean("WAGP").loc[0, "estimate"] == pytest.approx((w[ok] * x[ok]).sum() / w[ok].sum())
+    assert mf.mean("WAGP").loc[0, "n"] == 27
+    book = mf.codebook.set_index(["variable", "code"])
+    assert book.loc[("WAGP", "-1"), "not_applicable"]
+    assert not book.loc[("WAGP", "0"), "not_applicable"]
+    assert not book.loc[("AGEP", "0"), "not_applicable"]
+    assert fake.codebook_calls == 1
+
+    raw = census.fetch_acs_pums(2023, ["WAGP"], replicate_weights=False, na_to_nan=False)
+    assert (raw.data["WAGP"] == -1).sum() == 3 and raw.codebook.empty
+
+
+def test_codes_match_numerically():
+    book = pd.DataFrame({"variable": ["X", "X"], "code": ["01", "N"], "label": ["N/A", "N/A (GQ)"],
+                         "not_applicable": [True, True]})
+    df = pd.DataFrame({"X": ["1", "N", "2", "10"]})
+    out = census._blank_not_applicable(df, book)
+    assert out["X"].isna().tolist() == [True, True, False, False]
 
 
 def test_chunk_layout():

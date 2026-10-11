@@ -1229,6 +1229,7 @@
       "CPS_IDS",
       "MAX_VARIABLES",
       "PUMS_IDS",
+      "codebook",
       "fetch_acs_pums",
       "fetch_cps_basic",
       "fetch_records",

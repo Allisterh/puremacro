@@ -32,6 +32,20 @@ PUMS is published at state and PUMA level only. Pass the API's own
 syntax: ``geography="state:06"`` or ``geography="public use microdata
 area:*", within="state:06"``.
 
+NOT-APPLICABLE CODES
+--------------------
+The API returns "not applicable" as an ordinary number: ``WAGP == -1``
+for persons under 15, ``HINCP == -60000`` for group quarters, CPS
+``-1`` for "Not in Universe". Left alone they enter means and totals as
+real values. By default (``na_to_nan=True``) every requested variable is
+checked against the endpoint's own codebook (``variables.json``) and the
+codes labelled N/A, Not in Universe, NIU, Blank, Don't Know or Refused
+become ``NaN``, so estimates cover the variable's universe, as the
+codebook asks ("Unselect this value to get correct calculation of
+average"). Other special codes (top and bottom codes, ``0 = None``,
+CPS ``-4 = Hours Vary``) are kept. ``MicroFrame.codebook`` lists every
+labelled code of the requested variables and whether it was set to NaN.
+
 DOLLAR AMOUNTS
 --------------
 ACS income and housing-cost variables are in the survey year's nominal
@@ -42,6 +56,7 @@ this module does not do it silently.
 from __future__ import annotations
 
 import json
+import re
 from typing import Iterable, Mapping, Sequence
 
 import numpy as np
@@ -60,6 +75,11 @@ _MONTH_NAMES = ("january", "february", "march", "april", "may", "june", "july",
 
 PUMS_IDS = ("SERIALNO", "SPORDER")
 CPS_IDS = ("HRHHID", "HRHHID2", "PULINENO")
+
+# Codebook labels that mean "no value" rather than a value.
+_NOT_APPLICABLE = re.compile(
+    r"^\s*(n/a\b|not\s+in\s+universe\b|niu\s*(\(|$)|blank\s*$|"
+    r"don'?t\s+know\s*$|refused\s*$)", re.IGNORECASE)
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +190,43 @@ def variables(dataset: str = "acs/acs1/pums", year: int = 2023, *,
     return pd.DataFrame(rows).sort_values("name", ignore_index=True)
 
 
+def codebook(url: str, names: Sequence[str], *, refresh: bool = False,
+             timeout: int = 60) -> pd.DataFrame:
+    """Labelled codes of ``names`` from the endpoint's ``variables.json``.
+
+    One row per (variable, code) with ``not_applicable`` set for codes
+    whose label means no value (N/A, Not in Universe, NIU, Blank, Don't
+    Know, Refused).
+    """
+    raw = _http.cached_get(f"{url}/variables.json", refresh=refresh,
+                           timeout=timeout)
+    v = json.loads(raw).get("variables", {})
+    rows = []
+    for name in names:
+        items = (v.get(name) or {}).get("values", {}).get("item", {}) or {}
+        for code, label in items.items():
+            rows.append({"variable": name, "code": str(code), "label": label,
+                         "not_applicable": bool(_NOT_APPLICABLE.match(label))})
+    return pd.DataFrame(rows, columns=["variable", "code", "label",
+                                       "not_applicable"])
+
+
+def _blank_not_applicable(df: pd.DataFrame, book: pd.DataFrame) -> pd.DataFrame:
+    """Set the codebook's not-applicable codes to missing, matching codes
+    numerically where both sides are numbers (``"01"`` == ``"1"``)."""
+    na = book[book["not_applicable"]]
+    for name, codes in na.groupby("variable")["code"]:
+        if name not in df.columns:
+            continue
+        s = df[name]
+        hit = s.astype(str).str.strip().isin(set(codes))
+        num = pd.to_numeric(codes, errors="coerce").dropna()
+        if len(num):
+            hit |= pd.to_numeric(s, errors="coerce").isin(set(num))
+        df[name] = s.mask(hit)
+    return df
+
+
 # ---------------------------------------------------------------------------
 # ACS PUMS
 # ---------------------------------------------------------------------------
@@ -183,6 +240,7 @@ def fetch_acs_pums(
     within: str | None = None,
     where: Mapping | None = None,
     replicate_weights: bool = True,
+    na_to_nan: bool = True,
     api_key: str | None = None,
     refresh: bool = False,
     timeout: int = 180,
@@ -201,6 +259,9 @@ def fetch_acs_pums(
     where : predicates, e.g. ``{"AGEP": (25, 64), "SEX": 2}``.
     replicate_weights : set False to skip the 80 replicates (point
         estimates only; ``se`` becomes ``NaN``).
+    na_to_nan : set the codebook's not-applicable codes of ``variables``
+        (``WAGP == -1``, ``ESR == 0``, ...) to ``NaN``; see the module
+        docstring. False keeps the raw codes.
 
     Examples
     --------
@@ -221,13 +282,18 @@ def fetch_acs_pums(
     df = fetch_records(url, wanted, PUMS_IDS, geography=geography,
                        within=within, where=where, api_key=api_key,
                        refresh=refresh, timeout=timeout)
+    book = pd.DataFrame()
+    if na_to_nan:
+        book = codebook(url, [v for v in dict.fromkeys(variables)
+                              if v not in PUMS_IDS], refresh=refresh)
+        df = _blank_not_applicable(df, book)
     df = _to_numeric(df, keep_text=["SERIALNO"])
     if unit == "household":
         df = df[df["SPORDER"] == 1].reset_index(drop=True)
     return MicroFrame(
         data=df, design=design, unit=unit, source="census.acs_pums",
         vintage=f"{year} {survey}",
-        query=_describe(url, wanted, geography, within, where))
+        query=_describe(url, wanted, geography, within, where), codebook=book)
 
 
 # ---------------------------------------------------------------------------
@@ -241,6 +307,7 @@ def fetch_cps_basic(
     weight: str = "PWCMPWGT",
     geography: str | None = None,
     where: Mapping | None = None,
+    na_to_nan: bool = True,
     api_key: str | None = None,
     refresh: bool = False,
     timeout: int = 180,
@@ -253,6 +320,10 @@ def fetch_cps_basic(
     replicate weights or design variables, and a weights-only standard
     error would understate the truth. Use the BLS generalised variance
     function parameters if you need an approximation.
+
+    ``na_to_nan`` sets the codebook's Not in Universe, Blank, Don't Know
+    and Refused codes of ``variables`` to ``NaN`` (see the module
+    docstring); False keeps the raw codes.
     """
     if isinstance(month, str):
         name = month.strip().lower()
@@ -268,13 +339,19 @@ def fetch_cps_basic(
     wanted = list(variables) + [weight]
     df = fetch_records(url, wanted, CPS_IDS, geography=geography, where=where,
                        api_key=api_key, refresh=refresh, timeout=timeout)
+    book = pd.DataFrame()
+    if na_to_nan:
+        book = codebook(url, [v for v in dict.fromkeys(variables)
+                              if v not in CPS_IDS], refresh=refresh)
+        df = _blank_not_applicable(df, book)
     df = _to_numeric(df, keep_text=["HRHHID", "HRHHID2"])
     design = SurveyDesign.weights_only(
         weight, note="CPS public files publish no replicate weights or "
                      "design variables; standard errors not computed")
     return MicroFrame(data=df, design=design, unit="person",
                       source="census.cps_basic", vintage=f"{year}-{mon}",
-                      query=_describe(url, wanted, geography, None, where))
+                      query=_describe(url, wanted, geography, None, where),
+                      codebook=book)
 
 
 def _describe(url, wanted, geography, within, where) -> str:
@@ -289,4 +366,5 @@ def _describe(url, wanted, geography, within, where) -> str:
 
 
 __all__ = ["fetch_acs_pums", "fetch_cps_basic", "fetch_records", "variables",
+           "codebook",
            "MAX_VARIABLES", "PUMS_IDS", "CPS_IDS"]
