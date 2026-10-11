@@ -63,7 +63,7 @@ def _with_query(url: str, params: Optional[dict]) -> str:
 
 def _redact(exc: BaseException, secret_params: Optional[dict]) -> None:
     secrets = [str(v) for v in (secret_params or {}).values() if v]
-    secrets += [quote_plus(v) for v in secrets]
+    secrets += [quote(v, safe=",:*") for v in secrets] + [quote_plus(v) for v in secrets]
     if not secrets:
         return
     def clean(a):
@@ -72,7 +72,21 @@ def _redact(exc: BaseException, secret_params: Optional[dict]) -> None:
         for v in secrets:
             a = a.replace(v, "***")
         return a
-    exc.args = tuple(clean(a) for a in exc.args)
+    # A traceback prints the whole chain: requests raises ConnectionError
+    # while handling urllib3's MaxRetryError, whose text holds the URL. The
+    # exception (and its request/response) also keep the URL as `.url`.
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        exc.args = tuple(clean(a) for a in exc.args)
+        for holder in (exc, getattr(exc, "request", None),
+                       getattr(exc, "response", None)):
+            if isinstance(getattr(holder, "url", None), str):
+                try:
+                    holder.url = clean(holder.url)
+                except (AttributeError, TypeError):
+                    pass
+        exc = exc.__cause__ or exc.__context__
 
 
 def cached_get(
@@ -93,8 +107,10 @@ def cached_get(
     identity. ``secret_params`` (an API key) are sent with the request but
     never reach the cache path or the manifest: the on-disk file name and
     ``_manifest.json`` are derived from ``url`` + ``params`` alone, so a key
-    passed this way is not written anywhere under ``data/raw``. Never put a
-    key in ``url`` or ``params`` directly.
+    passed this way is not written anywhere under ``data/raw``, and it is
+    replaced by ``***`` in a raised exception (its whole chain, and the
+    URL it carries). urllib3 still logs request URLs at DEBUG level, key
+    included. Never put a key in ``url`` or ``params`` directly.
     """
     if requests is None:
         raise RuntimeError(

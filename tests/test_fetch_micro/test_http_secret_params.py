@@ -79,3 +79,32 @@ def test_spaces_are_percent_encoded(cache, monkeypatch):
     monkeypatch.setattr(_http, "requests", fake)
     _http.cached_get("https://h/x", params={"for": "public use microdata area:*"})
     assert fake.urls == ["https://h/x?for=public%20use%20microdata%20area:*"]
+
+
+def test_connection_errors_are_redacted_through_the_exception_chain(cache, monkeypatch):
+    """requests raises ConnectionError *during handling of* urllib3's
+    MaxRetryError, whose text holds the full URL; a traceback prints both,
+    and the exception also carries the request URL."""
+    import traceback
+
+    class _Request:
+        def __init__(self, url):
+            self.url = url
+
+    class _Raising:
+        def get(self, url, headers=None, timeout=None):
+            path = url.split("/", 3)[-1]
+            try:
+                raise OSError(f"Max retries exceeded with url: /{path}")
+            except OSError as inner:
+                err = ConnectionError(inner)
+                err.request = _Request(url)
+                raise err
+
+    monkeypatch.setattr(_http, "requests", _Raising())
+    with pytest.raises(ConnectionError) as ei:
+        _http.cached_get("https://h/x", params={"a": 1}, secret_params={"key": KEY})
+    shown = "".join(traceback.format_exception(ei.value))
+    assert "Max retries exceeded" in shown
+    assert KEY not in shown
+    assert KEY not in ei.value.request.url
