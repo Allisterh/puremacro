@@ -1,11 +1,11 @@
 {
-  "package_file": "/private/var/folders/lx/tfh_l1r90j3cp31s1bhtz7ph0000gn/T/puremacro-paths-build-80zznli7/installed/puremacro/__init__.py",
-  "version": "4.7.0",
+  "package_file": "/private/tmp/puremacro-release-4.8.0-final-installed/puremacro/__init__.py",
+  "version": "4.8.0",
   "forecasts": 225,
   "cartridge_verified": true,
   "passed": true,
-  "wheel_sha256": "9089c186085ff8a1d2151da44fc041ad5db45ae52f8d28b99e77ec9f4738c51f",
-  "wheel_bytes": 21150629,
+  "wheel_sha256": "0b8825bb9364491fed86d8dfdbba9d455bcf227f2c6c5a89644715dedfc3c3f3",
+  "wheel_bytes": 21153063,
   "table_sha256": {
     "levels": "dd05c0de2a423a916bc8912d9a154b1f7042eada3ad45b50e60747bd8a16c8a4",
     "growth": "9299f0334e40640a2564b4b913343d5257ce105302eec1c4fff2af46dda00ee2",
