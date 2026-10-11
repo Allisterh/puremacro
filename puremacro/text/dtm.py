@@ -360,9 +360,9 @@ def build_dtm(
         return out
     # Alphabetical columns make the matrix independent of document order.
     out = out._cols(np.argsort(np.asarray(vocab, dtype=object), kind="stable"))
-    if min_df != 1 or max_df != 1.0 or max_features is not None:
-        out = out.filter(min_df=min_df, max_df=max_df, max_features=max_features)
-    return out
+    # Always filter: comparing with the defaults (``min_df != 1``) cannot tell
+    # max_df=1 (one document) from max_df=1.0 (all documents).
+    return out.filter(min_df=min_df, max_df=max_df, max_features=max_features)
 
 
 def _df_threshold(v: int | float, n: int) -> float:

@@ -190,6 +190,20 @@ def test_filter(dtm):
     assert m.vocab == ["rates"]
 
 
+def test_df_bounds_follow_int_count_float_share_convention(dtm):
+    # scikit-learn's convention: an int is a number of documents, a float a
+    # share. max_df=1 keeps terms in at most one document; min_df=1.0 keeps
+    # terms in every document. Both bounds are inclusive.
+    once = [t for t, n in dtm.document_frequency().items() if n == 1]
+    assert dtm.filter(max_df=1).vocab == once
+    assert dtm.filter(min_df=1.0).vocab == []
+    assert dtm.filter(max_df=2 / 3).vocab == dtm.vocab  # "rates" is in 2 of 3
+    # build_dtm (and corpus.dtm) apply the same bounds as filter().
+    kw = dict(languages=["en", "en", "es"], docs=DOCS)
+    assert build_dtm(TEXTS, max_df=1, **kw).vocab == once
+    assert build_dtm(TEXTS, min_df=1.0, **kw).vocab == []
+
+
 def test_tfidf_matches_sklearn_definition(dtm):
     C = dtm.X.toarray().astype(float)
     n = C.shape[0]
