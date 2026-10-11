@@ -21,12 +21,13 @@ is kept in ``previous_content_hash``, so edited documents can be found with
 from __future__ import annotations
 
 import json
-import sqlite3
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable
 
 import pandas as pd
+
+from puremacro._optional_stdlib import sqlite3
 
 if TYPE_CHECKING:
     from .harvest import NarrativeCorpus, NarrativeDocument

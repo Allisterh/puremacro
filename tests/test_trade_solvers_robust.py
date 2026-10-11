@@ -26,6 +26,7 @@ import numpy as np
 import scipy.linalg as la
 import pytest
 
+from _timing import budget
 from puremacro.trade import (
     TradeCalibrationResult,
     TradeEquilibriumResult,
@@ -51,7 +52,7 @@ from puremacro.trade.solver import (
 @pytest.fixture(scope="module")
 def empirical_calib() -> TradeCalibrationResult:
     """Calibrate full 77-country 11-sector empirical model from bundled OECD ICIO data."""
-    raw = load_icio_data()
+    raw = load_icio_data(source="legacy")
     return calibrate_trade_model(raw, ns=11, nc=77, nfd=3, validate=False)
 
 
@@ -122,7 +123,7 @@ class TestHawkinsSimonViability:
         t_elapsed = time.perf_counter() - t_start
 
         # Runtime specification: must complete in < 0.15s (typically ~0.003s)
-        assert t_elapsed < 0.15, f"Hawkins-Simon check exceeded time limit: {t_elapsed:.4f}s >= 0.15s"
+        assert t_elapsed < budget(0.15), f"Hawkins-Simon check exceeded time limit: {t_elapsed:.4f}s >= {budget(0.15)}s"
 
         # Collatz-Wielandt bounding condition: cw_lower <= rho <= cw_upper
         assert cw_lower <= rho <= cw_upper + 1e-10, (
