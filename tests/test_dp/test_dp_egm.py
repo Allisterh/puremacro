@@ -418,6 +418,9 @@ def test_taste_shocks_infinite_horizon_distribution_and_means():
     np.testing.assert_allclose(probs.sum(axis=0), 1.0, atol=1e-12)
     assert sol.distribution.sum() == pytest.approx(1.0, abs=1e-10)
     assert sol.aggregates["H"] == pytest.approx(float(np.sum(sol.distribution * probs[1])), abs=1e-12)
+    # stationarity: the lottery preserves means, so mean a(+1) (each option's
+    # next assets weighted by its probability) equals mean a
+    assert sol.mean("a(+1)") == pytest.approx(sol.mean("a"), abs=1e-8)
     det = labour(n_a=150).solve("egm", tol=1e-9)
     assert np.all(sol.V >= det.V - 1e-8)          # the log-sum is at least the max
     assert 0.0 < sol.aggregates["H"] < 1.0
@@ -436,6 +439,12 @@ def test_a_state_without_feasible_consumption_raises_as_in_vfi():
     for method in ("vfi", "egm"):
         with pytest.raises(RuntimeError, match="no feasible"):
             m.solve(method)
+
+
+def test_taste_shocks_life_cycle_distribution_follows_each_options_savings():
+    sol = retire(5, 0.2, n_a=101).solve("egm")
+    np.testing.assert_allclose(sol.mean("a(+1)")[:-1], sol.mean("a")[1:], rtol=0, atol=1e-12)
+    np.testing.assert_allclose(sol.distribution.sum(axis=(1, 2)), 1.0, atol=1e-12)
 
 
 def test_taste_shocks_need_egm_and_a_discrete_choice():
