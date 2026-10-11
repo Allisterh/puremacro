@@ -150,19 +150,22 @@ def test_models_outside_egm_are_rejected(change, match):
 
 @pytest.mark.parametrize("gamma", [1.0, 2.0])
 def test_cake_eating_has_the_closed_form_policy(gamma):
-    # no income, beta*R < 1: c = (R - (beta*R)^(1/gamma)) * a exactly, and EGM's
-    # linear interpolation reproduces a linear consumption function exactly
+    # no income, beta*R < 1: c = (R - (beta*R)^(1/gamma)) * a, and EGM's linear
+    # interpolation reproduces a linear consumption function exactly. The grid
+    # starts just above 0 (at a = 0 no consumption is feasible); that floor moves
+    # the policy by about 3e-9
     r = 0.03
     m = dp.Model("cake")
     m.parameters(beta=BETA, gamma=gamma, r=r)
-    m.state("a", np.linspace(0.0, 10.0, 101))
+    m.state("a", np.linspace(1e-6, 10.0, 101))
     m.local("c = (1 + r)*a - a(+1)")
     m.reward("crra(c, gamma)")
     m.subject_to("c > 0")
     sol = m.solve("egm", tol=1e-12)
     a = sol.grids["a"]
     kappa = (1 + r) - (BETA * (1 + r)) ** (1 / gamma)
-    np.testing.assert_allclose(sol.policy("c")[1:, 0], kappa * a[1:], rtol=0, atol=1e-9)
+    np.testing.assert_allclose(sol.policy("c")[:, 0], kappa * a, rtol=0, atol=1e-7)
+    assert np.all(np.isfinite(sol.V))
 
 
 # ---------------------------------------------------------------- life cycle
@@ -402,6 +405,21 @@ def test_taste_shocks_infinite_horizon_distribution_and_means():
     det = labour(n_a=150).solve("egm", tol=1e-9)
     assert np.all(sol.V >= det.V - 1e-8)          # the log-sum is at least the max
     assert 0.0 < sol.aggregates["H"] < 1.0
+
+
+def test_a_state_without_feasible_consumption_raises_as_in_vfi():
+    # zero income and zero assets force c = 0; VFI raises, and EGM used to return
+    # an all-NaN value function (the -inf spreads through the lottery weights)
+    m = dp.Model("zero income state")
+    m.parameters(beta=0.95, gamma=2.0, r=0.02)
+    m.exogenous("y", dp.Markov([0.0, 1.0], [[0.5, 0.5], [0.1, 0.9]]))
+    m.state("a", np.linspace(0.0, 20.0, 50))
+    m.local("c = (1 + r)*a + y - a(+1)")
+    m.reward("crra(c, gamma)")
+    m.subject_to("c > 0")
+    for method in ("vfi", "egm"):
+        with pytest.raises(RuntimeError, match="no feasible"):
+            m.solve(method)
 
 
 def test_taste_shocks_need_egm_and_a_discrete_choice():

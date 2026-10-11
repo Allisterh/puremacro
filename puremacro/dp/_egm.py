@@ -196,6 +196,12 @@ class EGMPlan:
         a, n_a, n_z = self.a, self.a.size, self.n_z
         u = np.broadcast_to(self.comp.household(aprime, a[:, None], *self._zs(2), *params.values(), xp=np),
                             (n_a, n_z))
+        if not np.all(np.isfinite(u)):
+            # as VFI: a state whose cash on hand does not exceed the borrowing limit;
+            # its -inf would turn the whole policy-evaluation solve into NaN
+            ia, iz = np.argwhere(~np.isfinite(u))[0]
+            raise RuntimeError(f"no feasible action for state (a = {a[ia]:.6g}, shock index {iz}): "
+                               "consumption is not positive at any a(+1) on the grid")
         j = np.clip(np.searchsorted(a, aprime) - 1, 0, n_a - 2)
         w = np.clip((a[j + 1] - aprime) / (a[j + 1] - a[j]), 0.0, 1.0)
         rows, cols, vals = [], [], []
