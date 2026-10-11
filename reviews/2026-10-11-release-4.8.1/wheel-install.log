@@ -1,0 +1,5 @@
+Using CPython 3.12.13 interpreter at: /tmp/puremacro-release-4.8.0-venv/bin/python
+Resolved 1 package in 7ms
+Prepared 1 package in 50ms
+Installed 1 package in 9ms
+ + puremacro==4.8.1 (from file:///tmp/puremacro-release-4.8.1-source/dist/puremacro-4.8.1-py3-none-any.whl)

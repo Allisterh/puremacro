@@ -1,0 +1,38 @@
+{
+  "commit": "580d2e3d94a3d5ae2a464138943a720ca7598f09",
+  "wheel_entries": 907,
+  "wheel_package_entries": 901,
+  "sdist_entries": 1427,
+  "png_in_wheel": 0,
+  "required_files_present": true,
+  "all_wheel_package_bytes_match_clean_export": true,
+  "required_sdist_bytes_match_clean_export": true,
+  "wheel_metadata_version": "4.8.1",
+  "required_wheel_files": [
+    "puremacro/examples/cross_country_forecasting.py",
+    "puremacro/datasets/data/cross_country_gdp.csv",
+    "puremacro/datasets/data/cross_country_gdp_metadata.json",
+    "puremacro/runtime/store.py",
+    "puremacro/pocket/_cartridge.py"
+  ],
+  "required_sdist_source_files": [
+    "tools/build_cross_country_forecasting_data.py",
+    "tests/fixtures/runtime_store_v1.pmz",
+    "reviews/2026-10-10-cross-country-forecasting/source/wdi_countries.json",
+    "reviews/2026-10-10-cross-country-forecasting/source/wdi_gdp.json",
+    "tests/test_runtime_store_attrs.py",
+    "tests/test_cross_country_forecasting.py",
+    "tests/test_cross_country_forecasting_data.py"
+  ],
+  "artifacts": {
+    "puremacro-4.8.1-py3-none-any.whl": {
+      "bytes": 21153373,
+      "sha256": "571912e3e2f4df430533f0187a7b68fa641e3375d99388f20f6624138226f6f6"
+    },
+    "puremacro-4.8.1.tar.gz": {
+      "bytes": 22521857,
+      "sha256": "6b71007c8cf7353bf6ef0f70c9372e98e576f41e36d0301ebe23e87a8b1dd0a1"
+    }
+  },
+  "passed": true
+}
