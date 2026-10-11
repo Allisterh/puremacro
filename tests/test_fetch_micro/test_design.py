@@ -252,3 +252,10 @@ def test_cps_month_out_of_range_is_rejected():
     for bad in (0, -1, 13):
         with pytest.raises(ValueError, match="not in 1..12"):
             census.fetch_cps_basic(2024, bad, ["PEMLR"], api_key="k")
+
+
+def test_cps_month_names_must_be_real_months():
+    from puremacro.fetch.micro import census
+    for bad in ("junk", "Marmalade", "decimal", "13", True, 1.9):
+        with pytest.raises(ValueError, match="month"):
+            census.fetch_cps_basic(2024, bad, ["PEMLR"], api_key="k")

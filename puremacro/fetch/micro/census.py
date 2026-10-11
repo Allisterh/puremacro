@@ -44,6 +44,7 @@ from __future__ import annotations
 import json
 from typing import Iterable, Mapping, Sequence
 
+import numpy as np
 import pandas as pd
 
 from ... import credentials
@@ -54,6 +55,8 @@ API_ROOT = "https://api.census.gov/data"
 MAX_VARIABLES = 50
 _MONTHS = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep",
            "oct", "nov", "dec")
+_MONTH_NAMES = ("january", "february", "march", "april", "may", "june", "july",
+                "august", "september", "october", "november", "december")
 
 PUMS_IDS = ("SERIALNO", "SPORDER")
 CPS_IDS = ("HRHHID", "HRHHID2", "PULINENO")
@@ -252,13 +255,15 @@ def fetch_cps_basic(
     function parameters if you need an approximation.
     """
     if isinstance(month, str):
-        mon = month.lower()[:3]
-    elif 1 <= int(month) <= 12:
+        name = month.strip().lower()
+        mon = name[:3]
+        if mon not in _MONTHS or name not in (mon, _MONTH_NAMES[_MONTHS.index(mon)]):
+            raise ValueError(f"month {month!r} not understood")
+    elif (isinstance(month, (int, np.integer)) and not isinstance(month, bool)
+          and 1 <= month <= 12):
         mon = _MONTHS[int(month) - 1]
     else:
         raise ValueError(f"month {month!r} not in 1..12")
-    if mon not in _MONTHS:
-        raise ValueError(f"month {month!r} not understood")
     url = f"{API_ROOT}/{year}/cps/basic/{mon}"
     wanted = list(variables) + [weight]
     df = fetch_records(url, wanted, CPS_IDS, geography=geography, where=where,
