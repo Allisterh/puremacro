@@ -58,15 +58,20 @@ def ks_model(L, a, K_grid, firm=("r = alpha*Z*(K/L)^(alpha - 1) - delta", "w = (
 
 
 def test_cobb_douglas_matches_krusell_smith_exactly():
-    ref = ksm.krusell_smith(n_a=60, n_K=5, **SMALL)
-    L, a, K_grid, mu0 = reference_grids()
-    sol = ks_model(L, a, K_grid).solve(tol=1e-7, howard=40, ks=dict(SMALL, mu0=mu0))
+    # on 60 asset points discrete policies never move capital (the regression is
+    # degenerate: R^2 = 1, b1 -> 0); 120 points is the coarsest grid where it moves
+    opts = dict(T=300, burn_in=50, max_outer=2, tol=1e-6)
+    ref = ksm.krusell_smith(n_a=120, n_K=3, **opts)
+    L, a, K_grid, mu0 = reference_grids(n_a=120, n_K=3)
+    sol = ks_model(L, a, K_grid).solve(tol=1e-7, howard=40, ks=dict(opts, mu0=mu0))
     eq = sol.equilibrium
+    assert np.ptp(ref.K_path) > 1.0          # capital moves, so the regression is not degenerate
     np.testing.assert_array_equal(eq.b0, ref.b0)
     np.testing.assert_array_equal(eq.b1, ref.b1)
     np.testing.assert_array_equal(eq.K_path, ref.K_path)
     assert sol.method == "vfi+ks" and sol.aggregates["K"] == pytest.approx(ref.mean_K)
-    assert sol.policy("c").shape == (60, 2 * 2 * 5)
+    assert np.all((eq.b1 > 0.9) & (eq.b1 < 1.0))
+    assert sol.policy("c").shape == (120, 2 * 2 * 3)
 
 
 def test_any_firm_written_as_equations():
