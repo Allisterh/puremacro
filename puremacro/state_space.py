@@ -166,8 +166,9 @@ def _next_observation(
     remaining: list,
     P_curr: np.ndarray,
     A_curr: np.ndarray,
-) -> int:
-    """The observation of the period to process next.
+) -> Optional[int]:
+    """The observation of the period to process next, or None when no
+    remaining one carries diffuse information.
 
     The order does not change the exact result, but a diffuse step that
     barely loads the direction it resolves leaves a large ``P_*`` for the
@@ -176,16 +177,16 @@ def _next_observation(
     carry diffuse information (the cut-off of :func:`_kalman_diffuse_update`),
     take the one with the largest ``F_inf / F_*``, a ratio free of the units
     of y, of the states and of the scale of ``A``; ties go to the earlier
-    one. With no diffuse information left, keep the given order."""
+    one."""
     if A_curr.shape[1] == 0:
-        return remaining[0]
+        return None
     Z_r = Z_u[remaining]
     W = Z_r @ A_curr                          # rows (A'z_k)'
     F_inf = np.einsum("ij,ij->i", W, W)
     B = np.abs(Z_r) @ np.abs(A_curr)
     diffuse = F_inf > _DIFFUSE_TOL * np.einsum("ij,ij->i", B, B)
     if not diffuse.any():
-        return remaining[0]
+        return None
     F_star = np.einsum("ij,jk,ik->i", Z_r, P_curr, Z_r) + h_diag[remaining]
     score = np.full(len(remaining), -1.0)
     pos = diffuse & (F_star > 0.0)
@@ -232,41 +233,49 @@ def _kalman_diffuse_update(
     # in any order; see _next_observation for the one used.
     remaining = list(range(n_obs))
     while remaining:
-        k = _next_observation(Z_u, h_diag, remaining, P_curr, A_curr)
-        remaining.remove(k)
-        z_k = Z_u[k]                          # (m,)
-        v_k = float(y_u[k] - z_k @ a_curr)
-        w_k = A_curr.T @ z_k                  # (q,)
-        F_inf_k = float(w_k @ w_k)
-        F_star_k = float(z_k @ P_curr @ z_k + h_diag[k])
-        M_star = P_curr @ z_k                 # (m,)
-        bound = np.abs(A_curr).T @ np.abs(z_k)
-        if F_inf_k > _DIFFUSE_TOL * float(bound @ bound):
-            # Diffuse update (Koopman-Durbin eq. 5.18):
-            # P_* <- P_* + F_* K0 K0' - K0 M_*' - M_* K0'.
-            M_inf = A_curr @ w_k              # (m,)
-            if steps is not None:
-                steps.append(_UnivariateStep(z_k, v_k, F_star_k, M_star, F_inf_k, M_inf))
-            K0 = M_inf / F_inf_k
-            a_curr = a_curr + K0 * v_k
-            P_curr = P_curr + F_star_k * np.outer(K0, K0) \
-                      - np.outer(K0, M_star) \
-                      - np.outer(M_star, K0)
-            # P_inf - M_inf M_inf' / F_inf = A (I - w w' / w'w) A': keep
-            # the orthogonal complement of w in the factor's column space.
-            Q_w, _ = np.linalg.qr(w_k[:, None], mode="complete")
-            A_curr = A_curr @ Q_w[:, 1:]
-            ll_t += -0.5 * (log2pi + np.log(F_inf_k))
+        k_next = _next_observation(Z_u, h_diag, remaining, P_curr, A_curr)
+        if k_next is None:
+            # Standard steps leave A unchanged, so no later observation of
+            # the period can carry diffuse information: take the rest in the
+            # given order without rescoring.
+            batch, remaining = remaining, []
         else:
-            if F_star_k <= 0:
-                F_star_k = 1e-10
-            if steps is not None:
-                steps.append(_UnivariateStep(z_k, v_k, F_star_k, M_star))
-            K = M_star / F_star_k
-            a_curr = a_curr + K * v_k
-            P_curr = P_curr - np.outer(K, M_star)
-            ll_t += -0.5 * (log2pi + np.log(F_star_k)
-                             + v_k * v_k / F_star_k)
+            remaining.remove(k_next)
+            batch = [k_next]
+        for k in batch:
+            z_k = Z_u[k]                          # (m,)
+            v_k = float(y_u[k] - z_k @ a_curr)
+            w_k = A_curr.T @ z_k                  # (q,)
+            F_inf_k = float(w_k @ w_k)
+            F_star_k = float(z_k @ P_curr @ z_k + h_diag[k])
+            M_star = P_curr @ z_k                 # (m,)
+            bound = np.abs(A_curr).T @ np.abs(z_k)
+            if F_inf_k > _DIFFUSE_TOL * float(bound @ bound):
+                # Diffuse update (Koopman-Durbin eq. 5.18):
+                # P_* <- P_* + F_* K0 K0' - K0 M_*' - M_* K0'.
+                M_inf = A_curr @ w_k              # (m,)
+                if steps is not None:
+                    steps.append(_UnivariateStep(z_k, v_k, F_star_k, M_star, F_inf_k, M_inf))
+                K0 = M_inf / F_inf_k
+                a_curr = a_curr + K0 * v_k
+                P_curr = P_curr + F_star_k * np.outer(K0, K0) \
+                          - np.outer(K0, M_star) \
+                          - np.outer(M_star, K0)
+                # P_inf - M_inf M_inf' / F_inf = A (I - w w' / w'w) A': keep
+                # the orthogonal complement of w in the factor's column space.
+                Q_w, _ = np.linalg.qr(w_k[:, None], mode="complete")
+                A_curr = A_curr @ Q_w[:, 1:]
+                ll_t += -0.5 * (log2pi + np.log(F_inf_k))
+            else:
+                if F_star_k <= 0:
+                    F_star_k = 1e-10
+                if steps is not None:
+                    steps.append(_UnivariateStep(z_k, v_k, F_star_k, M_star))
+                K = M_star / F_star_k
+                a_curr = a_curr + K * v_k
+                P_curr = P_curr - np.outer(K, M_star)
+                ll_t += -0.5 * (log2pi + np.log(F_star_k)
+                                 + v_k * v_k / F_star_k)
     a_filt_t = a_curr
     P_filt_t = P_curr
     a_pred_next = Tm @ a_curr + c

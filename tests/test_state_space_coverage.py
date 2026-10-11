@@ -535,6 +535,22 @@ class TestExactDiffuseEdgeCases:
         np.testing.assert_allclose(out["P_filt"], ref["P_filt"], rtol=1e-12, atol=1e-14)
         assert out["loglik"] == pytest.approx(ref["loglik"], abs=1e-12)
 
+    def test_observation_order_is_chosen_once_diffuse_information_is_used(self):
+        """Once no remaining observation of a period loads the diffuse part,
+        none will (standard steps leave A unchanged), so the rest is taken in
+        the given order without rescoring each row. State 1 is diffuse and
+        loaded by no observable, so every period stays in the diffuse phase."""
+        import puremacro.state_space as ss
+        n_obs = 60
+        model = StateSpaceModel(T=np.eye(2),
+                                Z=np.column_stack([np.linspace(0.5, 1.5, n_obs), np.zeros(n_obs)]),
+                                Q=np.diag([0.3, 0.2]), H=np.eye(n_obs) * 0.5)
+        y = _rng(9).normal(0, 1, (5, n_obs))
+        with patch.object(ss, "_next_observation", wraps=ss._next_observation) as spy:
+            kalman_filter(y, model, diffuse_states=[0, 1])
+        # One choice per diffuse step plus one that finds none left, per period.
+        assert spy.call_count <= 2 * y.shape[0]
+
     def test_annihilated_diffuse_direction_is_dropped(self):
         """T = diag(1, 0) annihilates the diffuse part of the unobserved state
         1, so the diffuse phase ends after t = 0 (the standard recursion
