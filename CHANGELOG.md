@@ -56,7 +56,8 @@ This file records user-visible changes per release. Internal refactors that don'
   - The per-record `doctype` that 33 connectors emit was ignored (harvest read
     `doc_type`); both are now read.
   - A failing connector was swallowed by a bare `except`. Failures are now in
-    `corpus.harvest_report` and raise a warning (`on_error="warn"|"raise"|"ignore"`).
+    `corpus.harvest_report` and raise a warning (`on_error="warn"|"raise"|"ignore"`);
+    the documents a connector yielded before failing are kept, as before.
   - Newly registered: `us_treasury`, `mas`, `macro_blogs`, `bluesky`; and, via
     `QUERY_SOURCE_REGISTRY` + `source_kwargs`, `gdelt`, `google_news`, `reddit`,
     `hackernews`, `local_csv`. Unknown source names now raise instead of being

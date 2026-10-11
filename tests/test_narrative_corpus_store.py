@@ -89,6 +89,25 @@ def test_failing_connector_is_reported_not_swallowed(monkeypatch):
         harvest_narrative_corpus(sources=["fed_decision"], use_cache=False, on_error="raise")
 
 
+def test_connector_failing_mid_stream_keeps_documents_already_yielded(monkeypatch, tmp_path):
+    # A paginated scraper that fails on page 2 (rate limit) used to keep page 1.
+    import puremacro.narrative.sources.fed_decision as mod
+
+    def flaky():
+        yield ("2024-01-31", "Held rates.", "https://f/1", {})
+        yield ("2024-03-20", "Held rates again.", "https://f/2", {})
+        raise ConnectionError("429 on page 2")
+
+    monkeypatch.setattr(mod, "iter_fed_decision", flaky)
+    with pytest.warns(UserWarning, match="failed"):
+        c = harvest_narrative_corpus(sources=["fed_decision"], db_path=tmp_path / "c.db")
+    assert len(c) == 2
+    row = c.harvest_report.iloc[0]
+    assert (row.status, row.n_docs) == ("error", 2) and "429" in row.error
+    with CorpusStore(tmp_path / "c.db") as st:
+        assert len(st) == 2
+
+
 def test_query_sources_need_kwargs(monkeypatch):
     import puremacro.narrative.sources.reddit as mod
     seen = {}

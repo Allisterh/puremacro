@@ -721,10 +721,22 @@ def _harvest_source(
     clean_html_bodies: bool,
     kwargs: dict[str, Any] | None = None,
 ) -> tuple[list[NarrativeDocument], dict[str, Any]]:
-    """Run one connector. Returns its documents and a report row."""
+    """Run one connector. Returns its documents and a report row.
+
+    A connector that fails part-way (a paginated scraper hitting a rate limit)
+    keeps the documents it yielded before failing; its status is ``error``.
+    """
     entry = SOURCE_REGISTRY.get(src_name) or QUERY_SOURCE_REGISTRY[src_name]
     mod_name, fn_name, *defaults = entry
     report = {"source": src_name, "status": "ok", "n_docs": 0, "n_invalid": 0, "error": None}
+    failure: list[Exception] = []
+
+    def guarded(records: Iterable[Any]) -> Iterator[Any]:
+        try:
+            yield from records
+        except Exception as exc:  # noqa: BLE001 - recorded in the report below
+            failure.append(exc)
+
     try:
         mod = getattr(src_pkg, mod_name, None)
         if mod is None:
@@ -732,14 +744,17 @@ def _harvest_source(
             mod = importlib.import_module(f"{src_pkg.__name__}.{mod_name}")
         fn = getattr(mod, fn_name)
         docs, n_invalid = _records_to_docs(
-            fn(**(kwargs or {})), src_name, tuple(defaults),
+            guarded(fn(**(kwargs or {}))), src_name, tuple(defaults),
             max_docs=max_docs_per_source, clean_html_bodies=clean_html_bodies,
         )
     except Exception as exc:  # noqa: BLE001 - one broken scraper must not stop the harvest
-        report.update(status="error", error=f"{type(exc).__name__}: {exc}")
-        return [], report
+        failure.append(exc)
+        docs, n_invalid = [], 0
     report.update(n_docs=len(docs), n_invalid=n_invalid)
-    if not docs:
+    if failure:
+        exc = failure[0]
+        report.update(status="error", error=f"{type(exc).__name__}: {exc}")
+    elif not docs:
         report["status"] = "empty"
     return docs, report
 
