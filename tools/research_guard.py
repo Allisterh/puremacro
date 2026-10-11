@@ -73,7 +73,6 @@ FORBIDDEN_PREFIXES: tuple[str, ...] = (
     "docs/plans/",
     "docs/specs/",
     "docs/superpowers/",
-    "tools/run_main_street_",
     "playground/dist/",
 )
 
@@ -117,6 +116,7 @@ TOKEN_DIGESTS = frozenset({
     "44653a9bbc12fd1c4df45a50efc805d775ea958e5ee37259460062bccb799c2c",
     "49c1e36ba6a5f2f1fb745093c59fa13c6c970b6dec5aa02270c37a0cb28cc43d",
     "576dd68bef9c3d32467c1aae09cd3acde9eeef3595f8b2d02e788ca6c0fe55ac",
+    "61ccd95c2ef659ac118619ecb0f1210c92b701ca9d007fc3d730cfc016d0acaf",
     "6456da8f502c68e038081f3490792747ce2333227f4223826465b3f9b20e5713",
     "68ca9dd77979da0918037dcb9f802fd59d2266b6b301374fd1a7a113d33d6282",
     "7105df2cf3a17799b31c2892b3cae2325888a1a05974ebe3ca25b302949c5d57",

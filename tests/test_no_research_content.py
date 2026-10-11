@@ -25,6 +25,7 @@ from __future__ import annotations
 import ast
 import collections
 import dataclasses
+import functools
 import hashlib
 import io
 import os
@@ -32,6 +33,7 @@ import re
 import subprocess
 import tarfile
 import zipfile
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -130,7 +132,6 @@ _SPEC_PREFIXES = (
     "docs/plans/",
     "docs/specs/",
     "docs/superpowers/",
-    "tools/run_main_street_",
     "playground/dist/",
 )
 
@@ -145,6 +146,25 @@ def test_a_finding_is_an_immutable_value():
 def test_forbidden_prefix_is_found():
     found = scan_entries([("reviews/x.md", b"")])
     assert [(f.path, f.kind) for f in found] == [("reviews/x.md", "forbidden path")]
+
+
+def test_the_prefix_list_is_exactly_the_generic_one():
+    """A prefix that named a project would put the name in public code. The
+    ``tools/run_<name>_*.py`` scripts are covered by the token in their names."""
+    assert sorted(FORBIDDEN_PREFIXES) == sorted(_SPEC_PREFIXES)
+
+
+@pytest.mark.parametrize("script", [
+    f"tools/run_{SENTINEL_TOKEN}_phase3.py",
+    f"tools/run_{SENTINEL_TOKEN}_lp.py",
+    f"tools/run_{SENTINEL_TOKEN}.py",
+])
+def test_a_run_script_is_caught_by_the_token_in_its_name(script):
+    """Word-group matching finds a token inside ``run_<token>_<rest>``, so no
+    prefix is needed to forbid the scripts."""
+    found = scan_entries([(script, b"")])
+    assert _kinds(found) == ["hashed token"]
+    assert found[0].detail == _digest(SENTINEL_TOKEN)[:12]
 
 
 @pytest.mark.parametrize("prefix", _SPEC_PREFIXES)
@@ -569,10 +589,131 @@ def _package_of(path: str) -> list[str]:
     return path[: -len(".py")].split("/")[:-1]
 
 
-def _check_imports(path: str, source: bytes, tracked: frozenset[str]) -> tuple[list[str], int]:
-    """The ``puremacro`` imports in ``source`` that name no tracked module, and how
-    many it checked. ``from M import Y`` resolves when ``M`` is a module (``Y`` may
-    be a name it defines) or when ``M.Y`` is."""
+def _relative_base(package: list[str], level: int, module: str | None) -> str | None:
+    """The dotted module a relative import names, or ``None`` when it climbs above
+    the top-level package."""
+    up = level - 1
+    if up >= len(package):
+        return None
+    return ".".join(package[: len(package) - up] + ([module] if module else []))
+
+
+def _literal_strings(value: ast.expr) -> Iterator[str]:
+    """The strings in a literal list, tuple or set, or in a ``+`` of them."""
+    if isinstance(value, (ast.List, ast.Tuple, ast.Set)):
+        for element in value.elts:
+            if isinstance(element, ast.Constant) and isinstance(element.value, str):
+                yield element.value
+    elif isinstance(value, ast.BinOp) and isinstance(value.op, ast.Add):
+        yield from _literal_strings(value.left)
+        yield from _literal_strings(value.right)
+
+
+def _assigned_names(target: ast.expr) -> Iterator[str]:
+    """The names an assignment target binds, unpacking included. An attribute or
+    an item binds none."""
+    if isinstance(target, ast.Name):
+        yield target.id
+    elif isinstance(target, (ast.Tuple, ast.List)):
+        for element in target.elts:
+            yield from _assigned_names(element)
+    elif isinstance(target, ast.Starred):
+        yield from _assigned_names(target.value)
+
+
+def _provided_names(tree: ast.Module, package: list[str]) -> frozenset[str] | None:
+    """The names ``from <package> import name`` can get from the package's
+    ``__init__``, or ``None`` when it can serve any name (a star import).
+
+    Counted: bindings at module level, which includes the bodies of ``if``,
+    ``try``, ``with``, ``for`` and ``while`` (they run at import time) but not
+    function or class bodies; the strings of a literal ``__all__``; and, when the
+    file defines a module-level ``__getattr__``, every string literal in it, since
+    a lazy package lists what it serves. An import of the package from inside its
+    own ``__init__`` is not evidence: ``from . import x`` binds ``x`` only if ``x``
+    exists, and a leftover re-export of a removed submodule would vouch for itself.
+    """
+    this = ".".join(package)
+    names: set[str] = set()
+    lazy = False
+    stack: list[ast.AST] = list(tree.body)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+            lazy = lazy or node.name == "__getattr__"
+            continue                                    # its body is not module level
+        if isinstance(node, ast.Import):
+            names.update(a.asname or a.name.split(".")[0] for a in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            origin = node.module if node.level == 0 else _relative_base(package, node.level, node.module)
+            if origin != this:
+                for alias in node.names:
+                    if alias.name == "*":
+                        return None
+                    names.add(alias.asname or alias.name)
+        elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                if isinstance(target, ast.Name) and target.id == "__all__" and node.value is not None:
+                    names.update(_literal_strings(node.value))
+                if node.value is not None and not isinstance(node, ast.AugAssign):
+                    names.update(_assigned_names(target))
+        stack.extend(child for child in ast.iter_child_nodes(node)
+                     if isinstance(child, (ast.stmt, ast.excepthandler, ast.match_case)))
+    if lazy:
+        names.update(c.value for c in ast.walk(tree)
+                     if isinstance(c, ast.Constant) and isinstance(c.value, str))
+    return frozenset(names)
+
+
+@functools.lru_cache(maxsize=None)
+def _init_names(root: Path, init: str) -> frozenset[str] | None:
+    """``_provided_names`` for the ``__init__`` at ``init`` under ``root``. ``None``
+    when the file cannot be read or parsed: that says nothing about a name (a
+    missing file is skipped, a broken one is reported where it is scanned)."""
+    try:
+        tree = ast.parse((root / init).read_bytes())
+    except (OSError, SyntaxError):
+        return None
+    return _provided_names(tree, init[: -len("/__init__.py")].split("/"))
+
+
+def _unresolved_names(base: str, names: list[str], tracked: frozenset[str],
+                      root: Path) -> list[str] | None:
+    """The ``names`` that ``from <base> import <name>`` cannot find, or ``None`` when
+    ``base`` is no module at all.
+
+    A plain module may define any name, and ``*`` always resolves. In a package a
+    name must be a submodule or something its ``__init__`` provides.
+    """
+    folder = base.replace(".", "/")
+    init = f"{folder}/__init__.py"
+    if f"{folder}.py" in tracked and init not in tracked:
+        return []
+    submodules = {name for name in names if _is_module(f"{base}.{name}", tracked)}
+    if init not in tracked:                         # a namespace package, or nothing at all
+        return [n for n in names if n not in submodules] if submodules else None
+    missing = []
+    for name in names:
+        if name == "*" or name in submodules:
+            continue
+        provided = _init_names(root, init)
+        if provided is not None and name not in provided:
+            missing.append(name)
+    return missing
+
+
+def _check_imports(path: str, source: bytes, tracked: frozenset[str],
+                   root: Path) -> tuple[list[str], int]:
+    """The ``puremacro`` imports in ``source`` that name no tracked module and no
+    name their package provides, and how many it checked.
+
+    ``from M import Y`` resolves when ``M`` is a plain module (it may define ``Y``),
+    or, for a package ``M``, when ``M.Y`` is a tracked module or ``M/__init__.py``
+    provides ``Y`` (see ``_provided_names``). Package ``__init__`` files are read
+    from ``root``.
+    """
     try:
         tree = ast.parse(source)
     except SyntaxError as exc:
@@ -597,27 +738,38 @@ def _check_imports(path: str, source: bytes, tracked: frozenset[str]) -> tuple[l
             elif package is None:
                 continue               # relative imports are resolved inside puremacro/ only
             else:
-                up = node.level - 1
-                if up >= len(package):
+                base = _relative_base(package, node.level, node.module)
+                if base is None:
                     checked += 1
                     problems.append(f"{path}:{node.lineno}: from {shown} import ... "
                                     "(above the top-level package)")
                     continue
-                base = ".".join(package[: len(package) - up] + ([node.module] if node.module else []))
             checked += 1
-            if not (_is_module(base, tracked)
-                    or any(_is_module(f"{base}.{a.name}", tracked) for a in node.names)):
+            unresolved = _unresolved_names(base, [a.name for a in node.names], tracked, root)
+            if unresolved is None:
                 problems.append(f"{path}:{node.lineno}: from {shown} import ...")
+            else:
+                problems.extend(f"{path}:{node.lineno}: from {shown} import {name}"
+                                for name in unresolved)
     return sorted(problems), checked
 
 
-_FAKE_TREE = frozenset({
-    "puremacro/__init__.py",
-    "puremacro/a/__init__.py",
-    "puremacro/a/b.py",
-    "puremacro/a/c.py",
-    "puremacro/top.py",
-})
+def _write_tree(root: Path, files: dict[str, str]) -> frozenset[str]:
+    """Write ``files`` under ``root`` and return their paths: a tiny tree to resolve against."""
+    for rel, text in files.items():
+        target = root / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding="utf-8")
+    return frozenset(files)
+
+
+_FAKE_FILES = {
+    "puremacro/__init__.py": "",
+    "puremacro/a/__init__.py": "a_name = 1\n",
+    "puremacro/a/b.py": "",
+    "puremacro/a/c.py": "",
+    "puremacro/top.py": "",
+}
 
 
 @pytest.mark.parametrize("path, source, expected", [
@@ -625,37 +777,176 @@ _FAKE_TREE = frozenset({
     ("tools/t.py", "import puremacro", []),
     ("tools/t.py", "import puremacro.a.b", []),
     ("tools/t.py", "import puremacro.a.gone", ["tools/t.py:1: import puremacro.a.gone"]),
-    ("tools/t.py", "from puremacro.a import b", []),            # a submodule
-    ("tools/t.py", "from puremacro.a import a_name", []),       # a name the package defines
+    ("tools/t.py", "from puremacro.a import b", []),                  # a submodule
+    ("tools/t.py", "from puremacro.a import a_name", []),             # a name the package binds
+    ("tools/t.py", "from puremacro.a import gone", ["tools/t.py:1: from puremacro.a import gone"]),
+    ("tools/t.py", "from puremacro.a import b, gone, a_name",         # each name is judged alone
+     ["tools/t.py:1: from puremacro.a import gone"]),
+    ("tools/t.py", "from puremacro.a import *", []),
+    ("tools/t.py", "from puremacro.a.b import anything", []),         # a plain module may define any name
     ("tools/t.py", "from puremacro.gone import x", ["tools/t.py:1: from puremacro.gone import ..."]),
-    ("tools/t.py", "import numpy\nfrom os import path", []),    # only puremacro is checked
+    ("tools/t.py", "import numpy\nfrom os import path", []),          # only puremacro is checked
     ("tools/t.py", "def f():\n    try:\n        import puremacro.a.gone\n    except ImportError:\n        pass",
-     ["tools/t.py:3: import puremacro.a.gone"]),                # nested imports count
+     ["tools/t.py:3: import puremacro.a.gone"]),                      # nested imports count
     # relative imports inside puremacro/
     ("puremacro/a/c.py", "from . import b", []),
+    ("puremacro/a/c.py", "from . import a_name", []),
+    ("puremacro/a/c.py", "from . import gone", ["puremacro/a/c.py:1: from . import gone"]),
     ("puremacro/a/c.py", "from .b import f", []),
     ("puremacro/a/c.py", "from .gone import f", ["puremacro/a/c.py:1: from .gone import ..."]),
     ("puremacro/a/c.py", "from .. import top", []),
+    ("puremacro/a/c.py", "from .. import gone", ["puremacro/a/c.py:1: from .. import gone"]),
     ("puremacro/a/c.py", "from ..top import f", []),
     ("puremacro/a/c.py", "from ..gone import f", ["puremacro/a/c.py:1: from ..gone import ..."]),
     ("puremacro/a/c.py", "from ... import x",
      ["puremacro/a/c.py:1: from ... import ... (above the top-level package)"]),
-    ("puremacro/a/__init__.py", "from .b import f", []),        # an __init__ is its own package
+    ("puremacro/a/__init__.py", "from .b import f", []),              # an __init__ is its own package
     ("puremacro/top.py", "from . import a", []),
     ("puremacro/top.py", "from .. import a",
      ["puremacro/top.py:1: from .. import ... (above the top-level package)"]),
-    ("tools/t.py", "from . import x", []),                      # not resolved outside puremacro/
+    ("tools/t.py", "from . import x", []),                            # not resolved outside puremacro/
     # a file that does not parse is a finding, not a skip
     ("tools/t.py", "def (:", ["tools/t.py:1: does not parse (invalid syntax)"]),
 ])
-def test_the_import_resolver_flags_exactly_the_unresolvable_imports(path, source, expected):
-    problems, _ = _check_imports(path, source.encode(), _FAKE_TREE)
+def test_the_import_resolver_flags_exactly_the_unresolvable_imports(tmp_path, path, source, expected):
+    tracked = _write_tree(tmp_path, _FAKE_FILES)
+    problems, _ = _check_imports(path, source.encode(), tracked, tmp_path)
     assert problems == expected
 
 
-def test_the_import_resolver_counts_what_it_checks():
+def test_the_import_resolver_counts_what_it_checks(tmp_path):
+    tracked = _write_tree(tmp_path, _FAKE_FILES)
     source = b"import puremacro.a.b\nfrom . import x\nimport numpy\n"
-    assert _check_imports("puremacro/a/c.py", source, _FAKE_TREE)[1] == 2
+    assert _check_imports("puremacro/a/c.py", source, tracked, tmp_path)[1] == 2
+
+
+# ``from package import name`` needs the name to exist. Accepting it whenever the
+# package exists would let a removed submodule through for as long as the package
+# survives, which is the usual shape of a leftover import. Each case below writes
+# a tiny ``puremacro/pkg/__init__.py`` and asks whether
+# ``from puremacro.pkg import wanted`` resolves.
+
+_WANTED_PROBLEM = ["tools/t.py:1: from puremacro.pkg import wanted"]
+
+
+def _problems_for(root: Path, init: str, statement: str = "from puremacro.pkg import wanted") -> list[str]:
+    tracked = _write_tree(root, {"puremacro/__init__.py": "", "puremacro/pkg/__init__.py": init + "\n"})
+    return _check_imports("tools/t.py", statement.encode(), tracked, root)[0]
+
+
+def test_a_removed_submodule_fails_and_a_name_the_package_binds_passes(tmp_path):
+    tracked = _write_tree(tmp_path, {
+        "puremacro/__init__.py": "",
+        "puremacro/pkg/__init__.py": "def helper():\n    return 1\n",
+        "puremacro/pkg/alive.py": "",
+    })
+
+    def check(statement):
+        return _check_imports("tools/t.py", statement.encode(), tracked, tmp_path)[0]
+
+    assert check("from puremacro.pkg import alive") == []          # a submodule that exists
+    assert check("from puremacro.pkg import helper") == []         # a name pkg/__init__.py binds
+    assert check("from puremacro.pkg import removed") == [         # a submodule that was removed
+        "tools/t.py:1: from puremacro.pkg import removed"]
+
+
+@pytest.mark.parametrize("init", [
+    "wanted = 1",
+    "first, (second, *wanted) = 1, (2, 3)",
+    "wanted: int = 1",
+    "def wanted(): ...",
+    "async def wanted(): ...",
+    "class wanted: ...",
+    "import os as wanted",
+    "import wanted.sub",
+    "from os import wanted",
+    "from os import path as wanted",
+    "from .impl import wanted",                         # a re-export from a submodule
+    "__all__ = ['wanted']",
+    "__all__ = ('wanted',)",
+    "__all__ = ['other'] + ['wanted']",
+    "__all__ = []\n__all__ += ['wanted']",
+    "__all__: list = ['wanted']",
+    "try:\n    from os import path as wanted\nexcept ImportError:\n    wanted = None",
+    "try:\n    import os\nexcept ImportError:\n    wanted = None",     # bound only in a handler
+    "if True:\n    def wanted(): ...",
+])
+def test_every_kind_of_module_level_binding_counts(tmp_path, init):
+    assert _problems_for(tmp_path, init) == []
+
+
+@pytest.mark.parametrize("init", [
+    "def f():\n    wanted = 1",                  # a function body is not module level
+    "class C:\n    wanted = 1",                  # nor is a class body
+    "def f():\n    import wanted",
+    "# wanted = 1",
+    "'wanted'",                                  # a string alone serves nothing
+    "obj.wanted = 1",                            # an attribute or item target binds no name
+    "table['wanted'] = 1",
+    "wanted: int",                               # an annotation alone binds nothing
+    "wanted += 1",                               # an augmented assignment needs an earlier binding
+    "other = ['wanted']",                        # a list that is not __all__
+    "__all__ = sorted(['wanted'])",              # an __all__ that is not a literal
+    "_TABLE = {'wanted': 'impl'}",               # a lazy table without a module __getattr__
+    "def other(): ...\n_TABLE = {'wanted': 'impl'}",                        # only __getattr__ makes it lazy
+    "class C:\n    def __getattr__(self, name): ...\n_TABLE = {'wanted': 'impl'}",   # not a module __getattr__
+])
+def test_what_is_not_a_module_level_binding_does_not_count(tmp_path, init):
+    assert _problems_for(tmp_path, init) == _WANTED_PROBLEM
+
+
+def test_a_lazy_package_serves_the_names_its_file_lists(tmp_path):
+    """A package with a module ``__getattr__`` serves names from a table in its own
+    file (the narrative sources do: ``__all__`` is computed, not a literal)."""
+    init = ("_LAZY = {'served': 'impl'}\n__all__ = sorted(_LAZY)\n\n\n"
+            "def __getattr__(name):\n    raise AttributeError(name)\n")
+    assert _problems_for(tmp_path, init, "from puremacro.pkg import served") == []
+    assert _problems_for(tmp_path / "again", init, "from puremacro.pkg import wanted") == _WANTED_PROBLEM
+
+
+def test_a_package_that_star_imports_can_provide_any_name(tmp_path):
+    assert _problems_for(tmp_path, "from .impl import *") == []
+
+
+def test_a_package_init_that_cannot_be_read_gives_no_verdict(tmp_path):
+    unparseable = _write_tree(tmp_path, {"puremacro/__init__.py": "", "puremacro/pkg/__init__.py": "def (:\n"})
+    statement = b"from puremacro.pkg import wanted\n"
+    assert _check_imports("tools/t.py", statement, unparseable, tmp_path)[0] == []
+    # ... but the broken file is reported where it is scanned
+    assert _check_imports("puremacro/pkg/__init__.py", b"def (:\n", unparseable, tmp_path)[0]
+    # tracked, yet absent from the working tree (deleted mid-edit)
+    absent = tmp_path / "absent"
+    absent.mkdir()
+    tracked = frozenset({"puremacro/__init__.py", "puremacro/pkg/__init__.py"})
+    assert _check_imports("tools/t.py", statement, tracked, absent)[0] == []
+
+
+@pytest.mark.parametrize("statement", [
+    "from . import wanted",
+    "from . import wanted as wanted",
+    "from puremacro.pkg import wanted",
+    "from . import wanted\nfrom . import wanted",       # two of them do not vouch for each other
+])
+def test_a_package_cannot_vouch_for_a_name_it_imports_from_itself(tmp_path, statement):
+    """``from . import x`` in ``pkg/__init__.py`` binds ``x`` only if ``x`` exists, so it
+    is not evidence that it does. This is the shape of an ``__init__`` that still
+    re-exports a removed submodule."""
+    tracked = _write_tree(tmp_path, {"puremacro/__init__.py": "", "puremacro/pkg/__init__.py": statement + "\n"})
+    own, _ = _check_imports("puremacro/pkg/__init__.py", (statement + "\n").encode(), tracked, tmp_path)
+    other, _ = _check_imports("tools/t.py", b"from puremacro.pkg import wanted\n", tracked, tmp_path)
+    assert len(own) == statement.count("import")
+    assert other == _WANTED_PROBLEM
+
+
+def test_a_directory_without_an_init_offers_only_its_submodules(tmp_path):
+    tracked = _write_tree(tmp_path, {"puremacro/__init__.py": "", "puremacro/ns/one.py": ""})
+
+    def check(statement):
+        return _check_imports("tools/t.py", statement.encode(), tracked, tmp_path)[0]
+
+    assert check("from puremacro.ns import one") == []
+    assert check("from puremacro.ns import one, two") == ["tools/t.py:1: from puremacro.ns import two"]
+    assert check("from puremacro.ns import two") == ["tools/t.py:1: from puremacro.ns import ..."]
 
 
 def test_every_internal_import_resolves():
@@ -670,12 +961,15 @@ def test_every_internal_import_resolves():
             source = (REPO / rel).read_bytes()
         except FileNotFoundError:
             continue                    # tracked, but deleted from the working tree mid-edit
-        found, n = _check_imports(rel, source, tracked)
+        found, n = _check_imports(rel, source, tracked, REPO)
         problems += found
         checked += n
         scanned += 1
     assert scanned > 300 and checked > 500, (
         f"the scan is vacuous: {scanned} files, {checked} imports checked")
+    # positive control for the name rule: the real package __init__ was read
+    provided = _init_names(REPO, "puremacro/__init__.py")
+    assert provided is not None and "__version__" in provided, "package __init__ files were not read"
     assert not problems, (
-        f"{len(problems)} import(s) name a module that is not tracked:\n  "
+        f"{len(problems)} import(s) name a module or a name that is not there:\n  "
         + "\n  ".join(problems))
