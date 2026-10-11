@@ -144,3 +144,20 @@ def test_chunk_layout():
     ch = census._chunks(["A", "B"], [f"v{i}" for i in range(100)], limit=50)
     assert [len(c) for c in ch] == [48, 48, 4]
     assert census._chunks(["A"], []) == [[]]
+
+
+def test_a_later_empty_chunk_is_refused_not_an_empty_result(monkeypatch):
+    monkeypatch.setenv("CENSUS_API_KEY", KEY)
+    replies = iter([json.dumps([["ID", "A"], ["1", "x"], ["2", "y"]]).encode(), b""])
+    monkeypatch.setattr(census._http, "cached_get", lambda *a, **k: next(replies))
+    monkeypatch.setattr(census, "MAX_VARIABLES", 2)
+    with pytest.raises(ValueError, match="different record sets"):
+        census.fetch_records("u", ["A", "B"], ["ID"])
+
+
+def test_duplicate_identifiers_are_refused(monkeypatch):
+    monkeypatch.setenv("CENSUS_API_KEY", KEY)
+    monkeypatch.setattr(census._http, "cached_get", lambda *a, **k: json.dumps(
+        [["ID", "A"], ["1", "x"], ["1", "y"]]).encode())
+    with pytest.raises(ValueError, match="do not uniquely"):
+        census.fetch_records("u", ["A"], ["ID"])

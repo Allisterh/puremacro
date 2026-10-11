@@ -135,6 +135,9 @@ def fetch_records(url: str, variables: Sequence[str], ids: Sequence[str], *,
         df = _get(url, {"get": ",".join(ids + chunk), **base}, api_key=api_key,
                   refresh=refresh, timeout=timeout)
         if df.empty:
+            if merged is not None:
+                raise ValueError(f"{url}: chunks returned different record "
+                                 "sets; refusing to splice them")
             return pd.DataFrame(columns=ids + payload)
         if df.duplicated(ids).any():
             raise ValueError(f"{url}: identifiers {ids} do not uniquely "
