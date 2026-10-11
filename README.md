@@ -14,7 +14,7 @@ regular workstation.
 connects a frozen World Bank panel to an offline comparison of three simple
 forecasting methods, with portable provenance, full forecast tables and a
 reproducible report. The complete offline application and frozen data are
-included in puremacro 4.8.0.
+included in puremacro 4.8.1.
 
 [Independent benchmarks, empirical-to-structural estimation, and distributional trade](docs/research_workflows.md)
 now connect full-covariance LP moments to structural models and observed ENIGH 2024
@@ -1115,7 +1115,7 @@ The full notice, with each file's provenance and SHA-256, ships as
 
 ## Status
 
-Current release: **4.8.0**. The [stability tiers](ARCHITECTURE.md#stability-tiers)
+Current release: **4.8.1**. The [stability tiers](ARCHITECTURE.md#stability-tiers)
 identify stable, experimental and best-effort surfaces. Structural calculations
 have additional [validation limits](docs/STRUCTURAL_VALIDATION_STATUS.md).
 

@@ -1,5 +1,6 @@
 """Panel provenance must survive the same portable route as its observations."""
 import datetime as dt
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -94,6 +95,80 @@ def test_original_v1_cartridge_can_be_repacked_with_new_metadata():
     updated.frame().attrs["source"] = "changed"
     with pytest.raises(pocket.CartridgeError, match="changed since"):
         updated.verify()
+
+
+def _rewrite_cartridge_frame(payload, transform, *, update_digest=True):
+    """Change an NPZ container without relying on the current platform's ZIP defaults."""
+    with zipfile.ZipFile(io.BytesIO(payload)) as original:
+        contents = {name: original.read(name) for name in original.namelist()}
+    manifest = json.loads(contents["manifest.json"])
+    record = manifest["frames"][0]
+    filename = f"frames/{record['name']}.npz"
+    contents[filename] = transform(contents[filename])
+    if update_digest:
+        record["sha256"] = hashlib.sha256(contents[filename]).hexdigest()
+        record["n_bytes"] = len(contents[filename])
+        contents["manifest.json"] = json.dumps(manifest).encode()
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as rewritten:
+        for name, content in contents.items():
+            rewritten.writestr(name, content)
+    return out.getvalue()
+
+
+@pytest.mark.parametrize("schema_version", [1, 2])
+@pytest.mark.parametrize("creator_os", [0, 3])  # Windows and Unix ZIP identifiers.
+@pytest.mark.parametrize("compression", [zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED])
+def test_cartridge_verification_is_independent_of_npz_container(schema_version, creator_os, compression):
+    original = ((Path(__file__).parent / "fixtures/runtime_store_v1.pmz").read_bytes()
+                if schema_version == 1 else pocket.packs(_panel()))
+
+    def rewrite_npz(raw):
+        out = io.BytesIO()
+        with zipfile.ZipFile(io.BytesIO(raw)) as source, zipfile.ZipFile(out, "w") as target:
+            for name in source.namelist():
+                entry = zipfile.ZipInfo(name, date_time=(2020, 1, 2, 3, 4, 6))
+                entry.create_system = creator_os
+                target.writestr(entry, source.read(name), compress_type=compression, compresslevel=1)
+        rewritten = out.getvalue()
+        assert rewritten != raw  # The control must really change archive bytes.
+        with zipfile.ZipFile(io.BytesIO(raw)) as source, zipfile.ZipFile(io.BytesIO(rewritten)) as target:
+            assert {name: source.read(name) for name in source.namelist()} == {
+                name: target.read(name) for name in target.namelist()
+            }
+        return rewritten
+
+    transferred = _rewrite_cartridge_frame(original, rewrite_npz)
+    cart = pocket.loads(transferred)
+    assert cart.verify()
+    if schema_version == 2:
+        cart.frame().attrs["source"] = "changed after loading"
+        with pytest.raises(pocket.CartridgeError, match="changed since"):
+            cart.verify()
+        cart = pocket.loads(transferred)
+    cart.frame().iloc[0, 0] = -100.
+    with pytest.raises(pocket.CartridgeError, match="changed since"):
+        cart.verify()
+
+
+@pytest.mark.parametrize("schema_version", [1, 2])
+def test_deferred_verification_still_rejects_original_payload_corruption(schema_version):
+    original = ((Path(__file__).parent / "fixtures/runtime_store_v1.pmz").read_bytes()
+                if schema_version == 1 else pocket.packs(_panel()))
+
+    def change_observation(raw):
+        frame = store.loads_frame(raw)
+        frame.iloc[0, 0] = -100.
+        return store._dumps_frame(frame, schema_version=schema_version)
+
+    corrupt = _rewrite_cartridge_frame(original, change_observation, update_digest=False)
+    with pytest.raises(pocket.CartridgeError, match="corrupt cartridge"):
+        pocket.loads(corrupt)
+    unchecked = pocket.loads(corrupt, verify=False)
+    # A reader-local mutation baseline must never bless data whose original
+    # stored payload failed its manifest digest, even if checking was deferred.
+    with pytest.raises(pocket.CartridgeError, match="checksum mismatch"):
+        unchecked.verify()
 
 
 @pytest.mark.parametrize("value", [

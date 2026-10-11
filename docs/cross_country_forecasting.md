@@ -2,13 +2,13 @@
 
 # From a frozen panel to a forecast comparison
 
-**Available in puremacro 4.8.0.** Install the release to run this workflow.
+**Available in puremacro 4.8.1.** Install the release to run this workflow.
 It uses a frozen World Bank WDI snapshot for the United States,
 Mexico and Brazil. The full application runs offline and exports its inputs,
 forecasts, accuracy tables, figure, metadata and a portable `.pmz` cartridge.
 
 ```bash
-python -m pip install "puremacro==4.8.0"
+python -m pip install "puremacro==4.8.1"
 python -m puremacro.examples.cross_country_forecasting --output research_output/cross_country_forecasting
 ```
 
@@ -78,7 +78,7 @@ The portable frame codec now preserves supported `DataFrame.attrs` recursively,
 including mappings with tuple keys, lists/tuples, numeric scalars and date types.
 No pickle is used. Unsupported objects and cycles raise `StoreError` with a
 metadata path. The v2 frame schema is read alongside existing v1 frames; older
-readers need puremacro 4.8.0 or later to read v2. Existing v1 files need no
+readers need puremacro 4.8.1 or later to read v2. Existing v1 files need no
 conversion, and v1 cartridges remain verifiable,
 but their original format did not retain frame attributes. New cartridge
 checksums include metadata, so changing provenance after loading fails

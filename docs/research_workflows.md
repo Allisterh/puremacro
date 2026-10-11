@@ -5,7 +5,7 @@
 The [cross-country forecasting workflow](cross_country_forecasting.md) adds a
 frozen three-country GDP panel, an expanding-window comparison, and portable
 data provenance. It is latest-vintage forecast evidence, with no real-time or
-causal claim; it is included in puremacro 4.8.0.
+causal claim; it is included in puremacro 4.8.1.
 
 These research workflows connect independent validation, structural estimation
 and distributional analysis. Each can run offline from an installed package with

@@ -9,7 +9,7 @@ Una **caja de herramientas de macroeconomía empírica compatible con Pyodide**:
 [Pronósticos del PIB entre países](docs/es/cross_country_forecasting.md)
 conecta un panel congelado del Banco Mundial con tres métodos de pronóstico,
 procedencia portátil y un informe reproducible sin conexión. La aplicación
-completa y los datos congelados están incluidos en puremacro 4.8.0.
+completa y los datos congelados están incluidos en puremacro 4.8.1.
 
 [Benchmarks independientes, estimación empírica-estructural e incidencia comercial](docs/es/research_workflows.md)
 conectan momentos LP con covarianza completa a modelos estructurales, y canastas
@@ -856,7 +856,7 @@ como `puremacro/trade/_datafiles/SOURCES.md`.
 
 ## Estado
 
-Versión actual: **4.8.0**. Los [niveles de estabilidad](ARCHITECTURE.md#stability-tiers)
+Versión actual: **4.8.1**. Los [niveles de estabilidad](ARCHITECTURE.md#stability-tiers)
 identifican las superficies estables, experimentales y de soporte limitado.
 Los cálculos estructurales tienen [límites de validación](docs/es/STRUCTURAL_VALIDATION_STATUS.md)
 adicionales.

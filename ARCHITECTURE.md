@@ -76,7 +76,7 @@ study and the original-data published replication, respectively. Their source
 vintages, inference limits and distinct evidence claims are documented in
 `docs/empirical_research.md`.
 
-The application `examples/cross_country_forecasting.py`, added in 4.8.0,
+The application `examples/cross_country_forecasting.py`, included in 4.8.1,
 uses frozen WDI GDP levels for USA/MEX/BRA, validates the complete annual
 grid, and evaluates fixed zero-growth, historical-mean and AR(1) forecasts on
 2000–2024. It depends on the public `var.fit_var`, `reports` and `pocket` APIs.
@@ -90,7 +90,7 @@ tagged allowlist of metadata types in `DataFrame.attrs` without pickle. V1
 frames remain readable. `pocket` retains the source frame schema when verifying
 older cartridges, so their original checksums still work; metadata in new
 frames is covered by the checksum. Unsupported values and cycles raise rather
-than losing provenance silently. Readers need puremacro 4.8.0 or later for v2
+than losing provenance silently. Readers need puremacro 4.8.1 or later for v2
 files; existing v1 files need no conversion. This adds no runtime dependency.
 
 The tree below is grouped by **intent**, not by alphabet. Estimators and inference machinery come first; data pipelines, presentation, and side-channels are at the bottom.

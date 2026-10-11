@@ -2,7 +2,35 @@
 
 This file records user-visible changes per release. Internal refactors that don't change behaviour are listed under "Internal" so a returning user can see what shifted under the hood without surprise.
 
+## 4.8.1 (2026-10-11)
+
+**Cross-platform cartridge verification, with the cross-country panels, portable provenance and offline forecasting application prepared for 4.7.0 and 4.8.0.**
+
+### Fixed
+
+- Cartridges created on another operating system now verify correctly for
+  both v1 and v2 frames. Re-serializing unchanged data can change the ZIP
+  creator-OS metadata inside an NPZ file, which previously caused a false
+  checksum mismatch. Verification checks the original archive's checksum and
+  detects subsequent in-memory changes against a reader-local baseline,
+  preserving corruption and mutation detection.
+
+### Internal
+
+- All nine CI targets run the portable-cartridge compatibility tests before
+  the full numerical suite, so cross-platform storage regressions fail early.
+
+### Release status
+
+- Includes the features recorded below under 4.7.0 and 4.8.0, neither of which
+  was published to PyPI. The 4.8.0 tag remains unchanged; its Windows CI failures
+  prevented publication, and the correction is released under a new version.
+
 ## 4.8.0 (2026-10-10)
+
+**Not published to PyPI:** legacy v1 cartridge verification failed on all three
+Windows CI targets. The release workflow blocked the upload. The tag is retained
+unchanged; 4.8.1 carries the correction and the features below.
 
 **Portable panel provenance and reproducible cross-country forecasting: DataFrame attributes survive storage and cartridge verification, and a frozen World Bank GDP study runs offline with complete forecast tables and checksummed evidence.**
 

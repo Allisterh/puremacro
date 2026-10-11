@@ -2,14 +2,14 @@
 
 # De un panel congelado a una comparación de pronósticos
 
-**Disponible en puremacro 4.8.0.** Instale esta versión para ejecutar el flujo.
+**Disponible en puremacro 4.8.1.** Instale esta versión para ejecutar el flujo.
 Usa una copia fija de WDI del Banco
 Mundial para Estados Unidos, México y Brasil. La aplicación funciona sin red
 y exporta datos, pronósticos, tablas de precisión, figura, metadatos y un
 cartucho portátil `.pmz`.
 
 ```bash
-python -m pip install "puremacro==4.8.0"
+python -m pip install "puremacro==4.8.1"
 python -m puremacro.examples.cross_country_forecasting --output research_output/cross_country_forecasting
 ```
 
@@ -77,7 +77,7 @@ El nuevo esquema v2 conserva los atributos admitidos de los DataFrames:
 diccionarios, claves de tupla, listas, tuplas, escalares numéricos y fechas.
 No usa pickle; objetos no admitidos y ciclos generan `StoreError`. Los archivos
 v1 siguen siendo legibles y sus cartuchos verificables, aunque ese formato no
-conservaba atributos. Los lectores necesitan puremacro 4.8.0 o posterior para
+conservaba atributos. Los lectores necesitan puremacro 4.8.1 o posterior para
 leer v2; los archivos v1 no requieren conversión. Modificar los metadatos de un
 cartucho nuevo invalida su verificación.
 Las sumas detectan cambios; no son firmas de autenticidad.

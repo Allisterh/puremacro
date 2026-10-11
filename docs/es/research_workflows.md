@@ -5,7 +5,7 @@
 El [flujo de pronósticos entre países](cross_country_forecasting.md) añade un
 panel fijo de tres países, una evaluación con ventana creciente y procedencia
 portátil. Usa una edición reciente de datos revisados; no es evidencia causal
-ni de tiempo real. Está incluido en puremacro 4.8.0.
+ni de tiempo real. Está incluido en puremacro 4.8.1.
 
 Estos flujos de investigación conectan validación independiente, estimación
 estructural y análisis distributivo. Funcionan sin conexión desde el paquete
