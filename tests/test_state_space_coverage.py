@@ -483,6 +483,165 @@ class TestExactDiffuseEdgeCases:
                                        rtol=1e-12, atol=1e-14)
         assert out["loglik"] == pytest.approx(univ[0]["loglik"] + univ[1]["loglik"], abs=1e-9)
 
+    @pytest.mark.parametrize("t22, n_missing", [(1e-16, 1), (1e-4, 4)])
+    def test_shrunk_diffuse_direction_is_not_dropped(self, t22, n_missing):
+        """T shrinks the second diffuse direction (to t22**n_missing, below
+        eps of the first) without annihilating it. P_inf = T^k T^k' then has
+        full rank, so the finite part no longer matters and the filter from
+        period k on must be the fully diffuse filter started there; the
+        likelihoods differ by -log|det T^k|."""
+        Tm = np.diag([1.0, t22])
+        model = StateSpaceModel(T=Tm, Z=np.array([[1.0, 0.3], [0.2, 1.0]]),
+                                Q=np.diag([0.4, 0.3]), H=np.diag([0.6, 0.5]),
+                                c=np.array([0.1, -0.2]))
+        y = _rng(7).normal(0, 1, (8 + n_missing, 2))
+        y[:n_missing] = np.nan
+        a0 = np.array([0.5, -0.3])
+        out = kalman_filter(y, model, a0=a0, P0=np.eye(2), diffuse_states=[0, 1])
+        a_k = a0
+        for _ in range(n_missing):
+            a_k = Tm @ a_k + model.c
+        ref = kalman_filter(y[n_missing:], model, a0=a_k, P0=np.eye(2),
+                            diffuse_states=[0, 1])
+        np.testing.assert_allclose(out["a_filt"][n_missing:], ref["a_filt"], rtol=1e-9, atol=1e-12)
+        np.testing.assert_allclose(out["P_filt"][n_missing:], ref["P_filt"], rtol=1e-9, atol=1e-12)
+        assert out["loglik"] == pytest.approx(
+            ref["loglik"] - n_missing * np.log(t22), abs=1e-8)
+
+    def test_annihilated_diffuse_direction_is_dropped(self):
+        """T = diag(1, 0) annihilates the diffuse part of the unobserved state
+        1, so the diffuse phase ends after t = 0 (the standard recursion
+        stores F from t = 1) and from then on the filter is the one with only
+        state 0 diffuse."""
+        model = StateSpaceModel(T=np.diag([1.0, 0.0]), Z=np.array([[1.0, 0.0]]),
+                                Q=np.diag([0.4, 0.3]), H=np.array([[0.6]]))
+        y = _rng(8).normal(0, 1, 10)
+        out = kalman_filter(y, model, a0=np.zeros(2), P0=np.eye(2), diffuse_states=[0, 1])
+        ref = kalman_filter(y, model, a0=np.zeros(2), P0=np.eye(2), diffuse_states=[0])
+        assert out["F"][1, 0, 0] > 0.0
+        for key in ("a_filt", "P_filt", "F"):
+            np.testing.assert_allclose(out[key][1:], ref[key][1:], rtol=1e-12, atol=1e-14,
+                                       err_msg=key)
+        assert out["loglik"] == pytest.approx(ref["loglik"], abs=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# kalman_smoother: exact initial smoothing over the diffuse phase, checked
+# against the batch GLS posterior of alpha_{1..T}
+# ---------------------------------------------------------------------------
+
+def _gls_smoother(model, y, a0, P0, diffuse):
+    """Posterior mean and marginal covariances of alpha_{1..T} given y_{1..T},
+    with zero prior precision on the diffuse indices of alpha_1. Built in
+    information form from the prior, the transitions and the observations
+    (needs R Q R' and H invertible; independent of the Kalman code)."""
+    y = np.asarray(y, dtype=float)
+    if y.ndim == 1:
+        y = y[:, None]
+    n_t, m = y.shape[0], model.T.shape[0]
+    Tm, Z, c, d = model.T, model.Z, model.c, model.d
+    W = np.linalg.inv(model.R @ model.Q @ model.R.T)
+    Lam = np.zeros((n_t * m, n_t * m))
+    b = np.zeros(n_t * m)
+
+    def blk(t):
+        return slice(t * m, (t + 1) * m)
+
+    finite = [i for i in range(m) if i not in diffuse]
+    prior_prec = np.zeros((m, m))
+    prior_prec[np.ix_(finite, finite)] = np.linalg.inv(P0[np.ix_(finite, finite)])
+    Lam[blk(0), blk(0)] += prior_prec
+    b[blk(0)] += prior_prec @ a0
+    for t in range(n_t - 1):
+        # alpha_{t+1} - T alpha_t - c ~ N(0, R Q R')
+        Lam[blk(t), blk(t)] += Tm.T @ W @ Tm
+        Lam[blk(t), blk(t + 1)] -= Tm.T @ W
+        Lam[blk(t + 1), blk(t)] -= W @ Tm
+        Lam[blk(t + 1), blk(t + 1)] += W
+        b[blk(t)] -= Tm.T @ W @ c
+        b[blk(t + 1)] += W @ c
+    for t in range(n_t):
+        obs = ~np.isnan(y[t])
+        if not obs.any():
+            continue
+        Z_o = Z[obs]
+        H_inv = np.linalg.inv(model.H[np.ix_(obs, obs)])
+        Lam[blk(t), blk(t)] += Z_o.T @ H_inv @ Z_o
+        b[blk(t)] += Z_o.T @ H_inv @ (y[t, obs] - d[obs])
+    cov = np.linalg.inv(Lam)
+    a_post = (cov @ b).reshape(n_t, m)
+    P_post = np.stack([cov[blk(t), blk(t)] for t in range(n_t)])
+    return a_post, P_post
+
+
+class TestExactDiffuseSmoother:
+    """The filter stores only the finite part P_* in P_pred / P_filt while the
+    diffuse phase lasts, so an RTS gain built from them is wrong in every
+    period whose filtered P_inf is not yet zero. Those periods must follow the
+    exact initial smoother (Durbin and Koopman 2012, §5.3)."""
+
+    @staticmethod
+    def _assert_matches_gls(model, y, a0, P0, diffuse):
+        out = kalman_smoother(y, model, a0=a0, P0=P0, diffuse_states=diffuse)
+        a_post, P_post = _gls_smoother(model, y, a0, P0, diffuse)
+        np.testing.assert_allclose(out["a_smooth"], a_post, rtol=1e-9, atol=1e-10)
+        np.testing.assert_allclose(out["P_smooth"], P_post, rtol=1e-9, atol=1e-10)
+
+    @staticmethod
+    def _local_linear_trend() -> StateSpaceModel:
+        return StateSpaceModel(T=np.array([[1.0, 1.0], [0.0, 1.0]]),
+                               Z=np.array([[1.0, 0.0]]),
+                               Q=np.diag([0.2, 0.1]), H=np.array([[0.5]]))
+
+    def test_local_linear_trend_both_states_diffuse(self):
+        """Level and slope diffuse, one observable: the slope stays diffuse
+        after t = 0, where RTS was off by 0.18 in a_smooth."""
+        y = np.cumsum(_rng(5).normal(0, 1, 30))
+        self._assert_matches_gls(self._local_linear_trend(), y,
+                                 np.zeros(2), np.eye(2), [0, 1])
+
+    def test_diffuse_phase_reaches_last_period(self):
+        """With y[1] missing the diffuse phase lasts through the last period,
+        so the exact recursion starts from r = 0, N = 0."""
+        y = np.cumsum(_rng(5).normal(0, 1, 3))
+        y[1] = np.nan
+        self._assert_matches_gls(self._local_linear_trend(), y,
+                                 np.zeros(2), np.eye(2), [0, 1])
+
+    def test_stationary_diffuse_state_missing_first_period(self):
+        """AR(0.5) state loaded with Z = 1.5, diffuse, y[0] missing."""
+        model = StateSpaceModel(T=np.array([[0.5]]), Z=np.array([[1.5]]),
+                                Q=np.array([[0.4]]), H=np.array([[0.6]]))
+        y = _rng(4).normal(0, 1, 10)
+        y[0] = np.nan
+        self._assert_matches_gls(model, y, np.zeros(1), np.eye(1), [0])
+
+    def test_missing_period_moves_diffuse_direction(self):
+        """T swaps the states; with y[0] missing the diffuse part passes
+        through the unobserved state and is resolved only at t = 2."""
+        model = StateSpaceModel(T=np.array([[0.0, 1.0], [1.0, 0.0]]),
+                                Z=np.array([[1.0, 0.0]]),
+                                Q=np.diag([0.4, 0.3]), H=np.array([[0.6]]))
+        y = _rng(3).normal(0, 1, 10)
+        y[0] = np.nan
+        self._assert_matches_gls(model, y, np.zeros(2), np.eye(2), [0])
+
+    def test_correlated_measurement_errors(self):
+        """Non-diagonal H: the diffuse pass works on the eigen-rotated
+        observations, and the smoother must use the same rotation. Both
+        observables load the level but not the slope, so the slope is still
+        diffuse after t = 0; y[1, 1] is missing inside the diffuse phase."""
+        model = StateSpaceModel(T=np.array([[1.0, 1.0, 0.0], [0.0, 1.0, 0.0],
+                                            [0.0, 0.0, 0.6]]),
+                                Z=np.array([[1.0, 0.0, 1.0], [2.0, 0.0, -0.5]]),
+                                Q=np.diag([0.2, 0.1, 0.5]),
+                                H=np.array([[0.8, 0.5], [0.5, 1.3]]),
+                                c=np.array([0.1, 0.0, 0.2]), d=np.array([0.3, -0.4]))
+        y = _rng(6).normal(0, 1, (12, 2))
+        y[1, 1] = np.nan
+        self._assert_matches_gls(model, y, np.array([0.0, 0.0, 0.4]),
+                                 np.diag([1.0, 1.0, 0.9]), [0, 1])
+
 
 # ---------------------------------------------------------------------------
 # kalman_filter: Cholesky augmentation fallback (lines 231-236)
