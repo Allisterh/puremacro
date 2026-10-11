@@ -1,0 +1,137 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0 -- /tmp/puremacro-release-4.8.0-venv/bin/python
+cachedir: /tmp/notebook-triage-cache
+hypothesis profile 'default'
+rootdir: /private/tmp/puremacro-release-4.8.0-source
+configfile: pyproject.toml
+plugins: platformdirs-4.13.0, hypothesis-6.168.5, cov-7.1.0
+collecting ... collected 2 items
+
+tests/test_notebooks/test_notebook_51_e2e.py::TestTier4RealWorldScenarios::test_notebook_build_execution_check FAILED [ 50%]
+tests/test_notebooks/test_m5_trade_tutorials_tier5_stress.py::TestGate1HeadlessExecutionTiming::test_headless_execution_time_under_15s[63_trade_wars_and_nash_tariffs.py] FAILED [100%]
+
+=================================== FAILURES ===================================
+_______ TestTier4RealWorldScenarios.test_notebook_build_execution_check ________
+tests/test_notebooks/test_notebook_51_e2e.py:443: in test_notebook_build_execution_check
+    assert rc == 0, f"Notebook 51 execution check failed with exit code {rc}"
+E   AssertionError: Notebook 51 execution check failed with exit code 1
+E   assert 1 == 0
+----------------------------- Captured stdout call -----------------------------
+› /tmp/puremacro-release-4.8.0-venv/bin/python -m jupytext --to ipynb --execute --set-kernel python3 --run-path /private/tmp/puremacro-release-4.8.0-source/notebooks --output /var/folders/lx/tfh_l1r90j3cp31s1bhtz7ph0000gn/T/51_continuous_projection_collocation_and_fem.check.ipynb 51_continuous_projection_collocation_and_fem.py
+[jupytext] Reading 51_continuous_projection_collocation_and_fem.py in format py
+[jupytext] Setting kernel python3
+[jupytext] Updating notebook metadata with '{"kernelspec": {"name": "python3", "language": "python", "display_name": "Python 3 (ipykernel)"}}'
+[jupytext] Executing notebook with kernel python3
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/jupytext/__main__.py", line 13, in <module>
+    sys.exit(jupytext())
+             ^^^^^^^^^^
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/jupytext/cli.py", line 500, in jupytext
+    exit_code += jupytext_single_file(nb_file, args, log, notary=notary)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/jupytext/cli.py", line 752, in jupytext_single_file
+    exec_proc.preprocess(notebook, resources=resources)
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 97, in preprocess
+    with self.setup_kernel():
+         ^^^^^^^^^^^^^^^^^^^
+  File "/Users/jalonso/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/contextlib.py", line 137, in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/nbclient/client.py", line 600, in setup_kernel
+    self.start_new_kernel(**kwargs)
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 165, in wrapped
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/jalonso/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/nbclient/client.py", line 550, in async_start_new_kernel
+    await ensure_async(self.km.start_kernel(extra_arguments=self.extra_arguments, **kwargs))
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 214, in ensure_async
+    result = await obj
+             ^^^^^^^^^
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/jupyter_client/manager.py", line 116, in wrapper
+    raise e
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/jupyter_client/manager.py", line 107, in wrapper
+    out = await method(self, *args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/jupyter_client/manager.py", line 528, in _async_start_kernel
+    kernel_cmd, kw = await self._async_pre_start_kernel(**kw)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/jupyter_client/manager.py", line 493, in _async_pre_start_kernel
+    kw = await self.provisioner.pre_launch(**kw)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/jupyter_client/provisioning/local_provisioner.py", line 216, in pre_launch
+    km.shell_port = lpc.find_available_port(km.ip)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/jupyter_client/connect.py", line 755, in find_available_port
+    tmp_sock.bind((ip, 0))
+PermissionError: [Errno 1] Operation not permitted
+_ TestGate1HeadlessExecutionTiming.test_headless_execution_time_under_15s[63_trade_wars_and_nash_tariffs.py] _
+tests/test_notebooks/test_m5_trade_tutorials_tier5_stress.py:236: in test_headless_execution_time_under_15s
+    assert rc == 0, f"{py_path.name}: Headless execution check failed (rc={rc})"
+E   AssertionError: 63_trade_wars_and_nash_tariffs.py: Headless execution check failed (rc=1)
+E   assert 1 == 0
+----------------------------- Captured stdout call -----------------------------
+› /tmp/puremacro-release-4.8.0-venv/bin/python -m jupytext --to ipynb --execute --set-kernel python3 --run-path /private/tmp/puremacro-release-4.8.0-source/notebooks --output /var/folders/lx/tfh_l1r90j3cp31s1bhtz7ph0000gn/T/63_trade_wars_and_nash_tariffs.check.ipynb 63_trade_wars_and_nash_tariffs.py
+[jupytext] Reading 63_trade_wars_and_nash_tariffs.py in format py
+[jupytext] Setting kernel python3
+[jupytext] Updating notebook metadata with '{"kernelspec": {"name": "python3", "language": "python", "display_name": "Python 3 (ipykernel)"}}'
+[jupytext] Executing notebook with kernel python3
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/jupytext/__main__.py", line 13, in <module>
+    sys.exit(jupytext())
+             ^^^^^^^^^^
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/jupytext/cli.py", line 500, in jupytext
+    exit_code += jupytext_single_file(nb_file, args, log, notary=notary)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/jupytext/cli.py", line 752, in jupytext_single_file
+    exec_proc.preprocess(notebook, resources=resources)
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/nbconvert/preprocessors/execute.py", line 97, in preprocess
+    with self.setup_kernel():
+         ^^^^^^^^^^^^^^^^^^^
+  File "/Users/jalonso/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/contextlib.py", line 137, in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/nbclient/client.py", line 600, in setup_kernel
+    self.start_new_kernel(**kwargs)
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 165, in wrapped
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/jalonso/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/asyncio/base_events.py", line 691, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/nbclient/client.py", line 550, in async_start_new_kernel
+    await ensure_async(self.km.start_kernel(extra_arguments=self.extra_arguments, **kwargs))
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/jupyter_core/utils/__init__.py", line 214, in ensure_async
+    result = await obj
+             ^^^^^^^^^
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/jupyter_client/manager.py", line 116, in wrapper
+    raise e
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/jupyter_client/manager.py", line 107, in wrapper
+    out = await method(self, *args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/jupyter_client/manager.py", line 528, in _async_start_kernel
+    kernel_cmd, kw = await self._async_pre_start_kernel(**kw)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/jupyter_client/manager.py", line 493, in _async_pre_start_kernel
+    kw = await self.provisioner.pre_launch(**kw)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/jupyter_client/provisioning/local_provisioner.py", line 216, in pre_launch
+    km.shell_port = lpc.find_available_port(km.ip)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/puremacro-release-4.8.0-venv/lib/python3.12/site-packages/jupyter_client/connect.py", line 755, in find_available_port
+    tmp_sock.bind((ip, 0))
+PermissionError: [Errno 1] Operation not permitted
+=========================== short test summary info ============================
+FAILED tests/test_notebooks/test_notebook_51_e2e.py::TestTier4RealWorldScenarios::test_notebook_build_execution_check - AssertionError: Notebook 51 execution check failed with exit code 1
+assert 1 == 0
+FAILED tests/test_notebooks/test_m5_trade_tutorials_tier5_stress.py::TestGate1HeadlessExecutionTiming::test_headless_execution_time_under_15s[63_trade_wars_and_nash_tariffs.py] - AssertionError: 63_trade_wars_and_nash_tariffs.py: Headless execution check failed (rc=1)
+assert 1 == 0
+============================== 2 failed in 0.91s ===============================

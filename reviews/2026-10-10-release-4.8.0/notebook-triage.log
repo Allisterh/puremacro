@@ -1,0 +1,13 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0 -- /tmp/puremacro-release-4.8.0-venv/bin/python
+cachedir: /tmp/notebook-triage-cache
+hypothesis profile 'default'
+rootdir: /private/tmp/puremacro-release-4.8.0-source
+configfile: pyproject.toml
+plugins: platformdirs-4.13.0, hypothesis-6.168.5, cov-7.1.0
+collecting ... collected 2 items
+
+tests/test_notebooks/test_notebook_51_e2e.py::TestTier4RealWorldScenarios::test_notebook_build_execution_check PASSED [ 50%]
+tests/test_notebooks/test_m5_trade_tutorials_tier5_stress.py::TestGate1HeadlessExecutionTiming::test_headless_execution_time_under_15s[63_trade_wars_and_nash_tariffs.py] PASSED [100%]
+
+============================== 2 passed in 11.45s ==============================
