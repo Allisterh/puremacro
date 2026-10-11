@@ -152,3 +152,19 @@ def test_dynamic_topic_model_runs_on_sparse_matrix():
     assert res.document_topics.shape == (6, 3)
     # The last text shares no term with the others (min_df=2), so its row is 0.
     np.testing.assert_allclose(res.document_topics.sum(axis=1), [1, 1, 1, 1, 1, 0])
+
+
+def test_corpus_dtm_rows_stay_aligned_with_docs_when_corpus_is_unsorted():
+    # to_frame() sorts by date; the matrix rows follow the corpus order. A
+    # harvest concatenates sources, so its corpus is rarely in date order.
+    c = NarrativeCorpus(docs=[
+        _doc("feb_mx", "peso devaluation", country="MX", date="2024-02-01"),
+        _doc("jan_us", "fed hike", country="US", date="2024-01-01"),
+    ])
+    m = c.dtm()
+    assert m.docs["doc_id"].tolist() == ["feb_mx", "jan_us"]
+    tidy = m.to_tidy()
+    assert set(tidy.loc[tidy.doc_id == "feb_mx", "term"]) == {"peso", "devaluation"}
+    panel = m.aggregate("country")
+    assert panel.X[panel.docs.index[panel.docs.country == "MX"][0],
+                   panel.term_index["peso"]] == 1

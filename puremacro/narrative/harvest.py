@@ -255,7 +255,13 @@ class NarrativeCorpus:
             - ``"drop"``: no metadata column.
 
         A ``content_hash`` column (SHA-256 of the text) is always included.
+        Rows are sorted by ``date`` and ``country``.
         """
+        df = self._frame(metadata)
+        return df.sort_values(["date", "country"], kind="stable").reset_index(drop=True)
+
+    def _frame(self, metadata: str) -> pd.DataFrame:
+        """:meth:`to_frame` with rows in corpus order (aligned with ``self.docs``)."""
         if metadata not in ("dict", "json", "promote", "drop"):
             raise ValueError(
                 f"metadata={metadata!r}; expected 'dict', 'json', 'promote' or 'drop'"
@@ -295,7 +301,7 @@ class NarrativeCorpus:
 
         df["date"] = pd.to_datetime(df["date"], utc=True, format="ISO8601")
         df["date"] = _naive_if_all_naive(df["date"], self.docs)
-        return df.sort_values(["date", "country"], kind="stable").reset_index(drop=True)
+        return df
 
     @classmethod
     def from_frame(cls, df: pd.DataFrame) -> "NarrativeCorpus":
@@ -538,8 +544,9 @@ class NarrativeCorpus:
         """Sparse document-term matrix of the corpus.
 
         Returns a :class:`puremacro.text.DocumentTermMatrix` whose ``docs``
-        frame is :meth:`to_frame` without the text (``metadata`` is passed to
-        it, ``"promote"`` adds the ``meta_*`` columns). Stop words follow each
+        frame is :meth:`to_frame` without the text, in corpus order (row ``i``
+        is ``self.docs[i]``; ``metadata`` is passed to it, ``"promote"`` adds
+        the ``meta_*`` columns). Stop words follow each
         document's ``language``. ``weighting="tfidf"`` applies
         :meth:`~puremacro.text.DocumentTermMatrix.tfidf` with its defaults;
         call ``.tfidf(...)`` on a count matrix to choose the options.
@@ -551,7 +558,8 @@ class NarrativeCorpus:
 
         if weighting not in ("count", "binary", "tfidf"):
             raise ValueError(f"weighting must be 'count', 'binary' or 'tfidf', got {weighting!r}")
-        docs = self.to_frame(metadata=metadata).drop(columns=["text"])
+        # Corpus order, not to_frame()'s date order: row i of X is self.docs[i].
+        docs = self._frame(metadata).drop(columns=["text"])
         m = build_dtm(
             [d.text for d in self.docs], languages=[d.language for d in self.docs],
             docs=docs, tokenizer=tokenizer, ngram_range=ngram_range,
