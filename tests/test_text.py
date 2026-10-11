@@ -285,6 +285,25 @@ def test_save_load_roundtrip(dtm, tmp_path):
                                dtm.tfidf().X.toarray(), atol=1e-12)
 
 
+def test_save_load_keeps_docs_columns_as_written(tmp_path):
+    # read_csv's inference turned the id "007" into 7 and the country code
+    # "NA" (Namibia) into NaN, and returned dates as strings.
+    docs = pd.DataFrame({
+        "doc_id": ["007", "008"], "country": ["NA", "MX"],
+        "date": pd.to_datetime(["2024-01-05", "2024-02-01"]),
+        "stamp": pd.to_datetime(["2024-01-05T10:00", "2024-02-01T23:30"]).tz_localize("UTC"),
+        "magnitude": [0.25, np.nan],
+    })
+    m = build_dtm(["rates rose", "rates fell"], docs=docs)
+    back = DocumentTermMatrix.load(m.save(tmp_path / "m"))
+    assert back.docs["doc_id"].tolist() == ["007", "008"]
+    assert back.docs["country"].tolist() == ["NA", "MX"]
+    pd.testing.assert_series_equal(back.docs["date"], docs["date"], check_dtype=False)
+    pd.testing.assert_series_equal(back.docs["stamp"], docs["stamp"], check_dtype=False)
+    assert back.docs["magnitude"].isna().tolist() == [False, True]
+    assert back.aggregate("country", freq="MS").docs["n_docs"].tolist() == [1, 1]
+
+
 def test_custom_tokenizer():
     m = build_dtm(["A-B c", "c"], tokenizer=lambda text, language=None: text.split())
     assert m.vocab == ["A-B", "c"]

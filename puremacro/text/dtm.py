@@ -267,20 +267,26 @@ class DocumentTermMatrix:
         self.docs.to_csv(d / "docs.csv", index=False, encoding="utf-8")
         meta = {"weighting": self.weighting, "ngram_range": list(self.ngram_range),
                 "n_docs": self.n_docs, "n_terms": self.n_terms,
-                "tokenizer": repr(self.tokenizer)}
+                "tokenizer": repr(self.tokenizer),
+                "docs_dtypes": {str(c): str(t) for c, t in self.docs.dtypes.items()}}
         (d / "dtm.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
         return d
 
     @classmethod
     def load(cls, directory: str | Path) -> "DocumentTermMatrix":
-        """Read a directory written by :meth:`save` (the tokenizer is not restored)."""
+        """Read a directory written by :meth:`save` (the tokenizer is not restored).
+
+        ``docs`` columns get back the dtypes recorded in ``dtm.json``: text
+        columns stay text ("007" and "NA" are not parsed as 7 and NaN; only
+        an empty cell is missing), datetime columns are parsed.
+        """
         from scipy.io import mmread
 
         d = Path(directory)
         meta = json.loads((d / "dtm.json").read_text(encoding="utf-8"))
         X = sparse.csr_matrix(mmread(str(d / "X.mtx")))
         vocab = (d / "vocab.txt").read_text(encoding="utf-8").split("\n")[: X.shape[1]]
-        docs = pd.read_csv(d / "docs.csv", encoding="utf-8")
+        docs = _read_docs_csv(d / "docs.csv", meta.get("docs_dtypes"))
         return cls(X=X, vocab=vocab, docs=docs, weighting=meta["weighting"],
                    ngram_range=tuple(meta.get("ngram_range", (1, 1))))
 
@@ -363,6 +369,23 @@ def build_dtm(
     # Always filter: comparing with the defaults (``min_df != 1``) cannot tell
     # max_df=1 (one document) from max_df=1.0 (all documents).
     return out.filter(min_df=min_df, max_df=max_df, max_features=max_features)
+
+
+def _read_docs_csv(path: Path, dtypes: dict[str, str] | None) -> pd.DataFrame:
+    if dtypes is None:  # written before dtypes were recorded
+        return pd.read_csv(path, encoding="utf-8")
+    typed = ("int", "uint", "float", "bool", "datetime64")
+    text = [c for c, t in dtypes.items() if not t.startswith(typed)]
+    docs = pd.read_csv(
+        path, encoding="utf-8", dtype={c: str for c in text},
+        keep_default_na=False, na_values=[""],  # only an empty cell is missing
+    )
+    for c, t in dtypes.items():
+        if t.startswith("datetime64"):
+            tz = t[t.index(", ") + 2:-1] if ", " in t else None
+            col = pd.to_datetime(docs[c], utc=tz is not None, format="ISO8601")
+            docs[c] = col.dt.tz_convert(tz) if tz else col
+    return docs
 
 
 def _df_threshold(v: int | float, n: int) -> float:
