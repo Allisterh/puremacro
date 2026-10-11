@@ -11,7 +11,7 @@ as equations in Dynare expression syntax (parsed by the `.mod` parser), and
 `stationary_equilibrium`. No return-function closures, grid broadcasting or
 positional parameter lists. Aiyagari, Huggett, the life-cycle and two-asset
 examples written as `dp` models reproduce `vfi.examples` exactly (same prices,
-policies and value functions). `vfi.Model` is superseded and now warns.
+policies and value functions). `vfi.Model` stays supported: `dp` has no panel simulation or Python-callable utilities yet.
 
 **Endogenous grid method for `dp` models.** `Model.solve(method="egm")` compiles
 a one-asset model whose budget is `c + a(+1) = R*a + y(z)` to `vfi.solve_egm`.
