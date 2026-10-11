@@ -129,6 +129,26 @@ def test_tfidf_vectorizer_matches_pre_sparse_reference():
     np.testing.assert_allclose(X, R / norms, atol=1e-15)
 
 
+def test_tfidf_vectorizer_matches_output_of_dense_implementation():
+    # Literal output of the dense TfidfVectorizer this replaced (puremacro at
+    # 87cf98d), on texts that repeat terms so sublinear_tf (on by default)
+    # matters, with bigrams and a max_features cut. The test above recomputes
+    # the formula on texts where every count is 1, where 1 + log(tf) = tf.
+    texts = ["Inflation inflation inflation and rates rates.",
+             "Rates were cut; inflation fell.",
+             "Credit spreads widened as rates rose and rose.",
+             "La inflación bajó."]
+    vec = TfidfVectorizer(min_df=1, ngram_range=(1, 2), max_features=6)
+    X = vec.fit_transform(texts)
+    assert vec.get_feature_names_out() == [
+        "rates", "inflation", "bajó", "credit", "credit spreads", "cut"]
+    ref = [[0.5468521754520868, 0.8372291790204879, 0.0, 0.0, 0.0, 0.0],
+           [0.4480997313625986, 0.5534923152870045, 0.0, 0.0, 0.0, 0.7020348194149619],
+           [0.41137791133379387, 0.0, 0.0, 0.6445029922609534, 0.6445029922609534, 0.0],
+           [0.0, 0.0, 1.0, 0.0, 0.0, 0.0]]
+    np.testing.assert_allclose(X, ref, rtol=0, atol=1e-15)
+
+
 def test_nmf_sparse_matches_dense():
     rng = np.random.default_rng(1)
     X = np.abs(rng.normal(size=(20, 9)))
