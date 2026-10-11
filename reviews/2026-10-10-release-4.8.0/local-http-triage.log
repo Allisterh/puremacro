@@ -1,0 +1,40 @@
+...EE.......E                                                            [100%]
+==================================== ERRORS ====================================
+_______ ERROR at setup of test_http_engine_ollama_available_and_complete _______
+tests/test_local_engines.py:72: in stub_server
+    srv = http.server.HTTPServer(("127.0.0.1", 0), _OllamaStub)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/jalonso/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py:457: in __init__
+    self.server_bind()
+/Users/jalonso/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/http/server.py:140: in server_bind
+    socketserver.TCPServer.server_bind(self)
+/Users/jalonso/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py:478: in server_bind
+    self.socket.bind(self.server_address)
+E   PermissionError: [Errno 1] Operation not permitted
+______________ ERROR at setup of test_http_engine_openai_complete ______________
+tests/test_local_engines.py:72: in stub_server
+    srv = http.server.HTTPServer(("127.0.0.1", 0), _OllamaStub)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/jalonso/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py:457: in __init__
+    self.server_bind()
+/Users/jalonso/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/http/server.py:140: in server_bind
+    socketserver.TCPServer.server_bind(self)
+/Users/jalonso/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py:478: in server_bind
+    self.socket.bind(self.server_address)
+E   PermissionError: [Errno 1] Operation not permitted
+__________________ ERROR at setup of test_post_json_roundtrip __________________
+tests/test_local_http_post.py:29: in echo_server
+    srv = http.server.HTTPServer(("127.0.0.1", 0), _EchoHandler)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/Users/jalonso/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py:457: in __init__
+    self.server_bind()
+/Users/jalonso/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/http/server.py:140: in server_bind
+    socketserver.TCPServer.server_bind(self)
+/Users/jalonso/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none/lib/python3.12/socketserver.py:478: in server_bind
+    self.socket.bind(self.server_address)
+E   PermissionError: [Errno 1] Operation not permitted
+=========================== short test summary info ============================
+ERROR tests/test_local_engines.py::test_http_engine_ollama_available_and_complete
+ERROR tests/test_local_engines.py::test_http_engine_openai_complete - Permiss...
+ERROR tests/test_local_http_post.py::test_post_json_roundtrip - PermissionErr...
+10 passed, 3 errors in 0.72s

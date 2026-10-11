@@ -1,0 +1,18 @@
+{
+  "commit": "29d187e95b0e56e5ed4f7a838f4d5f2b832a7d1d",
+  "wheel_entries": 907,
+  "sdist_entries": 1427,
+  "png_in_wheel": 0,
+  "required_files_present": true,
+  "wheel_contents_identical_to_initial_candidate": true,
+  "artifacts": {
+    "puremacro-4.8.0-py3-none-any.whl": {
+      "bytes": 21153063,
+      "sha256": "0b8825bb9364491fed86d8dfdbba9d455bcf227f2c6c5a89644715dedfc3c3f3"
+    },
+    "puremacro-4.8.0.tar.gz": {
+      "bytes": 22520566,
+      "sha256": "87ebbd097e49e97a45a193c3317acceb1eac624e1a62c6d088958e2443ad3387"
+    }
+  }
+}

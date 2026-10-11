@@ -27,14 +27,16 @@ bibliography: paper.bib
      public ORCID registry (checked 2026-09-13); confirm it is yours. Set `date` to
      the day you submit. -->
 
-<!-- This draft is NOT pinned to an old release: it tracks the current one, 4.6.0.
+<!-- Evidence snapshot: this draft reports measurements from 4.6.0.
      Every count in the text (modules, lines, tests, swept library modules,
      validation checks, notebook pairs, commits) was recomputed from the 4.6.0 tree
      (commit d2634362) on 2026-10-04, and `scorecard.png` was regenerated from
      `validation.scorecard()` on the same tree: 114 checks, 16 subsystems,
      21 external (14 package + 5 SciPy + 2 published) / 31 analytical / 62 internal,
-     all passing (4.4.0 had 110: 20 / 31 / 59; 3.4.0 had 107: 19 / 29 / 59). Re-run
-     the commands in RELEASING.md §6.5 before submitting. -->
+     all passing (4.4.0 had 110: 20 / 31 / 59; 3.4.0 had 107: 19 / 29 / 59).
+     Package development has reached 4.7.0; these counts and measurements have
+     not been refreshed for it. Re-run the commands in RELEASING.md §6.5 on the
+     chosen submission commit before submitting. -->
 
 # Summary
 
@@ -78,11 +80,10 @@ identification from MATLAB toolboxes or R packages such as vars and lpirfs
 [@pfaff2008; @adammer2019]; DSGE analysis in Dynare [@dynare2024], which runs
 under MATLAB or GNU Octave; and heterogeneous-agent models in Python codes
 accelerated with Numba [@auclert2021; @carroll2018hark; @quantecon2024]. Each tool
-is good at what it does, but combining them means several installations, often
-several languages, sometimes a commercial licence, and conventions that change
-from package to package. The cost is highest in teaching, where installation
-problems consume class time and students' machines (managed laptops, low-end
-hardware, tablets) may not support the full stack.
+has its strengths, but combining them requires several installations, languages
+and conventions, sometimes with a commercial licence. Installation problems
+consume class time, and students' managed laptops or tablets may not support
+the full stack.
 
 `puremacro` is written for that audience: instructors, students and applied
 researchers in macroeconomics. It puts common estimators and models behind one
@@ -111,12 +112,11 @@ core modules. In a browser, the volatility, panel-IV and heterogeneous-agent lay
 of the usual stack are therefore unavailable, and Dynare needs a different language
 runtime altogether.
 
-This also answers the build-versus-contribute question. Individual estimators
-could be contributed to existing packages, and some would be welcome there. What
-cannot be contributed is the property that makes the collection usable on a
-constrained machine: one import surface whose numerical code depends on nothing
-beyond four core libraries. That is an invariant of the whole library, enforced by
-tests, not a feature that can be added to another project's dependency graph.
+Individual estimators could be contributed to existing packages. The collection's
+portability, however, depends on a library-wide invariant: one import surface
+whose numerical code uses only four core libraries. Tests enforce that constraint
+across the package; contributing an estimator elsewhere would not change its
+host's dependency graph.
 
 # Software design
 
@@ -174,6 +174,9 @@ Python, and version agreement across the package metadata, changelog and citatio
 file.
 
 ## Verification
+
+The measurements below describe version 4.6.0 (commit `d2634362`); they have not
+been refreshed for 4.7.0.
 
 The validation gallery, `puremacro.validation.scorecard()`, runs 114 checks across
 16 subsystems in under a minute, with none of the oracle packages installed; all

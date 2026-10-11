@@ -37,6 +37,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,notebooks]"
 
+      # Exercise the portable format before the long numerical suite: ZIP
+      # container headers differ between Windows and Unix even when the
+      # stored arrays are identical.
+      - name: Verify portable cartridge compatibility
+        run: pytest tests/test_runtime_store_attrs.py -q
+
       - name: Run pytest test suite
         env:
           # Shared runners are several times slower than the machines the
