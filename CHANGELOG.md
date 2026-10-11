@@ -31,6 +31,12 @@ This file records user-visible changes per release. Internal refactors that don'
   - Ten models exceed 1e-6 against a 60-digit evaluation of the same posterior (worst 3e-2 in `P_smooth`, at most 1e-5 in `a_smooth`). In nine of them some observation resolves a diffuse direction while barely loading on it: `F_inf` is at most 2e-4 of `(|z|' sd)²`, where `sd` holds the standard deviations of the `P_inf` entering the period, against a median of 1 over all the models (the tenth, at 2e-6, has 1.5e-2). The backward pass then cancels terms of order `1/F_inf²`.
 
   Results are unchanged when the diffuse prior is fully resolved within the first period, as in a local level with `Z = 1` (`python -m puremacro.examples.exact_diffuse_kalman`), and without `diffuse_states` (bit-identical). Tests in `tests/test_state_space_coverage.py` (`TestExactDiffuseSmoother`).
+- The exact-diffuse filter took a period's observations in the order given, so a diffuse step that barely loads the direction it resolves could come before an observation that loads it strongly. That step leaves a large `P_*` for the next observation to cancel, and the smoother's expansion in `1/κ` then cancels terms of order `1/F_inf²`. Results depended on the order of the observables. In the test model a row loads the last diffuse state with weight 1e-5 and comes first; filtering with the rows swapped moved `P_filt` by 8e-8, and `a_smooth` was 6e-7 off the GLS posterior.
+  - Within each diffuse period the filter now takes first, among the observations that still carry diffuse information, the one with the largest `F_inf / F_*`. That ratio is free of the units of `y`, of the states and of the scale of the diffuse factor. The order does not change the exact result.
+  - Over the 2,898 random models of the previous entry, models above 1e-6 fall from ten to five and the worst error from 3e-2 to 2e-3. Each of the five left has a weak diffuse step in every order of its observables (smallest `F_inf / F_*` between 2e-8 and 1e-4, the same in every order): its diffuse loadings are nearly collinear within a period.
+  - Reversing the observables moves the log-likelihood by at most 5e-8 relative (2e-7 before).
+  - Filter output is bit-identical for 2,238 of 3,000 random models and within 1.4e-12 for 99%.
+  - Tests: `test_invariant_to_the_order_of_the_observables`, `test_weakly_loaded_observation_before_a_strong_one`.
 
 ### Documentation
 

@@ -368,6 +368,18 @@ class TestExactDiffuseNonUnitLoadings:
             approx["loglik"] + 0.5 * np.log(_KAPPA), abs=1e-6)
 
 
+def _weak_before_strong(load: float = 1e-5):
+    """Row 2 resolves state 0 alone at t = 0, leaving state 1 diffuse. At
+    t = 1, row 0 loads state 1 only with weight ``load`` and comes before
+    row 1, which loads it fully."""
+    model = StateSpaceModel(T=np.eye(2), Z=np.array([[1.0, load], [0.0, 1.0], [1.0, 0.0]]),
+                            Q=np.diag([0.3, 0.2]), H=np.diag([0.5, 0.4, 0.6]))
+    y = _rng(11).normal(0, 1, (6, 3))
+    y[0, :2] = np.nan
+    y[1, 2] = np.nan
+    return model, y
+
+
 class TestExactDiffuseEdgeCases:
     """Exact-diffuse filter: correlated measurement errors, fully missing
     periods inside the diffuse phase, and loadings far from unit scale."""
@@ -508,6 +520,21 @@ class TestExactDiffuseEdgeCases:
         assert out["loglik"] == pytest.approx(
             ref["loglik"] - n_missing * np.log(t22), abs=1e-8)
 
+    def test_invariant_to_the_order_of_the_observables(self):
+        """The exact-diffuse filter cannot depend on the order in which a
+        period's observables are listed. Processed in the given order, a
+        weakly loaded diffuse step before a strong one loses accuracy; the
+        filter takes the most strongly loaded diffuse observation first."""
+        model, y = _weak_before_strong()
+        perm = [1, 0, 2]                      # strong row first
+        swapped = StateSpaceModel(T=model.T, Z=model.Z[perm], Q=model.Q,
+                                  H=model.H[np.ix_(perm, perm)])
+        out = kalman_filter(y, model, diffuse_states=[0, 1])
+        ref = kalman_filter(y[:, perm], swapped, diffuse_states=[0, 1])
+        np.testing.assert_allclose(out["a_filt"], ref["a_filt"], rtol=1e-12, atol=1e-14)
+        np.testing.assert_allclose(out["P_filt"], ref["P_filt"], rtol=1e-12, atol=1e-14)
+        assert out["loglik"] == pytest.approx(ref["loglik"], abs=1e-12)
+
     def test_annihilated_diffuse_direction_is_dropped(self):
         """T = diag(1, 0) annihilates the diffuse part of the unobserved state
         1, so the diffuse phase ends after t = 0 (the standard recursion
@@ -641,6 +668,13 @@ class TestExactDiffuseSmoother:
         y[1, 1] = np.nan
         self._assert_matches_gls(model, y, np.array([0.0, 0.0, 0.4]),
                                  np.diag([1.0, 1.0, 0.9]), [0, 1])
+
+    def test_weakly_loaded_observation_before_a_strong_one(self):
+        """A diffuse step that barely loads the direction it resolves makes
+        the backward pass cancel terms of order 1/F_inf^2 (7e-6 off in
+        P_smooth here when processed in the given order)."""
+        model, y = _weak_before_strong()
+        self._assert_matches_gls(model, y, np.zeros(2), np.eye(2), [0, 1])
 
 
 # ---------------------------------------------------------------------------

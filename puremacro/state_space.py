@@ -160,6 +160,40 @@ class _UnivariateStep(NamedTuple):
     M_inf: Optional[np.ndarray] = None  # P_inf z; None for a non-diffuse step
 
 
+def _next_observation(
+    Z_u: np.ndarray,
+    h_diag: np.ndarray,
+    remaining: list,
+    P_curr: np.ndarray,
+    A_curr: np.ndarray,
+) -> int:
+    """The observation of the period to process next.
+
+    The order does not change the exact result, but a diffuse step that
+    barely loads the direction it resolves leaves a large ``P_*`` for the
+    next observation to cancel, and the smoother's expansion in 1/kappa then
+    cancels terms of order 1/F_inf^2. Among the remaining observations that
+    carry diffuse information (the cut-off of :func:`_kalman_diffuse_update`),
+    take the one with the largest ``F_inf / F_*``, a ratio free of the units
+    of y, of the states and of the scale of ``A``; ties go to the earlier
+    one. With no diffuse information left, keep the given order."""
+    if A_curr.shape[1] == 0:
+        return remaining[0]
+    Z_r = Z_u[remaining]
+    W = Z_r @ A_curr                          # rows (A'z_k)'
+    F_inf = np.einsum("ij,ij->i", W, W)
+    B = np.abs(Z_r) @ np.abs(A_curr)
+    diffuse = F_inf > _DIFFUSE_TOL * np.einsum("ij,ij->i", B, B)
+    if not diffuse.any():
+        return remaining[0]
+    F_star = np.einsum("ij,jk,ik->i", Z_r, P_curr, Z_r) + h_diag[remaining]
+    score = np.full(len(remaining), -1.0)
+    pos = diffuse & (F_star > 0.0)
+    score[pos] = F_inf[pos] / F_star[pos]
+    score[diffuse & ~pos] = np.inf
+    return remaining[int(np.argmax(score))]
+
+
 def _kalman_diffuse_update(
     a_t: np.ndarray,
     P_t: np.ndarray,
@@ -194,7 +228,12 @@ def _kalman_diffuse_update(
         Z_u, y_u = U.T @ Z_t, U.T @ y_dm
     else:
         h_diag, Z_u, y_u = np.diag(H_t), Z_t, y_dm
-    for k in range(n_obs):
+    # The rotated errors are independent, so the observations may be taken
+    # in any order; see _next_observation for the one used.
+    remaining = list(range(n_obs))
+    while remaining:
+        k = _next_observation(Z_u, h_diag, remaining, P_curr, A_curr)
+        remaining.remove(k)
         z_k = Z_u[k]                          # (m,)
         v_k = float(y_u[k] - z_k @ a_curr)
         w_k = A_curr.T @ z_k                  # (q,)
