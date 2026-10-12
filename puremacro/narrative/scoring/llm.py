@@ -31,6 +31,7 @@ from typing import Iterable
 import pandas as pd
 
 from puremacro import credentials
+from puremacro.llm import CacheMiss
 from .._local_engines import BackendUnavailable
 from ..types import NarrativeEvent, VALID_SIGNS
 
@@ -301,35 +302,44 @@ class OpenAIBackend(_BackendBase):
 
 
 class LocalBackend(_BackendBase):
-    """Free local-LLM backend for ``score_llm`` (MLX / llama.cpp / HTTP).
+    """Free local-LLM backend for ``score_llm``, through :func:`puremacro.llm.complete`.
 
-    No API key. ``engine="auto"`` picks the best installed engine. ``base_url``
-    only matters for the HTTP engine (Ollama / LM Studio / OpenAI-compatible).
+    No API key. Every ``call`` goes through the facade, which reads the completion cache
+    first and applies the mode (``mode``, else ``PUREMACRO_LLM_MODE``, else ``auto``); no
+    engine is looked for at construction, so in ``cache`` mode a cached corpus is scored
+    with no engine installed. ``model`` is a tier (``"default"``, ``"small"``,
+    ``"large"``), an alias of :data:`puremacro.llm.MODELS` or an engine's own id, and is
+    kept as its canonical name (the alias the cache is keyed on). ``engine="auto"`` takes
+    the first available engine; ``base_url`` names one HTTP server (Ollama / LM Studio /
+    OpenAI-compatible), else ``PUREMACRO_LLM_BASE_URL`` or the default local servers.
+    ``json_mode`` is off by default: the prompts ask for a JSON array, which an engine's
+    object-only JSON mode would forbid.
     """
 
-    def __init__(self, model: str = "qwen2.5-3b-instruct", *,
-                 engine: str = "auto", base_url: str = "http://localhost:11434",
-                 timeout: float = 120.0, json_mode: bool = True, **kw):
-        super().__init__(model=model, **kw)
-        from .._local_engines import resolve_engine
+    def __init__(self, model: str = "default", *,
+                 engine: str = "auto", base_url: str | None = None,
+                 timeout: float = 120.0, json_mode: bool = False,
+                 mode: str | None = None, **kw):
+        from puremacro.llm import canonical
+        super().__init__(model=canonical(model), **kw)
         self.engine = engine
         self.base_url = base_url
+        self.timeout = timeout
         self.json_mode = json_mode
-        self._engine = resolve_engine(engine, base_url=base_url, timeout=timeout)
+        self.mode = mode
 
     def call(self, prompt: str) -> str:
-        from .._local_engines import resolve_model_id
-        model_id = resolve_model_id(self.model, self._engine.name)
-        return self._engine.complete(
-            model_id, prompt, max_tokens=self.max_tokens,
-            temperature=self.temperature, json_mode=self.json_mode,
-        )
+        from puremacro.llm import complete
+        return complete(prompt, model=self.model, engine=self.engine, mode=self.mode,
+                        max_tokens=self.max_tokens, temperature=self.temperature,
+                        json_mode=self.json_mode, timeout=self.timeout,
+                        base_url=self.base_url)
 
 
 class OllamaBackend(LocalBackend):
     """Preset: ``LocalBackend(engine="ollama")`` for a running Ollama/LM Studio."""
 
-    def __init__(self, model: str = "qwen2.5:3b", *,
+    def __init__(self, model: str = "qwen3:4b", *,
                  base_url: str = "http://localhost:11434", **kw):
         super().__init__(model=model, engine="ollama", base_url=base_url, **kw)
 
@@ -345,17 +355,43 @@ class MockBackend(_BackendBase):
         return "[]"
 
 
-def get_default_backend(model: str = "qwen2.5-3b-instruct", **kw) -> _BackendBase:
-    """Best available local backend, or ``MockBackend`` if no engine is present.
-    Prints which engine was selected. Lets demos/notebooks run free by default."""
-    from .._local_engines import LocalLLMUnavailable
-    try:
-        be = LocalBackend(model=model, **kw)
-        print(f"[puremacro] local LLM backend: engine={be._engine.name}")
-        return be
-    except LocalLLMUnavailable as e:
-        print(f"[puremacro] {e}\n[puremacro] using MockBackend (zero events).")
-        return MockBackend()
+def _local_engine_for(*, mode: str, engine: str, base_url: str | None) -> str | None:
+    """The engine a local object would use, ``"cache"`` in cache mode, or None if none is
+    available. Cache mode probes nothing; the other modes ask
+    :func:`puremacro.llm.engines.available_engines`."""
+    if mode == "cache":
+        return "cache"
+    from puremacro.llm import engines as _engines
+    names = _engines.available_engines(base_url=base_url)
+    if engine == "auto":
+        return names[0] if names else None
+    return engine if engine in names else None
+
+
+def _print_local_choice(*, mode: str, engine: str | None, model: str) -> None:
+    if engine is None:
+        from puremacro.llm.engines import INSTALL_HINT
+        print(f"[puremacro] {INSTALL_HINT}")
+    print(f"[puremacro] local LLM: mode={mode} engine={engine or 'mock'} model={model}")
+
+
+def get_default_backend(model: str = "default", **kw) -> _BackendBase:
+    """A :class:`LocalBackend`, or :class:`MockBackend` when no engine can serve it.
+
+    In ``cache`` mode the local backend is returned without probing anything (it reads the
+    completion cache). In ``auto`` and ``off`` modes it is returned when
+    :func:`puremacro.llm.engines.available_engines` lists an engine (the one named by
+    ``engine``, if given), else the install hint is printed and ``MockBackend`` (zero
+    events) is returned, so demos and notebooks always run. Prints
+    ``[puremacro] local LLM: mode=<mode> engine=<name|cache|mock> model=<alias>``.
+    Keywords go to :class:`LocalBackend`.
+    """
+    from puremacro.llm import current_mode
+    be = LocalBackend(model=model, **kw)
+    mode = current_mode(be.mode)
+    chosen = _local_engine_for(mode=mode, engine=be.engine, base_url=be.base_url)
+    _print_local_choice(mode=mode, engine=chosen, model=be.model)
+    return be if chosen is not None else MockBackend()
 
 
 # ---------------------------------------------------------------------------
@@ -460,6 +496,12 @@ def score_llm(
 
     A ``BackendUnavailable`` error (e.g. a local engine/server that is
     unreachable) propagates to the caller rather than being dropped as malformed.
+    So does a :class:`puremacro.llm.CacheMiss` (including ``CacheUnavailable``),
+    which a :class:`LocalBackend` raises in ``cache`` mode for a record the
+    completion cache does not hold: the corpus was not scored ahead of time, and
+    dropping the record would return a silently shorter list of events. Any other
+    failure of a record's call (a model that cannot load, a timeout) is counted
+    with the malformed events and the loop goes on.
     """
     if kind not in _PROMPTS:
         raise ValueError(f"kind {kind!r} not in {sorted(_PROMPTS)}")
@@ -488,7 +530,7 @@ def score_llm(
         )
         try:
             response = backend.call(prompt)
-        except BackendUnavailable:
+        except (BackendUnavailable, CacheMiss):
             raise
         except (ValueError, ArithmeticError, Exception):
             n_dropped_malformed += 1
