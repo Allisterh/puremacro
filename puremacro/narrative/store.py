@@ -10,6 +10,10 @@ The store is its own SQLite file (default ``narrative_corpus.db`` next to the
 HTTP cache, see :func:`default_corpus_path`), not a table in the HTTP cache:
 clearing the cache must never delete a corpus.
 
+:func:`~puremacro.narrative.harvest.harvest_narrative_corpus` writes to a store
+only when asked (``db_path=``, ``store=`` or ``use_cache=True``), since the store
+keeps every document's full text on disk.
+
 Revisions
 ---------
 A document is keyed by ``doc_id``. When a later harvest returns the same
