@@ -12,7 +12,7 @@ import pytest
 from puremacro.examples import scf_aiyagari as ex
 from puremacro.fetch.micro import MicroFrame, SurveyDesign
 
-SMALL = dict(n_a=60, n_z=5)
+SMALL = {"n_a": 60, "n_z": 5}
 
 
 def _synthetic_scf(n=300, seed=0):
@@ -48,7 +48,7 @@ def test_model_frame_reproduces_the_solution(solved):
 
 
 def test_model_moments_are_sane_and_have_no_sampling_error(solved):
-    m = ex.moments(ex.model_frame(solved))
+    m = ex.model_moments(solved)
     assert list(m.index) == list(ex.MOMENTS)
     assert m["se"].isna().all()
     est = m["estimate"]
@@ -57,6 +57,21 @@ def test_model_moments_are_sane_and_have_no_sampling_error(solved):
     assert est["bottom 50% share"] + est["top 10% share"] < 1
     # Mass at the borrowing limit equals the solved distribution's first row.
     assert est["share with wealth <= 0"] == pytest.approx(solved.distribution[0].sum(), rel=1e-12)
+
+
+def test_model_median_ratio_moves_smoothly_with_beta():
+    # On a grid the inverse-CDF median sits on a node and moves in steps;
+    # the calibration needs the interpolated one to rise with patience.
+    vals = [ex.model_moments(ex.solve(b, **SMALL)).loc[ex.TARGETS["median"], "estimate"]
+            for b in np.arange(0.90, 0.951, 0.01)]
+    assert np.all(np.diff(vals) > 0)
+
+
+def test_interpolated_quantile_pools_equal_values():
+    x = np.array([1.0, 2.0, 2.0, 3.0])
+    w = np.array([1.0, 1.0, 1.0, 1.0])
+    # Pooled knots (1, .25), (2, .75), (3, 1): the median is 1.5.
+    assert ex._interpolated_quantile(x, w, 0.5) == pytest.approx(1.5)
 
 
 def test_calibration_hits_an_attainable_target():

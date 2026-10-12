@@ -48,8 +48,8 @@ from puremacro.fetch.micro import MicroFrame, SurveyDesign
 #: Fixed parameters. Capital share and depreciation as in Aiyagari (1994);
 #: log-earnings AR(1) from Floden and Lindé (2001), US PSID estimates;
 #: log utility.
-DEFAULTS = dict(gamma=1.0, alpha=0.36, delta=0.08, rho=0.9136, sigma=0.2064,
-                n_z=7, n_a=400, a_max=400.0)
+DEFAULTS = {"gamma": 1.0, "alpha": 0.36, "delta": 0.08, "rho": 0.9136, "sigma": 0.2064,
+            "n_z": 7, "n_a": 400, "a_max": 400.0}
 
 MOMENTS = (
     "mean wealth / mean income",
@@ -232,8 +232,10 @@ def calibrate(target: str, value: float, se: float = np.nan, *,
 
 
 # ----------------------------------------------------------------------------- application
-def lorenz(mf: MicroFrame, points=np.linspace(0.0, 1.0, 101)) -> pd.Series:
-    """Lorenz curve of net worth at population shares ``points`` (point estimates)."""
+def lorenz(mf: MicroFrame, points=None) -> pd.Series:
+    """Lorenz curve of net worth at population shares ``points`` (default:
+    every percentile), point estimates only."""
+    points = np.linspace(0.0, 1.0, 101) if points is None else np.asarray(points, dtype=float)
     frame = MicroFrame(mf.data, SurveyDesign(weight=mf.design.weight, implicate=mf.design.implicate,
                                              note="point estimates only"),
                        mf.unit, mf.source, mf.vintage)
