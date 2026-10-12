@@ -188,7 +188,7 @@ def test_block_inverse_matches_dense_solve(method, per_date):
 @pytest.mark.parametrize("H", [1, 3, 7])
 @pytest.mark.parametrize("per_date", [False, True])
 def test_time_block_jacobi_matches_masked_dense_solve(method, H, per_date):
-    """labels = repeat(arange(T)//H, n): links across blocks are dropped (IO block Jacobi)."""
+    """labels = repeat(arange(T)//H, n): links across blocks are dropped (block Jacobi in time)."""
     T, n = 7, 5
     A, B, C = _random_blocks(T, n, seed=3, per_date=per_date)
     masked = _dense_stacked(A, B, C, T, mask_block=H)
@@ -484,7 +484,7 @@ def test_complex_jvp_requires_complex_safe_equations():
 @pytest.mark.parametrize("side", ["right", "left"])
 def test_exact_inverse_identity_one_outer_iteration(ramsey, method, side):
     """A preconditioner built from the CURRENT date blocks makes the Krylov solve converge
-    to rtol 1e-12 in a single inner cycle (IO test_finite_block_inverts_original_jacobian analogue)."""
+    to rtol 1e-12 in a single inner cycle."""
     eq, y_ss = ramsey["equations_fn"], ramsey["y_ss"]
     y_init = np.array([ramsey["c_ss"], 0.5 * ramsey["k_ss"]])
     T = 40
@@ -511,7 +511,7 @@ def test_exact_inverse_identity_one_outer_iteration(ramsey, method, side):
 
 @pytest.mark.parametrize("side", ["left", "right"])
 def test_true_residual_of_returned_direction_when_cap_exhausted(side):
-    """Port of IO test_final_linear_log_uses_returned_original_direction_when_cap_exhausted."""
+    """At an exhausted cap the recorded residual is that of the returned direction, not the last callback's."""
     matrix = np.array([[4., .5, 0., .2], [-.3, 2., .4, 0.], [.2, 0., 1., .3], [0., .1, -.4, 3.]])
     weights = np.array([.2, .4, 1.3, .6])
     operator = spla.LinearOperator(matrix.shape, matvec=lambda x: matrix @ x, dtype=float)
@@ -863,7 +863,7 @@ def test_converged_start_takes_zero_steps(ramsey):
     assert res.linear_history[0]["convergence_check"] is True and res.linear_history[0]["step"] == 0.0
     assert res.metadata["converged_by"] == "residual_and_step"
     np.testing.assert_allclose(res.to_numpy(), np.tile(y_ss, (10, 1)), rtol=0.0, atol=1e-12)
-    # step_tol=None (or inf) is the IO residual-only rule: accepted without any linear solve
+    # step_tol=None (or inf) is the residual-only rule: accepted without any linear solve
     for residual_only in (None, float("inf")):
         io_rule = solve_stacked_newton_krylov(prob, np.tile(y_ss, (10, 1)), tol=1e-8, step_tol=residual_only)
         assert io_rule.converged and io_rule.iterations == 0 and io_rule.linear_history == ()
@@ -895,7 +895,7 @@ def test_failure_contract_when_krylov_cap_is_exhausted(growth20):
 
 def test_krylov_cap_is_recorded_not_fatal(ramsey):
     """An exhausted Krylov cap is recorded (krylov_status > 0, true residual above the requested
-    tolerance) and the inexact direction is line-searched, as in the IO engine; acceptance rests
+    tolerance) and the inexact direction is line-searched like any other; acceptance rests
     on the recomputed residual, and the path matches solve_perfect_foresight to 1e-8 (observed 6e-11)."""
     eq, y_ss = ramsey["equations_fn"], ramsey["y_ss"]
     y_init = np.array([ramsey["c_ss"], 0.5 * ramsey["k_ss"]])
@@ -1003,7 +1003,7 @@ def test_step_test_failure_on_a_noisy_residual_floor(options):
 
 
 def test_line_search_failure_raises_with_state():
-    """Every trial point raises inside equations_fn (the IO line search treats it as rejected)."""
+    """Every trial point raises inside equations_fn (the line search treats it as rejected)."""
     def eq(yp, yc, yl, eps):
         if abs(yc[0] - 0.3) > 1e-12:
             raise ValueError("outside the installation domain")
@@ -1020,7 +1020,7 @@ def test_line_search_failure_raises_with_state():
     assert res.linear_history[-1]["backtracks"] == 5
     assert res.metadata["converged_by"] == "line_search_failure"
     np.testing.assert_array_equal(res.to_numpy(), np.full((3, 1), 0.3))
-    # default: 24 trial evaluations (23 halvings), the IO native_solver._newton range(24) rule
+    # default: 24 trial evaluations (23 halvings)
     trials = []
 
     def counting(yp, yc, yl, eps):
