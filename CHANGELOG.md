@@ -92,9 +92,69 @@ Scalar-`r` calls are unchanged.
 
 - `puremacro.fetch.registry` lists every data source (series, panels, vintage providers, microdata and the narrative text connectors) with its auth level, credential, terms and whether results may be redistributed; `registry.load(id)` returns the fetcher. `puremacro.fetch.micro` adds `fetch_acs_pums` (Census ACS PUMS, 80 replicate weights, chunked past the API's 50-variable cap), `fetch_cps_basic` (weights only) and `fetch_scf` (Fed SCF summary extract, five implicates, 999 replicate weights) and `fetch_enigh` (INEGI ENIGH, Mexico, 2016+; strata and PSUs, so standard errors come from Taylor linearisation, `SurveyDesign(method="taylor")`). Each returns a `MicroFrame` whose `mean`/`total`/`quantile`/`share` give replicate standard errors, combined across implicates by Rubin's rules. The Census fetchers set the codebook's not-applicable codes (N/A, Not in Universe, Blank, Don't Know, Refused, CPS "Met No Conditions To Assign", including CPS earnings codes served with implied decimals as `-0.01`; e.g. `WAGP == -1` for persons under 15) to `NaN` by default, read from the endpoint's `variables.json`, so they no longer enter means and totals as values; `na_to_nan=False` keeps the raw codes and `MicroFrame.codebook` lists every labelled code.
 
+- **Narrative corpus is now stored and exportable.** `harvest_narrative_corpus`
+  used to keep nothing: its SQLite table was never written (and had no text
+  column), and `use_cache`/`db_path` were ignored. Harvests now upsert into a
+  `CorpusStore` (`narrative_corpus.db` beside the HTTP cache), which keeps full
+  text (latest version, with a flag and the previous hash when a document
+  was edited; see `store.revised()`) and a log of harvest runs; `store.load()`
+  returns the accumulated corpus. `NarrativeCorpus` gains `to_frame(metadata=
+  "promote"|"json"|"drop")`, `to_jsonl`/`from_jsonl` (no dependency),
+  `to_parquet`/`from_parquet` (`io` extra), `from_frame`, `from_records` (any
+  connector's output, including query-driven ones), and a provenance
+  `manifest()` written next to every export, with `verify_manifest` to check a
+  re-harvest against it.
+- **New `puremacro.text`: tokenizer, segmentation and a sparse document-term
+  matrix.** `build_dtm(texts, languages=...)` returns a `DocumentTermMatrix`
+  whose `X` is a `scipy.sparse.csr_matrix` with a row-aligned `docs` frame;
+  `.filter(min_df, max_df, max_features, terms)`, `.tfidf()` (scikit-learn's
+  definition), `.aggregate(by="country", freq="MS")` (term-count panels),
+  `.transform(new_texts)`, `.to_tidy()`, and `.save(dir)` writing `X.mtx` +
+  `vocab.txt` + `docs.csv` for R (`Matrix::readMM`, quanteda, stm). The default
+  `RegexTokenizer` keeps numbers and percentages ("25", "5.25%"; or masks them
+  with `numbers="mask"`) and picks stop words from each document's language
+  (en, es, pt, de, fr, it). Any `callable(text, language) -> list[str]` (spaCy,
+  NLTK) can replace it. `NarrativeCorpus.dtm(...)` and
+  `NarrativeCorpus.segment("paragraph"|"sentence"|callable)` build on it.
+
+### Changed
+
+- `narrative.topics.TfidfVectorizer` now builds its matrix sparse, so memory
+  scales with non-zero cells rather than documents x terms. Its default
+  tokenizer and its dense return value are unchanged (results match the
+  previous version to 1e-14); pass `sparse_output=True` or `tokenizer=` to opt
+  in. `NMF` accepts sparse input, and `DynamicTopicModel` uses it.
+
 ### Fixed
 
 - `fetch._http.cached_get` gains `params=` and `secret_params=`; an API key passed as a secret parameter is no longer written into the cache file name, the manifest, or HTTP error text.
+
+- `harvest_narrative_corpus` fixes that changed what the narrative corpus contains:
+  - In a fresh session `harvest_narrative_corpus` returned an empty corpus: it
+    looked connectors up with `getattr(sources, module_name)`, which is `None`
+    until the lazily loaded submodule has been imported, and skipped them
+    silently. Connectors are now imported on demand.
+  - Three registry entries named functions that do not exist (`us_federal_register`,
+    `us_dod_contracts`, `uk_obr`) and harvested nothing; fixed.
+  - Connectors that yield legacy `(date, text, url)` 3-tuples (the RSS/Atom
+    helpers: `uk_hmt`, `uk_obr`, `de_bmf`, `fr_tresor`, `it_mef`, `eu_ecfin`,
+    `ca_dof`, `us_treasury`, `us_dod_contracts`) were rejected by the schema
+    check, so these sources were always empty. They are now accepted.
+  - The per-record `doctype` that 33 connectors emit was ignored (harvest read
+    `doc_type`); both are now read.
+  - A failing connector was swallowed by a bare `except`. Failures are now in
+    `corpus.harvest_report` and raise a warning (`on_error="warn"|"raise"|"ignore"`);
+    the documents a connector yielded before failing are kept, as before.
+  - Newly registered: `us_treasury`, `mas`, `macro_blogs`, `bluesky`; and, via
+    `QUERY_SOURCE_REGISTRY` + `source_kwargs`, `gdelt`, `google_news`, `reddit`,
+    `hackernews`, `local_csv`. Unknown source names now raise instead of being
+    dropped silently.
+  - Harvested `doc_id`s now also hash the record's explicit title (or `id`), and
+    records sharing a key but differing in text all get text-qualified ids, so
+    the ids do not depend on feed order (a reordered `us_warn` feed no longer
+    shows up as revisions). A key with a single text keeps its plain id, which is
+    what lets the store flag revisions; if a second text later appears under that
+    key, both records get new ids and the old row stays in the store.
 
 - `kalman_filter` / `kalman_smoother` with `diffuse_states=[...]` (exact-diffuse initialisation) returned wrong filtered and smoothed states, covariances and log-likelihood whenever a diffuse state's loading was not 1. Four defects, each now checked against an exact batch posterior and the closed-form diffuse log-likelihood (2,400 random 3-state / 2-observable models agree to ≤4e-7 relative error, previously wrong in most of them):
   - The diffuse-step update of the finite covariance scaled `K0 K0'` by `F_* / F_inf` instead of `F_*` (Koopman and Durbin 2000; Durbin and Koopman 2012, §5.2). The two agree only when `F_inf = 1`, as in the local-level `Z = 1` examples and tests. A local level with `Z = 2` gave a first-period variance of 0.0625 instead of `H / Z² = 0.25`.
