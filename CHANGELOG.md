@@ -137,6 +137,8 @@ Scalar-`r` calls are unchanged.
 
 ### Fixed
 
+- `fetch.registry` listed the 67 narrative text connectors as `redistributable=True`, although their terms are marked `unaudited`. They are now `redistributable=False` until someone reviews them.
+
 - `fetch._http.cached_get` gains `params=` and `secret_params=`; an API key passed as a secret parameter is no longer written into the cache file name, the manifest, or HTTP error text.
 
 - `harvest_narrative_corpus` fixes that changed what the narrative corpus contains:
@@ -191,6 +193,9 @@ Scalar-`r` calls are unchanged.
   - Tests: `test_invariant_to_the_order_of_the_observables`, `test_weakly_loaded_observation_before_a_strong_one`.
 
 ### Documentation
+
+- New guides, each with a Spanish twin and with code blocks that CI runs: `docs/dp.md` (declarative dynamic programming: VFI, EGM and DC-EGM, continuous time, Krusell-Smith, and what `dp` does not cover yet), `docs/micro_data.md` (the source registry, the ACS, CPS, SCF and ENIGH providers, design-based standard errors and the SCF-calibrated Aiyagari example) and `docs/text_analysis.md` (corpus storage and export, the tokenizer and the sparse document-term matrix). README, README.es and the site navigation link them. `docs/CREDENTIALS.md` now names the microdata providers as the `census` key's consumers.
+- The JOSS paper (`paper/paper.md`) describes `puremacro.dp`, the survey microdata and the text tools, uses the SCF example as its worked case, and adds dolo to the state of the field. It stays within the 1,750-word limit (1,742 by `tests/test_paper.py`'s count).
 
 - Course lesson T02_F (Gertler-Karadi 2011, English and Spanish) reports percent deviations from `to_frame(units="pct")`. It multiplied level deviations by 100 and labelled them %, so it printed capital at -28.66% and bank net worth at -67.88% on impact where the true figures are -5.06% and -49.15% (`docs/ADVISORY.md`, 2026-09-30). The scorecard, the policy table, the three figures, the figures quoted in the text and the lesson's own checks are corrected; the spread in annualised basis points and Q, whose steady state is 1, were already right. The lesson now installs `puremacro>=4.4,<5`, the first versions with `units="pct"`. `tests/test_notebooks/test_curso_t02f_units.py` pins the printed values and, under `-m slow`, re-runs the lesson.
 

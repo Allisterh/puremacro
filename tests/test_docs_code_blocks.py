@@ -84,6 +84,13 @@ PAGES = [
     "docs/es/trade_stability.md",
     "docs/es/trade_dynamic.md",
     "docs/es/dsge_stacked_newton.md",
+    # Declarative DP, survey microdata and text as data (English and Spanish, identical code).
+    "docs/dp.md",
+    "docs/micro_data.md",
+    "docs/text_analysis.md",
+    "docs/es/dp.md",
+    "docs/es/micro_data.md",
+    "docs/es/text_analysis.md",
 ]
 
 _FENCE = re.compile(r"```python\n(.*?)```", re.S)

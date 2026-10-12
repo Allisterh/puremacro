@@ -89,15 +89,14 @@ through to env-vars-only — never blocks credential resolution.
 | `bea`       | `fetch.bea_cainc`, `fetch.bea_industry_shares` | https://apps.bea.gov/API/signup/                         |
 | `anthropic` | `narrative.scoring.llm` (Anthropic provider)   | https://console.anthropic.com/settings/keys              |
 | `openai`    | `narrative.scoring.llm` (OpenAI provider)      | https://platform.openai.com/api-keys                     |
-| `census`    | (forward-declared; no current consumer)        | https://api.census.gov/data/key_signup.html              |
+| `census`    | `fetch.micro.fetch_acs_pums`, `fetch_cps_basic` | https://api.census.gov/data/key_signup.html              |
 | `banxico`   | `fetch.realtime.banxico`                       | https://www.banxico.org.mx/SieAPIRest/service/v1/token_req.html |
 | `inegi`     | `fetch.realtime.inegi`                         | https://www.inegi.org.mx/app/api/indicadores/desarrolladores/jsonxml/ |
 | `bcch`      | `fetch.realtime.bcch`                          | https://si3.bcentral.cl/estadisticas/principal1/registro/index.html |
 
-> ⚠️ The `census` service is forward-declared (registered in
-> `SERVICES` for future direct Census API connectors, e.g., ACS or
-> per-state BFS series not mirrored on FRED). Current `fetch.census_bfs`
-> pulls Census BFS data via FRED — see the `fred` row above.
+> The `census` key is used by the microdata providers in
+> [`fetch.micro`](micro_data.md) (ACS PUMS and CPS). `fetch.census_bfs`
+> still pulls Census BFS data through FRED, under the `fred` key.
 
 ### Real-time Latin American connectors
 
