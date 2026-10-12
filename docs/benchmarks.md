@@ -21,11 +21,9 @@ The table below reports execution times across representative macroeconomic mode
 
 The timings above are the reference CPU NumPy/SciPy code paths. The
 hardware-accelerated alternatives are documented elsewhere: the `backend=`
-keyword of the spatial and trade solvers in
-[`docs/spatial_and_trade_ge.md`](spatial_and_trade_ge.md), the GPU tariff surface
-— batched Jacobians, homotopy continuation, the optional `torch` / `mlx` solvers
-— in [`docs/trade_gpu.md`](trade_gpu.md), and the continuous-time HJB solver in
-[`docs/vfi_hjb_continuous.md`](vfi_hjb_continuous.md).
+keyword of the spatial solver in
+[`docs/spatial_and_trade_ge.md`](spatial_and_trade_ge.md) and the continuous-time
+HJB solver in [`docs/vfi_hjb_continuous.md`](vfi_hjb_continuous.md).
 
 ---
 

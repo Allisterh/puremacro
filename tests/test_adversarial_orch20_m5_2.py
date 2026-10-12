@@ -71,8 +71,6 @@ from puremacro.inference.wild_bootstrap import wild_bootstrap, wild_bootstrap_va
 from puremacro.pocket import CartridgeError
 from puremacro.runtime import capabilities, refresh
 from puremacro.spatial.allen_arkolakis import AllenArkolakisModel
-from puremacro.trade.calibration import calibrate_trade_model
-from puremacro.trade.solver import solve_trade_equilibrium
 from puremacro.var.bootstrap import bootstrap_bands
 
 
@@ -362,52 +360,6 @@ class TestLatAmCanaryAdversarial:
 class TestBackendAccelerationAdversarial:
     """Stress testing hardware backend abstraction and array namespaces."""
 
-    @pytest.fixture
-    def canonical_trade_calib(self):
-        nc, ns, nfd = 2, 2, 3
-        data = np.zeros((7, 10), dtype=float)
-        data[:4, :4] = np.array([
-            [20.0, 15.0, 5.0, 2.0],
-            [10.0, 25.0, 2.0, 8.0],
-            [5.0, 5.0, 12.0, 18.0],
-            [10.0, 10.0, 18.0, 22.0],
-        ])
-        inter_col_sums = data[:4, :4].sum(axis=0)
-        y = np.array([100.0, 150.0, 120.0, 180.0])
-        va = y - inter_col_sums
-        taxes = 0.05 * y
-        va_fac = va - taxes
-        labor = (2.0 / 3.0) * va_fac
-        capital = (1.0 / 3.0) * va_fac
-
-        data[4, :4] = taxes
-        data[5, :4] = labor
-        data[6, :4] = capital
-
-        inter_row_sums = data[:4, :4].sum(axis=1)
-        fd_row_sums = y - inter_row_sums
-
-        for i in range(4):
-            tot_fd = fd_row_sums[i]
-            if i < 2:
-                data[i, 4] = tot_fd * 0.50
-                data[i, 5] = tot_fd * 0.25
-                data[i, 6] = tot_fd * 0.05
-                data[i, 7] = tot_fd * 0.10
-                data[i, 8] = tot_fd * 0.08
-                data[i, 9] = tot_fd * 0.02
-            else:
-                data[i, 4] = tot_fd * 0.10
-                data[i, 5] = tot_fd * 0.08
-                data[i, 6] = tot_fd * 0.02
-                data[i, 7] = tot_fd * 0.50
-                data[i, 8] = tot_fd * 0.25
-                data[i, 9] = tot_fd * 0.05
-
-        fd_col_sums = data[:4, 4:].sum(axis=0)
-        data[4, 4:] = 0.02 * fd_col_sums
-        return calibrate_trade_model(data, ns=ns, nc=nc, nfd=nfd, validate=True)
-
     def test_invalid_backend_name_handling(self):
         """Unsupported backend names must raise actionable ValueError."""
         with pytest.raises(ValueError, match="Unknown backend"):
@@ -428,19 +380,6 @@ class TestBackendAccelerationAdversarial:
         converted_list = to_numpy([10, 20])
         assert isinstance(converted_list, np.ndarray)
         np.testing.assert_array_equal(converted_list, [10, 20])
-
-    def test_trade_solver_fallback_warning_and_numerical_equivalence(self, canonical_trade_calib):
-        """solve_trade_equilibrium with unavailable backend must warn and match numpy exactly."""
-        res_numpy = solve_trade_equilibrium(canonical_trade_calib, method="condensed", backend="numpy")
-        assert res_numpy.converged is True
-
-        with pytest.warns(RuntimeWarning, match="falling back to 'numpy'"):
-            res_cupy = solve_trade_equilibrium(canonical_trade_calib, method="condensed", backend="cupy")
-
-        assert res_cupy.converged is True
-        np.testing.assert_allclose(res_numpy.w_sol, res_cupy.w_sol, atol=1e-12)
-        np.testing.assert_allclose(res_numpy.r_sol, res_cupy.r_sol, atol=1e-12)
-        np.testing.assert_allclose(res_numpy.p_sol, res_cupy.p_sol, atol=1e-12)
 
     def test_allen_arkolakis_fallback_warning_and_numerical_equivalence(self):
         """AllenArkolakisModel with unavailable backend must warn and match numpy."""

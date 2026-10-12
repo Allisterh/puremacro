@@ -1026,8 +1026,7 @@ class StructuredBlockTridiagonalPreconditioner:
        tridiagonal in time) have the structure of this second form, so a
        model-specific transition solver could supply such an elimination through
        it. Neither is ported here, and in this release no puremacro module uses the
-       protocol: ``puremacro.trade.dynamic`` ships its own capital preconditioner
-       and Newton loop.
+       protocol.
 
     Either way, :meth:`as_linear_operator` returns the object SciPy's Krylov
     solvers accept, and :meth:`apply` raises :class:`StackedNewtonError` on a

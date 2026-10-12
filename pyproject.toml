@@ -98,15 +98,6 @@ backend = [
 cuda = [
   "cupy-cuda12x>=13",  # NVIDIA only; pick the wheel matching your CUDA toolkit
 ]
-# The PyTorch-backed trade GE solver (puremacro.trade.gpu: solve_trade_equilibrium_gpu,
-# select_compute_device) runs on CUDA, Apple MPS or CPU tensors, with an MLX path on
-# Apple Silicon. `cuda` above (cupy) serves only puremacro._backend and does not power
-# trade.gpu: without torch, select_compute_device("cuda") raises at call time. torch
-# >= 2.1 for torch.func (vmap/jacrev) and torch.linalg.solve.
-gpu = [
-  "torch>=2.1",
-  "mlx>=0.9; sys_platform == 'darwin'",
-]
 notebooks = [
   "jupytext>=1.16",
   "nbconvert>=7",
@@ -163,11 +154,6 @@ include = ["puremacro*"]
 # they did before 1.2.0.
 "puremacro.datasets" = ["data/*.csv", "data/*.json"]
 "puremacro.validation.goldens" = ["*.json"]
-# The OECD ICIO transaction matrix the trade model calibrates from, shipped as a
-# compressed .npz so `puremacro.trade` reproduces with no MATLAB and no file
-# outside the distribution. Before 3.5.0 it was read from a `.mat` above the
-# checkout, so every trade parity test skipped for anyone but the author.
-"puremacro.trade" = ["_datafiles/*.npz", "_datafiles/*.json", "_datafiles/SOURCES.md"]
 # *.npz: the SW07 posterior fixture the dsge_estimation replication cases read
 # (through 4.3.0 it was read from tests/fixtures, so the cases failed in a wheel).
 "puremacro.replication.data" = ["*.csv", "*.npz", "*.json"]

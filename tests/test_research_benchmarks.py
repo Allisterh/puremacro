@@ -26,11 +26,11 @@ def minimal(**overrides):
 
 
 def test_all_research_benchmarks_have_independent_evidence(report):
-    assert len(report.results) == 8
+    assert len(report.results) == 5
     assert not report.passed  # The original-data published t-rounding miss stays visible.
     assert [r.id for r in report.results if not r.passed] == ["rr2010_published_peak"]
     assert {r.evidence_kind for r in report.results} == {
-        "analytical", "numerical_oracle", "external_software", "official_data", "published_empirical"}
+        "analytical", "external_software", "published_empirical"}
     for case in report.results:
         assert case.metrics
         assert case.negative_control_rejected

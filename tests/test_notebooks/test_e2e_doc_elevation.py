@@ -65,7 +65,6 @@ SHOWCASE_CONFORMING_EXEMPLARS = [
     "52_continuous_transition_mit_shocks",
     "53_exact_analytic_ift_gradients",
     "54_deep_macro_pinns_high_dim",
-    "55_quantitative_spatial_and_trade_ge",
     "56_implicit_hjb_and_continuous_kfe",
     "57_multiconstraint_occbin_and_dml",
     "58_latin_america_realtime_macro",
@@ -80,7 +79,6 @@ SHOWCASE_CITED_EXEMPLARS = [
     "05_portfolios_and_preferences",
     "51_continuous_projection_collocation_and_fem",
     "52_continuous_transition_mit_shocks",
-    "55_quantitative_spatial_and_trade_ge",
     "58_latin_america_realtime_macro",
 ]
 
@@ -99,8 +97,6 @@ TARGET_15_NOTEBOOKS = [
     "37_central_bank_narrative_sentiment_es.ipynb",
     "43_dsge_nuts_and_analytic_gradients.ipynb",
     "43_dsge_nuts_and_analytic_gradients_es.ipynb",
-    "62_flexible_trade_cge.ipynb",
-    "62_flexible_trade_cge_es.ipynb",
 ]
 
 # Elevated parameter table cohort (progressively populated as M1–M4 authoring proceeds)
@@ -132,7 +128,6 @@ BILINGUAL_EXEMPLAR_PAIRS = [
     ("52_continuous_transition_mit_shocks.py", "52_continuous_transition_mit_shocks_es.py"),
     ("53_exact_analytic_ift_gradients.py", "53_exact_analytic_ift_gradients_es.py"),
     ("54_deep_macro_pinns_high_dim.py", "54_deep_macro_pinns_high_dim_es.py"),
-    ("55_quantitative_spatial_and_trade_ge.py", "55_quantitative_spatial_and_trade_ge_es.py"),
     ("56_implicit_hjb_and_continuous_kfe.py", "56_implicit_hjb_and_continuous_kfe_es.py"),
     ("57_multiconstraint_occbin_and_dml.py", "57_multiconstraint_occbin_and_dml_es.py"),
     ("58_latin_america_realtime_macro.py", "58_latin_america_realtime_macro_es.py"),

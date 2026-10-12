@@ -1,8 +1,8 @@
 """Empirical Challenger Test Suite for Milestone 5 (Visual Card Styling, Theme Invariance, and Opacity).
 
-Adversarially validates across all 214 notebooks and 647 embedded PNG images:
+Adversarially validates across all 214 notebooks and 623 embedded PNG images:
 1. Universal PNG Canvas Opacity Challenge:
-   - min_alpha == 255 across every pixel of all 647 images.
+   - min_alpha == 255 across every pixel of all 623 images.
    - Zero transparent pixels exist repository-wide.
 2. Dual-Mode Contrast Invariance:
    - Figures render on opaque card backgrounds (#161616 grafito or #FFFFFF papel).
@@ -89,9 +89,9 @@ def test_notebook_inventory_and_counts():
 
 
 def test_universal_png_canvas_opacity_repository_wide():
-    """Universal PNG Canvas Opacity Challenge: assert min_alpha == 255 across every pixel of all 647 images."""
+    """Universal PNG Canvas Opacity Challenge: assert min_alpha == 255 across every pixel of all 623 images."""
     nbs, images = _extract_all_embedded_pngs()
-    assert len(images) >= 647, f"Original figure corpus was lost: {len(images)} PNGs"
+    assert len(images) >= 623, f"Original figure corpus was lost: {len(images)} PNGs"
 
     transparent_violations = []
 

@@ -10,7 +10,7 @@ Covered findings (see the audit's CONFIRMED_FINDINGS for the evidence):
   showcase bullets stopped at notebook 58.
 - The four 4.3.0 pages had no Spanish mirrors and no language switchers, so the bilingual
   parity test passed vacuously. The mirrors must keep their code blocks identical to the
-  English pages (the examples are runnable contracts, not prose). The eight pages added
+  English pages (the examples are runnable contracts, not prose). The pages added
   after 4.3.0 (``NEW_MODULE_DOCS``) are held to the same contract.
 - ``test_target_15_png_opacity_and_contrast`` hard-coded 36 embedded figures; the count is
   now derived from a per-notebook table that must stay in step with the target list.
@@ -32,20 +32,10 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 NEW_TRADE_DOCS = [
-    "trade_accounting.md",
-    "trade_welfare.md",
-    "trade_policy.md",
     "STRUCTURAL_VALIDATION_STATUS.md",
 ]
-# Pages added after 4.3.0 (MRIO engines and stacked Newton-Krylov): same bilingual contract.
+# Pages added after 4.3.0 (the stacked Newton-Krylov): same bilingual contract.
 NEW_MODULE_DOCS = [
-    "trade_mrio.md",
-    "trade_condensed.md",
-    "trade_ces_newton.md",
-    "trade_household.md",
-    "trade_continuation.md",
-    "trade_stability.md",
-    "trade_dynamic.md",
     "dsge_stacked_newton.md",
 ]
 BILINGUAL_PAGES = NEW_TRADE_DOCS + NEW_MODULE_DOCS
@@ -166,10 +156,19 @@ def test_readme_notebook_range_matches_the_catalogue(readme: str):
 
 @pytest.mark.parametrize("readme", ["README.md", "README.es.md"])
 def test_readme_showcase_list_reaches_the_newest_notebooks(readme: str):
-    """The curated showcase bullets stopped at (`58`) while notebooks 59-65 shipped."""
+    """The curated showcase bullets stopped at (`58`) while notebooks 59-65 shipped.
+
+    Every showcase notebook from 59 on that ships in ``notebooks/`` must have its bullet;
+    numbers with no notebook in the repository are not required.
+    """
     txt = (ROOT / readme).read_text(encoding="utf-8")
+    shipped = {
+        int(p.name[:2])
+        for p in (ROOT / "notebooks").glob("[0-9][0-9]_*.py")
+        if not p.stem.endswith("_es")
+    }
     highest = _highest_showcase_notebook()
-    missing = [n for n in range(59, highest + 1) if f"(`{n:02d}`)" not in txt]
+    missing = [n for n in range(59, highest + 1) if n in shipped and f"(`{n:02d}`)" not in txt]
     assert not missing, f"{readme} showcase list omits notebooks {missing}"
 
 
@@ -236,4 +235,4 @@ def test_m4_figure_table_matches_target_list():
     total = _module_assignment(m4, "EXPECTED_TOTAL_FIGURES")
     assert ast.unparse(total) == "sum(EXPECTED_FIGURES_PER_TARGET.values())", ast.unparse(total)
     assert table["34_penalized_macro_forecasting.ipynb"] == 3
-    assert sum(table.values()) == 37
+    assert sum(table.values()) == 29
