@@ -2177,6 +2177,17 @@
       "weak_iv_summary",
       "wui"
     ],
+    "puremacro.narrative._local_engines": [
+      "BackendUnavailable",
+      "HTTPEngine",
+      "LlamaCppEngine",
+      "LocalLLMUnavailable",
+      "MLXEngine",
+      "MODEL_ALIASES",
+      "chat",
+      "resolve_engine",
+      "resolve_model_id"
+    ],
     "puremacro.narrative.aggregate": [
       "events_to_quarterly",
       "index_to_quarterly"
