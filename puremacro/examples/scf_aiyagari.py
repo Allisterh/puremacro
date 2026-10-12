@@ -49,7 +49,7 @@ from puremacro.fetch.micro import MicroFrame, SurveyDesign
 #: log-earnings AR(1) from Floden and Lindé (2001), US PSID estimates;
 #: log utility.
 DEFAULTS = dict(gamma=1.0, alpha=0.36, delta=0.08, rho=0.9136, sigma=0.2064,
-                n_z=7, n_a=200, a_max=400.0)
+                n_z=7, n_a=400, a_max=400.0)
 
 MOMENTS = (
     "mean wealth / mean income",
@@ -108,9 +108,25 @@ def model_frame(sol: dp.DPSolution) -> MicroFrame:
 
 
 # ----------------------------------------------------------------------------- moments
-def moments(mf: MicroFrame) -> pd.DataFrame:
+def _interpolated_quantile(x: np.ndarray, w: np.ndarray, q: float) -> float:
+    """``q``-quantile of the piecewise-linear CDF through the mass points
+    (mass at equal values pooled first, so the CDF has one knot per value)."""
+    xs, inv = np.unique(x, return_inverse=True)
+    cw = np.cumsum(np.bincount(inv, weights=w))
+    return float(np.interp(q * cw[-1], cw, xs))
+
+
+def moments(mf: MicroFrame, *, interpolate: bool = False) -> pd.DataFrame:
     """The comparison moments of net worth, with standard errors where the
-    design has them (``NaN`` for the model)."""
+    design has them (``NaN`` for the model).
+
+    ``interpolate=True`` (used for the model) takes the medians from the
+    piecewise-linear CDF through the mass points. A distribution on an
+    asset grid puts its median on a grid node, so the plain inverse-CDF
+    median jumps from node to node as ``beta`` moves; a calibration to it
+    would be a root search on a step function. Every other moment is
+    already continuous in the masses.
+    """
     nonpos = mf.data["networth"].le(0).astype(float).where(mf.data["networth"].notna())
     work = MicroFrame(mf.data.assign(_nonpos=nonpos), mf.design, mf.unit, mf.source, mf.vintage)
     bottom = work.top_share("networth", 0.5)
@@ -126,7 +142,18 @@ def moments(mf: MicroFrame) -> pd.DataFrame:
     ]
     out = pd.concat(rows, ignore_index=True)[["estimate", "se"]]
     out.index = pd.Index(MOMENTS, name="moment")
+    if interpolate:
+        d = mf.data.dropna(subset=["networth", "income"])
+        w = d[mf.design.weight].to_numpy(dtype=float)
+        out.loc[MOMENTS[1]] = (
+            _interpolated_quantile(d["networth"].to_numpy(dtype=float), w, 0.5)
+            / _interpolated_quantile(d["income"].to_numpy(dtype=float), w, 0.5), np.nan)
     return out
+
+
+def model_moments(sol: dp.DPSolution) -> pd.DataFrame:
+    """:func:`moments` of a solved economy's stationary distribution."""
+    return moments(model_frame(sol), interpolate=True)
 
 
 # ----------------------------------------------------------------------------- calibration
@@ -175,7 +202,7 @@ def calibrate(target: str, value: float, se: float = np.nan, *,
     def at(beta):
         if beta not in cache:
             sol = solve(beta, **params)
-            cache[beta] = (sol, moments(model_frame(sol)))
+            cache[beta] = (sol, model_moments(sol))
         return cache[beta]
 
     def gap(beta):
