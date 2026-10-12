@@ -22,14 +22,8 @@ import pytest
 import puremacro
 from puremacro.llm import models as M
 
-_ENV = "PUREMACRO_LLM_MODEL"
+_ENV = "PUREMACRO_LLM_MODEL"     # removed before every test by tests/conftest.py
 GIB = 1024 ** 3
-
-
-@pytest.fixture(autouse=True)
-def _no_model_override(monkeypatch):
-    """A PUREMACRO_LLM_MODEL exported in the developer's shell must not leak in."""
-    monkeypatch.delenv(_ENV, raising=False)
 
 
 # ---------------------------------------------------------------- the brief's contract
