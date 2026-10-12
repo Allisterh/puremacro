@@ -1084,8 +1084,9 @@ to 4.3.0.
 ## 2026-09-20 — structural models, affected APIs in 4.2.0 and earlier
 
 **Fixed or explicitly restricted in 4.3.0.** The review found incorrect numerical
-outputs and success flags in VFI, DSGE/Dynare and trade. Earlier introduction
-versions differ by API; the findings were reproduced on the 4.2.0 tree.
+outputs and success flags in VFI, DSGE/Dynare and trade (the trade findings left
+puremacro with the trade engine). Earlier introduction versions differ by API; the
+findings were reproduced on the 4.2.0 tree.
 
 | Surface | Affected condition | Rerun guidance |
 |---|---|---|

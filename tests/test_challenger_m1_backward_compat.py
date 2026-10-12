@@ -3,11 +3,10 @@
 Verifies:
 1. Backward compatibility of HJBSolution (dict subscripting, methods, iteration edge cases).
 2. Backward compatibility of VFISolution (positional args, endo_shape, optional grids, unravelling).
-3. Presentation quintet parity across VFI solutions.
-4. Deprecation warning targets: puremacro.lp.garch_utils and puremacro.sigma.sigma_numpy name 5.0.0
+3. Deprecation warning targets: puremacro.lp.garch_utils and puremacro.sigma.sigma_numpy name 5.0.0
    (both retargeted after 4.0.0 shipped keeping the shims).
-5. Pyodide four-package contract compliance via static AST inspection.
-6. Execution of continuous-time HJB showcase notebook.
+4. Pyodide four-package contract compliance via static AST inspection.
+5. Execution of continuous-time HJB showcase notebook.
 """
 from __future__ import annotations
 

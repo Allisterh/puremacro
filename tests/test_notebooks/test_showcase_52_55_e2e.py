@@ -508,7 +508,7 @@ class TestTier3BilingualParityAndCrossFeature:
 
     @pytest.mark.parametrize("stem", ["52", "53", "54"])
     def test_bilingual_code_cells_identical_logic(self, stem: str):
-        """Verify normalize_code(en) == normalize_code(es) for every code cell across all 4 pairs."""
+        """Verify normalize_code(en) == normalize_code(es) for every code cell across all 3 pairs."""
         en_content = _require_file(NB_PATHS_EN[stem])
         es_content = _require_file(NB_PATHS_ES[stem])
         en_cells = extract_code_cells(en_content)

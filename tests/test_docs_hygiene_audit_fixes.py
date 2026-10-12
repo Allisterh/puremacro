@@ -10,7 +10,7 @@ Covered findings (see the audit's CONFIRMED_FINDINGS for the evidence):
   showcase bullets stopped at notebook 58.
 - The four 4.3.0 pages had no Spanish mirrors and no language switchers, so the bilingual
   parity test passed vacuously. The mirrors must keep their code blocks identical to the
-  English pages (the examples are runnable contracts, not prose). The pages added
+  English pages (the examples are runnable contracts, not prose). The eight pages added
   after 4.3.0 (``NEW_MODULE_DOCS``) are held to the same contract.
 - ``test_target_15_png_opacity_and_contrast`` hard-coded 36 embedded figures; the count is
   now derived from a per-notebook table that must stay in step with the target list.
@@ -31,6 +31,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# The trade pages of both lists left puremacro with the trade engine; the names are kept.
 NEW_TRADE_DOCS = [
     "STRUCTURAL_VALIDATION_STATUS.md",
 ]

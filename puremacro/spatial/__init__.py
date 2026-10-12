@@ -104,7 +104,7 @@ __all__ = [
     # local projections
     "spatial_lp",
     "SpatialLPResult",
-    # quantitative spatial general equilibrium & trade
+    # quantitative spatial general equilibrium
     "AllenArkolakisModel",
     "AllenArkolakisResult",
 ]

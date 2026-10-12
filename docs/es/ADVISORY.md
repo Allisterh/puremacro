@@ -1158,7 +1158,8 @@ logarítmica es idéntica bit a bit a 4.3.0.
 
 **Corregidas o restringidas explícitamente en 4.3.0.** La revisión reprodujo
 resultados numéricos y señales de éxito incorrectos en VFI, DSGE/Dynare y comercio
-sobre el código de 4.2.0; la primera versión afectada depende de cada API.
+sobre el código de 4.2.0 (los hallazgos de comercio salieron de puremacro con el motor
+de comercio); la primera versión afectada depende de cada API.
 
 - **DSGE de tercer orden:** recalcular reglas y simulaciones, momentos o
   verosimilitudes que dependen de pendientes de riesgo en modelos estocásticos
