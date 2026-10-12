@@ -166,7 +166,7 @@ def test_mnl_kernel_empty_doc_yields_zero():
 # ---------------------------------------------------------------------------
 def test_llm_prob_kernel_with_mock_provider(tmp_path, monkeypatch):
     from puremacro.narrative.indices import llm_prob_kernel, MockProvider
-    monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(tmp_path / "scores.sqlite"))
+    monkeypatch.setenv("PUREMACRO_LLM_SCORES_CACHE", str(tmp_path / "scores.sqlite"))
     provider = MockProvider(hot_keywords=["uncertain"])
     records = [
         (pd.Timestamp("2024-01-01"), "Inflation outlook is uncertain. Risks remain.", "u", {}),
@@ -182,7 +182,7 @@ def test_llm_prob_kernel_with_mock_provider(tmp_path, monkeypatch):
 
 def test_llm_prob_kernel_cache_avoids_repeat_calls(tmp_path, monkeypatch):
     from puremacro.narrative.indices import llm_prob_kernel, MockProvider
-    monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(tmp_path / "scores.sqlite"))
+    monkeypatch.setenv("PUREMACRO_LLM_SCORES_CACHE", str(tmp_path / "scores.sqlite"))
 
     class CountingMock(MockProvider):
         def __init__(self):
@@ -206,7 +206,7 @@ def test_llm_prob_kernel_cache_avoids_repeat_calls(tmp_path, monkeypatch):
 
 def test_llm_prob_kernel_respects_max_calls(tmp_path, monkeypatch):
     from puremacro.narrative.indices import llm_prob_kernel, MockProvider
-    monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(tmp_path / "scores.sqlite"))
+    monkeypatch.setenv("PUREMACRO_LLM_SCORES_CACHE", str(tmp_path / "scores.sqlite"))
 
     class CountingMock(MockProvider):
         def __init__(self):

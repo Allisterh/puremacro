@@ -14,8 +14,10 @@ Design priorities, in order:
      when ``llm_prob_kernel(...)`` is actually called.
   2. **Cached**: scores are keyed on
      ``(provider, model, prompt_hash, text_hash)`` in a SQLite store
-     under ``~/.cache/puremacro/llm_scores.sqlite``. Repeat runs are
-     instant and free.
+     under ``~/.cache/puremacro/llm_scores.sqlite``, or the file named by
+     ``PUREMACRO_LLM_SCORES_CACHE``. Repeat runs are instant and free.
+     This is not the completion cache of :mod:`puremacro.llm`, which keeps
+     its own file and reads ``PUREMACRO_LLM_CACHE``.
   3. **Cost-capped**: a per-call budget (max API calls) is enforced
      unless ``PUREMACRO_LLM_BUDGET=spend`` is exported.
   4. **Provider-agnostic**: Anthropic Claude / OpenAI GPT / local
@@ -41,8 +43,15 @@ from ._kernels import _split_paragraphs, _split_sentences
 # Cache layer (SQLite)
 # ---------------------------------------------------------------------------
 def _cache_path() -> Path:
+    """The score cache file: ``$PUREMACRO_LLM_SCORES_CACHE``, else the user cache directory.
+
+    ``PUREMACRO_LLM_CACHE`` is deliberately not read. It names the completion
+    cache of :mod:`puremacro.llm`, and two caches in one file would put this
+    table inside a (possibly read-only, shipped) completion cache and let this
+    kernel's open transaction block that cache's writes.
+    """
     return Path(os.environ.get(
-        "PUREMACRO_LLM_CACHE",
+        "PUREMACRO_LLM_SCORES_CACHE",
         Path.home() / ".cache" / "puremacro" / "llm_scores.sqlite",
     ))
 

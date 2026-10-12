@@ -403,10 +403,10 @@ def test_cache_row_is_frozen_and_positional_order_is_fixed():
 
 # ---------------------------------------------------------------------------
 # One file, several owners. A cache file is an ordinary SQLite file, so it can hold
-# tables this module does not own (the narrative score cache, for one, keeps an
-# `llm_scores` table in a file of the same kind). The cache must leave them alone,
-# ship only its own rows, and degrade (not raise) when the file is read-only or
-# locked by another connection.
+# tables this module does not own (anyone may point PUREMACRO_LLM_CACHE at a file that
+# already has the narrative score cache's `llm_scores` table in it). The cache must
+# leave them alone, ship only its own rows, and degrade (not raise) when the file is
+# read-only or locked by another connection.
 # ---------------------------------------------------------------------------
 
 def _tables(path):
@@ -518,3 +518,100 @@ def test_a_write_blocked_by_another_connection_is_skipped_not_raised(tmp_path, m
     fresh = CompletionCache(c.path)                # once the lock is gone a new object writes again
     fresh.set(_row(_k("after"), text="back"))
     assert fresh.get(_k("after")) == "back" and fresh.get(_k("before")) == "kept"
+
+
+# ---------------------------------------------------------------------------
+# Two caches, two files, two variables. The narrative score cache (`llm_prob_kernel`) keeps
+# an `llm_scores` table in the file named by PUREMACRO_LLM_SCORES_CACHE. It used to read
+# PUREMACRO_LLM_CACHE as well, which put that table inside the completion cache, made a
+# read-only shipped completion cache stop the kernel, and blocked every completion a provider
+# stored while the kernel held its transaction (five seconds per window, then the cache gave up).
+# ---------------------------------------------------------------------------
+
+def _score_one_document(provider=None):
+    """One document of three sentence windows through the narrative score kernel."""
+    import pandas as pd
+    from puremacro.narrative.indices import MockProvider, llm_prob_kernel
+
+    text = "One sentence here. A second sentence there. And a third one."
+    records = [(pd.Timestamp("2024-01-01"), text, "u", {})]
+    return list(llm_prob_kernel(records, provider=provider or MockProvider(),
+                                category="u", window="sentence"))
+
+
+def test_the_score_cache_has_its_own_file_and_its_own_variable(tmp_path, monkeypatch):
+    completions, scores = tmp_path / "completions.sqlite", tmp_path / "scores.sqlite"
+    monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(completions))
+    monkeypatch.setenv("PUREMACRO_LLM_SCORES_CACHE", str(scores))
+    CompletionCache().set(_row(_k("p"), text="t"))
+    before = completions.read_bytes()
+    assert len(_score_one_document()) == 1
+    assert _tables(scores) == ["llm_scores"]
+    assert _tables(completions) == ["completions"]       # no score table inside the completion cache
+    assert completions.read_bytes() == before            # and nothing else changed in it
+
+
+def test_the_score_cache_default_does_not_follow_the_completion_cache_variable(tmp_path, monkeypatch):
+    from puremacro.narrative.indices import _llm_kernel
+
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))         # Path.home() on Windows
+    monkeypatch.delenv("PUREMACRO_LLM_SCORES_CACHE", raising=False)
+    monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(tmp_path / "completions.sqlite"))
+    assert _llm_kernel._cache_path() == home / ".cache" / "puremacro" / "llm_scores.sqlite"
+    monkeypatch.setenv("PUREMACRO_LLM_SCORES_CACHE", str(tmp_path / "scores.sqlite"))
+    assert _llm_kernel._cache_path() == tmp_path / "scores.sqlite"
+
+
+def test_a_provider_that_stores_completions_is_not_blocked_by_the_score_kernel(
+        tmp_path, monkeypatch, recwarn):
+    """What `LocalProvider` does once it goes through `puremacro.llm`: every window it scores
+    leaves a completion in the default completion cache, while the kernel has an uncommitted
+    insert in its own cache. Two files: all three completions are stored, none is skipped."""
+    import puremacro.llm.cache as cache_module
+    from puremacro.narrative.indices import MockProvider
+
+    class StoresACompletionPerWindow(MockProvider):
+        name, model = "local", "qwen3-4b"
+
+        def score_paragraph(self, text, category):
+            CompletionCache().set(CacheRow(_k(text), "qwen3-4b", prompt_sha256(text), 8, 0.0,
+                                           False, "0.5"))
+            return 0.5
+
+    monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(tmp_path / "completions.sqlite"))
+    monkeypatch.setenv("PUREMACRO_LLM_SCORES_CACHE", str(tmp_path / "scores.sqlite"))
+    monkeypatch.setattr(cache_module, "sqlite3", _ShortTimeout())    # a lock costs 50 ms, not 5 s
+    _score_one_document(StoresACompletionPerWindow())
+    assert CompletionCache().stats()["rows"] == 3
+    assert _n_cache_warnings(recwarn) == 0
+
+
+def test_a_read_only_completion_cache_does_not_stop_the_score_kernel(tmp_path, monkeypatch):
+    shipped = tmp_path / "shipped.sqlite"
+    CompletionCache(shipped).set(_row(_k("hola"), text="¡Hola!"))
+    os.chmod(shipped, stat.S_IRUSR)
+    try:
+        if os.access(shipped, os.W_OK):
+            pytest.skip("file permissions do not restrict this account")
+        monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(shipped))
+        monkeypatch.setenv("PUREMACRO_LLM_SCORES_CACHE", str(tmp_path / "scores.sqlite"))
+        assert len(_score_one_document()) == 1       # used to raise "attempt to write a readonly database"
+        assert CompletionCache().get(_k("hola")) == "¡Hola!"
+        assert _tables(shipped) == ["completions"]
+        assert _tables(tmp_path / "scores.sqlite") == ["llm_scores"]
+    finally:
+        os.chmod(shipped, stat.S_IRUSR | stat.S_IWUSR)
+
+
+def test_the_suite_gives_each_cache_its_own_file_off_the_users_home():
+    """The autouse fixture in conftest.py gives every test a file for each cache, so tests
+    that score a document (the local-LLM example, for one) or complete a prompt never write
+    to ~/.cache/puremacro, and the two caches never share a file."""
+    from puremacro.narrative.indices import _llm_kernel
+
+    scores, completions = _llm_kernel._cache_path(), default_cache_path()
+    home = Path.home() / ".cache" / "puremacro"
+    assert scores != completions
+    assert scores != home / "llm_scores.sqlite" and completions != home / "llm_cache.sqlite"

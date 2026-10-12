@@ -6,7 +6,9 @@ answers the same call everywhere: a cache built on a laptop can be shipped with
 a course and read by a tablet that cannot run the model.
 
 * **Location.** ``~/.cache/puremacro/llm_cache.sqlite``, or the file named by the
-  environment variable ``PUREMACRO_LLM_CACHE``.
+  environment variable ``PUREMACRO_LLM_CACHE``. The narrative score cache of
+  ``llm_prob_kernel`` is another cache in another file, named by
+  ``PUREMACRO_LLM_SCORES_CACHE``; this variable never moves it.
 * **Other tables are not ours.** The file is an ordinary SQLite file and may hold
   tables that belong to other code. This module reads and writes ``completions``
   (and its index) and nothing else: it creates its table beside whatever is

@@ -135,6 +135,13 @@ Scalar-`r` calls are unchanged.
   previous version to 1e-14); pass `sparse_output=True` or `tokenizer=` to opt
   in. `NMF` accepts sparse input, and `DynamicTopicModel` uses it.
 
+- The score cache of `narrative.indices.llm_prob_kernel` now takes its path from
+  `PUREMACRO_LLM_SCORES_CACHE` (the default, `~/.cache/puremacro/llm_scores.sqlite`,
+  is unchanged). It used to read `PUREMACRO_LLM_CACHE`, which now names the
+  completion cache of `puremacro.llm`. They are different caches with different
+  tables, and one file for both would let each get in the other's way. If you had
+  pointed `PUREMACRO_LLM_CACHE` at a score cache, set the new variable instead.
+
 ### Fixed
 
 - `fetch.registry` listed the 67 narrative text connectors as `redistributable=True`, although their terms are marked `unaudited`. They are now `redistributable=False` until someone reviews them.

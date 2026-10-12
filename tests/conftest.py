@@ -8,16 +8,22 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _isolated_llm_cache(monkeypatch, tmp_path):
-    """Keep every test off the user's real completion cache and mode.
+    """Keep every test off the user's real LLM caches and mode.
 
-    ``puremacro.llm`` reads and writes ``$PUREMACRO_LLM_CACHE`` (default
-    ``~/.cache/puremacro/llm_cache.sqlite``). Without this a test that
-    completes a prompt would leave rows in the developer's real cache, and a
-    cache hit left there by an earlier run would stand in for the engine a later
-    test means to exercise. A value the user set on purpose is respected.
+    There are two caches in two files. ``puremacro.llm`` reads and writes the
+    completion cache ``$PUREMACRO_LLM_CACHE`` (default
+    ``~/.cache/puremacro/llm_cache.sqlite``); ``llm_prob_kernel`` reads and
+    writes the narrative score cache ``$PUREMACRO_LLM_SCORES_CACHE`` (default
+    ``~/.cache/puremacro/llm_scores.sqlite``). Each gets its own file here.
+    Without this a test that completes a prompt or scores a document would
+    leave rows in the developer's real cache, and a cache hit left there by an
+    earlier run would stand in for the engine a later test means to exercise.
+    A value the user set on purpose is respected.
     """
     if "PUREMACRO_LLM_CACHE" not in os.environ:
         monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(tmp_path / "llm_cache.sqlite"))
+    if "PUREMACRO_LLM_SCORES_CACHE" not in os.environ:
+        monkeypatch.setenv("PUREMACRO_LLM_SCORES_CACHE", str(tmp_path / "llm_scores.sqlite"))
     monkeypatch.delenv("PUREMACRO_LLM_MODE", raising=False)
 
 
