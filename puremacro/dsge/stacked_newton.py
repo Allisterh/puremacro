@@ -1508,7 +1508,7 @@ def _step_test_message(res: float, res_bound: float, step_norm: float, step_boun
     return (f"Newton step test failed: the residual {res:.3g} meets tol * s = {res_bound:.3g}, but the "
             f"Newton step {step_norm:.3g} exceeds step_tol * max(1, |Y|_inf) = {step_bound:.3g} and {reason}. "
             "The residual may be at its noise floor (an inner iterative solve or finite-difference noise); "
-            "pass step_tol=None for the residual-only acceptance rule of the IO engine, or a larger step_tol.")
+            "pass step_tol=None to accept on the residual alone, or a larger step_tol.")
 
 
 def solve_stacked_newton_krylov(
