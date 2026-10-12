@@ -86,6 +86,32 @@ def test_calibration_hits_an_attainable_target():
     assert 0 < cal.r < 1 / cal.beta - 1
 
 
+def test_different_targets_give_different_betas():
+    lo = ex.calibrate("median", 2.0, bracket=(0.90, 0.99), **SMALL)
+    hi = ex.calibrate("median", 2.4, bracket=(0.90, 0.99), **SMALL)
+    assert lo.attained and hi.attained and hi.beta > lo.beta + 1e-3
+    for cal, v in ((lo, 2.0), (hi, 2.4)):
+        assert cal.moments.loc[ex.TARGETS["median"], "estimate"] == pytest.approx(v, rel=1e-3)
+
+
+def test_a_jump_over_the_target_is_not_reported_as_attained(monkeypatch, solved):
+    base = ex.model_moments(solved)
+
+    class Stub:
+        def __init__(self, beta):
+            self.beta = beta
+
+    def stepped(sol):
+        m = base.copy()
+        m.loc[ex.TARGETS["median"], "estimate"] = 1.0 if sol.beta < 0.93 else 3.0
+        return m
+    monkeypatch.setattr(ex, "solve", lambda beta, **_: Stub(beta))
+    monkeypatch.setattr(ex, "model_moments", stepped)
+    cal = ex.calibrate("median", 2.0, 0.1, bracket=(0.90, 0.95))
+    assert not cal.attained and "jumps over" in cal.notes[0]
+    assert cal.beta == pytest.approx(0.93, abs=1e-5)
+
+
 def test_unattainable_target_is_reported_not_forced():
     cal = ex.calibrate("mean", 1e3, 1.0, bracket=(0.90, 0.95), **SMALL)
     assert not cal.attained
