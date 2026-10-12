@@ -1,7 +1,24 @@
 """Shared toy datasets for puremacro tests."""
+import os
+
 import numpy as np
 import pandas as pd
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def _isolated_llm_cache(monkeypatch, tmp_path):
+    """Keep every test off the user's real completion cache and mode.
+
+    ``puremacro.llm`` reads and writes ``$PUREMACRO_LLM_CACHE`` (default
+    ``~/.cache/puremacro/llm_cache.sqlite``). Without this a test that
+    completes a prompt would leave rows in the developer's real cache, and a
+    cache hit left there by an earlier run would stand in for the engine a later
+    test means to exercise. A value the user set on purpose is respected.
+    """
+    if "PUREMACRO_LLM_CACHE" not in os.environ:
+        monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(tmp_path / "llm_cache.sqlite"))
+    monkeypatch.delenv("PUREMACRO_LLM_MODE", raising=False)
 
 
 @pytest.fixture

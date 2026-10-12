@@ -1736,6 +1736,15 @@
     "puremacro.labor_share": [
       "gollin_adjusted_ls"
     ],
+    "puremacro.llm.cache": [
+      "CACHE_FORMAT",
+      "CacheMiss",
+      "CacheRow",
+      "CompletionCache",
+      "cache_key",
+      "default_cache_path",
+      "prompt_sha256"
+    ],
     "puremacro.longrun": [
       "CheckpointError",
       "Job",
@@ -5862,6 +5871,17 @@
       "quarterly",
       "quarterly_observed",
       "stocks"
+    ],
+    "puremacro.llm.cache.CacheRow": [
+      "completion",
+      "engine",
+      "engine_model_id",
+      "json_mode",
+      "key",
+      "max_tokens",
+      "model",
+      "prompt_sha256",
+      "temperature"
     ],
     "puremacro.longrun._job.Progress": [
       "done",
