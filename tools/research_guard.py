@@ -6,7 +6,10 @@ and it is written so that the code itself never names a project:
 
 1. **Path check.** A path may not start with one of ``FORBIDDEN_PREFIXES``:
    generic names of the directories that held research records, and the stale
-   playground build.
+   playground build. Nor may it be one of the paths that moved out of this tree
+   and must never come back: ``research_guard_paths.txt`` holds the SHA-256 of
+   each exact path (``FORBIDDEN_PATH_DIGESTS``), generated from a private
+   manifest, so this repository does not list what moved.
 2. **Machine-path check.** A text file may not contain a path that exists on
    exactly one machine (``MACHINE_PATTERNS``): a mounted volume, a user's home
    directory, or the ``RESEARCH/`` root.
@@ -28,12 +31,24 @@ matches whole words only, never inside a word, and only groups of up to
 
 Which files are read
 --------------------
-The path check and the token check on the *path* apply to every entry. The
+The path checks and the token check on the *path* apply to every entry. The
 machine-path check and the token check on the *content* apply to text only: no
 NUL byte in the first 8 KB. The token check also skips files over
-``MAX_TOKEN_SCAN_BYTES``. The two files in ``SELF_EXEMPT`` are exempt from the
-content checks, because by construction they hold machine-path patterns, digests
-and the plaintext sentinel; their paths are still checked.
+``MAX_TOKEN_SCAN_BYTES``. The files in ``MACHINE_PATH_EXEMPT`` are exempt from
+the machine-path check because they hold the patterns, or regex literals for
+them. The two in ``SELF_EXEMPT`` also hold the plaintext sentinel, so its digest
+is ignored in their content. Nothing else is exempt from anything: their paths
+and every other token are checked like any file's.
+
+Built artifacts
+---------------
+A wheel (``.whl``) is read as named. An sdist, a tar archive or a zip that is not
+a wheel, has its single top-level ``name-version/`` directory stripped. Members
+that do not share one directory, or a directory that is not named for the
+archive, are refused: stripping would shift every path, and a record directory
+taken for the wrapper would hide its own prefix. A link is published as its
+target text, so that text is the content of a link member and of a tracked
+symlink.
 
 Usage
 -----
@@ -95,9 +110,25 @@ MAX_TOKEN_SCAN_BYTES = 10 * 1024 * 1024
 #: Longest group of underscore-separated words tried as a token.
 MAX_TOKEN_WORDS = 10
 
-#: The guard's own sources: exempt from the content checks, never from the path
-#: check.
+#: The guard's own sources. They hold the plaintext sentinel by construction, so
+#: its digest is ignored in their content. Every other digest is still found
+#: there, and their paths are checked like any other.
 SELF_EXEMPT = ("tools/research_guard.py", "tests/test_no_research_content.py")
+
+#: Files exempt from the machine-path check: the guard's own sources, which hold
+#: the patterns, and the older test that holds machine-path regex literals. Their
+#: paths and their tokens are still checked.
+MACHINE_PATH_EXEMPT = (*SELF_EXEMPT, "tests/test_no_machine_specific_paths.py")
+
+#: A path that is guaranteed to be in ``FORBIDDEN_PATH_DIGESTS``, so that the
+#: tests can tell "no moved path is back" from "a check that matches nothing".
+#: It is not a real path.
+SENTINEL_PATH = "zz/research-guard-sentinel-path.txt"
+
+#: SHA-256 digests, one per line, of the exact repo-relative paths that moved out
+#: of this tree and must never come back. Generated from a private manifest,
+#: never edited by hand.
+PATH_DIGESTS_FILE = Path(__file__).with_name("research_guard_paths.txt")
 
 #: SHA-256 digests of the private token list. Generated, never edited by hand:
 #: change the private list and regenerate.
@@ -148,6 +179,30 @@ TOKEN_DIGESTS = frozenset({
 
 _BINARY_SNIFF_BYTES = 8192
 _RUN = re.compile(rb"[a-z0-9_]+")
+_SENTINEL_DIGEST = hashlib.sha256(SENTINEL_TOKEN.encode()).digest()
+_HEX_DIGEST = re.compile(r"[0-9a-f]{64}")
+
+
+def _parse_digests(text: str) -> frozenset[str]:
+    """The SHA-256 digests in ``text``, one per line. Anything else is a
+    ``ValueError``, so a damaged file cannot quietly weaken the check."""
+    digests = text.split()
+    bad = [d for d in digests if not _HEX_DIGEST.fullmatch(d)]
+    if bad:
+        raise ValueError(f"{len(bad)} entries of the moved-path digest file are not SHA-256 digests")
+    return frozenset(digests)
+
+
+def _load_path_digests(path: Path) -> frozenset[str]:
+    """The digests in ``path``, which must include the sentinel path's: an empty or
+    truncated file would silently switch the moved-path check off."""
+    digests = _parse_digests(path.read_text(encoding="ascii"))
+    if hashlib.sha256(SENTINEL_PATH.encode()).hexdigest() not in digests:
+        raise ValueError(f"{path.name} does not list the sentinel path: truncated, or not generated?")
+    return digests
+
+
+FORBIDDEN_PATH_DIGESTS: frozenset[str] = _load_path_digests(PATH_DIGESTS_FILE)
 
 
 @dataclass(frozen=True)
@@ -191,24 +246,30 @@ def _token_hits(lowered: bytes, wanted: frozenset[bytes]) -> set[bytes]:
     return {d for token in _candidates(lowered) if (d := sha256(token).digest()) in wanted}
 
 
-def _scan_entry(path: str, data: bytes, wanted: frozenset[bytes]) -> list[Finding]:
+def _scan_entry(path: str, data: bytes, wanted: frozenset[bytes],
+                moved: frozenset[str]) -> list[Finding]:
     findings: list[Finding] = []
     normal = path.replace("\\", "/")
     folded = normal.lower()
-    for prefix in FORBIDDEN_PREFIXES:
-        if folded.startswith(prefix):
-            findings.append(Finding(path, "forbidden path", prefix))
-            break
+    prefix = next((p for p in FORBIDDEN_PREFIXES if folded.startswith(p)), None)
+    if prefix is not None:
+        findings.append(Finding(path, "forbidden path", prefix))
+    elif hashlib.sha256(normal.encode("utf-8", "surrogateescape")).hexdigest() in moved:
+        findings.append(Finding(path, "forbidden path", "moved path"))
     hits = _token_hits(path.encode("utf-8", "surrogateescape").lower(), wanted)
-    if normal not in SELF_EXEMPT and b"\0" not in data[:_BINARY_SNIFF_BYTES]:
-        text = data.decode("utf-8", "replace")
-        for name, pattern in MACHINE_PATTERNS.items():
-            match = pattern.search(text)
-            if match:
-                line = text.count("\n", 0, match.start()) + 1
-                findings.append(Finding(path, f"machine path: {name}", f"line {line}"))
+    if b"\0" not in data[:_BINARY_SNIFF_BYTES]:
+        if normal not in MACHINE_PATH_EXEMPT:
+            text = data.decode("utf-8", "replace")
+            for name, pattern in MACHINE_PATTERNS.items():
+                match = pattern.search(text)
+                if match:
+                    line = text.count("\n", 0, match.start()) + 1
+                    findings.append(Finding(path, f"machine path: {name}", f"line {line}"))
         if len(data) <= MAX_TOKEN_SCAN_BYTES:
-            hits |= _token_hits(data.lower(), wanted)
+            in_content = _token_hits(data.lower(), wanted)
+            if normal in SELF_EXEMPT:
+                in_content.discard(_SENTINEL_DIGEST)
+            hits |= in_content
     findings.extend(Finding(path, "hashed token", d.hex()[:12]) for d in sorted(hits))
     return findings
 
@@ -222,9 +283,10 @@ def scan_entries(entries: Iterable[tuple[str, bytes]]) -> list[Finding]:
     reported once.
     """
     wanted = frozenset(bytes.fromhex(d) for d in TOKEN_DIGESTS)
+    moved = FORBIDDEN_PATH_DIGESTS
     findings: list[Finding] = []
     for path, data in entries:
-        findings.extend(_scan_entry(path, data, wanted))
+        findings.extend(_scan_entry(path, data, wanted, moved))
     return findings
 
 
@@ -237,43 +299,106 @@ def _run_git(repo: Path, *args: str) -> bytes:
 
 
 def git_entries(repo: Path) -> Iterator[tuple[str, bytes]]:
-    """Yield ``git ls-files`` paths of ``repo`` with their working-tree bytes.
+    """Yield the ``git ls-files`` paths of the repository containing ``repo``, with
+    their working-tree bytes. Paths are relative to the top level whichever
+    directory ``repo`` names: ``git ls-files`` run in a subdirectory lists only
+    that directory, relative to it, and every prefix check would miss.
 
-    A tracked path that is missing from the working tree (deleted mid-edit) is
-    skipped; a tracked directory (a submodule) is yielded with no content.
+    A tracked symlink yields its link text, which is the blob git publishes,
+    never the bytes of the file it points at (that may lie outside the tree, and
+    a dangling link still has its path checked). A tracked path that is missing
+    from the working tree (deleted mid-edit) is skipped; a tracked directory (a
+    submodule) is yielded with no content.
     """
-    repo = Path(repo)
-    for raw in _run_git(repo, "ls-files", "-z").split(b"\0"):
+    top = Path(os.fsdecode(_run_git(Path(repo), "rev-parse", "--show-toplevel").rstrip(b"\r\n")))
+    for raw in _run_git(top, "ls-files", "-z").split(b"\0"):
         if not raw:
             continue
         rel = os.fsdecode(raw)
-        try:
-            data = (repo / rel).read_bytes()
-        except (FileNotFoundError, NotADirectoryError):
-            continue
-        except IsADirectoryError:
-            data = b""
+        target = top / rel
+        if target.is_symlink():
+            data = os.fsencode(os.readlink(target))
+        else:
+            try:
+                data = target.read_bytes()
+            except (FileNotFoundError, NotADirectoryError):
+                continue
+            except IsADirectoryError:
+                data = b""
         yield rel, data
 
 
+def _components(name: str) -> list[str]:
+    return [part for part in name.split("/") if part not in ("", ".")]
+
+
+_ARCHIVE_SUFFIXES = (".tar.gz", ".tar.bz2", ".tar.xz", ".tgz", ".tar", ".zip")
+
+
+def _stem(path: Path) -> str:
+    """The archive's file name without its suffix: ``name-version`` for an sdist."""
+    for suffix in _ARCHIVE_SUFFIXES:
+        if path.name.lower().endswith(suffix):
+            return path.name[: -len(suffix)]
+    return path.stem
+
+
+def _require_one_root(path: Path, members: Iterable[tuple[str, bool]]) -> None:
+    """``ValueError`` unless every ``(name, is_directory)`` member sits under one
+    top-level directory, and that directory is the archive's own ``name-version``.
+    Stripping the first component is only right then: anything else would shift
+    every path and break the prefix checks, and a lone record directory taken for
+    the wrapper would take its prefix with it. The messages count and name no
+    member."""
+    roots: set[str] = set()
+    loose = False
+    for name, is_directory in members:
+        parts = _components(name)
+        if parts:
+            roots.add(parts[0])
+            loose = loose or (len(parts) == 1 and not is_directory)
+    if len(roots) > 1 or loose:
+        raise ValueError(f"{path.name}: the members do not share one top-level directory "
+                         f"({len(roots)} top-level names{', one of them a file' if loose else ''})")
+    if roots and next(iter(roots)) != _stem(path):
+        raise ValueError(f"{path.name}: the top-level directory does not match the file name")
+
+
 def archive_entries(path: Path) -> Iterator[tuple[str, bytes]]:
-    """Yield the members of a wheel (zip) as named, or of an sdist (``.tar.gz``)
-    with its top-level ``name-version/`` directory stripped. Directories are
-    skipped."""
+    """Yield the members of a built artifact as ``(path, content)``.
+
+    A wheel (``.whl``) is read as named. An sdist, a tar archive or a zip that is
+    not a wheel, has its single top-level ``name-version/`` directory stripped;
+    members that do not share one, or whose directory is not named for the
+    archive, raise ``ValueError``. Directories are skipped.
+    A link member yields its link name as content, as a link is published as its
+    target text, which can name a machine.
+    """
     path = Path(path)
     if zipfile.is_zipfile(path):
-        with zipfile.ZipFile(path) as wheel:
-            for info in wheel.infolist():
+        with zipfile.ZipFile(path) as archive:
+            infos = archive.infolist()
+            wheel = path.suffix.lower() == ".whl"
+            if not wheel:
+                _require_one_root(path, [(i.filename, i.is_dir()) for i in infos])
+            for info in infos:
                 if not info.is_dir():
-                    yield info.filename, wheel.read(info)
+                    name = info.filename if wheel else "/".join(_components(info.filename)[1:])
+                    yield name, archive.read(info)
     elif tarfile.is_tarfile(path):
         with tarfile.open(path) as sdist:
-            for member in sdist:
+            members = sdist.getmembers()
+            _require_one_root(path, [(m.name, m.isdir()) for m in members])
+            for member in members:
                 if member.isdir():
                     continue
-                parts = [p for p in member.name.split("/") if p not in ("", ".")]
-                data = sdist.extractfile(member).read() if member.isfile() else b""
-                yield "/".join(parts[1:] or parts), data
+                if member.isfile():
+                    data = sdist.extractfile(member).read()
+                elif member.issym() or member.islnk():
+                    data = member.linkname.encode("utf-8", "surrogateescape")
+                else:
+                    data = b""
+                yield "/".join(_components(member.name)[1:]), data
     else:
         raise ValueError(f"{path}: neither a wheel (zip) nor an sdist (tar)")
 
@@ -311,8 +436,7 @@ def main(argv: list[str] | None = None) -> int:
     findings: list[Finding] = []
     try:
         if args.git:
-            top = _run_git(Path.cwd(), "rev-parse", "--show-toplevel").decode().strip()
-            findings += _scan_source("tracked tree", git_entries(Path(top)))
+            findings += _scan_source("tracked tree", git_entries(Path.cwd()))
         for artifact in args.artifacts:
             findings += _scan_source(artifact.name, archive_entries(artifact))
     except (OSError, ValueError, zipfile.BadZipFile, tarfile.TarError) as exc:

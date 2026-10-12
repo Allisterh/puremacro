@@ -5,7 +5,9 @@ repository. ``tools/research_guard.py`` enforces it three ways, and this file is
 the guard's own test suite plus the one test that runs it over the real tree:
 
 1. **Path check.** No tracked path may start with one of a short list of generic
-   prefixes (the records directories, the stale playground build, ...).
+   prefixes (the records directories, the stale playground build, ...), and none
+   may be a path that moved out of the tree, which is matched by the digest of
+   the exact path from a generated file, so that file lists nothing.
 2. **Machine-path check.** No tracked text file may contain a path that exists
    on exactly one machine: ``/Volumes/``, ``/Users/<name>/`` or ``RESEARCH/``.
 3. **Hashed-name check.** Project names are never written down in this
@@ -27,10 +29,12 @@ import collections
 import dataclasses
 import functools
 import hashlib
+import importlib
 import io
 import os
 import re
 import subprocess
+import sys
 import tarfile
 import zipfile
 from collections.abc import Iterator
@@ -43,8 +47,10 @@ from tools.research_guard import (
     FORBIDDEN_PREFIXES,
     MACHINE_PATTERNS,
     MAX_TOKEN_SCAN_BYTES,
+    MACHINE_PATH_EXEMPT,
     MAX_TOKEN_WORDS,
     SELF_EXEMPT,
+    SENTINEL_PATH,
     SENTINEL_TOKEN,
     TOKEN_DIGESTS,
     Finding,
@@ -201,6 +207,87 @@ def test_playground_build_gets_no_token_scan_exclusion():
     found = scan_entries([("playground/dist/x.js", SENTINEL_TOKEN.encode())])
     assert sorted(_kinds(found)) == ["forbidden path", "hashed token"]
     assert not hasattr(guard, "TOKEN_SCAN_EXCLUDE")
+
+
+# The second clause of the path check: the paths that moved out of the tree must
+# never come back. They are matched by the SHA-256 of the exact path, from a
+# generated file of digests, so that this repository does not list what moved.
+
+_PATH_VARIANTS = {
+    "one character short": lambda p: p[:-1],
+    "one character long": lambda p: p + "x",
+    "one character different": lambda p: p[:-1] + "T",
+    "one character different in the directory": lambda p: p.replace("zz/", "zy/"),
+    "upper case": lambda p: p.upper(),
+}
+
+
+def test_a_moved_path_is_found_by_its_digest_alone():
+    found = scan_entries([(SENTINEL_PATH, b"")])
+    assert found == [Finding(SENTINEL_PATH, "forbidden path", "moved path")]
+
+
+@pytest.mark.parametrize("variant", sorted(_PATH_VARIANTS))
+def test_a_path_one_character_off_is_not_a_moved_path(variant):
+    path = _PATH_VARIANTS[variant](SENTINEL_PATH)
+    assert path != SENTINEL_PATH
+    assert scan_entries([(path, b"")]) == []
+
+
+def test_a_moved_path_is_found_whichever_way_its_separators_are_written():
+    path = SENTINEL_PATH.replace("/", "\\")
+    assert _kinds(scan_entries([(path, b"")])) == ["forbidden path"]
+
+
+def test_a_moved_path_under_a_forbidden_prefix_is_reported_once(monkeypatch):
+    """Both rules match the sentinel path: its digest is in the file, and the prefix
+    list is widened to cover its directory."""
+    monkeypatch.setattr(guard, "FORBIDDEN_PREFIXES", guard.FORBIDDEN_PREFIXES + ("zz/",))
+    assert scan_entries([(SENTINEL_PATH, b"")]) == [Finding(SENTINEL_PATH, "forbidden path", "zz/")]
+
+
+def test_the_moved_path_digest_set_is_read_when_scanning(monkeypatch):
+    """So a test can substitute one, as it can the token digests."""
+    monkeypatch.setattr(guard, "FORBIDDEN_PATH_DIGESTS", frozenset({_digest("zz/dummy-path.txt")}))
+    assert _kinds(scan_entries([("zz/dummy-path.txt", b"")])) == ["forbidden path"]
+    assert scan_entries([(SENTINEL_PATH, b"")]) == []
+
+
+def test_the_moved_path_digest_file_is_sorted_unique_hex_and_not_vacuous():
+    text = guard.PATH_DIGESTS_FILE.read_text(encoding="ascii")
+    lines = text.splitlines()
+    assert text.endswith("\n")
+    assert all(re.fullmatch(r"[0-9a-f]{64}", line) for line in lines)
+    assert lines == sorted(set(lines)), "the file is not sorted and unique"
+    assert len(lines) > 500, f"only {len(lines)} digests: regenerated from a truncated list?"
+    assert _digest(SENTINEL_PATH) in lines
+    assert guard.FORBIDDEN_PATH_DIGESTS == frozenset(lines)
+
+
+def test_the_moved_path_digest_file_trips_no_content_check():
+    """It is hex and nothing else, so the machine and token checks find nothing in it."""
+    data = guard.PATH_DIGESTS_FILE.read_bytes()
+    assert scan_entries([("tools/research_guard_paths.txt", data)]) == []
+
+
+def test_a_digest_file_that_lacks_the_sentinel_is_refused(tmp_path):
+    """A truncated or empty file would silently switch the check off."""
+    for name, text in (("empty.txt", ""), ("other.txt", "a" * 64 + "\n")):
+        path = tmp_path / name
+        path.write_text(text, encoding="ascii")
+        with pytest.raises(ValueError, match="sentinel"):
+            guard._load_path_digests(path)
+    ok = tmp_path / "ok.txt"
+    ok.write_text(_digest(SENTINEL_PATH) + "\n", encoding="ascii")
+    assert guard._load_path_digests(ok) == frozenset({_digest(SENTINEL_PATH)})
+
+
+def test_a_malformed_digest_file_is_refused():
+    good = "a" * 64 + "\n" + "b" * 64 + "\n"
+    assert guard._parse_digests(good) == frozenset({"a" * 64, "b" * 64})
+    for bad in ("not a digest\n", "A" * 64 + "\n", "a" * 63 + "\n", "a" * 65 + "\n", good + "<<<<<<< HEAD\n"):
+        with pytest.raises(ValueError):
+            guard._parse_digests(bad)
 
 
 # ---------------------------------------------------------------------------
@@ -384,16 +471,42 @@ def test_guard_sources_are_exempt_from_machine_patterns():
 
 
 def test_guard_sources_are_exempt_from_token_scan():
-    """By construction they hold the plaintext sentinel and the digests."""
-    assert scan_entries([("tests/test_no_research_content.py", SENTINEL_TOKEN.encode())]) == []
+    """From the sentinel's digest only: by construction they hold its plaintext.
+    Every other token is still found in them (the next test)."""
+    for path in ("tools/research_guard.py", "tests/test_no_research_content.py"):
+        assert scan_entries([(path, SENTINEL_TOKEN.encode())]) == []
 
 
-def test_the_exemption_is_exactly_the_two_guard_files():
+def test_a_non_sentinel_token_is_found_in_a_guard_source(monkeypatch):
+    """A real name pasted into the guard or its tests must not hide there. Built
+    without a real token: the digest of a second dummy token joins the set."""
+    dummy = "second_dummy_token"
+    monkeypatch.setattr(guard, "TOKEN_DIGESTS", guard.TOKEN_DIGESTS | {_digest(dummy)})
+    text = f"{SENTINEL_TOKEN} and {dummy}".encode()
+    for path in SELF_EXEMPT:
+        found = scan_entries([(path, text)])
+        assert [(f.kind, f.detail) for f in found] == [("hashed token", _digest(dummy)[:12])]
+    # anywhere else the sentinel is reported as well
+    assert [f.detail for f in scan_entries([("docs/x.md", text)])] == sorted(
+        [_digest(SENTINEL_TOKEN)[:12], _digest(dummy)[:12]])
+
+
+def test_the_exempt_sets_are_pinned():
     assert SELF_EXEMPT == ("tools/research_guard.py", "tests/test_no_research_content.py")
+    assert MACHINE_PATH_EXEMPT == SELF_EXEMPT + ("tests/test_no_machine_specific_paths.py",)
 
 
-def test_the_exemption_covers_content_and_never_the_path(monkeypatch):
+def test_the_older_machine_path_test_is_exempt_from_machine_patterns_only():
+    """It holds machine-path regex literals but no plaintext sentinel."""
+    path = "tests/test_no_machine_specific_paths.py"
+    text = b'_P = Path("/Users/someone/x")  # /Volumes/y RESEARCH/z'
+    assert scan_entries([(path, text)]) == []
+    assert _kinds(scan_entries([(path, SENTINEL_TOKEN.encode())])) == ["hashed token"]
+
+
+def test_the_exemptions_never_cover_the_path(monkeypatch):
     monkeypatch.setattr(guard, "SELF_EXEMPT", ("reviews/x.md",))
+    monkeypatch.setattr(guard, "MACHINE_PATH_EXEMPT", ("reviews/x.md",))
     found = scan_entries([("reviews/x.md", f"/Volumes/A/ {SENTINEL_TOKEN}".encode())])
     assert _kinds(found) == ["forbidden path"]
 
@@ -433,15 +546,85 @@ def test_the_sdist_root_directory_is_stripped_and_directories_are_skipped(tmp_pa
         "pyproject.toml": b"C", "puremacro/__init__.py": b"D"}
 
 
-def test_a_link_member_of_an_sdist_still_has_its_path_checked(tmp_path):
-    sdist = tmp_path / "puremacro-5.0.0a1.tar.gz"
-    with tarfile.open(sdist, "w:gz") as tf:
-        info = tarfile.TarInfo("puremacro-5.0.0a1/reviews/link")
-        info.type = tarfile.SYMTYPE
-        info.linkname = "elsewhere"
+def _link_sdist(path: Path, name: str, kind: bytes, linkname: str) -> Path:
+    with tarfile.open(path, "w:gz") as tf:
+        info = tarfile.TarInfo(f"puremacro-5.0.0a1/{name}")
+        info.type = kind
+        info.linkname = linkname
         tf.addfile(info)
-    assert list(archive_entries(sdist)) == [("reviews/link", b"")]
+    return path
+
+
+def test_a_link_member_of_an_sdist_still_has_its_path_checked(tmp_path):
+    sdist = _link_sdist(tmp_path / "puremacro-5.0.0a1.tar.gz", "reviews/link", tarfile.SYMTYPE, "elsewhere")
+    assert list(archive_entries(sdist)) == [("reviews/link", b"elsewhere")]
     assert _kinds(scan_entries(archive_entries(sdist))) == ["forbidden path"]
+
+
+@pytest.mark.parametrize("kind", [tarfile.SYMTYPE, tarfile.LNKTYPE], ids=["symlink", "hard link"])
+def test_the_link_name_of_an_sdist_member_is_scanned_as_content(tmp_path, kind):
+    """A link is published as its target text, which can name a machine."""
+    sdist = _link_sdist(tmp_path / "puremacro-5.0.0a1.tar.gz", "docs/link", kind, "/Users/someone/data/")
+    assert list(archive_entries(sdist)) == [("docs/link", b"/Users/someone/data/")]
+    found = scan_entries(archive_entries(sdist))
+    assert [(f.path, f.kind) for f in found] == [("docs/link", "machine path: user home")]
+
+
+def test_a_zip_sdist_is_read_like_a_tar_sdist_and_a_wheel_is_not(tmp_path):
+    members = {"puremacro-5.0.0a1/reviews/a.md": b"", "puremacro-5.0.0a1/pyproject.toml": b"x"}
+    sdist = _wheel(tmp_path / "puremacro-5.0.0a1.zip", members, directories=("puremacro-5.0.0a1",))
+    assert dict(archive_entries(sdist)) == {"reviews/a.md": b"", "pyproject.toml": b"x"}
+    wheel = _wheel(tmp_path / "puremacro-5.0.0a1-py3-none-any.whl", members)
+    assert dict(archive_entries(wheel)) == members          # a wheel's names are the installed paths
+    shouting = _wheel(tmp_path / "PUREMACRO-5.0.0A1-PY3-NONE-ANY.WHL", members)
+    assert dict(archive_entries(shouting)) == members
+
+
+_SDIST_SUFFIXES = [".tar.gz", ".tgz", ".tar", ".zip"]
+
+
+def _make_sdist(tmp_path: Path, name: str, members: dict[str, bytes]) -> Path:
+    """A zip sdist if ``name`` ends in ``.zip``, else a tar sdist."""
+    path = tmp_path / name
+    return _wheel(path, members) if name.lower().endswith(".zip") else _sdist(path, members)
+
+
+@pytest.mark.parametrize("suffix", _SDIST_SUFFIXES + [s.upper() for s in _SDIST_SUFFIXES])
+def test_an_sdist_named_for_its_top_directory_is_read_whatever_its_suffix(tmp_path, suffix):
+    archive = _make_sdist(tmp_path, f"puremacro-5.0.0a1{suffix}", {"puremacro-5.0.0a1/reviews/a.md": b"x"})
+    assert dict(archive_entries(archive)) == {"reviews/a.md": b"x"}
+
+
+@pytest.mark.parametrize("suffix", _SDIST_SUFFIXES)
+def test_a_top_directory_that_is_not_the_archive_name_is_refused(tmp_path, suffix):
+    """Stripped as a wrapper, a lone record directory would take its prefix with it
+    and the path check would never see it; a renamed archive is as suspect. The
+    message names no member."""
+    cases = {
+        f"puremacro-5.0.0a1{suffix}": {"reviews/a.md": b""},                 # the only directory is a record one
+        f"renamed{suffix}": {"puremacro-5.0.0a1/reviews/a.md": b""},         # a proper root, but not this archive's
+    }
+    for name, members in cases.items():
+        with pytest.raises(ValueError, match="does not match the file name") as exc:
+            list(archive_entries(_make_sdist(tmp_path, name, members)))
+        assert "reviews" not in str(exc.value)
+
+
+@pytest.mark.parametrize("kind", ["tar", "zip"])
+@pytest.mark.parametrize("members, message", [
+    ({"first/x.py": b"", "second/y.py": b""}, "share one top-level directory"),
+    ({"puremacro-5.0.0a1/x.py": b"", "second/y.py": b""}, "share one top-level directory"),    # one root is the right one
+    ({"README": b"", "puremacro-5.0.0a1/x.py": b""}, "one of them a file"),
+    ({"puremacro-5.0.0a1": b"a file, not a directory"}, "one of them a file"),                  # named like the archive
+    ({"README": b""}, "one of them a file"),
+], ids=["two roots", "right root beside another", "file beside a root", "file named like the archive", "only a file"])
+def test_an_sdist_without_one_top_directory_is_refused(tmp_path, kind, members, message):
+    """Stripping the first component of every member is only right when they all share
+    it. The message gives counts, never member names."""
+    name = "puremacro-5.0.0a1.zip" if kind == "zip" else "puremacro-5.0.0a1.tar.gz"
+    with pytest.raises(ValueError, match=message) as exc:
+        list(archive_entries(_make_sdist(tmp_path, name, members)))
+    assert not any(word in str(exc.value) for word in ("first", "second", "README", "x.py", "y.py"))
 
 
 def test_something_that_is_neither_wheel_nor_sdist_is_rejected(tmp_path):
@@ -463,6 +646,63 @@ def test_git_entries_yields_tracked_files_with_their_working_tree_bytes(tmp_path
         ("a.txt", b"edited after staging"), ("sub/b.txt", b"x")]
 
 
+def test_git_entries_scans_the_whole_repository_from_a_subdirectory(tmp_path):
+    """``git ls-files`` run in a subdirectory lists only that directory, relative to
+    it, which would make every prefix check miss."""
+    repo = _scratch_repo(tmp_path / "r", {"a.txt": b"A", "sub/b.txt": b"B", "reviews/c.md": b""})
+    whole = [("a.txt", b"A"), ("reviews/c.md", b""), ("sub/b.txt", b"B")]
+    assert list(git_entries(repo)) == whole
+    assert list(git_entries(repo / "sub")) == whole
+    assert _kinds(scan_entries(git_entries(repo / "sub"))) == ["forbidden path"]
+
+
+def _symlink(link: Path, target: str) -> None:
+    """Create a symlink, or skip: Windows round-trips link text differently, and git
+    there checks symlinks out as plain files, which the regular-file path covers."""
+    if sys.platform == "win32":
+        pytest.skip("symlink text is not portable to Windows")
+    link.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.symlink(target, link)
+    except (OSError, NotImplementedError):
+        pytest.skip("this platform cannot create symlinks")
+
+
+def _repo_with_links(root: Path, links: dict[str, str]) -> Path:
+    repo = _scratch_repo(root, {"keep.txt": b"k"})
+    _git(repo, "config", "core.symlinks", "true")
+    for name, target in links.items():
+        _symlink(repo / name, target)
+    _git(repo, "add", "--", *links)
+    return repo
+
+
+def test_a_tracked_symlink_yields_its_link_text_not_its_target(tmp_path):
+    outside = tmp_path / "outside.txt"
+    outside.write_bytes(b"TARGET BYTES " + SENTINEL_TOKEN.encode())
+    repo = _repo_with_links(tmp_path / "r", {"link": str(outside)})
+    entries = dict(git_entries(repo))
+    assert entries["link"] == os.fsencode(os.readlink(repo / "link"))
+    assert b"TARGET BYTES" not in entries["link"]
+    assert scan_entries(git_entries(repo)) == []          # the target's sentinel is not this tree's
+
+
+def test_a_dangling_tracked_symlink_still_has_its_path_and_text_checked(tmp_path):
+    repo = _repo_with_links(tmp_path / "r", {"reviews/link": "nowhere", "docs/link": "/Volumes/DATA/x"})
+    assert dict(git_entries(repo))["reviews/link"] == b"nowhere"
+    found = scan_entries(git_entries(repo))
+    assert [(f.path, f.kind) for f in found] == [
+        ("docs/link", "machine path: volume path"), ("reviews/link", "forbidden path")]
+
+
+def test_a_symlink_to_a_directory_yields_its_link_text(tmp_path):
+    repo = _scratch_repo(tmp_path / "r", {"sub/b.txt": b"B"})
+    _git(repo, "config", "core.symlinks", "true")
+    _symlink(repo / "alias", "sub")
+    _git(repo, "add", "--", "alias")
+    assert dict(git_entries(repo))["alias"] == b"sub"
+
+
 def test_git_entries_skips_a_tracked_path_missing_from_the_working_tree(tmp_path):
     repo = _scratch_repo(tmp_path / "r", {"keep.txt": b"k", "gone.txt": b"g"})
     (repo / "gone.txt").unlink()
@@ -470,9 +710,9 @@ def test_git_entries_skips_a_tracked_path_missing_from_the_working_tree(tmp_path
 
 
 def test_git_entries_raises_outside_a_repository(tmp_path, monkeypatch):
-    """A failed ``git ls-files`` must not look like an empty, clean tree."""
+    """A failed ``git`` call must not look like an empty, clean tree."""
     monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path.parent))   # never find a parent repo
-    with pytest.raises(OSError, match="ls-files"):
+    with pytest.raises(OSError, match="git rev-parse failed"):
         list(git_entries(tmp_path))
 
 
@@ -621,62 +861,99 @@ def _assigned_names(target: ast.expr) -> Iterator[str]:
         yield from _assigned_names(target.value)
 
 
-def _provided_names(tree: ast.Module, package: list[str]) -> frozenset[str] | None:
-    """The names ``from <package> import name`` can get from the package's
-    ``__init__``, or ``None`` when it can serve any name (a star import).
+def _module_level(body: list[ast.stmt]) -> Iterator[ast.AST]:
+    """The statements that run when a module is imported, in source order: the body
+    itself and the bodies of ``if``, ``try``, ``with``, ``for``, ``while`` and
+    ``match`` inside it, but not the inside of a function or a class."""
+    for node in body:
+        yield node
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.stmt, ast.excepthandler, ast.match_case)):
+                yield from _module_level([child])
 
-    Counted: bindings at module level, which includes the bodies of ``if``,
-    ``try``, ``with``, ``for`` and ``while`` (they run at import time) but not
-    function or class bodies; the strings of a literal ``__all__``; and, when the
-    file defines a module-level ``__getattr__``, every string literal in it, since
-    a lazy package lists what it serves. An import of the package from inside its
-    own ``__init__`` is not evidence: ``from . import x`` binds ``x`` only if ``x``
-    exists, and a leftover re-export of a removed submodule would vouch for itself.
+
+@dataclasses.dataclass(frozen=True)
+class _InitNames:
+    """What a package's ``__init__.py`` offers to ``from package import name``."""
+
+    bound: frozenset[str]       # bound at module level; an import of the package from itself is not
+    declared: tuple[str, ...]   # the entries of a literal ``__all__``, in order
+    strings: frozenset[str]     # every string literal in the file; empty unless it is lazy
+    lazy: bool                  # defines a module-level ``__getattr__``
+    open_ended: bool            # star-imports something, so it may serve any name
+
+    def provides(self, name: str) -> bool:
+        """Whether the file offers ``name``. An ``__all__`` entry is a claim, not
+        evidence: a stale one would vouch for a removed re-export. A lazy package
+        serves what its file lists, so any string in it counts there, and the
+        runtime test at the end of this file is the backstop for that."""
+        return self.open_ended or name in self.bound or name in self.strings
+
+
+def _analyse_init(tree: ast.Module, package: list[str]) -> _InitNames:
+    """What the ``__init__.py`` of ``package`` (parsed into ``tree``) offers.
+
+    A binding is an assignment target, a ``def`` or ``class``, or an ``import``,
+    all at module level. An import of the package from inside its own ``__init__``
+    is not evidence: ``from . import x`` binds ``x`` only if ``x`` exists, and a
+    leftover re-export of a removed submodule would vouch for itself.
     """
     this = ".".join(package)
-    names: set[str] = set()
-    lazy = False
-    stack: list[ast.AST] = list(tree.body)
-    while stack:
-        node = stack.pop()
+    bound: set[str] = set()
+    declared: list[str] = []
+    lazy = open_ended = False
+    for node in _module_level(tree.body):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            names.add(node.name)
+            bound.add(node.name)
             lazy = lazy or node.name == "__getattr__"
-            continue                                    # its body is not module level
-        if isinstance(node, ast.Import):
-            names.update(a.asname or a.name.split(".")[0] for a in node.names)
+        elif isinstance(node, ast.Import):
+            bound.update(a.asname or a.name.split(".")[0] for a in node.names)
         elif isinstance(node, ast.ImportFrom):
             origin = node.module if node.level == 0 else _relative_base(package, node.level, node.module)
             if origin != this:
                 for alias in node.names:
                     if alias.name == "*":
-                        return None
-                    names.add(alias.asname or alias.name)
+                        open_ended = True
+                    else:
+                        bound.add(alias.asname or alias.name)
         elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
             for target in targets:
                 if isinstance(target, ast.Name) and target.id == "__all__" and node.value is not None:
-                    names.update(_literal_strings(node.value))
+                    declared.extend(_literal_strings(node.value))
                 if node.value is not None and not isinstance(node, ast.AugAssign):
-                    names.update(_assigned_names(target))
-        stack.extend(child for child in ast.iter_child_nodes(node)
-                     if isinstance(child, (ast.stmt, ast.excepthandler, ast.match_case)))
-    if lazy:
-        names.update(c.value for c in ast.walk(tree)
-                     if isinstance(c, ast.Constant) and isinstance(c.value, str))
-    return frozenset(names)
+                    bound.update(_assigned_names(target))
+    strings = frozenset(c.value for c in ast.walk(tree)
+                        if isinstance(c, ast.Constant) and isinstance(c.value, str)) if lazy else frozenset()
+    return _InitNames(frozenset(bound), tuple(declared), strings, lazy, open_ended)
 
 
 @functools.lru_cache(maxsize=None)
-def _init_names(root: Path, init: str) -> frozenset[str] | None:
-    """``_provided_names`` for the ``__init__`` at ``init`` under ``root``. ``None``
+def _init_names(root: Path, init: str) -> _InitNames | None:
+    """``_analyse_init`` for the ``__init__`` at ``init`` under ``root``. ``None``
     when the file cannot be read or parsed: that says nothing about a name (a
     missing file is skipped, a broken one is reported where it is scanned)."""
     try:
         tree = ast.parse((root / init).read_bytes())
     except (OSError, SyntaxError):
         return None
-    return _provided_names(tree, init[: -len("/__init__.py")].split("/"))
+    return _analyse_init(tree, init[: -len("/__init__.py")].split("/"))
+
+
+def _stale_all_entries(init: str, tree: ast.Module, tracked: frozenset[str]) -> list[str]:
+    """The entries of the literal ``__all__`` in the package ``__init__`` at ``init``
+    that nothing provides: not bound at module level, and not a tracked submodule.
+    A lazy package serves names at runtime (judged by the runtime test) and a star
+    import may serve any, so neither is judged here."""
+    package = init[: -len("/__init__.py")].split("/")
+    names = _analyse_init(tree, package)
+    if names.lazy or names.open_ended:
+        return []
+    dotted = ".".join(package)
+    return [entry for entry in names.declared
+            if entry not in names.bound and not _is_module(f"{dotted}.{entry}", tracked)]
 
 
 def _unresolved_names(base: str, names: list[str], tracked: frozenset[str],
@@ -699,7 +976,7 @@ def _unresolved_names(base: str, names: list[str], tracked: frozenset[str],
         if name == "*" or name in submodules:
             continue
         provided = _init_names(root, init)
-        if provided is not None and name not in provided:
+        if provided is not None and not provided.provides(name):
             missing.append(name)
     return missing
 
@@ -862,11 +1139,6 @@ def test_a_removed_submodule_fails_and_a_name_the_package_binds_passes(tmp_path)
     "from os import wanted",
     "from os import path as wanted",
     "from .impl import wanted",                         # a re-export from a submodule
-    "__all__ = ['wanted']",
-    "__all__ = ('wanted',)",
-    "__all__ = ['other'] + ['wanted']",
-    "__all__ = []\n__all__ += ['wanted']",
-    "__all__: list = ['wanted']",
     "try:\n    from os import path as wanted\nexcept ImportError:\n    wanted = None",
     "try:\n    import os\nexcept ImportError:\n    wanted = None",     # bound only in a handler
     "if True:\n    def wanted(): ...",
@@ -887,6 +1159,11 @@ def test_every_kind_of_module_level_binding_counts(tmp_path, init):
     "wanted += 1",                               # an augmented assignment needs an earlier binding
     "other = ['wanted']",                        # a list that is not __all__
     "__all__ = sorted(['wanted'])",              # an __all__ that is not a literal
+    "__all__ = ['wanted']",                      # an __all__ entry is a claim, not evidence: a stale
+    "__all__ = ('wanted',)",                     # one would vouch for a removed re-export
+    "__all__ = ['other'] + ['wanted']",
+    "__all__ = []\n__all__ += ['wanted']",
+    "__all__: list = ['wanted']",
     "_TABLE = {'wanted': 'impl'}",               # a lazy table without a module __getattr__
     "def other(): ...\n_TABLE = {'wanted': 'impl'}",                        # only __getattr__ makes it lazy
     "class C:\n    def __getattr__(self, name): ...\n_TABLE = {'wanted': 'impl'}",   # not a module __getattr__
@@ -949,6 +1226,237 @@ def test_a_directory_without_an_init_offers_only_its_submodules(tmp_path):
     assert check("from puremacro.ns import two") == ["tools/t.py:1: from puremacro.ns import ..."]
 
 
+def test_a_literal_all_entry_of_a_lazy_package_resolves(tmp_path):
+    """A lazy package serves what its file lists; the runtime test below is the backstop."""
+    init = "__all__ = ['served']\n\n\ndef __getattr__(name):\n    raise AttributeError(name)\n"
+    assert _problems_for(tmp_path, init, "from puremacro.pkg import served") == []
+
+
+def test_a_stale_all_entry_does_not_vouch_for_a_removed_re_export(tmp_path):
+    """The shape of a package that re-exported from a module that was then removed:
+    the import is gone, the ``__all__`` string is not."""
+    init = "from puremacro.models.kept import Kept\n\n__all__ = ['Kept', 'Gone']\n"
+    tracked = _write_tree(tmp_path, {"puremacro/__init__.py": "", "puremacro/models/__init__.py": init,
+                                     "puremacro/models/kept.py": ""})
+
+    def check(name):
+        source = f"from puremacro.models import {name}".encode()
+        return _check_imports("tools/t.py", source, tracked, tmp_path)[0]
+
+    assert check("Kept") == []
+    assert check("Gone") == ["tools/t.py:1: from puremacro.models import Gone"]
+    assert _stale_all_entries("puremacro/models/__init__.py", ast.parse(init), tracked) == ["Gone"]
+
+
+@pytest.mark.parametrize("init, expected", [
+    ("x = 1\n__all__ = ['x']", []),
+    ("__all__ = ['gone']", ["gone"]),
+    ("from .impl import thing\n__all__ = ['thing']", []),
+    ("def f(): ...\nclass C: ...\n__all__ = ['f', 'C', 'gone']", ["gone"]),
+    ("from . import sub\n__all__ = ['sub']", []),               # sub is a tracked submodule
+    ("from . import ghost\n__all__ = ['ghost']", ["ghost"]),    # a self-import binds nothing
+    ("__all__ = []\n__all__ += ['gone']", ["gone"]),
+    ("__all__ = ['a'] + ['gone']\na = 1", ["gone"]),
+    ("__all__ = ['gone_1', 'gone_2']", ["gone_1", "gone_2"]),    # in the order listed
+    ("__all__ = sorted(['gone'])", []),                          # not a literal: nothing to judge
+    ("from .impl import *\n__all__ = ['anything']", []),        # a star import may serve any name
+    ("__all__ = ['served']\n\ndef __getattr__(name): ...", []),  # lazy: judged at runtime instead
+    ("", []),
+])
+def test_a_literal_all_entry_must_be_bound_or_a_submodule(init, expected):
+    tracked = frozenset({"puremacro/pkg/__init__.py", "puremacro/pkg/sub.py", "puremacro/pkg/impl.py"})
+    assert _stale_all_entries("puremacro/pkg/__init__.py", ast.parse(init), tracked) == expected
+
+
+def test_package_all_entries_are_bound():
+    """Every literal ``__all__`` entry of a puremacro package is a real attribute:
+    bound at module level (a package's import of itself does not count) or a tracked
+    submodule. A stale entry is what would otherwise let ``from package import
+    removed`` look fine."""
+    tracked = _tracked_paths(REPO)
+    inits = sorted(p for p in tracked if p.startswith("puremacro/") and p.endswith("/__init__.py"))
+    stale: list[str] = []
+    entries = 0
+    for init in inits:
+        try:
+            tree = ast.parse((REPO / init).read_bytes())
+        except (OSError, SyntaxError):
+            continue                    # deleted mid-edit, or reported where it is scanned
+        package = init[: -len("/__init__.py")].split("/")
+        names = _analyse_init(tree, package)
+        if not (names.lazy or names.open_ended):
+            entries += len(names.declared)
+        stale += [f"{init}: __all__ lists {entry!r}, which nothing binds"
+                  for entry in _stale_all_entries(init, tree, tracked)]
+    assert len(inits) > 30 and entries > 500, (
+        f"the scan is vacuous: {len(inits)} packages, {entries} __all__ entries judged")
+    assert not stale, f"{len(stale)} stale __all__ entr(ies):\n  " + "\n  ".join(stale)
+
+
+# ---------------------------------------------------------------------------
+# lazy packages: the runtime backstop
+# ---------------------------------------------------------------------------
+#
+# The resolver above trusts every string a lazy package (one that defines a
+# module ``__getattr__``) lists. That is only as good as the list, so each such
+# package is imported and every name in its runtime ``__all__`` is read for real.
+# A module missing for an optional third-party dependency is tolerated and
+# reported in the skip reason; a missing ``puremacro`` module, or an
+# ``AttributeError``, is a stale entry and fails.
+
+def _is_optional_dependency(exc: ImportError) -> bool:
+    """Whether the import failed on a module outside puremacro: an optional
+    third-party dependency that is not installed."""
+    missing = exc.name or ""
+    return bool(missing) and missing != "puremacro" and not missing.startswith("puremacro.")
+
+
+def _lazy_all_problems(module) -> tuple[list[str], list[str]]:
+    """``(failures, tolerated)`` from reading every name in the module's runtime
+    ``__all__``. It is the runtime value that counts: some packages compute it, so
+    it is not in the source to be read."""
+    failures: list[str] = []
+    tolerated: list[str] = []
+    for name in getattr(module, "__all__", ()):
+        try:
+            getattr(module, name)
+        except ImportError as exc:
+            if _is_optional_dependency(exc):
+                tolerated.append(f"{name} (needs {exc.name})")
+            else:
+                failures.append(f"{name}: {type(exc).__name__}: {exc}")
+        except Exception as exc:        # an AttributeError, or anything else a lazy import raises
+            failures.append(f"{name}: {type(exc).__name__}: {exc}")
+    return failures, tolerated
+
+
+def _lazy_packages(repo: Path) -> list[str]:
+    """The dotted names of the packages under ``repo/puremacro`` whose ``__init__``
+    defines a module-level ``__getattr__``."""
+    found = []
+    for init in sorted((repo / "puremacro").rglob("__init__.py")):
+        try:
+            tree = ast.parse(init.read_bytes())
+        except (OSError, SyntaxError):
+            continue
+        package = init.relative_to(repo).parent.parts
+        if _analyse_init(tree, list(package)).lazy:
+            found.append(".".join(package))
+    return found
+
+
+_LAZY_PACKAGES = _lazy_packages(REPO)
+
+
+@pytest.mark.parametrize("exc, tolerated", [
+    (ModuleNotFoundError("No module named 'bs4'", name="bs4"), True),
+    (ImportError("cannot import name 'x' from 'bs4'", name="bs4"), True),
+    (ModuleNotFoundError("No module named 'puremacrofoo'", name="puremacrofoo"), True),   # another top-level module
+    (ModuleNotFoundError("No module named 'puremacro.gone'", name="puremacro.gone"), False),
+    (ImportError("cannot import name 'x' from 'puremacro.a'", name="puremacro.a"), False),
+    (ImportError("cannot import name 'x' from 'puremacro'", name="puremacro"), False),
+    (ImportError("no module recorded"), False),
+])
+def test_only_a_missing_third_party_module_is_tolerated(exc, tolerated):
+    assert _is_optional_dependency(exc) is tolerated
+
+
+_LAZY_BODY = """\
+__all__ = ["served", "stale", "needs_optional", "needs_ours", "broken"]
+
+
+def __getattr__(name):
+    if name == "served":
+        return 1
+    if name == "needs_optional":
+        raise ModuleNotFoundError("No module named 'some_optional_dependency'", name="some_optional_dependency")
+    if name == "needs_ours":
+        raise ModuleNotFoundError("No module named 'puremacro.gone'", name="puremacro.gone")
+    if name == "broken":
+        raise RuntimeError("import-time failure")
+    raise AttributeError(name)
+"""
+
+
+@pytest.fixture
+def make_package(tmp_path, monkeypatch):
+    """Write and import a throwaway package, and forget it afterwards."""
+    made: list[str] = []
+
+    def make(name: str, init: str):
+        folder = tmp_path / name
+        folder.mkdir()
+        (folder / "__init__.py").write_text(init, encoding="utf-8")
+        monkeypatch.syspath_prepend(str(tmp_path))
+        made.append(name)
+        return importlib.import_module(name)
+
+    yield make
+    for name in made:
+        sys.modules.pop(name, None)
+
+
+def test_the_runtime_backstop_fails_stale_entries_and_tolerates_optional_dependencies(make_package):
+    failures, tolerated = _lazy_all_problems(make_package("lazy_fixture_a", _LAZY_BODY))
+    assert sorted(f.split(":")[0] for f in failures) == ["broken", "needs_ours", "stale"]
+    assert tolerated == ["needs_optional (needs some_optional_dependency)"]
+
+
+def test_the_runtime_backstop_passes_a_package_that_serves_every_name(make_package):
+    module = make_package("lazy_fixture_b", '__all__ = ["a", "b"]\n\n\ndef __getattr__(name):\n    return name\n')
+    assert _lazy_all_problems(module) == ([], [])
+
+
+def test_the_runtime_backstop_reads_the_runtime_all_not_the_literal(make_package):
+    """The narrative sources compute ``__all__``; only the runtime value shows it."""
+    module = make_package(
+        "lazy_fixture_c",
+        "_NAMES = {'x': 1}\n__all__ = sorted(_NAMES)\n\n\ndef __getattr__(name):\n    raise AttributeError(name)\n")
+    failures, _ = _lazy_all_problems(module)
+    assert [f.split(":")[0] for f in failures] == ["x"]
+
+
+def test_lazy_package_discovery_finds_a_module_getattr_and_nothing_else(tmp_path):
+    _write_tree(tmp_path, {
+        "puremacro/__init__.py": "",
+        "puremacro/lazy/__init__.py": "def __getattr__(name): ...\n",
+        "puremacro/eager/__init__.py": "x = 1\n",
+        "puremacro/eager/sub/__init__.py": "class C:\n    def __getattr__(self, name): ...\n",
+        "puremacro/broken/__init__.py": "def (:\n",
+    })
+    assert _lazy_packages(tmp_path) == ["puremacro.lazy"]
+
+
+def test_the_lazy_package_discovery_agrees_with_a_plain_text_search():
+    """An independent control: were the analysis to find nothing by mistake, the
+    backstop would run on nothing and pass."""
+    inits = sorted((REPO / "puremacro").rglob("__init__.py"))
+    assert len(inits) > 30
+    expected = [".".join(i.relative_to(REPO).parent.parts) for i in inits
+                if re.search(r"^def __getattr__\(", i.read_text(encoding="utf-8"), re.M)]
+    assert _LAZY_PACKAGES == expected
+
+
+@pytest.mark.parametrize("package", _LAZY_PACKAGES)
+def test_lazy_package_all_names_resolve_at_runtime(package, monkeypatch):
+    """The backstop for the resolver's trust in a lazy package: import it and read
+    every name in its runtime ``__all__``. A name the package cannot serve fails,
+    and a module missing only for an optional dependency is reported as a skip."""
+    monkeypatch.setenv("MPLBACKEND", "Agg")
+    try:
+        module = importlib.import_module(package)
+    except ImportError as exc:
+        if not _is_optional_dependency(exc):
+            raise
+        pytest.skip(f"{package} needs {exc.name}, which is not installed")
+    assert Path(module.__file__).resolve().is_relative_to(REPO), (
+        f"{package} was imported from {module.__file__}, not from this checkout")
+    failures, tolerated = _lazy_all_problems(module)
+    assert not failures, (f"{package} lists names it cannot serve:\n  " + "\n  ".join(failures))
+    if tolerated:
+        pytest.skip("optional dependencies are missing for: " + ", ".join(tolerated))
+
+
 def test_every_internal_import_resolves():
     tracked = _tracked_paths(REPO)
     sources = sorted(p for p in tracked
@@ -969,7 +1477,7 @@ def test_every_internal_import_resolves():
         f"the scan is vacuous: {scanned} files, {checked} imports checked")
     # positive control for the name rule: the real package __init__ was read
     provided = _init_names(REPO, "puremacro/__init__.py")
-    assert provided is not None and "__version__" in provided, "package __init__ files were not read"
+    assert provided is not None and "__version__" in provided.bound, "package __init__ files were not read"
     assert not problems, (
         f"{len(problems)} import(s) name a module or a name that is not there:\n  "
         + "\n  ".join(problems))
