@@ -399,3 +399,122 @@ def test_cache_row_is_frozen_and_positional_order_is_fixed():
     assert CacheRow("k", "m", "sha", 8, 0.0, False, "text").engine is None
     with pytest.raises(AttributeError):
         r.completion = "changed"
+
+
+# ---------------------------------------------------------------------------
+# One file, several owners. A cache file is an ordinary SQLite file, so it can hold
+# tables this module does not own (the narrative score cache, for one, keeps an
+# `llm_scores` table in a file of the same kind). The cache must leave them alone,
+# ship only its own rows, and degrade (not raise) when the file is read-only or
+# locked by another connection.
+# ---------------------------------------------------------------------------
+
+def _tables(path):
+    return sorted(r[0] for r in _sql(path, "SELECT name FROM sqlite_master WHERE type = 'table'"))
+
+
+def _add_foreign_table(path, rows=2):
+    """Another owner's table, as the narrative score cache would leave it in the file."""
+    _sql(path, "CREATE TABLE IF NOT EXISTS llm_scores "
+               "(key TEXT PRIMARY KEY, provider TEXT, model TEXT, score REAL)")
+    for i in range(rows):
+        _sql(path, "INSERT OR REPLACE INTO llm_scores VALUES (?, 'local', 'qwen3-4b', ?)",
+             (f"s{i}", i / 10))
+    return path
+
+
+def test_tables_other_code_keeps_in_the_file_are_left_alone(tmp_path):
+    shared = _add_foreign_table(tmp_path / "shared.sqlite")
+    scores = lambda p: _sql(p, "SELECT * FROM llm_scores ORDER BY key")     # noqa: E731
+    kept = scores(shared)
+    c = CompletionCache(shared)                    # `completions` is created beside `llm_scores`
+    assert c.writable is True and _tables(shared) == ["completions", "llm_scores"]
+    c.set(_row(_k("p"), text="t"))
+    assert c.get(_k("p")) == "t"
+    s = c.stats()
+    assert s["rows"] == 1 and s["by_model"] == {"qwen3-4b": 1}   # the other table's rows are not ours
+    assert s["bytes"] == shared.stat().st_size                   # but the file is one file
+    assert c.export(tmp_path / "ship.sqlite") == 1               # export ships the completions alone
+    assert _tables(tmp_path / "ship.sqlite") == ["completions"]
+    other = _add_foreign_table(tmp_path / "other.sqlite", rows=3)
+    CompletionCache(other).set(_row(_k("q"), text="u"))
+    assert c.merge(other) == 1 and c.stats()["rows"] == 2        # merge takes completions, not the rest
+    assert scores(shared) == kept                                # the other table is exactly as it was
+    assert len(scores(other)) == 3                               # and so is the source's
+
+
+def test_a_table_added_to_the_file_later_does_not_disturb_the_cache(tmp_path):
+    c = CompletionCache(tmp_path / "c.sqlite")
+    c.set(_row(_k("p"), text="kept"))
+    _add_foreign_table(c.path)                     # the other owner arrives second
+    assert c.get(_k("p")) == "kept" and c.stats()["rows"] == 1
+    c.set(_row(_k("q"), text="more"))
+    assert c.stats()["rows"] == 2 and _tables(c.path) == ["completions", "llm_scores"]
+
+
+def test_a_read_only_cache_file_serves_hits_and_never_raises(tmp_path, recwarn):
+    """A cache shipped as a read-only *file* in a writable directory, with another owner's
+    table in it: hits are served, a new completion is skipped with one warning."""
+    shipped = tmp_path / "shipped.sqlite"
+    CompletionCache(shipped).set(_row(_k("hola"), text="¡Hola!"))
+    _add_foreign_table(shipped)
+    os.chmod(shipped, stat.S_IRUSR)
+    try:
+        if os.access(shipped, os.W_OK):
+            pytest.skip("file permissions do not restrict this account")
+        c = CompletionCache(shipped)
+        assert c.get(_k("hola")) == "¡Hola!" and c.stats()["rows"] == 1
+        c.set(_row(_k("nuevo")))                   # attempt to write a readonly database: no raise
+        assert c.writable is False and c.get(_k("nuevo")) is None
+        assert c.get(_k("hola")) == "¡Hola!"
+        assert _n_cache_warnings(recwarn) == 1
+    finally:
+        os.chmod(shipped, stat.S_IRUSR | stat.S_IWUSR)
+
+
+def test_a_read_only_file_with_only_another_owners_table_degrades(tmp_path, recwarn):
+    scores_only = _add_foreign_table(tmp_path / "scores.sqlite")
+    os.chmod(scores_only, stat.S_IRUSR)
+    try:
+        if os.access(scores_only, os.W_OK):
+            pytest.skip("file permissions do not restrict this account")
+        c = CompletionCache(scores_only)           # `completions` cannot be created
+        assert c.writable is False
+        assert c.get(_k("p")) is None and c.stats()["rows"] == 0
+        c.set(_row(_k("p")))                       # no raise
+        assert _n_cache_warnings(recwarn) == 1
+        assert len(_sql(scores_only, "SELECT * FROM llm_scores")) == 2     # the other table is intact
+    finally:
+        os.chmod(scores_only, stat.S_IRUSR | stat.S_IWUSR)
+
+
+class _ShortTimeout:
+    """`sqlite3` that waits 50 ms for a lock instead of the default five seconds."""
+
+    def __getattr__(self, name):
+        if name != "connect":
+            return getattr(sqlite3, name)
+        return lambda *args, **kwargs: sqlite3.connect(*args, **{**kwargs, "timeout": 0.05})
+
+
+def test_a_write_blocked_by_another_connection_is_skipped_not_raised(tmp_path, monkeypatch, recwarn):
+    """Another owner of the file keeps a write transaction open, as a caller does when it stores
+    a completion in the middle of its own transaction on the shared file: the blocked write is
+    skipped like any other failed write, and readers are not blocked."""
+    import puremacro.llm.cache as cache_module
+
+    c = CompletionCache(tmp_path / "c.sqlite")
+    c.set(_row(_k("before"), text="kept"))
+    monkeypatch.setattr(cache_module, "sqlite3", _ShortTimeout())
+    holder = sqlite3.connect(c.path)
+    try:
+        holder.execute("BEGIN IMMEDIATE")          # takes the write lock and keeps it
+        c.set(_row(_k("blocked")))                 # waits 50 ms, then is skipped: no raise
+        assert c.get(_k("before")) == "kept" and c.get(_k("blocked")) is None
+        assert _n_cache_warnings(recwarn) == 1
+    finally:
+        holder.rollback()
+        holder.close()
+    fresh = CompletionCache(c.path)                # once the lock is gone a new object writes again
+    fresh.set(_row(_k("after"), text="back"))
+    assert fresh.get(_k("after")) == "back" and fresh.get(_k("before")) == "kept"

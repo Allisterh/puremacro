@@ -7,6 +7,13 @@ a course and read by a tablet that cannot run the model.
 
 * **Location.** ``~/.cache/puremacro/llm_cache.sqlite``, or the file named by the
   environment variable ``PUREMACRO_LLM_CACHE``.
+* **Other tables are not ours.** The file is an ordinary SQLite file and may hold
+  tables that belong to other code. This module reads and writes ``completions``
+  (and its index) and nothing else: it creates its table beside whatever is
+  there, never alters or drops another table, and :meth:`CompletionCache.export`
+  and :meth:`CompletionCache.merge` copy ``completions`` rows only, so exporting
+  a shared file ships the completions alone. ``stats()["bytes"]`` is the size of
+  the whole file.
 * **Key (format ``v1``).** The model is the *canonical alias* (``qwen3-4b``),
   never an engine-specific id, and the prompt is hashed as the caller wrote it,
   *before* any chat template, so the engine that produced a row does not matter.
@@ -21,7 +28,10 @@ a course and read by a tablet that cannot run the model.
   and :meth:`CompletionCache.merge` are explicit actions, so they raise instead.
 * **No shared state.** Every method opens its own connection and closes it
   before returning; nothing is kept at module level except the record of which
-  files were already reported as unusable.
+  files were already reported as unusable. A write that finds the file locked by
+  another connection waits (five seconds, the default of :func:`sqlite3.connect`)
+  and is then skipped like any other failed write, so code that shares the file
+  must not keep a write transaction open on it while a completion is being made.
 """
 from __future__ import annotations
 
@@ -375,7 +385,8 @@ class CompletionCache:
         -------
         dict
             ``rows`` (int), ``by_model`` (canonical alias -> row count, sorted by
-            alias), ``bytes`` (size of the file, 0 if absent) and ``path`` (str).
+            alias; ``completions`` only), ``bytes`` (size of the whole file,
+            whatever else it holds; 0 if absent) and ``path`` (str).
         """
         by_model: dict[str, int] = {}
         try:
