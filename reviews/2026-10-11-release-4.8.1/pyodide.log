@@ -1,0 +1,48 @@
+[package] Loading atomicwrites, attrs, exceptiongroup, iniconfig, micropip, more-itertools, pluggy, py, pyparsing, pytest, setuptools, six
+[package] Loaded atomicwrites, attrs, exceptiongroup, iniconfig, micropip, more-itertools, pluggy, py, pyparsing, pytest, setuptools, six
+[pyodide] six already loaded from default channel
+[pyodide] pyparsing already loaded from default channel
+[pyodide] Loading Pillow, certifi, charset-normalizer, contourpy, cycler, fonttools, idna, kiwisolver, libopenblas, matplotlib, numpy, packaging, pandas, python-dateutil, pytz, requests, scipy, urllib3
+[pyodide] Loaded Pillow, certifi, charset-normalizer, contourpy, cycler, fonttools, idna, kiwisolver, libopenblas, matplotlib, numpy, packaging, pandas, python-dateutil, pytz, requests, scipy, urllib3
+{
+  "schema_version": 1,
+  "checked_at": "2026-10-11T16:29:43.984Z",
+  "wheel_path": "/tmp/puremacro-release-4.8.1-source/dist/puremacro-4.8.1-py3-none-any.whl",
+  "wheel_sha256": "571912e3e2f4df430533f0187a7b68fa641e3375d99388f20f6624138226f6f6",
+  "source_tree": "/tmp/puremacro-release-4.8.1-source",
+  "test_file_sha256": "d80318e90aa5ebbf87bd9ad14adc5c8d5d2a38d7efb9a6cf91f747192730f6b5",
+  "scope": "Installed wheel; provenance tests and complete cross-country forecasting application in Node Pyodide",
+  "pyodide_version": "0.28.3",
+  "python_version": "3.13.2",
+  "platform": "emscripten",
+  "package_version": "4.8.1",
+  "package_file": "/lib/python3.13/site-packages/puremacro/__init__.py",
+  "numpy_version": "2.2.5",
+  "pandas_version": "2.3.1",
+  "pypi_dependencies": [],
+  "timezone_database": "pytz distribution's bundled zoneinfo",
+  "pytest_returncode": 0,
+  "pytest_passed": 93,
+  "pytest_output": "........................................................................ [ 77%]\n.....................                                                    [100%]\n93 passed in 0.40s\n",
+  "full_application_completed": true,
+  "cartridge_verified": true,
+  "provenance_preserved": true,
+  "artifact_hashes_verified": true,
+  "plot_bytes": 48578,
+  "forecast_rows": 225,
+  "accuracy_rows": 9,
+  "accuracy_atol": 1e-10,
+  "accuracy_rtol": 1e-10,
+  "accuracy_max_absolute_difference": 4.440892098500626e-16,
+  "reference_version": "4.8.1",
+  "reference_source_hashes_match": true,
+  "source_sha256": {
+    "examples/cross_country_forecasting.py": "4d765e719648b852a314d622341444d1d8066301b96c3ef6e8dc0ac62ffd1750",
+    "var/estimate.py": "ecafb6102b1b0b1ec6de835a3ce9380bcae8767c1029e299767d9d2f2ac2db7a",
+    "runtime/store.py": "7d9c5799f7a664dc09d2581e612c2ea82d14b382913dd050a25a90a586cff670",
+    "pocket/_cartridge.py": "f64a9ca91c143b4baceada5436689af7297b8d0cc0a0a67fee3fa09810f54c33"
+  },
+  "input_csv_sha256": "dd05c0de2a423a916bc8912d9a154b1f7042eada3ad45b50e60747bd8a16c8a4",
+  "passed": true,
+  "runtime_seconds": 7.403
+}

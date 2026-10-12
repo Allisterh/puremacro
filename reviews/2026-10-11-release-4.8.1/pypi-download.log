@@ -1,0 +1,9 @@
+Collecting puremacro==4.8.1
+  Downloading puremacro-4.8.1-py3-none-any.whl.metadata (73 kB)
+Downloading puremacro-4.8.1-py3-none-any.whl (21.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 21.2/21.2 MB 9.9 MB/s eta 0:00:00
+Saved ./downloads/puremacro-4.8.1-py3-none-any.whl
+Successfully downloaded puremacro
+
+[notice] A new release of pip is available: 25.0.1 -> 26.2.1
+[notice] To update, run: /tmp/puremacro-pypi-4.8.1-venv/bin/python -m pip install --upgrade pip
