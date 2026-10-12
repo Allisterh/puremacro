@@ -1,5 +1,5 @@
 """Shared toy datasets for puremacro tests."""
-import os
+import uuid
 
 import numpy as np
 import pandas as pd
@@ -7,23 +7,38 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def _isolated_llm_cache(monkeypatch, tmp_path):
+def _isolated_llm_cache(monkeypatch, tmp_path_factory):
     """Keep every test off the user's real LLM caches and mode.
 
     There are two caches in two files. ``puremacro.llm`` reads and writes the
     completion cache ``$PUREMACRO_LLM_CACHE`` (default
     ``~/.cache/puremacro/llm_cache.sqlite``); ``llm_prob_kernel`` reads and
     writes the narrative score cache ``$PUREMACRO_LLM_SCORES_CACHE`` (default
-    ``~/.cache/puremacro/llm_scores.sqlite``). Each gets its own file here.
-    Without this a test that completes a prompt or scores a document would
-    leave rows in the developer's real cache, and a cache hit left there by an
-    earlier run would stand in for the engine a later test means to exercise.
-    A value the user set on purpose is respected.
+    ``~/.cache/puremacro/llm_scores.sqlite``). Each gets a file of its own,
+    different for every test. Without this a test that completes a prompt or
+    scores a document would leave rows in a real cache, and a cache hit left
+    there by an earlier run would stand in for the engine a later test means
+    to exercise.
+
+    Both variables are set whatever the shell exports. A developer who points
+    one at a cache worth keeping (to build one to ship, say) would otherwise
+    get a test's fake completions or scores in it, and later tests would find
+    them there. ``monkeypatch`` puts the developer's values back when the test
+    ends.
+
+    The files sit under the session's base temp directory but not in
+    ``tmp_path``. ``tmp_path`` makes a numbered directory for every test, and
+    pytest scans the whole base directory for the next number each time, so
+    asking for it here would make the cost of a run grow with the square of
+    the number of tests. A random name keeps each test's files its own, and no
+    directory is made: both caches create their parent directory when they
+    first open their file (``CompletionCache`` in ``_connect``, the score
+    kernel just before it connects), so only a test that uses a cache touches
+    the disk.
     """
-    if "PUREMACRO_LLM_CACHE" not in os.environ:
-        monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(tmp_path / "llm_cache.sqlite"))
-    if "PUREMACRO_LLM_SCORES_CACHE" not in os.environ:
-        monkeypatch.setenv("PUREMACRO_LLM_SCORES_CACHE", str(tmp_path / "llm_scores.sqlite"))
+    base = tmp_path_factory.getbasetemp() / "llm_cache"
+    monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(base / f"{uuid.uuid4().hex}.sqlite"))
+    monkeypatch.setenv("PUREMACRO_LLM_SCORES_CACHE", str(base / f"{uuid.uuid4().hex}_scores.sqlite"))
     monkeypatch.delenv("PUREMACRO_LLM_MODE", raising=False)
 
 

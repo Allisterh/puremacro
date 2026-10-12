@@ -615,3 +615,44 @@ def test_the_suite_gives_each_cache_its_own_file_off_the_users_home():
     home = Path.home() / ".cache" / "puremacro"
     assert scores != completions
     assert scores != home / "llm_scores.sqlite" and completions != home / "llm_cache.sqlite"
+
+
+# ---------------------------------------------------------------------------
+# How the suite keeps tests off real caches (the autouse fixture in tests/conftest.py): both
+# variables are set for every test whatever the shell exports, to a file no other test uses, and
+# without a numbered temp directory per test.
+# ---------------------------------------------------------------------------
+
+_CACHE_FILES_SEEN: list[tuple[str, str]] = []     # (completions, scores) of each run of the test below
+
+
+@pytest.mark.parametrize("run", ["first", "second"])
+def test_every_test_gets_cache_files_of_its_own_under_the_session_temp_directory(
+        run, request, tmp_path_factory):
+    """Run twice; the module-level list is how the second run learns what the first one had.
+    To see the first assertion guard the export case, run this file with either variable exported
+    to a path of your own: a fixture that respects the export leaves the path outside the session's
+    temp directory, and the same for both runs."""
+    base = tmp_path_factory.getbasetemp()
+    completions = Path(os.environ["PUREMACRO_LLM_CACHE"])
+    scores = Path(os.environ["PUREMACRO_LLM_SCORES_CACHE"])
+    assert completions.is_relative_to(base), f"completion cache outside {base}: {completions}"
+    assert scores.is_relative_to(base), f"score cache outside {base}: {scores}"
+    assert completions != scores
+    assert str(completions) not in {c for c, _ in _CACHE_FILES_SEEN}, "files shared between tests"
+    assert str(scores) not in {s for _, s in _CACHE_FILES_SEEN}, "files shared between tests"
+    _CACHE_FILES_SEEN.append((str(completions), str(scores)))
+    # `tmp_path` makes a numbered directory per test and pytest rescans the base directory for the
+    # next number each time, so over a 20,000-test run it costs minutes. This test did not ask for
+    # one, so nothing in its fixtures may.
+    assert "tmp_path" not in request.fixturenames
+
+
+def test_the_score_kernel_creates_the_directory_of_its_cache_file(tmp_path, monkeypatch):
+    """The suite's fixture points the score cache into a directory it does not create (making one
+    per test is what makes a full run slow), so the kernel has to create it, as the completion
+    cache does (test_cache_without_arguments_uses_the_default_path)."""
+    scores = tmp_path / "not" / "yet" / "there" / "scores.sqlite"
+    monkeypatch.setenv("PUREMACRO_LLM_SCORES_CACHE", str(scores))
+    assert len(_score_one_document()) == 1
+    assert scores.is_file() and _tables(scores) == ["llm_scores"]
