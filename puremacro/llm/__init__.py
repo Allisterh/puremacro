@@ -217,6 +217,8 @@ def complete(prompt: str, *, model: str = "default", engine: str = "auto",
     key = _cache.cache_key(alias, prompt, system=system, max_tokens=max_tokens,
                            temperature=temperature, json_mode=json_mode)
     mode = current_mode(mode)
+    # Off mode neither reads nor writes a cache, so it builds none (CompletionCache() creates the
+    # directory, the file and the table) and leaves one passed as ``cache`` untouched.
     store: CompletionCache | None = None
     if mode != "off":
         store = cache if cache is not None else _cache.CompletionCache()

@@ -162,6 +162,19 @@ def test_off_mode_leaves_no_cache_file_behind(fake):
     assert not L.default_cache_path().exists()
 
 
+def test_off_mode_builds_no_cache_and_leaves_a_given_one_untouched(monkeypatch, fake, tmp_path):
+    mine = L.CompletionCache(tmp_path / "mine.sqlite")
+    key = L.cache_key("qwen3-4b", "hola", max_tokens=8, temperature=0.0, json_mode=False)
+    mine.set(L.CacheRow(key, "qwen3-4b", prompt_sha256("hola", None), 8, 0.0, False,
+                        "cached", "fake", "qwen3-4b"))
+    monkeypatch.setattr(L.cache, "CompletionCache",
+                        lambda *a, **k: pytest.fail("off mode built a CompletionCache"))
+    assert L.complete("hola", mode="off", max_tokens=8) == "0.7"
+    assert L.complete("hola", mode="off", max_tokens=8, cache=mine) == "0.7"   # its row is not read
+    assert L.complete("adios", mode="off", max_tokens=8, cache=mine) == "0.7"  # no row is written
+    assert len(fake.calls) == 3 and mine.stats()["rows"] == 1
+
+
 def test_the_mode_argument_wins_over_the_variable_and_both_are_checked(monkeypatch):
     assert L.MODES == ("auto", "cache", "off")
     assert L.current_mode() == "auto"
