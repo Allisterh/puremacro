@@ -220,6 +220,12 @@ def calibrate(target: str, value: float, se: float = np.nan, *,
                            mom.assign(se=np.nan), (lo, hi), len(cache), notes)
     beta = brentq(gap, lo, hi, xtol=1e-6)
     sol, mom = at(beta)
+    if abs(gap(beta)) > 1e-3 * abs(value):
+        # A sign change without a root: the model moment jumps across the target.
+        notes.append(f"{name}: the model jumps over {value:.4g} near beta = {beta:.6f} "
+                     f"(reaches {gap(beta) + value:.4g}); not attained")
+        return Calibration(target, value, se, False, float(beta), np.nan, sol,
+                           mom.assign(se=np.nan), (lo, hi), len(cache), notes)
     # Delta method: d(moment)/d(beta) by central differences, then
     # se(beta) = se(target) / |d target / d beta|.
     up, dn = at(min(beta + h, hi))[1], at(max(beta - h, lo))[1]
