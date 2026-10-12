@@ -90,6 +90,8 @@ Scalar-`r` calls are unchanged.
 
 ### Added
 
+- `puremacro.fetch.registry` lists every data source (series, panels, vintage providers, microdata and the narrative text connectors) with its auth level, credential, terms and whether results may be redistributed; `registry.load(id)` returns the fetcher. `puremacro.fetch.micro` adds `fetch_acs_pums` (Census ACS PUMS, 80 replicate weights, chunked past the API's 50-variable cap), `fetch_cps_basic` (weights only) and `fetch_scf` (Fed SCF summary extract, five implicates, 999 replicate weights) and `fetch_enigh` (INEGI ENIGH, Mexico, 2016+; strata and PSUs, so standard errors come from Taylor linearisation, `SurveyDesign(method="taylor")`). Each returns a `MicroFrame` whose `mean`/`total`/`quantile`/`share` give replicate standard errors, combined across implicates by Rubin's rules. The Census fetchers set the codebook's not-applicable codes (N/A, Not in Universe, Blank, Don't Know, Refused, CPS "Met No Conditions To Assign", including CPS earnings codes served with implied decimals as `-0.01`; e.g. `WAGP == -1` for persons under 15) to `NaN` by default, read from the endpoint's `variables.json`, so they no longer enter means and totals as values; `na_to_nan=False` keeps the raw codes and `MicroFrame.codebook` lists every labelled code.
+
 - **Narrative corpus is now stored and exportable.** `harvest_narrative_corpus`
   used to keep nothing: its SQLite table was never written (and had no text
   column), and `use_cache`/`db_path` were ignored. Harvests now upsert into a
@@ -124,6 +126,8 @@ Scalar-`r` calls are unchanged.
   in. `NMF` accepts sparse input, and `DynamicTopicModel` uses it.
 
 ### Fixed
+
+- `fetch._http.cached_get` gains `params=` and `secret_params=`; an API key passed as a secret parameter is no longer written into the cache file name, the manifest, or HTTP error text.
 
 - `harvest_narrative_corpus` fixes that changed what the narrative corpus contains:
   - In a fresh session `harvest_narrative_corpus` returned an empty corpus: it
