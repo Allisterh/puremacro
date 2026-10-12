@@ -5,7 +5,9 @@ Three engines run a model on the user's own machine, and :func:`resolve_engine` 
 * :class:`MLXEngine`: Apple-silicon GPU inference through ``mlx-lm`` (the ``[local-llm]``
   extra), on a Mac and under Juno on the iPad, which ships MLX and mlx-lm.
 * :class:`LlamaCppEngine`: GGUF inference through ``llama-cpp-python`` (``[local-llm]``) on any
-  platform, with every layer offloaded to the GPU when the build has one.
+  platform, with every layer offloaded to the GPU when the build has one. A model of the
+  registry is a ``(repository, file)`` pair on Hugging Face, which ``huggingface_hub``
+  downloads once and afterwards finds in its cache with no network.
 * :class:`HTTPEngine`: a local server over ``urllib``, with no extra dependency: Ollama's
   ``/api/chat`` (``api="ollama"``) or an OpenAI-compatible ``/v1/chat/completions``
   (``api="openai"``: llama-server, llamafile, LM Studio, vLLM, and Ollama as well).
@@ -20,7 +22,9 @@ Three engines run a model on the user's own machine, and :func:`resolve_engine` 
   :data:`DEFAULT_SERVERS` in turn: Ollama on port 11434, then OpenAI-compatible servers on 8080
   (llamafile, llama-server) and 1234 (LM Studio). A ``base_url``, or else the environment
   variable ``PUREMACRO_LLM_BASE_URL``, replaces those three with one URL, tried as an Ollama
-  server and then as an OpenAI-compatible one.
+  server and then as an OpenAI-compatible one. A server URL loses its trailing slashes and then
+  one trailing ``/v1``, so the ``http://localhost:1234/v1`` that LM Studio and OpenAI clients
+  document names the same server as ``http://localhost:1234``.
 * **Thinking.** ``complete(..., thinking=True)`` says that the model thinks before it answers
   (``ModelSpec.thinking``) and that the thinking is to be switched off for the call. MLX
   applies the chat template with ``enable_thinking=False``; llama.cpp passes the same switch to
@@ -32,15 +36,24 @@ Three engines run a model on the user's own machine, and :func:`resolve_engine` 
 * **System prompt.** A non-empty ``system`` text becomes a leading ``{"role": "system"}``
   message on every engine.
 * **Errors.** :class:`LocalLLMUnavailable`, a :class:`BackendUnavailable`, means that the engine
-  cannot be used: its package is missing, or its server cannot be reached or answers with an
-  error status (a ``urllib.error.URLError``, of which ``HTTPError`` is a kind). Callers such
-  as ``score_llm`` let it propagate instead of counting it as malformed output. Every other
-  failure propagates as raised: a model that cannot be loaded, a llama.cpp id that is neither a
-  file nor a pair (``ValueError``), a reply that does not come within the timeout.
+  cannot serve the model at all: its package is missing (or ``huggingface_hub``, which fetches
+  the file of a llama.cpp pair); the file of a pair is neither in the Hugging Face cache nor
+  downloadable; the server cannot be reached (a ``urllib.error.URLError``: the connection is
+  refused, fails or times out); or the server answers with 404, which says the model is not
+  there (for Ollama the message gives the ``ollama pull`` command instead of
+  :data:`INSTALL_HINT`), or with an error status that is not a 4xx (a 5xx server error, or a
+  redirect urllib does not follow for a POST). Callers such as ``score_llm`` let it propagate
+  instead of counting it as malformed output. Any other 4xx status is a plain ``RuntimeError``
+  naming the status and the start of the reply: the server turned down this one request (a
+  prompt longer than the context, say), so ``score_llm`` counts that record as malformed and
+  goes on. Every other failure propagates as raised: a model that cannot be loaded, a llama.cpp
+  id that is neither a file nor a pair (``ValueError``), a reply that does not come within the
+  timeout (``TimeoutError``).
 
-``mlx``, ``mlx_lm``, ``llama_cpp`` and ``puremacro._http`` are imported inside the functions
-that use them, so importing this module needs nothing but the standard library and works under
-Pyodide, where a server on ``localhost`` cannot be reached and no engine is available.
+``mlx``, ``mlx_lm``, ``llama_cpp``, ``huggingface_hub`` and ``puremacro._http`` are imported
+inside the functions that use them, so importing this module needs nothing but the standard
+library and works under Pyodide, where a server on ``localhost`` cannot be reached and no
+engine is available.
 """
 from __future__ import annotations
 
@@ -84,7 +97,8 @@ INSTALL_HINT = (
     "or start Ollama (https://ollama.com) and run `ollama pull qwen3:4b`."
 )
 """What to do when no engine is usable. Every :class:`LocalLLMUnavailable` raised for a missing
-package, an unavailable engine or a server that cannot be reached includes it."""
+engine package, an unavailable engine, or a server that cannot be reached or answers with a
+server error includes it."""
 
 
 class BackendUnavailable(RuntimeError):
@@ -114,13 +128,15 @@ class Engine(Protocol):
         """Whether the engine can run here: its package is installed, or its server answers."""
         ...
 
-    def complete(self, model_id: Any, prompt: str, *, system: str | None, max_tokens: int,
-                 temperature: float, json_mode: bool, thinking: bool) -> str:
+    def complete(self, model_id: Any, prompt: str, *, system: str | None = None,
+                 max_tokens: int, temperature: float, json_mode: bool,
+                 thinking: bool = False) -> str:
         """The model's reply to ``prompt``, with its thinking removed (:func:`strip_thinking`).
 
         ``model_id`` is already this engine's id for the model. ``system``, when not empty, is
         sent as a leading system message. ``thinking`` is True for a model that thinks before
-        it answers; the engine then switches the thinking off for this call.
+        it answers; the engine then switches the thinking off for this call. Both have the
+        defaults every engine gives them, so a call written for 4.8.1, without either, is valid.
         """
         ...
 
@@ -296,14 +312,44 @@ def _thinking_off(handler: Any) -> Any:
     return handler_without_thinking
 
 
+def _hub_file(repo: str, file: str) -> str:
+    """The local path of ``file`` from the Hugging Face repository ``repo``.
+
+    ``hf_hub_download`` downloads the file into the Hugging Face cache the first time; later it
+    returns the cached copy, with no network when ``HF_HUB_OFFLINE=1`` and after a failed
+    connection otherwise. A missing ``huggingface_hub``, and a file that is neither cached nor
+    downloadable, are :class:`LocalLLMUnavailable`.
+    """
+    try:
+        from huggingface_hub import hf_hub_download
+    except ImportError as exc:
+        raise LocalLLMUnavailable(
+            f"llama.cpp gets {file} of {repo} from Hugging Face through huggingface_hub, which "
+            f"cannot be imported ({exc}). Install it with `pip install huggingface_hub`, or "
+            f"pass the path of a .gguf file instead.") from exc
+    try:
+        path = hf_hub_download(repo_id=repo, filename=file)
+    except Exception as exc:
+        detail = " ".join(str(exc).split())
+        raise LocalLLMUnavailable(
+            f"Cannot get {file} of the Hugging Face repository {repo}: it is not in the local "
+            f"cache and cannot be downloaded ({type(exc).__name__}: {detail}). Download it once "
+            f"while online, or pass the path of a .gguf file.") from exc
+    return str(path)   # a str already; recent releases type it str | DryRunFileInfo (dry runs)
+
+
 class LlamaCppEngine:
     """GGUF inference through ``llama-cpp-python``, on any platform.
 
-    ``model_id`` is a ``(repository, file name)`` pair, which ``Llama.from_pretrained``
-    downloads from Hugging Face the first time, or the path of a ``.gguf`` file. Every layer is
-    offloaded to the GPU (``n_gpu_layers=-1``): Metal or CUDA when the build has one, and
-    harmless on a build without (llama-cpp-python's own default, 0, would leave a GPU idle). A
-    loaded model is kept for each id for the life of the instance.
+    ``model_id`` is a ``(repository, file name)`` pair on Hugging Face or the path of a
+    ``.gguf`` file. The file of a pair comes from ``huggingface_hub.hf_hub_download``, which
+    downloads it into the Hugging Face cache the first time and afterwards returns the cached
+    copy, with no network when ``HF_HUB_OFFLINE=1`` and after a failed connection otherwise
+    (``Llama.from_pretrained`` lists the repository on the Hub at every load, so it cannot load
+    a cached model offline). Every layer is offloaded to the GPU (``n_gpu_layers=-1``): Metal or
+    CUDA when the build has one, and harmless on a build without (llama-cpp-python's own
+    default, 0, would leave a GPU idle). A loaded model is kept for each id for the life of the
+    instance.
 
     Parameters
     ----------
@@ -328,12 +374,9 @@ class LlamaCppEngine:
             raise _missing("llama-cpp-python", exc) from exc
         source = _gguf_source(model_id)
         if source not in self._loaded:
-            options = {"n_ctx": self.n_ctx, "n_gpu_layers": -1, "verbose": False}
-            if isinstance(source, str):
-                self._loaded[source] = Llama(model_path=source, **options)
-            else:
-                self._loaded[source] = Llama.from_pretrained(repo_id=source[0],
-                                                             filename=source[1], **options)
+            path = source if isinstance(source, str) else _hub_file(*source)
+            self._loaded[source] = Llama(model_path=path, n_ctx=self.n_ctx, n_gpu_layers=-1,
+                                         verbose=False)
         return self._loaded[source]
 
     def complete(self, model_id: Any, prompt: str, *, system: str | None = None,
@@ -384,7 +427,15 @@ def _get_json(url: str, *, timeout: float) -> Any:
         return json.loads(response.read().decode("utf-8"))
 
 
-def _server_message(exc: Any) -> str:
+def _error_body(exc: Any) -> str:
+    """The body of the error reply ``exc`` (an ``HTTPError``) as text, or ``""``."""
+    try:
+        return exc.read().decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
+def _server_message(body: str) -> str:
     """The error message an LLM server put in the body of an error reply, or ``""``.
 
     Ollama sends ``{"error": "..."}``, OpenAI-compatible servers ``{"error": {"message": ...}}``.
@@ -392,13 +443,25 @@ def _server_message(exc: Any) -> str:
     import json
 
     try:
-        body = json.loads(exc.read().decode("utf-8"))
+        reply = json.loads(body)
     except Exception:
         return ""
-    error = body.get("error") if isinstance(body, dict) else None
+    error = reply.get("error") if isinstance(reply, dict) else None
     if isinstance(error, dict):
         error = error.get("message")
     return " ".join(error.split())[:300] if isinstance(error, str) else ""
+
+
+def _root_url(url: str) -> str:
+    """``url`` without its trailing slashes and then without one trailing ``/v1``.
+
+    LM Studio and OpenAI clients write a server as ``http://localhost:1234/v1``, while the HTTP
+    engine adds ``/v1/...`` or ``/api/...`` to the root of the server itself.
+    """
+    url = url.rstrip("/")
+    if url.endswith("/v1"):
+        url = url[: -len("/v1")].rstrip("/")
+    return url
 
 
 class HTTPEngine:
@@ -407,7 +470,9 @@ class HTTPEngine:
     Parameters
     ----------
     base_url : str
-        Root URL of the server, such as ``http://localhost:11434``; a trailing slash is dropped.
+        Root URL of the server, such as ``http://localhost:11434``. Trailing slashes are dropped
+        and then one trailing ``/v1``, so ``http://localhost:1234/v1``, the form LM Studio and
+        OpenAI clients document, names the same server as ``http://localhost:1234``.
     api : {"ollama", "openai"}
         ``"ollama"`` posts to Ollama's ``/api/chat``; ``"openai"`` to ``/v1/chat/completions``
         (llama-server, llamafile, LM Studio, vLLM; Ollama serves it too). It is also the
@@ -423,7 +488,7 @@ class HTTPEngine:
                  probe_timeout: float = _PROBE_TIMEOUT) -> None:
         if api not in ("ollama", "openai"):
             raise ValueError(f"api must be 'ollama' or 'openai'; got {api!r}")
-        self.base_url = base_url.rstrip("/")
+        self.base_url = _root_url(base_url)
         self.api = api
         self.name = api
         self.timeout = timeout
@@ -462,7 +527,7 @@ class HTTPEngine:
                 payload["response_format"] = {"type": "json_object"}
             if thinking:
                 payload["chat_template_kwargs"] = {"enable_thinking": False}
-        reply = self._post(path, payload)
+        reply = self._post(path, payload, model_id)
         if self.api == "ollama":
             message = reply.get("message") if isinstance(reply, dict) else None
             content = message.get("content") if isinstance(message, dict) else None
@@ -470,13 +535,13 @@ class HTTPEngine:
             content = _choice_content(reply)
         return strip_thinking(_text(content))
 
-    def _post(self, path: str, payload: dict[str, Any]) -> Any:
-        """The decoded reply to ``POST path``.
+    def _post(self, path: str, payload: dict[str, Any], model_id: Any) -> Any:
+        """The decoded reply to ``POST path``, a request for the model ``model_id``.
 
-        A ``urllib.error.URLError`` becomes :class:`LocalLLMUnavailable`: the server cannot be
-        reached, or it answered with an error status (an ``HTTPError``, which is a
-        ``URLError``). Anything else, such as a reply that does not come within ``timeout``,
-        propagates as raised.
+        A server that cannot be reached (a ``urllib.error.URLError``: the connection is refused,
+        fails or times out) is :class:`LocalLLMUnavailable`; an error status (an ``HTTPError``,
+        a kind of ``URLError``) is what :meth:`_status_error` says. Anything else, such as a
+        reply that does not come within ``timeout``, propagates as raised.
         """
         import urllib.error
 
@@ -485,22 +550,51 @@ class HTTPEngine:
         try:
             return post_json(self.base_url + path, payload, timeout=self.timeout)
         except urllib.error.HTTPError as exc:
-            said = _server_message(exc)
-            raise LocalLLMUnavailable(
-                f"The local LLM server at {self.base_url} answered {path} with HTTP "
-                f"{exc.code}{': ' + said if said else ''}. {INSTALL_HINT}") from exc
+            raise self._status_error(exc, path, model_id) from exc
         except urllib.error.URLError as exc:
             raise LocalLLMUnavailable(
                 f"Cannot reach a local LLM server at {self.base_url} ({exc}). "
                 f"{INSTALL_HINT}") from exc
 
+    def _status_error(self, exc: Any, path: str, model_id: Any) -> RuntimeError:
+        """The exception for the error status of ``exc``, an ``HTTPError`` from ``path``.
+
+        * 404: :class:`LocalLLMUnavailable` naming the model, which the server does not have,
+          and for Ollama the ``ollama pull`` command that fetches it.
+        * any other 4xx: a plain ``RuntimeError`` with the status and the first 200 characters
+          of the reply. The server turned down this request (a prompt longer than the context,
+          say), not every request, so ``score_llm`` counts that record as malformed and goes on.
+        * anything else (a 5xx above all): :class:`LocalLLMUnavailable` with
+          :data:`INSTALL_HINT`.
+        """
+        body = _error_body(exc)
+        said = _server_message(body)
+        detail = f": {said}" if said else ""
+        if exc.code == 404:
+            if self.api == "ollama":
+                remedy = f"Download it with `ollama pull {model_id}`."
+            else:
+                remedy = (f"Load it in the server, or ask for a model listed at "
+                          f"{self.base_url}/v1/models.")
+            return LocalLLMUnavailable(
+                f"The local LLM server at {self.base_url} answered {path} with HTTP 404 for "
+                f"model {model_id!r}{detail}. {remedy}")
+        if 400 <= exc.code < 500:
+            return RuntimeError(
+                f"{self.base_url} rejected the request (HTTP {exc.code}): {body[:200]}")
+        return LocalLLMUnavailable(
+            f"The local LLM server at {self.base_url} answered {path} with HTTP "
+            f"{exc.code}{detail}. {INSTALL_HINT}")
+
 
 def _server_url(base_url: str | None) -> str | None:
     """The one server URL that replaces :data:`DEFAULT_SERVERS`: ``base_url``, else the
-    environment variable ``PUREMACRO_LLM_BASE_URL``; None when neither is set (or blank)."""
+    environment variable ``PUREMACRO_LLM_BASE_URL``, stripped of blanks and of trailing slashes
+    and one trailing ``/v1`` as :class:`HTTPEngine` strips its ``base_url``; None when neither
+    is set (or blank)."""
     for value in (base_url, os.environ.get(_ENV_BASE_URL)):
         if value and value.strip():
-            return value.strip()
+            return _root_url(value.strip())
     return None
 
 

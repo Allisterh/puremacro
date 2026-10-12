@@ -9,9 +9,10 @@ The blocks below pin the rest of the rulings (what each engine sends, the server
 URLs, the probe timeout, the error paths) and the rule that keeps the module importable where
 mlx, llama.cpp and sockets do not exist.
 
-No test loads a model or talks to a real server. The engines get stand-in modules, and every
-probe is answered by a stub on 127.0.0.1 or by a patched ``available``: an Ollama running on
-the developer's machine must not decide a test.
+No test loads a model, downloads one or talks to a real server. The engines get stand-in
+modules (``mlx_lm``, ``llama_cpp``, ``huggingface_hub``), and every probe is answered by a stub
+on 127.0.0.1 or by a patched ``available``: an Ollama running on the developer's machine must
+not decide a test.
 """
 import importlib.util
 import json
@@ -90,17 +91,22 @@ def test_mlx_complete_passes_enable_thinking_false_and_system(monkeypatch):
 
 
 def _install_fake_llama_cpp(monkeypatch, route):
-    """Install a stand-in ``llama_cpp`` and return what reaches it.
+    """Install stand-ins for ``llama_cpp`` and ``huggingface_hub``; return what reaches them.
 
-    Its ``Llama`` finds a chat handler the way llama-cpp-python 0.3.36 does (``chat_handler``,
-    then ``_chat_handlers[chat_format]``, then ``llama_chat_format.get_chat_completion_handler``)
-    and, like the real one, refuses keywords ``create_chat_completion`` does not take.
+    The ``Llama`` stand-in finds a chat handler the way llama-cpp-python 0.3.36 does
+    (``chat_handler``, then ``_chat_handlers[chat_format]``, then
+    ``llama_chat_format.get_chat_completion_handler``) and, like the real one, refuses keywords
+    ``create_chat_completion`` does not take; ``seen["built"]`` holds the keywords of each
+    ``Llama``. It has no ``from_pretrained``, which lists the repository on the Hub at every
+    load: the file of a ``(repository, file)`` pair has to come from
+    ``huggingface_hub.hf_hub_download``, whose stand-in takes keywords only, records them in
+    ``seen["downloads"]`` and returns ``/hf-cache/<repository>/<file>``.
     ``route`` says where the handler is: ``"attribute"``, ``"format"`` (what a GGUF file with a
     chat template gives, Qwen3's case), ``"registry"``, or nowhere: ``"none"`` (all three are
     None or raise) and ``"bare"`` (a build without that machinery: no such attributes and no
     ``llama_chat_format`` module).
     """
-    seen = {"built": [], "requests": [], "handler": []}
+    seen = {"built": [], "requests": [], "handler": [], "downloads": []}
 
     def handler(*, llama, **request):
         seen["handler"].append(request)
@@ -113,17 +119,7 @@ def _install_fake_llama_cpp(monkeypatch, route):
 
     class Llama:
         def __init__(self, **options):
-            seen["built"].append(("Llama", options))
-            self._attach()
-
-        @classmethod
-        def from_pretrained(cls, **options):
-            seen["built"].append(("from_pretrained", options))
-            llm = cls.__new__(cls)
-            llm._attach()
-            return llm
-
-        def _attach(self):
+            seen["built"].append(options)
             if route == "bare":
                 return
             self.chat_handler = handler if route == "attribute" else None
@@ -141,11 +137,18 @@ def _install_fake_llama_cpp(monkeypatch, route):
                       or registry_lookup(self.chat_format))
             return chosen(llama=self, **request)
 
+    def hf_hub_download(**request):
+        seen["downloads"].append(request)
+        return f"/hf-cache/{request['repo_id']}/{request['filename']}"
+
     fake = types.ModuleType("llama_cpp")
     fake.Llama = Llama
     if route != "bare":
         fake.llama_chat_format = types.SimpleNamespace(get_chat_completion_handler=registry_lookup)
+    hub = types.ModuleType("huggingface_hub")
+    hub.hf_hub_download = hf_hub_download
     monkeypatch.setitem(sys.modules, "llama_cpp", fake)
+    monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
     return seen
 
 
@@ -161,15 +164,17 @@ def test_llamacpp_wraps_chat_handler_when_thinking(monkeypatch, tmp_path):
     eng.complete(pair, "hola", system=None, thinking=False, **_CALL)
     assert "enable_thinking" not in seen["handler"][-1]
     assert seen["handler"][-1]["messages"] == [{"role": "user", "content": "hola"}]
-    # (d) every layer offloaded to the GPU, for a Hugging Face pair and for a file on disk
+    # (d) every layer offloaded to the GPU, for a Hugging Face pair and for a file on disk; the
+    #     pair's file is the path hf_hub_download gives (the cached copy, found offline)
     gguf = tmp_path / "model.gguf"
     gguf.write_bytes(b"GGUF")
     eng.complete(str(gguf), "hola", system=None, thinking=True, **_CALL)
     assert seen["handler"][-1]["enable_thinking"] is False
+    assert seen["downloads"] == [{"repo_id": pair[0], "filename": pair[1]}]
     assert seen["built"] == [
-        ("from_pretrained", {"repo_id": pair[0], "filename": pair[1], "n_ctx": 4096,
-                             "n_gpu_layers": -1, "verbose": False}),
-        ("Llama", {"model_path": str(gguf), "n_ctx": 4096, "n_gpu_layers": -1, "verbose": False}),
+        {"model_path": f"/hf-cache/{pair[0]}/{pair[1]}", "n_ctx": 4096, "n_gpu_layers": -1,
+         "verbose": False},
+        {"model_path": str(gguf), "n_ctx": 4096, "n_gpu_layers": -1, "verbose": False},
     ]
     # (c) where no chat handler can be found, the /no_think suffix is the switch instead
     for route in ("none", "bare"):
@@ -236,6 +241,20 @@ def test_the_three_engines_satisfy_the_engine_protocol():
     assert (http.base_url, http.api, http.timeout, http.probe_timeout) == ("http://h:1", "openai", 120.0, 3.0)
     assert issubclass(E.LocalLLMUnavailable, E.BackendUnavailable)
     assert issubclass(E.BackendUnavailable, RuntimeError)
+
+
+def test_the_protocol_defaults_system_and_thinking_like_the_engines():
+    """A 4.8.1-style call, without ``system`` and ``thinking``, type-checks through ``Engine``
+    as it runs on each engine (the callers behind the narrative shim make such calls)."""
+    import inspect
+
+    def shape(cls):
+        return [(p.name, p.kind, p.default) for p in inspect.signature(cls.complete).parameters.values()]
+
+    protocol = shape(E.Engine)
+    defaults = {name: default for name, _, default in protocol}
+    assert defaults["system"] is None and defaults["thinking"] is False
+    assert [shape(cls) for cls in (E.MLXEngine, E.LlamaCppEngine, E.HTTPEngine)] == [protocol] * 3
 
 
 def test_http_engine_rejects_an_unknown_api():
@@ -389,7 +408,7 @@ def test_llamacpp_request_carries_system_json_mode_and_sampling(monkeypatch):
     assert seen["requests"] == [{
         "messages": [{"role": "system", "content": "S"}, {"role": "user", "content": "hola"}],
         "temperature": 0.2, "max_tokens": 16, "response_format": {"type": "json_object"}}]
-    assert seen["built"][0][1]["n_ctx"] == 8192
+    assert seen["built"][0]["n_ctx"] == 8192
 
 
 def test_llamacpp_keeps_each_model_loaded_once(monkeypatch):
@@ -397,7 +416,10 @@ def test_llamacpp_keeps_each_model_loaded_once(monkeypatch):
     eng = E.LlamaCppEngine()
     for model_id in (("r", "a.gguf"), ["r", "a.gguf"], ("r", "a.gguf"), ("r", "b.gguf")):
         eng.complete(model_id, "hola", system=None, thinking=False, **_CALL)
-    assert [options["filename"] for _, options in seen["built"]] == ["a.gguf", "b.gguf"]
+    assert seen["downloads"] == [{"repo_id": "r", "filename": "a.gguf"},
+                                 {"repo_id": "r", "filename": "b.gguf"}]
+    assert [options["model_path"] for options in seen["built"]] == ["/hf-cache/r/a.gguf",
+                                                                     "/hf-cache/r/b.gguf"]
 
 
 @pytest.mark.parametrize("model_id", ["qwen3:4b", "no/such/file.gguf", ("only-one",), ("r", "f", "x"), ("r", 4), 42])
@@ -405,7 +427,7 @@ def test_llamacpp_rejects_an_id_it_cannot_load(monkeypatch, model_id):
     seen = _install_fake_llama_cpp(monkeypatch, "format")
     with pytest.raises(ValueError, match="neither"):    # a bad argument, not a missing engine
         E.LlamaCppEngine().complete(model_id, "hola", system=None, thinking=False, **_CALL)
-    assert seen["built"] == []
+    assert seen["built"] == [] and seen["downloads"] == []
 
 
 @pytest.mark.parametrize("source", ["pair", "path"])
@@ -414,17 +436,13 @@ def test_llamacpp_load_failure_propagates_as_raised(monkeypatch, tmp_path, sourc
     gguf = tmp_path / "broken.gguf"
     gguf.write_bytes(b"not a model")
     model_id = ("r", "f.gguf") if source == "pair" else str(gguf)
-    failure = ValueError("No file found in r that match f.gguf" if source == "pair"
-                         else f"Failed to load model from file: {gguf}")   # llama.cpp's words
+    path = "/hf-cache/r/f.gguf" if source == "pair" else str(gguf)
+    failure = ValueError(f"Failed to load model from file: {path}")       # llama.cpp's words
 
     def fail(*args, **options):
         raise failure
 
-    Llama = sys.modules["llama_cpp"].Llama
-    if source == "pair":
-        monkeypatch.setattr(Llama, "from_pretrained", classmethod(fail))
-    else:
-        monkeypatch.setattr(Llama, "__init__", fail)
+    monkeypatch.setattr(sys.modules["llama_cpp"].Llama, "__init__", fail)
     with pytest.raises(ValueError) as ei:   # llama-cpp-python is there: no LocalLLMUnavailable
         E.LlamaCppEngine().complete(model_id, "hola", system=None, thinking=False, **_CALL)
     assert ei.value is failure
@@ -437,6 +455,43 @@ def test_llamacpp_missing_package_is_local_llm_unavailable(monkeypatch):
     assert isinstance(ei.value.__cause__, ImportError)
 
 
+def test_llamacpp_pair_without_huggingface_hub_is_local_llm_unavailable(monkeypatch, tmp_path):
+    seen = _install_fake_llama_cpp(monkeypatch, "format")
+    monkeypatch.setitem(sys.modules, "huggingface_hub", None)    # `import huggingface_hub` raises
+    with pytest.raises(E.LocalLLMUnavailable, match="pip install huggingface_hub") as ei:
+        E.LlamaCppEngine().complete(("r", "f.gguf"), "hola", system=None, thinking=False, **_CALL)
+    assert isinstance(ei.value.__cause__, ImportError) and seen["built"] == []
+    gguf = tmp_path / "model.gguf"                               # a file on disk needs no hub
+    gguf.write_bytes(b"GGUF")
+    assert E.LlamaCppEngine().complete(str(gguf), "hola", system=None, thinking=False, **_CALL) == "0.3"
+
+
+class _LocalEntryNotFoundError(FileNotFoundError):
+    """What huggingface_hub raises for a file it has not cached when the Hub cannot be reached."""
+
+
+@pytest.mark.parametrize("failure", [
+    _LocalEntryNotFoundError("Cannot find the requested files in the disk cache and outgoing "
+                             "traffic has been disabled."),
+    OSError("404 Client Error. Repository Not Found for url: https://huggingface.co/api/models/x"),
+    ConnectionError("Failed to resolve 'huggingface.co'"),
+], ids=["offline-not-cached", "not-on-the-hub", "no-connection"])
+def test_llamacpp_pair_neither_cached_nor_downloadable_is_local_llm_unavailable(monkeypatch, failure):
+    seen = _install_fake_llama_cpp(monkeypatch, "format")
+
+    def hf_hub_download(**request):
+        seen["downloads"].append(request)
+        raise failure
+
+    monkeypatch.setattr(sys.modules["huggingface_hub"], "hf_hub_download", hf_hub_download)
+    pair = ("Qwen/Qwen3-4B-GGUF", "Qwen3-4B-Q4_K_M.gguf")
+    with pytest.raises(E.LocalLLMUnavailable) as ei:
+        E.LlamaCppEngine().complete(pair, "hola", system=None, thinking=True, **_CALL)
+    assert pair[0] in str(ei.value) and pair[1] in str(ei.value)
+    assert ei.value.__cause__ is failure and seen["built"] == []
+    assert seen["downloads"] == [{"repo_id": pair[0], "filename": pair[1]}]
+
+
 # ---------------------------------------------------------------- HTTP servers
 
 def test_http_engines_against_the_stub(llm_stub_server):
@@ -447,6 +502,41 @@ def test_http_engines_against_the_stub(llm_stub_server):
     llm_stub_server.chat_content = '[{"x": 1}]'
     assert ollama.complete("qwen3:4b", "hi", max_tokens=16, temperature=0.0, json_mode=True) == '[{"x": 1}]'
     assert openai.complete("qwen3-4b", "hi", **_CALL) == "0.7"                 # 4.8.1-style calls
+
+
+@pytest.mark.parametrize("given,root", [
+    ("http://h:1", "http://h:1"),
+    ("http://h:1/", "http://h:1"),
+    ("http://h:1/v1", "http://h:1"),                  # how LM Studio and OpenAI clients write it
+    ("http://h:1/v1/", "http://h:1"),
+    ("http://h:1//v1//", "http://h:1"),
+    ("http://h:1/v1/v1", "http://h:1/v1"),            # one /v1 only
+    ("http://h:1/proxy/v1", "http://h:1/proxy"),
+    ("http://h:1/v10", "http://h:1/v10"),
+])
+@pytest.mark.parametrize("api", ["ollama", "openai"])
+def test_a_base_url_loses_its_trailing_slashes_and_one_v1(api, given, root):
+    assert E.HTTPEngine(base_url=given, api=api).base_url == root
+
+
+@pytest.mark.parametrize("api,probe,chat,reply", [
+    ("openai", "/v1/models", "/v1/chat/completions", "0.7"),
+    ("ollama", "/api/tags", "/api/chat", "[]"),
+])
+def test_a_v1_base_url_reaches_the_server_root(monkeypatch, llm_stub_server, api, probe, chat, reply):
+    urls = []
+    real_urlopen = urllib.request.urlopen
+
+    def urlopen(request, *args, **kwargs):             # the real one, recording each URL
+        urls.append(request.full_url)
+        return real_urlopen(request, *args, **kwargs)
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    eng = E.HTTPEngine(base_url=llm_stub_server.url + "/v1", api=api)
+    assert eng.base_url == llm_stub_server.url
+    assert eng.available() is True       # the stub answers /v1/v1/models and /v1/api/tags with 404
+    assert eng.complete("m", "hola", system=None, thinking=False, **_CALL) == reply
+    assert urls == [llm_stub_server.url + probe, llm_stub_server.url + chat]
 
 
 def test_ollama_payload_shape(llm_stub_server):
@@ -485,6 +575,23 @@ def test_an_unreachable_server_is_local_llm_unavailable(api):
 
 
 @pytest.mark.parametrize("api", ["ollama", "openai"])
+def test_a_connection_that_times_out_is_local_llm_unavailable(monkeypatch, api):
+    tried = []
+
+    def urlopen(request, *args, **kwargs):
+        tried.append(request.full_url)
+        raise urllib.error.URLError(TimeoutError("timed out"))   # urllib's words for a connect timeout
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    with pytest.raises(E.LocalLLMUnavailable) as ei:
+        E.HTTPEngine(base_url="http://h:1", api=api, timeout=0.5).complete(
+            "m", "hola", system=None, thinking=False, **_CALL)
+    message = str(ei.value)
+    assert "http://h:1" in message and "timed out" in message and E.INSTALL_HINT in message
+    assert tried and all(url.startswith("http://h:1/") for url in tried)
+
+
+@pytest.mark.parametrize("api", ["ollama", "openai"])
 def test_a_reply_that_never_comes_propagates_the_timeout(llm_stub_server, api):
     llm_stub_server.delay = 30.0                        # the request is read, the reply never sent
     eng = E.HTTPEngine(base_url=llm_stub_server.url, api=api, timeout=0.3)
@@ -493,12 +600,65 @@ def test_a_reply_that_never_comes_propagates_the_timeout(llm_stub_server, api):
     assert not isinstance(ei.value, (urllib.error.URLError, E.LocalLLMUnavailable))
 
 
+@pytest.mark.parametrize("status,body,said", [
+    (500, json.dumps({"error": "model runner has unexpectedly stopped"}).encode(), "unexpectedly stopped"),
+    (503, json.dumps({"error": {"message": "Loading model"}}).encode(), "Loading model"),   # llama-server
+    (307, b"", ""),                      # a redirect urllib does not follow for a POST: not a 4xx
+], ids=["500", "503", "307"])
 @pytest.mark.parametrize("api", ["ollama", "openai"])
-def test_an_error_status_is_local_llm_unavailable(llm_stub_404_server, api):
-    eng = E.HTTPEngine(base_url=llm_stub_404_server, api=api)
-    with pytest.raises(E.LocalLLMUnavailable, match="404") as ei:
-        eng.complete("m", "hola", system=None, thinking=False, **_CALL)
-    assert llm_stub_404_server in str(ei.value) and "qwen3:4b" in str(ei.value)
+def test_a_server_error_is_local_llm_unavailable(llm_stub_server, api, status, body, said):
+    llm_stub_server.chat_reply = (status, "application/json", body)
+    with pytest.raises(E.LocalLLMUnavailable) as ei:
+        E.HTTPEngine(base_url=llm_stub_server.url, api=api).complete(
+            "m", "hola", system=None, thinking=False, **_CALL)
+    message = str(ei.value)
+    assert llm_stub_server.url in message and f"HTTP {status}" in message and said in message
+    assert E.INSTALL_HINT in message
+    assert isinstance(ei.value.__cause__, urllib.error.HTTPError)
+
+
+def test_a_404_from_ollama_names_the_model_and_how_to_pull_it(llm_stub_server, llm_stub_404_server):
+    missing = json.dumps({"error": 'model "qwen3:8b" not found, try pulling it first'}).encode()
+    llm_stub_server.chat_reply = (404, "application/json", missing)            # how Ollama says it
+    messages = []
+    for url in (llm_stub_server.url, llm_stub_404_server):                     # and a bare 404 page
+        with pytest.raises(E.LocalLLMUnavailable) as ei:
+            E.HTTPEngine(base_url=url, api="ollama").complete(
+                "qwen3:8b", "hola", system=None, thinking=True, **_CALL)
+        assert isinstance(ei.value.__cause__, urllib.error.HTTPError)
+        messages.append(str(ei.value))
+        assert url in messages[-1] and "HTTP 404" in messages[-1] and "'qwen3:8b'" in messages[-1]
+        assert "`ollama pull qwen3:8b`" in messages[-1]
+        assert E.INSTALL_HINT not in messages[-1] and "local-llm" not in messages[-1]   # no generic hint
+    assert "try pulling it first" in messages[0]                               # what Ollama said
+
+
+def test_a_404_from_an_openai_server_names_the_model(llm_stub_server, llm_stub_404_server):
+    missing = json.dumps({"error": {"message": "The model `qwen3-8b` does not exist",
+                                    "type": "invalid_request_error", "code": "model_not_found"}}).encode()
+    llm_stub_server.chat_reply = (404, "application/json", missing)            # the OpenAI shape
+    messages = []
+    for url in (llm_stub_server.url, llm_stub_404_server):
+        with pytest.raises(E.LocalLLMUnavailable) as ei:
+            E.HTTPEngine(base_url=url, api="openai").complete(
+                "qwen3-8b", "hola", system=None, thinking=True, **_CALL)
+        assert isinstance(ei.value.__cause__, urllib.error.HTTPError)
+        messages.append(str(ei.value))
+        assert url in messages[-1] and "HTTP 404" in messages[-1] and "'qwen3-8b'" in messages[-1]
+        assert "ollama pull" not in messages[-1] and "local-llm" not in messages[-1]   # neither remedy
+    assert "does not exist" in messages[0]
+
+
+@pytest.mark.parametrize("status", [400, 401, 413, 422])
+@pytest.mark.parametrize("api", ["ollama", "openai"])
+def test_any_other_4xx_is_a_runtime_error_for_that_request_alone(llm_stub_server, api, status):
+    body = json.dumps({"error": {"message": "the request (" + "x" * 300 + ") exceeds the context size"}})
+    llm_stub_server.chat_reply = (status, "application/json", body.encode())
+    with pytest.raises(RuntimeError) as ei:
+        E.HTTPEngine(base_url=llm_stub_server.url, api=api).complete(
+            "m", "hola", system=None, thinking=False, **_CALL)
+    assert type(ei.value) is RuntimeError      # not a BackendUnavailable: score_llm counts the record
+    assert str(ei.value) == f"{llm_stub_server.url} rejected the request (HTTP {status}): {body[:200]}"
     assert isinstance(ei.value.__cause__, urllib.error.HTTPError)
 
 
@@ -510,9 +670,10 @@ def test_the_servers_own_error_message_is_passed_on(llm_stub_server):
             "qwen3:8b", "hola", system=None, thinking=True, **_CALL)
     too_long = json.dumps({"error": {"message": "the request exceeds the context size"}}).encode()
     llm_stub_server.chat_reply = (400, "application/json", too_long)           # the OpenAI shape
-    with pytest.raises(E.LocalLLMUnavailable, match="exceeds the context size"):
+    with pytest.raises(RuntimeError, match="exceeds the context size") as ei:  # this prompt, not the server
         E.HTTPEngine(base_url=llm_stub_server.url, api="openai").complete(
             "qwen3-4b", "hola", system=None, thinking=True, **_CALL)
+    assert not isinstance(ei.value, E.BackendUnavailable)
 
 
 @pytest.mark.parametrize("reply", [
@@ -674,6 +835,18 @@ def test_available_engines_follows_base_url_and_the_env_var(monkeypatch):
     assert E.available_engines() == []
     assert probed == [("ollama", "http://arg-box:7000"), ("openai", "http://arg-box:7000"),
                       ("ollama", "http://env-box:6000"), ("openai", "http://env-box:6000")]
+
+
+def test_the_env_var_and_base_url_lose_a_trailing_v1_too(monkeypatch, llm_stub_server):
+    _no_local_packages(monkeypatch)
+    monkeypatch.setenv(_ENV_URL, f" {llm_stub_server.url}/v1/ ")
+    eng = E.resolve_engine()
+    assert (eng.name, eng.base_url) == ("ollama", llm_stub_server.url)
+    assert E.resolve_engine("openai").base_url == llm_stub_server.url
+    assert E.available_engines() == ["ollama", "openai"]
+    monkeypatch.delenv(_ENV_URL)
+    assert E.resolve_engine("openai", base_url=llm_stub_server.url + "/v1").base_url == llm_stub_server.url
+    assert E.available_engines(base_url=llm_stub_server.url + "/v1") == ["ollama", "openai"]
 
 
 def test_available_engines_against_the_stub(monkeypatch, llm_stub_server):
