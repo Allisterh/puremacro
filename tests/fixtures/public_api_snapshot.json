@@ -1745,6 +1745,17 @@
       "default_cache_path",
       "prompt_sha256"
     ],
+    "puremacro.llm.models": [
+      "ALIASES",
+      "MODELS",
+      "ModelSpec",
+      "ModelTooLarge",
+      "canonical",
+      "check_fits",
+      "device_budget_gb",
+      "pick_model",
+      "resolve_model_id"
+    ],
     "puremacro.longrun": [
       "CheckpointError",
       "Job",
@@ -5882,6 +5893,18 @@
       "model",
       "prompt_sha256",
       "temperature"
+    ],
+    "puremacro.llm.models.ModelSpec": [
+      "alias",
+      "approx_gb",
+      "license",
+      "llamacpp",
+      "min_budget_gb",
+      "mlx",
+      "ollama",
+      "openai",
+      "params_b",
+      "thinking"
     ],
     "puremacro.longrun._job.Progress": [
       "done",
