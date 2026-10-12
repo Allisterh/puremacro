@@ -23,8 +23,9 @@ Three engines run a model on the user's own machine, and :func:`resolve_engine` 
   (llamafile, llama-server) and 1234 (LM Studio). A ``base_url``, or else the environment
   variable ``PUREMACRO_LLM_BASE_URL``, replaces those three with one URL, tried as an Ollama
   server and then as an OpenAI-compatible one. A server URL loses its trailing slashes and then
-  one trailing ``/v1``, so the ``http://localhost:1234/v1`` that LM Studio and OpenAI clients
-  document names the same server as ``http://localhost:1234``.
+  one trailing ``/v1``, once, when :class:`HTTPEngine` is built, so the
+  ``http://localhost:1234/v1`` that LM Studio and OpenAI clients document names the same server
+  as ``http://localhost:1234`` and ``http://h:1/v1/v1`` names ``http://h:1/v1``.
 * **Thinking.** ``complete(..., thinking=True)`` says that the model thinks before it answers
   (``ModelSpec.thinking``) and that the thinking is to be switched off for the call. MLX
   applies the chat template with ``enable_thinking=False``; llama.cpp passes the same switch to
@@ -47,8 +48,8 @@ Three engines run a model on the user's own machine, and :func:`resolve_engine` 
   naming the status and the start of the reply: the server turned down this one request (a
   prompt longer than the context, say), so ``score_llm`` counts that record as malformed and
   goes on. Every other failure propagates as raised: a model that cannot be loaded, a llama.cpp
-  id that is neither a file nor a pair (``ValueError``), a reply that does not come within the
-  timeout (``TimeoutError``).
+  id that is neither a file nor a pair, or a pair whose file name is a pattern (``ValueError``),
+  a reply that does not come within the timeout (``TimeoutError``).
 
 ``mlx``, ``mlx_lm``, ``llama_cpp``, ``huggingface_hub`` and ``puremacro._http`` are imported
 inside the functions that use them, so importing this module needs nothing but the standard
@@ -265,7 +266,10 @@ class MLXEngine:
 def _gguf_source(model_id: Any) -> str | tuple[str, str]:
     """Where llama.cpp loads ``model_id`` from: a file path, or a ``(repository, file)`` pair.
 
-    Anything else is a ``ValueError``: a bad argument, not a missing engine.
+    The file of a pair is an exact name: one with ``*`` or ``?`` in it is a pattern (4.8.1 wrote
+    ``"*Q4_K_M.gguf"``), which can match no file or several and which ``hf_hub_download``, taking
+    a name, cannot resolve. Anything else that is neither a file nor a pair is a ``ValueError``
+    too: a bad argument, not a missing engine. Both are raised before anything is downloaded.
     """
     if isinstance(model_id, (str, os.PathLike)):
         path = os.path.expanduser(os.fspath(model_id))
@@ -273,6 +277,9 @@ def _gguf_source(model_id: Any) -> str | tuple[str, str]:
             return path
     elif (isinstance(model_id, Sequence) and len(model_id) == 2
           and all(isinstance(part, str) for part in model_id)):
+        if "*" in model_id[1] or "?" in model_id[1]:
+            raise ValueError(
+                f"llama.cpp registry files must be exact file names, not patterns: {model_id[1]}")
         return (model_id[0], model_id[1])
     raise ValueError(
         f"llama.cpp loads a (repository, file name) pair from Hugging Face or the path of a "
@@ -342,7 +349,8 @@ class LlamaCppEngine:
     """GGUF inference through ``llama-cpp-python``, on any platform.
 
     ``model_id`` is a ``(repository, file name)`` pair on Hugging Face or the path of a
-    ``.gguf`` file. The file of a pair comes from ``huggingface_hub.hf_hub_download``, which
+    ``.gguf`` file. The file name is exact: a pattern such as ``*Q4_K_M.gguf`` is a
+    ``ValueError``. The file of a pair comes from ``huggingface_hub.hf_hub_download``, which
     downloads it into the Hugging Face cache the first time and afterwards returns the cached
     copy, with no network when ``HF_HUB_OFFLINE=1`` and after a failed connection otherwise
     (``Llama.from_pretrained`` lists the repository on the Hub at every load, so it cannot load
@@ -589,12 +597,16 @@ class HTTPEngine:
 
 def _server_url(base_url: str | None) -> str | None:
     """The one server URL that replaces :data:`DEFAULT_SERVERS`: ``base_url``, else the
-    environment variable ``PUREMACRO_LLM_BASE_URL``, stripped of blanks and of trailing slashes
-    and one trailing ``/v1`` as :class:`HTTPEngine` strips its ``base_url``; None when neither
-    is set (or blank)."""
+    environment variable ``PUREMACRO_LLM_BASE_URL``, stripped of surrounding blanks; None when
+    neither is set (or blank).
+
+    The URL is handed on as written. :class:`HTTPEngine` drops the trailing slashes and one
+    trailing ``/v1`` of its ``base_url`` when it is built, and does it nowhere else: a second
+    strip on the way would turn ``http://h:1/v1/v1`` into the root of the server.
+    """
     for value in (base_url, os.environ.get(_ENV_BASE_URL)):
         if value and value.strip():
-            return _root_url(value.strip())
+            return value.strip()
     return None
 
 

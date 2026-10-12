@@ -432,6 +432,20 @@ def test_llamacpp_rejects_an_id_it_cannot_load(monkeypatch, model_id):
     assert seen["built"] == [] and seen["downloads"] == []
 
 
+@pytest.mark.parametrize("pair_type", [tuple, list])
+@pytest.mark.parametrize("file", ["*Q4_K_M.gguf", "Qwen3-4B-Q4_?_M.gguf", "Qwen3-*-Q4_K_M.gguf"])
+def test_llamacpp_rejects_a_pattern_in_place_of_a_file_name(monkeypatch, pair_type, file):
+    # 4.8.1 wrote the file of a pair as a glob ("*Q4_K_M.gguf"); the registry now holds the exact
+    # name, because a pattern can match no file or several. hf_hub_download takes a name, not a
+    # pattern, so the pair is refused before it is asked for anything.
+    seen = _install_fake_llama_cpp(monkeypatch, "format")
+    pair = pair_type(("Qwen/Qwen3-4B-GGUF", file))
+    with pytest.raises(ValueError) as ei:       # a bad argument, not a missing engine
+        E.LlamaCppEngine().complete(pair, "hola", system=None, thinking=False, **_CALL)
+    assert str(ei.value) == f"llama.cpp registry files must be exact file names, not patterns: {file}"
+    assert seen["downloads"] == [] and seen["built"] == []     # nothing was downloaded or loaded
+
+
 @pytest.mark.parametrize("source", ["pair", "path"])
 def test_llamacpp_load_failure_propagates_as_raised(monkeypatch, tmp_path, source):
     _install_fake_llama_cpp(monkeypatch, "format")
@@ -890,6 +904,36 @@ def test_the_env_var_and_base_url_lose_a_trailing_v1_too(monkeypatch, llm_stub_s
     monkeypatch.delenv(_ENV_URL)
     assert E.resolve_engine("openai", base_url=llm_stub_server.url + "/v1").base_url == llm_stub_server.url
     assert E.available_engines(base_url=llm_stub_server.url + "/v1") == ["ollama", "openai"]
+
+
+def test_one_trailing_v1_is_stripped_once_whichever_path_builds_the_engine(monkeypatch):
+    # resolve_engine and available_engines hand HTTPEngine the URL as it was given, and the engine
+    # strips one /v1 (and trailing slashes) from it: a second strip on the way would turn
+    # /v1/v1 into the root of the server and /proxy/v1/v1 into /proxy.
+    _no_local_packages(monkeypatch)
+    monkeypatch.setattr(E.HTTPEngine, "available", lambda self: True)
+    for api in ("ollama", "openai", "auto"):
+        assert E.resolve_engine(api, base_url="http://h:1/v1/v1").base_url == "http://h:1/v1", api
+        assert E.resolve_engine(api, base_url=" http://h:1/v1/v1/ ").base_url == "http://h:1/v1", api
+    monkeypatch.setenv(_ENV_URL, "http://h:1/proxy/v1/v1")
+    for api in ("ollama", "openai", "auto"):
+        assert E.resolve_engine(api).base_url == "http://h:1/proxy/v1", api
+    probed = []
+    monkeypatch.setattr(E.HTTPEngine, "available", lambda self: probed.append((self.api, self.base_url)) or False)
+    assert E.available_engines() == [] and E.available_engines(base_url="http://h:1/v1/v1") == []
+    assert probed == [("ollama", "http://h:1/proxy/v1"), ("openai", "http://h:1/proxy/v1"),
+                      ("ollama", "http://h:1/v1"), ("openai", "http://h:1/v1")]
+
+
+def test_a_v1_v1_base_url_is_probed_at_one_v1_below_the_model_list(monkeypatch):
+    # the same rule on the wire: the root /v1 plus the /v1/models of the OpenAI API
+    _no_local_packages(monkeypatch)
+    seen = _record_probes(monkeypatch)
+    with pytest.raises(E.LocalLLMUnavailable):
+        E.resolve_engine("openai", base_url="http://h:1/v1/v1")
+    with pytest.raises(E.LocalLLMUnavailable):
+        E.resolve_engine("ollama", base_url="http://h:1/v1/v1")
+    assert seen == [("http://h:1/v1/v1/models", 3.0), ("http://h:1/v1/api/tags", 3.0)]
 
 
 def test_available_engines_against_the_stub(monkeypatch, llm_stub_server):
