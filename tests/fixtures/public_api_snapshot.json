@@ -1745,6 +1745,19 @@
       "default_cache_path",
       "prompt_sha256"
     ],
+    "puremacro.llm.engines": [
+      "BackendUnavailable",
+      "DEFAULT_SERVERS",
+      "Engine",
+      "HTTPEngine",
+      "INSTALL_HINT",
+      "LlamaCppEngine",
+      "LocalLLMUnavailable",
+      "MLXEngine",
+      "available_engines",
+      "resolve_engine",
+      "strip_thinking"
+    ],
     "puremacro.llm.models": [
       "ALIASES",
       "MODELS",
