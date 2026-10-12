@@ -3,8 +3,9 @@
 Every provider returns a :class:`MicroFrame`: the records, the
 :class:`SurveyDesign` that says how to get standard errors from them,
 and the request that produced them (keys stripped). Estimators on the
-frame (``mean``, ``total``, ``quantile``, ``share``) return estimate,
-standard error and unweighted ``n`` together.
+frame (``mean``, ``total``, ``quantile``, ``share``, ``ratio``, ``gini``,
+``top_share``) return estimate, standard error and unweighted ``n``
+together.
 
 Providers
 ---------

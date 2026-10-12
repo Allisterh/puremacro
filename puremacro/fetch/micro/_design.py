@@ -182,6 +182,52 @@ def _w_quantile(x: np.ndarray, W: np.ndarray, q: float) -> np.ndarray:
     return out
 
 
+def _lorenz(x: np.ndarray, W: np.ndarray):
+    """Sorted values, cumulative weights and cumulative weighted values."""
+    order = np.argsort(x, kind="stable")
+    xs, Ws = x[order], W[order]
+    return xs, Ws, np.cumsum(Ws, axis=0), np.cumsum(Ws * xs[:, None], axis=0)
+
+
+def _w_gini(x: np.ndarray, W: np.ndarray) -> np.ndarray:
+    """Gini coefficient, 1 − Σ_i p_i (L_i + L_{i−1}), from the Lorenz curve of
+    the weighted sample (each unit a mass point). Equals the mean absolute
+    difference Σ_ij w_i w_j |x_i − x_j| / (2 N Σ w x). Negative values (net
+    worth) are allowed and can push it above 1; NaN when the total is <= 0."""
+    _, Ws, cw, S = _lorenz(x, W)
+    N, tot = cw[-1], S[-1]
+    S_prev = np.vstack([np.zeros((1, W.shape[1])), S[:-1]])
+    with np.errstate(invalid="ignore", divide="ignore"):
+        g = 1.0 - (Ws * (S + S_prev)).sum(axis=0) / (N * tot)
+    return np.where((N > 0) & (tot > 0), g, np.nan)
+
+
+def _w_top_share(x: np.ndarray, W: np.ndarray, p: float) -> np.ndarray:
+    """Share of the total held by the top ``p`` of units by weight,
+    1 − L(1 − p), splitting the unit that straddles the cut-off."""
+    xs, _, cw, S = _lorenz(x, W)
+    N, tot = cw[-1], S[-1]
+    cut = (1.0 - p) * N
+    i = (cw >= cut - 1e-12 * np.abs(cut)).argmax(axis=0)
+    cols = np.arange(W.shape[1])
+    prev = i > 0
+    cw_prev = np.where(prev, cw[np.maximum(i - 1, 0), cols], 0.0)
+    S_prev = np.where(prev, S[np.maximum(i - 1, 0), cols], 0.0)
+    below = S_prev + (cut - cw_prev) * xs[i]
+    with np.errstate(invalid="ignore", divide="ignore"):
+        share = 1.0 - below / tot
+    return np.where((N > 0) & (tot > 0), share, np.nan)
+
+
+def _w_ratio(X: np.ndarray, W: np.ndarray, q: float | None) -> np.ndarray:
+    """Ratio of the means (``q=None``) or of the ``q``-quantiles of two columns."""
+    if q is None:
+        with np.errstate(invalid="ignore", divide="ignore"):
+            return (X[:, 0] @ W) / (X[:, 1] @ W)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return _w_quantile(X[:, 0], W, q) / _w_quantile(X[:, 1], W, q)
+
+
 @dataclass
 class MicroFrame:
     """Microdata rows plus everything needed to estimate from them.
@@ -250,13 +296,46 @@ class MicroFrame:
             frames.append(res)
         return pd.concat(frames, ignore_index=True)
 
+    def ratio(self, num: str, den: str, by: str | Sequence[str] | None = None,
+              *, q: float | None = None) -> pd.DataFrame:
+        """Ratio of the weighted means of ``num`` and ``den`` (e.g. mean
+        wealth over mean income), or of their ``q``-quantiles when ``q`` is
+        given. Rows missing either column are dropped from both."""
+        if q is not None and not 0 <= q <= 1:
+            raise ValueError("q must lie in [0, 1]")
+        return self._estimate([num, den], by, lambda X, W: _w_ratio(X, W, q),
+                              kind="ratio")
+
+    def gini(self, col: str, by: str | Sequence[str] | None = None) -> pd.DataFrame:
+        """Weighted Gini coefficient of ``col``."""
+        return self._estimate(col, by, _w_gini, kind="gini")
+
+    def top_share(self, col: str, p: float,
+                  by: str | Sequence[str] | None = None) -> pd.DataFrame:
+        """Share of the total of ``col`` held by the top ``p`` of units
+        (``p=0.01``: the top 1% by weight)."""
+        if not 0 < p < 1:
+            raise ValueError("p must lie in (0, 1)")
+        return self._estimate(col, by, lambda x, W: _w_top_share(x, W, p),
+                              kind="top_share")
+
     # ----- engine ----------------------------------------------------------
     def _estimate(self, col, by, stat: Callable, kind="mean") -> pd.DataFrame:
         d = self.design
-        x_all = (col if isinstance(col, pd.Series) else self.data[col])
-        x_all = pd.to_numeric(x_all, errors="coerce").to_numpy(dtype=float)
+        if isinstance(col, list):           # several columns -> (n, k)
+            x_all = np.column_stack([
+                pd.to_numeric(self.data[c], errors="coerce").to_numpy(dtype=float)
+                for c in col])
+        else:
+            x_all = (col if isinstance(col, pd.Series) else self.data[col])
+            x_all = pd.to_numeric(x_all, errors="coerce").to_numpy(dtype=float)
         by_cols = [by] if isinstance(by, str) else list(by or [])
         if d.method == "taylor":
+            if kind not in ("total", "mean") and not (
+                    isinstance(kind, tuple) and kind[0] == "quantile"):
+                raise NotImplementedError(
+                    f"{kind} has no linearised variance here; Taylor designs "
+                    "support total, mean, quantile and share")
             return self._taylor(x_all, by_cols, kind)
         wcols = [d.weight, *(d.replicate_weights if d.has_variance else ())]
         W_all = self.data[wcols].to_numpy(dtype=float, na_value=0.0)
@@ -269,7 +348,7 @@ class MicroFrame:
         for key, idx in groups.items():
             idx = np.asarray(idx)
             x = x_all[idx]
-            keep = ~np.isnan(x)
+            keep = ~np.isnan(x) if x.ndim == 1 else ~np.isnan(x).any(axis=1)
             est, se, m = self._combine(x[keep], W_all[idx][keep],
                                        imp_all[idx][keep], stat)
             key = key if isinstance(key, tuple) else (key,)
