@@ -247,8 +247,8 @@ def test_http_engine_rejects_an_unknown_api():
     ("<think>\n\n</think>\n\n0.3", "0.3"),                 # what /no_think leaves (Task 1 spike)
     ("<think>a</think>x <think>b</think>y", "x y"),
     ("0.4 <think>cut off by the token limit", "0.4"),
-    ("thinking opened in the prompt</think>0.8", "0.8"),
-    ("a</think>b<think>c", "b"),
+    ("Use the </think> tag.", "Use the </think> tag."),    # a closing tag alone is not thinking
+    ("a</think>b<think>c", "a</think>b"),
     ("<think>only thinking</think>", ""),
     ("  0.5\n", "0.5"),
     ("", ""),
@@ -360,11 +360,12 @@ def test_mlx_missing_package_is_local_llm_unavailable(monkeypatch):
     assert isinstance(ei.value.__cause__, ImportError)
 
 
-def test_mlx_load_failure_is_local_llm_unavailable(monkeypatch):
-    _fake_mlx_lm(monkeypatch, load_error=OSError("Repository Not Found: org/no-such-model"))
-    with pytest.raises(E.LocalLLMUnavailable, match="Repository Not Found") as ei:
+def test_mlx_load_failure_propagates_as_raised(monkeypatch):
+    failure = OSError("Repository Not Found: org/no-such-model")
+    _fake_mlx_lm(monkeypatch, load_error=failure)
+    with pytest.raises(OSError) as ei:                  # mlx-lm is there: not a LocalLLMUnavailable
         E.MLXEngine().complete("org/no-such-model", "hola", system=None, thinking=True, **_CALL)
-    assert "org/no-such-model" in str(ei.value) and isinstance(ei.value.__cause__, OSError)
+    assert ei.value is failure
 
 
 # ---------------------------------------------------------------- llama.cpp
@@ -402,21 +403,31 @@ def test_llamacpp_keeps_each_model_loaded_once(monkeypatch):
 @pytest.mark.parametrize("model_id", ["qwen3:4b", "no/such/file.gguf", ("only-one",), ("r", "f", "x"), ("r", 4), 42])
 def test_llamacpp_rejects_an_id_it_cannot_load(monkeypatch, model_id):
     seen = _install_fake_llama_cpp(monkeypatch, "format")
-    with pytest.raises(E.LocalLLMUnavailable, match="neither"):
+    with pytest.raises(ValueError, match="neither"):    # a bad argument, not a missing engine
         E.LlamaCppEngine().complete(model_id, "hola", system=None, thinking=False, **_CALL)
     assert seen["built"] == []
 
 
-def test_llamacpp_load_failure_is_local_llm_unavailable(monkeypatch):
+@pytest.mark.parametrize("source", ["pair", "path"])
+def test_llamacpp_load_failure_propagates_as_raised(monkeypatch, tmp_path, source):
     _install_fake_llama_cpp(monkeypatch, "format")
+    gguf = tmp_path / "broken.gguf"
+    gguf.write_bytes(b"not a model")
+    model_id = ("r", "f.gguf") if source == "pair" else str(gguf)
+    failure = ValueError("No file found in r that match f.gguf" if source == "pair"
+                         else f"Failed to load model from file: {gguf}")   # llama.cpp's words
 
-    def no_such_file(cls, **options):
-        raise ValueError("No file found in r that match f.gguf")
+    def fail(*args, **options):
+        raise failure
 
-    monkeypatch.setattr(sys.modules["llama_cpp"].Llama, "from_pretrained", classmethod(no_such_file))
-    with pytest.raises(E.LocalLLMUnavailable, match="No file found") as ei:
-        E.LlamaCppEngine().complete(("r", "f.gguf"), "hola", system=None, thinking=False, **_CALL)
-    assert isinstance(ei.value.__cause__, ValueError)
+    Llama = sys.modules["llama_cpp"].Llama
+    if source == "pair":
+        monkeypatch.setattr(Llama, "from_pretrained", classmethod(fail))
+    else:
+        monkeypatch.setattr(Llama, "__init__", fail)
+    with pytest.raises(ValueError) as ei:   # llama-cpp-python is there: no LocalLLMUnavailable
+        E.LlamaCppEngine().complete(model_id, "hola", system=None, thinking=False, **_CALL)
+    assert ei.value is failure
 
 
 def test_llamacpp_missing_package_is_local_llm_unavailable(monkeypatch):
@@ -474,13 +485,12 @@ def test_an_unreachable_server_is_local_llm_unavailable(api):
 
 
 @pytest.mark.parametrize("api", ["ollama", "openai"])
-def test_a_reply_that_never_comes_is_local_llm_unavailable(llm_stub_server, api):
+def test_a_reply_that_never_comes_propagates_the_timeout(llm_stub_server, api):
     llm_stub_server.delay = 30.0                        # the request is read, the reply never sent
     eng = E.HTTPEngine(base_url=llm_stub_server.url, api=api, timeout=0.3)
-    with pytest.raises(E.LocalLLMUnavailable, match=llm_stub_server.url) as ei:
+    with pytest.raises(TimeoutError) as ei:             # the server was reached: not a URLError
         eng.complete("m", "hola", system=None, thinking=False, **_CALL)
-    cause = ei.value.__cause__                          # a timeout, which is not a URLError
-    assert isinstance(cause, TimeoutError) and not isinstance(cause, urllib.error.URLError)
+    assert not isinstance(ei.value, (urllib.error.URLError, E.LocalLLMUnavailable))
 
 
 @pytest.mark.parametrize("api", ["ollama", "openai"])

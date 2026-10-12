@@ -32,9 +32,11 @@ Three engines run a model on the user's own machine, and :func:`resolve_engine` 
 * **System prompt.** A non-empty ``system`` text becomes a leading ``{"role": "system"}``
   message on every engine.
 * **Errors.** :class:`LocalLLMUnavailable`, a :class:`BackendUnavailable`, means that the engine
-  could not reach its model: the package is missing, the model cannot be loaded, the server
-  cannot be reached or answers with an error status. Callers such as ``score_llm`` let it
-  propagate instead of counting it as malformed output.
+  cannot be used: its package is missing, or its server cannot be reached or answers with an
+  error status (a ``urllib.error.URLError``, of which ``HTTPError`` is a kind). Callers such
+  as ``score_llm`` let it propagate instead of counting it as malformed output. Every other
+  failure propagates as raised: a model that cannot be loaded, a llama.cpp id that is neither a
+  file nor a pair (``ValueError``), a reply that does not come within the timeout.
 
 ``mlx``, ``mlx_lm``, ``llama_cpp`` and ``puremacro._http`` are imported inside the functions
 that use them, so importing this module needs nothing but the standard library and works under
@@ -123,21 +125,18 @@ class Engine(Protocol):
         ...
 
 
-_THINK_OPEN, _THINK_CLOSE = "<think>", "</think>"
+_THINK_OPEN = "<think>"
 _THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL)
 
 
 def strip_thinking(text: str) -> str:
     """``text`` without the model's thinking, and without surrounding whitespace.
 
-    Every ``<think>…</think>`` block is removed. If a ``</think>`` is left (thinking whose
-    opening tag was part of the prompt), everything up to the last one goes too; if a
-    ``<think>`` is left (thinking cut off by the token limit), everything from it on.
+    Every ``<think>…</think>`` block is removed, and so is everything from a ``<think>`` left
+    unterminated (thinking cut off by the token limit). A ``</think>`` without its opening tag
+    is left as it is.
     """
     text = _THINK_BLOCK.sub("", text)
-    close = text.rfind(_THINK_CLOSE)
-    if close != -1:
-        text = text[close + len(_THINK_CLOSE):]
     opening = text.find(_THINK_OPEN)
     if opening != -1:
         text = text[:opening]
@@ -221,11 +220,7 @@ class MLXEngine:
             except ImportError as exc:
                 raise _missing("mlx-lm", exc) from exc
             options = {} if self.adapter_path is None else {"adapter_path": self.adapter_path}
-            try:
-                self._loaded[model_id] = load(model_id, **options)
-            except Exception as exc:
-                raise LocalLLMUnavailable(
-                    f"MLX could not load the model {model_id!r}: {exc}") from exc
+            self._loaded[model_id] = load(model_id, **options)
         return self._loaded[model_id]
 
     def complete(self, model_id: str, prompt: str, *, system: str | None = None,
@@ -252,7 +247,10 @@ class MLXEngine:
 
 
 def _gguf_source(model_id: Any) -> str | tuple[str, str]:
-    """Where llama.cpp loads ``model_id`` from: a file path, or a ``(repository, file)`` pair."""
+    """Where llama.cpp loads ``model_id`` from: a file path, or a ``(repository, file)`` pair.
+
+    Anything else is a ``ValueError``: a bad argument, not a missing engine.
+    """
     if isinstance(model_id, (str, os.PathLike)):
         path = os.path.expanduser(os.fspath(model_id))
         if isinstance(path, str) and os.path.isfile(path):
@@ -260,7 +258,7 @@ def _gguf_source(model_id: Any) -> str | tuple[str, str]:
     elif (isinstance(model_id, Sequence) and len(model_id) == 2
           and all(isinstance(part, str) for part in model_id)):
         return (model_id[0], model_id[1])
-    raise LocalLLMUnavailable(
+    raise ValueError(
         f"llama.cpp loads a (repository, file name) pair from Hugging Face or the path of a "
         f".gguf file, and {model_id!r} is neither; a model of the registry, such as "
         f"'qwen3-4b', is resolved to its pair.")
@@ -331,15 +329,11 @@ class LlamaCppEngine:
         source = _gguf_source(model_id)
         if source not in self._loaded:
             options = {"n_ctx": self.n_ctx, "n_gpu_layers": -1, "verbose": False}
-            try:
-                if isinstance(source, str):
-                    llm = Llama(model_path=source, **options)
-                else:
-                    llm = Llama.from_pretrained(repo_id=source[0], filename=source[1], **options)
-            except Exception as exc:
-                raise LocalLLMUnavailable(
-                    f"llama.cpp could not load the model {model_id!r}: {exc}") from exc
-            self._loaded[source] = llm
+            if isinstance(source, str):
+                self._loaded[source] = Llama(model_path=source, **options)
+            else:
+                self._loaded[source] = Llama.from_pretrained(repo_id=source[0],
+                                                             filename=source[1], **options)
         return self._loaded[source]
 
     def complete(self, model_id: Any, prompt: str, *, system: str | None = None,
@@ -477,6 +471,13 @@ class HTTPEngine:
         return strip_thinking(_text(content))
 
     def _post(self, path: str, payload: dict[str, Any]) -> Any:
+        """The decoded reply to ``POST path``.
+
+        A ``urllib.error.URLError`` becomes :class:`LocalLLMUnavailable`: the server cannot be
+        reached, or it answered with an error status (an ``HTTPError``, which is a
+        ``URLError``). Anything else, such as a reply that does not come within ``timeout``,
+        propagates as raised.
+        """
         import urllib.error
 
         from .._http import post_json
@@ -488,7 +489,7 @@ class HTTPEngine:
             raise LocalLLMUnavailable(
                 f"The local LLM server at {self.base_url} answered {path} with HTTP "
                 f"{exc.code}{': ' + said if said else ''}. {INSTALL_HINT}") from exc
-        except OSError as exc:         # URLError, a timeout, a connection dropped mid-reply
+        except urllib.error.URLError as exc:
             raise LocalLLMUnavailable(
                 f"Cannot reach a local LLM server at {self.base_url} ({exc}). "
                 f"{INSTALL_HINT}") from exc
