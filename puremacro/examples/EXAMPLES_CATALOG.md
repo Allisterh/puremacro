@@ -163,7 +163,7 @@ Thirteen scripts that together span the methods catalogue. Read in this order if
 
 | Script | LOC | Headline |
 |---|---:|---|
-| `scf_aiyagari` | 390 | Aiyagari (1994) `dp` economy calibrated to SCF wealth-to-income ratios; untargeted Gini and top shares against the SCF with replicate-weight standard errors (needs network). |
+| `scf_aiyagari` | 378 | Aiyagari (1994) `dp` economy calibrated to SCF wealth-to-income ratios; untargeted Gini and top shares against the SCF with replicate-weight standard errors (needs network). |
 
 ### Data infrastructure
 
