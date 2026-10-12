@@ -66,6 +66,8 @@ nav:
           - Long national accounts panel: long_panel.md
           - Global Macro Data Ecosystem: data_ecosystem.md
           - Cross-country macro panels: cross_country_panels.md
+          - Source registry & survey microdata: micro_data.md
+          - Text as data (corpus, tokenizer, DTM): text_analysis.md
       - Econometric Engines:
           - VAR & FAVAR: var.md
           - Narrative Sign Restrictions SVAR: narrative_sign_svar.md
@@ -99,6 +101,7 @@ nav:
           - DSGE Non-linear Particle Filtering & Regime Switching: dsge_phase_d.md
           - Stacked-Time Newton-Krylov (Perfect Foresight): dsge_stacked_newton.md
       - Continuous Dynamic Programming & Projection Solvers:
+          - Declarative dynamic programming (dp): dp.md
           - Continuous Projection Solvers: vfi_continuous_projection.md
           - Splines & Sparse Grids: vfi_splines_and_sparse_grids.md
           - Discrete Choice EGM (DC-EGM): dcegm.md
@@ -153,6 +156,8 @@ nav:
           - Panel largo de cuentas nacionales: es/long_panel.md
           - Ecosistema de datos macro globales: es/data_ecosystem.md
           - Paneles macro entre países: es/cross_country_panels.md
+          - Registro de fuentes y microdatos de encuestas: es/micro_data.md
+          - Texto como datos (corpus, tokenizador, DTM): es/text_analysis.md
       - Motores econométricos:
           - VAR y FAVAR: es/var.md
           - SVAR con restricciones narrativas de signo: es/narrative_sign_svar.md
@@ -186,6 +191,7 @@ nav:
           - DSGE Filtrado de Partículas No Lineal y Cambio de Régimen: es/dsge_phase_d.md
           - Newton-Krylov apilado en el tiempo (previsión perfecta): es/dsge_stacked_newton.md
       - Programación dinámica continua y solucionadores de proyección:
+          - Programación dinámica declarativa (dp): es/dp.md
           - Solucionadores de proyección continua: es/vfi_continuous_projection.md
           - Splines y mallas dispersas: es/vfi_splines_and_sparse_grids.md
           - DC-EGM de elección discreta: es/dcegm.md

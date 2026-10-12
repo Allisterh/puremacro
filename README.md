@@ -483,6 +483,19 @@ lines are hardware-specific: with neither framework installed, `has_torch()` and
   transfer simulations across wealth deciles (`simulate_targeted_transfer`,
   `FiscalTransferResult`); numpy reference backend with optional
   numba / mlx / cupy acceleration. See `notebooks/` for a showcase suite.
+- **Declarative dynamic programming** (`dp`) — declare states, shocks,
+  choices, a reward, constraints and a market-clearing condition as equations
+  (Dynare expression syntax) and `Model.solve()` compiles them to VFI, EGM with
+  discrete choices and taste shocks, the continuous-time HJB scheme or a
+  Krusell-Smith loop; see `docs/dp.md`.
+- **Survey microdata and the source registry** (`fetch.micro`, `fetch.registry`) —
+  Census ACS PUMS and CPS, the Fed's SCF and INEGI's ENIGH with their survey
+  designs, so means, quantiles, ratios, Ginis and top shares come with
+  replicate-weight or Taylor standard errors; one table of every data source
+  with its key, terms and redistribution status; see `docs/micro_data.md`.
+- **Text as data** (`text`, `narrative`) — multilingual tokenizer that keeps
+  numbers, sparse document-term matrices with TF-IDF and country-by-period
+  panels, and a stored, exportable narrative corpus; see `docs/text_analysis.md`.
 
 **Continuous dynamic programming & projection engines (puremacro 3.3)**
 
@@ -1043,6 +1056,9 @@ All notebooks strictly adhere to the Pyodide contract and the 7-section pedagogi
 - **`docs/quickstart.md`** — 2-minute quickstart covering core estimators and publication workflows.
 - **`docs/vfi_continuous_projection.md`** — Continuous state-space dynamic programming: Chebyshev polynomial collocation and Finite Element Galerkin projection with Fischer-Burmeister borrowing constraints.
 - **`docs/vfi_splines_and_sparse_grids.md`** — Shape-preserving cubic B-splines, Schumaker quadratic splines, and Smolyak high-dimensional sparse grids ($d \in [2, 6]$).
+- **`docs/dp.md`** — Declarative dynamic programming (`puremacro.dp`): models as equations, compiled to VFI, EGM and DC-EGM, continuous-time HJB and Krusell-Smith (Spanish twin under `docs/es/`).
+- **`docs/micro_data.md`** — The data-source registry and survey microdata with design-based standard errors (ACS, CPS, SCF, ENIGH), and the SCF-calibrated Aiyagari example (Spanish twin under `docs/es/`).
+- **`docs/text_analysis.md`** — Narrative corpus storage and export, the multilingual tokenizer and sparse document-term matrices (Spanish twin under `docs/es/`).
 - **`docs/dcegm.md`** — Discrete Choice Endogenous Grid Method (DC-EGM) with fast Upper Envelope filtering for non-convex dynamic programming.
 - **`docs/vfi_continuous_equilibrium.md`** — Young (2010) continuous stationary wealth distributions, mass conservation, and Aiyagari general equilibrium factor market clearing.
 - **`docs/vfi_continuous_transition.md`** — Non-linear continuous transition dynamics under unexpected MIT shocks and sequence-space Broyden solvers.

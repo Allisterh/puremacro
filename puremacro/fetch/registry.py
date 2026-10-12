@@ -348,7 +348,9 @@ def _ensure_text() -> None:
             loader=f"puremacro.narrative.sources.{module}:{name}",
             description=f"narrative.sources.{name}: yields "
                         "(date, text, url, metadata) records",
-            auth="unaudited"))
+            # Terms not reviewed one by one: don't advertise the text as
+            # redistributable until someone has read them.
+            auth="unaudited", redistributable=False))
 
 
 __all__ = ["SourceInfo", "KINDS", "AUTH_LEVELS", "register", "info", "load",

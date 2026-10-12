@@ -23,6 +23,15 @@ def test_text_loaders_point_at_existing_modules():
         assert importlib.util.find_spec(module) is not None, loader
 
 
+def test_unaudited_text_sources_are_not_marked_redistributable():
+    # Their terms have not been read, so the registry must not tell a user
+    # the harvested text may be republished.
+    df = registry.sources("text")
+    unaudited = df[df["auth"] == "unaudited"]
+    assert len(unaudited) >= 50
+    assert not unaudited["redistributable"].any()
+
+
 def test_credentials_named_by_entries_exist():
     df = registry.sources()
     named = set(df["credential"].dropna())
