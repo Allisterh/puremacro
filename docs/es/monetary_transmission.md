@@ -14,7 +14,7 @@ Los modelos Neokeynesianos de Agente Representativo (RANK) tradicionales asumen 
 
 Por el contrario, los modelos HANK (Kaplan, Moll y Violante 2018; Auclert et al. 2021) incorporan riesgo idiosincrásico no asegurable y restricciones crediticias ($a' \ge 0$). Una porción sustancial de los hogares vive al día (*hand-to-mouth*), registrando elevadas Propensiones Marginales a Consumir (PMC) respecto al ingreso corriente.
 
-En consecuencia, el **canal indirecto de equilibrio general**—que se transmite a través de la demanda de trabajo, el producto agregado y los salarios netos—explica la mayor parte de la respuesta macroeconómica del consumo.
+En consecuencia, en el modelo HANK cuantitativo de Kaplan, Moll y Violante (2018), el **canal indirecto de equilibrio general**—que se transmite a través de la demanda de trabajo, el producto agregado y los salarios netos—explica la mayor parte de la respuesta macroeconómica del consumo.
 
 ### 1.2 Descomposición de Kaplan-Moll-Violante (2018) en el Espacio de Secuencias
 
@@ -34,9 +34,11 @@ $$\left( \mathbf{I} - \mathbf{J}^{C, Y} - \mathbf{J}^{C, r} \mathbf{M}_{r, Y} \r
 |---|---|---|
 | **Estructura de Mercados** | Mercados de activos completos | Mercados incompletos, restricción crediticia $a' \ge 0$ |
 | **Distribución de la PMC** | Uniforme en deciles: $1 - \beta \approx 0.015$ | Pendiente pronunciada: Decil 1 ($>0.40$) al Decil 10 ($<0.06$) |
-| **Participación Canal Directo** | Idénticamente $100\%$ | $20\% - 40\%$ |
-| **Participación Canal Indirecto** | Idénticamente $0\%$ | $60\% - 80\%$ |
+| **Participación Canal Directo** | Idénticamente $100\%$ | $20\% - 40\%$ en Kaplan, Moll y Violante (2018); $85.0\%$ en este simulador (Receta 1) |
+| **Participación Canal Indirecto** | Idénticamente $0\%$ | $60\% - 80\%$ en Kaplan, Moll y Violante (2018); $15.0\%$ en este simulador (Receta 1) |
 | **Núcleo de Propagación** | Ecuación de Euler intertemporal | Multiplicador de ingreso laboral en equilibrio general |
+
+Las participaciones de la literatura son las de Kaplan, Moll y Violante (2018): los efectos indirectos explican el 80 por ciento de la respuesta del consumo durante el primer año en su caso base y el 60 por ciento cuando la deuda pública absorbe la mayor parte del desequilibrio fiscal en el corto plazo (sus cuadros 7 y 8). No son resultados de este simulador. En la Receta 1, `MonetaryTransmissionSimulator` imprime `indirect_share_hank=15.0%`, la participación del canal indirecto en la respuesta del consumo en la fecha 0, de modo que el canal directo explica el 85.0 por ciento restante: la calibración estilizada del simulador da una participación indirecta menor que el modelo HANK cuantitativo de ese artículo.
 
 ### 1.3 Recetas Prácticas en Python
 
@@ -62,7 +64,7 @@ print(f"PMC Agregada HANK: {sim_mon.steady_state_mpc:.4f}")
 res_mon = sim_mon.simulate_rate_shock(magnitude=0.0025, rho=0.7, T=40)
 
 print(repr(res_mon))
-# Salida: MonetaryTransmissionResult(shock_type='rate', magnitude=+0.0025, T=40, mpc_hank=0.1582, mpc_rank=0.0150, indirect_share_hank=68.4%)
+# Salida: MonetaryTransmissionResult(shock_type='rate', magnitude=+0.0025, T=40, mpc_hank=0.1027, mpc_rank=0.0150, indirect_share_hank=15.0%)
 
 # Resumen comparativo en texto
 print(res_mon.summary())
@@ -88,7 +90,9 @@ res_tf = sim_mon.simulate_balance_sheet_intervention(
 
 print(f"Multiplicador inicial de consumo en HANK: {res_tf.irf_consumption_hank[0]:.4f}")
 print(f"Multiplicador inicial de consumo en RANK: {res_tf.irf_consumption_rank[0]:.4f}")
-# En HANK, los hogares con alta PMC gastan de inmediato (>10x la respuesta en RANK)
+# Salida: Multiplicador inicial de consumo en HANK: 0.3163
+#         Multiplicador inicial de consumo en RANK: 0.0150
+# En HANK, los hogares con alta PMC gastan más en el impacto (unas 21 veces la respuesta en RANK)
 ```
 
 ---
@@ -110,7 +114,7 @@ print(f"Multiplicador inicial de consumo en RANK: {res_tf.irf_consumption_rank[0
 |---|---|---|
 | `irf_output_hank / rank` | `np.ndarray (T,)` | Trayectorias de función de impulso-respuesta del producto $d\mathbf{Y}$. |
 | `irf_consumption_hank / rank` | `np.ndarray (T,)` | Trayectorias de impulso-respuesta del consumo $d\mathbf{C}$. |
-| `irf_inflation_hank / rank` | `np.ndarray (T,)` | Trayectorias anualizadas de inflación $d\boldsymbol{\pi}$. |
+| `irf_inflation_hank / rank` | `np.ndarray (T,)` | Trayectorias de impulso-respuesta de la inflación trimestral $d\boldsymbol{\pi}$ (`plot()` las muestra anualizadas, $\times 400$). |
 | `irf_rate_hank / rank` | `np.ndarray (T,)` | Trayectorias de la tasa de interés real *ex-ante* $d\mathbf{r}$. |
 | `mpc_deciles_hank / rank` | `pd.Series (10,)` | Propensión marginal a consumir en 10 deciles de riqueza. |
 | `aggregate_mpc_hank / rank` | `float` | Propensión marginal a consumir agregada trimestral. |
@@ -124,7 +128,7 @@ print(f"Multiplicador inicial de consumo en RANK: {res_tf.irf_consumption_rank[0
 
 ---
 
-## 3. Laboratorios Interactivos en Navegador (`curso/site/labs/`)
+## 3. Laboratorio Interactivo en el Navegador con JavaScript (`curso/site/labs/`)
 
 El sitio del curso en `curso/site/labs/` incluye un laboratorio en el navegador para este simulador: HTML y JavaScript estáticos, sin pasos de compilación.
 
@@ -132,14 +136,15 @@ El sitio del curso en `curso/site/labs/` incluye un laboratorio en el navegador 
 
 - **Ubicación**: `curso/site/labs/politica-monetaria-hank.html` y `curso/site/labs/politica-monetaria-hank.js`.
 - **Características**:
-  * Curvas de impulso-respuesta comparativas para producto, inflación y consumo.
-  * Controles deslizantes para magnitud del choque, persistencia ($\rho$) y proporción de hogares *hand-to-mouth*.
-  * Gráficos de barras que contrastan la escalera empírica de PMC por deciles frente a la línea plana del agente representativo.
-  * Visualizador dinámico de las participaciones de los canales directo e indirecto de Kaplan-Moll-Violante.
+  * Un preajuste de escenario de política (alza de 100 pb, recorte de 100 pb, choque persistente con $\rho = 0.85$, inyección de liquidez) y seis controles deslizantes: el choque de tasa de interés (de −200 a +200 pb, anualizado), su persistencia $\rho$, la transferencia a hogares restringidos (% del PIB), la respuesta de Taylor $\phi_\pi$, la pendiente de Phillips $\kappa$ y la aversión al riesgo $\gamma$.
+  * Gráficas de líneas de las funciones impulso-respuesta del producto y de la inflación, HANK frente a RANK.
+  * Una gráfica de líneas de la PMC trimestral por decil de riqueza: la escalera descendente de HANK frente a la línea plana de RANK en $1 - \beta$.
+  * La descomposición de Kaplan-Moll-Violante del consumo de HANK en sus canales directo e indirecto, y recuadros con la PMC agregada, la caída del producto en el impacto, la participación del canal indirecto y el multiplicador de balance.
+  * Los jacobianos de los hogares HANK y las PMC por decil ($T = 40$) son arreglos fijos en el script; mover un control vuelve a resolver en el navegador el sistema lineal de equilibrio general.
 
 ### 3.2 Ejecución Local
 
-Para servir los laboratorios de forma local sin requerir conexión a internet:
+Para servir los laboratorios localmente (cada página carga d3 7.9.0 y KaTeX 0.16.11, con su extensión auto-render, desde la CDN jsDelivr, y la fuente Manrope desde Google Fonts, así que las gráficas necesitan acceso a la red):
 
 ```bash
 # Desde la raíz del repositorio puremacro

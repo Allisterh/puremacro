@@ -14,7 +14,7 @@ Textbook Representative-Agent New Keynesian (RANK) models dictate that monetary 
 
 In contrast, Heterogeneous-Agent New Keynesian (HANK) models (Kaplan, Moll, and Violante 2018; Auclert et al. 2021) incorporate uninsurable idiosyncratic productivity risk and borrowing constraints. A large share of households are **hand-to-mouth** (either poor hand-to-mouth with zero net worth, or wealthy hand-to-mouth with illiquid assets), exhibiting high marginal propensities to consume (MPCs) out of current income.
 
-Consequently, the **indirect general equilibrium channel**—transmitted through labor demand, aggregate output, and disposable income—drives the dominant share of consumption movements.
+Consequently, in the quantitative HANK model of Kaplan, Moll, and Violante (2018), the **indirect general equilibrium channel**—transmitted through labor demand, aggregate output, and disposable income—drives the dominant share of consumption movements.
 
 ### 1.2 Kaplan-Moll-Violante (2018) Sequence-Space Decomposition
 
@@ -34,9 +34,11 @@ $$\left( \mathbf{I} - \mathbf{J}^{C, Y} - \mathbf{J}^{C, r} \mathbf{M}_{r, Y} \r
 |---|---|---|
 | **Market Structure** | Complete asset markets | Incomplete markets, borrowing constraint $a' \ge 0$ |
 | **Household MPCs** | Uniform across deciles: $1 - \beta \approx 0.015$ | Steep gradient: Decile 1 ($>0.40$) to Decile 10 ($<0.06$) |
-| **Direct Channel Share** | Identically $100\%$ | $20\% - 40\%$ |
-| **Indirect Channel Share** | Identically $0\%$ | $60\% - 80\%$ |
+| **Direct Channel Share** | Identically $100\%$ | $20\% - 40\%$ in Kaplan, Moll, and Violante (2018); $85.0\%$ in this simulator (Recipe 1) |
+| **Indirect Channel Share** | Identically $0\%$ | $60\% - 80\%$ in Kaplan, Moll, and Violante (2018); $15.0\%$ in this simulator (Recipe 1) |
 | **Propagation Core** | Intertemporal Euler equation | General equilibrium labor income multiplier |
+
+The literature shares are those of Kaplan, Moll, and Violante (2018): indirect effects account for 80 percent of the consumption response over the first year in their baseline and for 60 percent when government debt absorbs most of the fiscal imbalance in the short run (their Tables 7 and 8). They are not this simulator's output. In Recipe 1 below, `MonetaryTransmissionSimulator` prints `indirect_share_hank=15.0%`, the indirect channel's share of the date-0 consumption response, so the direct channel carries the other 85.0 percent: the simulator's stylised calibration gives a smaller indirect share than the quantitative HANK model in that paper.
 
 ### 1.3 Python Usage & Transmission Recipes
 
@@ -62,7 +64,7 @@ print(f"HANK Steady-State MPC: {sim_mon.steady_state_mpc:.4f}")
 res_mon = sim_mon.simulate_rate_shock(magnitude=0.0025, rho=0.7, T=40)
 
 print(repr(res_mon))
-# Output: MonetaryTransmissionResult(shock_type='rate', magnitude=+0.0025, T=40, mpc_hank=0.1582, mpc_rank=0.0150, indirect_share_hank=68.4%)
+# Output: MonetaryTransmissionResult(shock_type='rate', magnitude=+0.0025, T=40, mpc_hank=0.1027, mpc_rank=0.0150, indirect_share_hank=15.0%)
 
 # Display comprehensive side-by-side summary
 print(res_mon.summary())
@@ -88,7 +90,9 @@ res_tf = sim_mon.simulate_balance_sheet_intervention(
 
 print(f"Initial Consumption Multiplier in HANK: {res_tf.irf_consumption_hank[0]:.4f}")
 print(f"Initial Consumption Multiplier in RANK: {res_tf.irf_consumption_rank[0]:.4f}")
-# In HANK, high-MPC borrowers spend immediately (>10x the response in RANK)
+# Output: Initial Consumption Multiplier in HANK: 0.3163
+#         Initial Consumption Multiplier in RANK: 0.0150
+# In HANK, high-MPC borrowers spend more of it on impact (about 21x the response in RANK)
 ```
 
 ---
@@ -110,7 +114,7 @@ print(f"Initial Consumption Multiplier in RANK: {res_tf.irf_consumption_rank[0]:
 |---|---|---|
 | `irf_output_hank / rank` | `np.ndarray (T,)` | Output impulse response paths $d\mathbf{Y}$. |
 | `irf_consumption_hank / rank` | `np.ndarray (T,)` | Consumption impulse response paths $d\mathbf{C}$. |
-| `irf_inflation_hank / rank` | `np.ndarray (T,)` | Annualized inflation impulse response paths $d\boldsymbol{\pi}$. |
+| `irf_inflation_hank / rank` | `np.ndarray (T,)` | Quarterly inflation impulse response paths $d\boldsymbol{\pi}$ (`plot()` shows them annualized, $\times 400$). |
 | `irf_rate_hank / rank` | `np.ndarray (T,)` | Ex-ante real interest rate paths $d\mathbf{r}$. |
 | `mpc_deciles_hank / rank` | `pd.Series (10,)` | Marginal propensity to consume across 10 wealth deciles. |
 | `aggregate_mpc_hank / rank` | `float` | Aggregate quarterly economy-wide MPC. |
@@ -124,7 +128,7 @@ print(f"Initial Consumption Multiplier in RANK: {res_tf.irf_consumption_rank[0]:
 
 ---
 
-## 3. Interactive WebAssembly / Browser Labs (`curso/site/labs/`)
+## 3. Interactive Browser Lab in JavaScript (`curso/site/labs/`)
 
 The course site in `curso/site/labs/` includes a client-side browser lab for this simulator: static HTML and JavaScript, with no build step.
 
@@ -132,14 +136,15 @@ The course site in `curso/site/labs/` includes a client-side browser lab for thi
 
 - **Path**: `curso/site/labs/politica-monetaria-hank.html` and `curso/site/labs/politica-monetaria-hank.js`.
 - **Core Features**:
-  * Comparative impulse response curves for output, inflation, and consumption.
-  * Interactive parameter sliders for shock size, persistence ($\rho$), and the share of hand-to-mouth households.
-  * Live bar charts contrasting the steep empirical MPC decile ladder against the flat representative-agent benchmark.
-  * Dynamic visualizer for the Kaplan-Moll-Violante direct versus indirect transmission shares.
+  * A policy-scenario preset (hike of 100 bp, cut of 100 bp, persistent shock with $\rho = 0.85$, liquidity transfer) and six sliders: the interest rate shock (−200 to +200 bp, annualized), its persistence $\rho$, the transfer to constrained households (% of GDP), the Taylor rule response $\phi_\pi$, the Phillips curve slope $\kappa$ and risk aversion $\gamma$.
+  * Line charts of the output and inflation impulse responses, HANK against RANK.
+  * A line chart of the quarterly MPC by wealth decile: HANK's declining ladder against RANK's flat line at $1 - \beta$.
+  * The Kaplan-Moll-Violante decomposition of HANK consumption into its direct and indirect channels, and tiles for the aggregate MPC, the impact output contraction, the indirect channel share and the transfer multiplier.
+  * The HANK household Jacobians and MPC deciles ($T = 40$) are fixed arrays in the script; moving a control re-solves the linear general-equilibrium system in the browser.
 
 ### 3.2 Running Locally
 
-To run the interactive laboratories locally without any external dependencies:
+To serve the labs locally (each page loads d3 7.9.0 and KaTeX 0.16.11, with its auto-render extension, from the jsDelivr CDN, and the Manrope font from Google Fonts, so the charts need network access):
 
 ```bash
 # From the puremacro repository root
