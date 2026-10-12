@@ -27,6 +27,7 @@ from puremacro.vfi.krusell_smith import (
     KSEquilibrium,
     _regress_forecast,
     _simulate_markov_path,
+    _warn_ks_outcome,
     ks_exog_transition,
     ks_simulate,
 )
@@ -59,6 +60,9 @@ def solve_ks(comp, *, method="vfi", backend="numpy", options=None, T: int = 3000
     by default the stationary distribution of the household policy when agents
     expect K to stay at the middle of its grid, in the most likely aggregate state.
     ``b0``/``b1`` are the initial forecast coefficients (default: K stays put).
+
+    Warns (``RuntimeWarning``) when the loop stops at ``max_outer`` without
+    converging, and when simulated capital never moves under aggregate risk.
     """
     from puremacro.dp._results import DPSolution
 
@@ -102,7 +106,7 @@ def solve_ks(comp, *, method="vfi", backend="numpy", options=None, T: int = 3000
                else stationary_distribution(pol[:, :, iz, k_mid], P_idio))
     Z_path = _simulate_markov_path(P_Z, int(T), np.random.default_rng(seed))
 
-    converged, n_outer = False, 0
+    converged, n_outer, diff = False, 0, float("inf")
     for outer in range(int(max_outer)):
         n_outer = outer + 1
         sol, pol = household(b0, b1)
@@ -115,6 +119,11 @@ def solve_ks(comp, *, method="vfi", backend="numpy", options=None, T: int = 3000
         if diff < tol:
             converged = True
             break
+    hint = "Raise max_outer in solve(ks=dict(...)), or lower damping if the coefficients oscillate."
+    if plan is None:
+        hint += " method='egm' converges in far fewer iterations."
+    _warn_ks_outcome(f"{method}+ks", converged=converged, n_outer=n_outer, diff=diff, tol=tol,
+                     K_path=K_path, Z_path=Z_path, nZ=nZ, burn_in=int(burn_in), hint=hint)
     eq = KSEquilibrium(b0=b0, b1=b1, r_squared=R2, K_path=K_path, mean_K=float(np.mean(K_path[burn_in:])),
                        no_agg_risk_K=float("nan"), n_outer=n_outer, converged=converged)
     return DPSolution(comp, sol, params=params, aggregates={comp.shock_names[-1]: eq.mean_K},

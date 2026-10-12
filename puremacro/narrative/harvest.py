@@ -773,7 +773,7 @@ def harvest_narrative_corpus(
     start_date: str | None = None,
     end_date: str | None = None,
     max_docs_per_source: int | None = None,
-    use_cache: bool = True,
+    use_cache: bool = False,
     db_path: Path | None = None,
     store: Any = None,
     source_kwargs: dict[str, dict[str, Any]] | None = None,
@@ -791,12 +791,15 @@ def harvest_narrative_corpus(
     start_date : earliest publication date.
     end_date : latest publication date.
     max_docs_per_source : limit documents fetched per connector.
-    use_cache : persist harvested documents in a :class:`~puremacro.narrative.store.CorpusStore`.
-        Set ``False`` to keep the harvest in memory only.
-    db_path : store file used when ``use_cache`` is true and ``store`` is not
-        given. Defaults to :func:`~puremacro.narrative.store.default_corpus_path`.
+    use_cache : persist harvested documents (full text) in a
+        :class:`~puremacro.narrative.store.CorpusStore` at
+        :func:`~puremacro.narrative.store.default_corpus_path`. Off by default:
+        the harvest stays in memory unless ``use_cache``, ``db_path`` or
+        ``store`` asks for a store. Revision flags and the corpus accumulated
+        across harvests exist only in a store.
+    db_path : persist into the store at this file (implies ``use_cache``).
     store : a :class:`~puremacro.narrative.store.CorpusStore` to write into
-        (overrides ``db_path``).
+        (implies ``use_cache``; overrides ``db_path``).
     source_kwargs : per-source keyword arguments, e.g.
         ``{"reddit": {"subreddit": "economics"}, "fed_speeches": {...}}``.
         Query-driven connectors (:data:`QUERY_SOURCE_REGISTRY`) run only when
@@ -874,7 +877,7 @@ def harvest_narrative_corpus(
     if start_date or end_date:
         corpus = corpus.filter(start_date=start_date, end_date=end_date)
 
-    if use_cache or store is not None:
+    if use_cache or db_path is not None or store is not None:
         from .store import CorpusStore
         own = store is None
         st = store if store is not None else CorpusStore(db_path)

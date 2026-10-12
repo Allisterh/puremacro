@@ -83,6 +83,10 @@ simulated capital never moves and the regression is degenerate; at its
 defaults (200 points) `vfi.krusell_smith` had not converged after its 60 outer
 iterations (470 s, `b1` = 0.897 and 0.954). Loop options go in
 `solve(ks=dict(T=..., burn_in=..., seed=..., damping=..., tol=..., max_outer=..., mu0=...))`.
+Both `vfi.krusell_smith` and dp's loop now raise a `RuntimeWarning` when they stop
+at `max_outer` without converging (they used to return `converged=False`
+silently), and when simulated capital never moves under aggregate risk, the
+degenerate regression above, which would otherwise pass `tol` and look converged.
 
 `vfi.solve_egm` and dp's EGM accept a return on assets that varies with the
 exogenous state (`r` of shape (n_z,); Euler u'(c) = beta E[(1 + r') u'(c')]).
@@ -98,8 +102,10 @@ Scalar-`r` calls are unchanged.
 
 - **Narrative corpus is now stored and exportable.** `harvest_narrative_corpus`
   used to keep nothing: its SQLite table was never written (and had no text
-  column), and `use_cache`/`db_path` were ignored. Harvests now upsert into a
-  `CorpusStore` (`narrative_corpus.db` beside the HTTP cache), which keeps full
+  column), and `use_cache`/`db_path` were ignored. A harvest given `db_path=`,
+  `store=` or `use_cache=True` (default path: `narrative_corpus.db` beside the
+  HTTP cache) now upserts into a `CorpusStore`; without them it stays in memory
+  and writes nothing to disk. The store keeps full
   text (latest version, with a flag and the previous hash when a document
   was edited; see `store.revised()`) and a log of harvest runs; `store.load()`
   returns the accumulated corpus. `NarrativeCorpus` gains `to_frame(metadata=

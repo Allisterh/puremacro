@@ -7,11 +7,13 @@ state makes the household a standard VFIProblem (endogenous a; exogenous
 """
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 
 import numpy as np
 from scipy.optimize import brentq
 
+from puremacro.vfi.continuous_distribution import _caller_stacklevel
 from puremacro.vfi.discretize import markov_stationary
 from puremacro.vfi.distribution import lottery_push, stationary_distribution
 from puremacro.vfi.problem import VFIProblem
@@ -189,6 +191,37 @@ def _regress_forecast(K_path, Z_path, nZ, burn_in):
     return b0, b1, R2
 
 
+def _warn_ks_outcome(where, *, converged, n_outer, diff, tol, K_path, Z_path, nZ, burn_in, hint):
+    """Warn when the forecast-rule loop stopped without converging, or converged
+    on a simulated capital path that never moved (a degenerate rule: b1 = 0, R^2 = 1).
+
+    The second case passes the ``tol`` test at once, so ``converged`` alone does
+    not catch it. It is only flagged when there is aggregate risk (``nZ > 1``):
+    with a single aggregate state constant capital is the right answer.
+    """
+    if not converged:
+        warnings.warn(
+            f"{where}: the forecast rule did not converge in {n_outer} outer iterations "
+            f"(last change in the coefficients {diff:.3g}, tol {tol:g}). The returned "
+            f"equilibrium has converged=False and its b0, b1 and K_path are the last iterate. {hint}",
+            RuntimeWarning, stacklevel=_caller_stacklevel(),
+        )
+    if nZ < 2:
+        return
+    logK = np.log(np.asarray(K_path, dtype=float)[burn_in:-1])
+    zt = np.asarray(Z_path)[burn_in:]
+    flat = [iZ for iZ in range(nZ) if np.sum(zt == iZ) >= 2 and float(np.var(logK[zt == iZ])) < 1e-14]
+    if flat:
+        warnings.warn(
+            f"{where}: simulated aggregate capital did not move after burn-in (aggregate state(s) "
+            f"{flat}), so the forecast regression is degenerate (b1 = 0, R^2 = 1) and the rule is "
+            "not a Krusell-Smith equilibrium. Discrete VFI policies sit on asset-grid nodes, so on a "
+            "coarse grid an aggregate shock can leave every choice unchanged; use a finer asset grid "
+            "or dp's method='egm'.",
+            RuntimeWarning, stacklevel=_caller_stacklevel(),
+        )
+
+
 def krusell_smith(*, alpha: float = 0.36, delta: float = 0.025, beta: float = 0.99,
                   gamma: float = 1.0, e=(0.5, 1.1), P_z=((0.6, 0.4), (0.2, 0.8)),
                   Z_vals=(0.99, 1.01), P_Z=((0.875, 0.125), (0.125, 0.875)),
@@ -202,6 +235,10 @@ def krusell_smith(*, alpha: float = 0.36, delta: float = 0.025, beta: float = 0.
     exogenous state), simulate the wealth distribution along a drawn aggregate
     path, OLS-update the forecast, damp, repeat. v1: 2-state idiosyncratic
     productivity, 2-state aggregate TFP, Cobb-Douglas firm. Returns a KSEquilibrium.
+
+    Warns (``RuntimeWarning``) when the loop stops at ``max_outer`` without
+    converging, and when simulated capital never moves under aggregate risk
+    (a degenerate forecast regression that passes ``tol`` trivially).
     """
     z_vals = np.asarray(e, dtype=float)
     P_z = np.asarray(P_z, dtype=float)
@@ -238,7 +275,7 @@ def krusell_smith(*, alpha: float = 0.36, delta: float = 0.025, beta: float = 0.
     converged = False
     K_path = np.array([Kstar])
     R2 = np.ones(nZ)
-    n_outer = 0
+    n_outer, diff = 0, float("inf")
     for outer in range(max_outer):
         n_outer = outer + 1
         policy = _solve_household(b0, b1, z_vals=z_vals, P_z=P_z, Z_vals=Z_vals,
@@ -253,6 +290,10 @@ def krusell_smith(*, alpha: float = 0.36, delta: float = 0.025, beta: float = 0.
         if diff < tol:
             converged = True
             break
+    _warn_ks_outcome("krusell_smith", converged=converged, n_outer=n_outer, diff=diff, tol=tol,
+                     K_path=K_path, Z_path=Z_path, nZ=nZ, burn_in=burn_in,
+                     hint="Raise max_outer, or lower damping if the coefficients oscillate; "
+                          "puremacro.dp solves this model by EGM (method='egm'), which converges faster.")
     return KSEquilibrium(b0=b0, b1=b1, r_squared=R2, K_path=K_path,
                          mean_K=float(np.mean(K_path[burn_in:])),
                          no_agg_risk_K=Kstar, n_outer=n_outer, converged=converged)

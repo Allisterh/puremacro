@@ -108,6 +108,28 @@ def test_connector_failing_mid_stream_keeps_documents_already_yielded(monkeypatc
         assert len(st) == 2
 
 
+def test_harvest_writes_no_store_unless_asked(monkeypatch, tmp_path):
+    # Persisting full text is opt-in: a plain harvest stays in memory, and
+    # use_cache=True, db_path= or store= each turn the store on.
+    import puremacro.narrative.sources.fed_decision as mod
+
+    monkeypatch.setenv("PUREMACRO_HTTP_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr(mod, "iter_fed_decision",
+                        lambda: iter([("2024-01-31", "Held rates.", "https://f/1", {})]))
+    default = tmp_path / "cache" / "narrative_corpus.db"
+
+    c = harvest_narrative_corpus(sources=["fed_decision"])
+    assert len(c) == 1 and "store" not in c.metadata and not default.exists()
+
+    c = harvest_narrative_corpus(sources=["fed_decision"], use_cache=True)
+    assert c.metadata["store"] == str(default)
+    with CorpusStore(default) as st:
+        assert len(st) == 1
+
+    c = harvest_narrative_corpus(sources=["fed_decision"], db_path=tmp_path / "mine.db")
+    assert c.metadata["store"] == str(tmp_path / "mine.db")
+
+
 def test_query_sources_need_kwargs(monkeypatch):
     import puremacro.narrative.sources.reddit as mod
     seen = {}

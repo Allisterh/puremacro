@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
+import pytest
 
 from puremacro.vfi import markov_stationary
 from puremacro.vfi.krusell_smith import (
@@ -27,7 +30,9 @@ def test_ks_simulate_constant_policy_holds_K():
 
 
 def test_krusell_smith_converges_high_r2_and_mean_K():
-    eq = krusell_smith(n_a=150, n_K=5, T=1500, burn_in=200, seed=1)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("error", message="krusell_smith:")
+        eq = krusell_smith(n_a=150, n_K=5, T=1500, burn_in=200, seed=1)
     assert isinstance(eq, KSEquilibrium)
     assert eq.converged                                    # forecast-rule fixed point found
     assert np.all(eq.r_squared > 0.99)                     # KS "approximate aggregation"
@@ -42,8 +47,12 @@ def test_krusell_smith_degenerate_reduces_to_aiyagari():
     # capital approximates the no-aggregate-risk Aiyagari capital K* (the
     # reduction). The gap is the coarse aggregate-K-grid discretization (the
     # K-folded household interpolates the policy over n_K points), not a bug.
-    eq = krusell_smith(Z_vals=(1.0,), P_Z=((1.0,),), n_a=150, n_K=7, T=800,
-                       burn_in=150, seed=2)
+    # The forecast rule never meets tol here: K barely moves once it settles, so
+    # the regression of log K' on log K is ill-identified and b0, b1 keep moving.
+    # The loop now says so instead of returning converged=False silently.
+    with pytest.warns(RuntimeWarning, match="did not converge in 60"):
+        eq = krusell_smith(Z_vals=(1.0,), P_Z=((1.0,),), n_a=150, n_K=7, T=800,
+                           burn_in=150, seed=2)
     assert abs(eq.mean_K - eq.no_agg_risk_K) / eq.no_agg_risk_K < 0.06
     # and the no-aggregate-risk path settles to a steady state (tiny tail variation)
     tail = eq.K_path[400:]
