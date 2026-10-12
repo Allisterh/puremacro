@@ -31,6 +31,23 @@ transfers included. The model's wealth is capital ``a`` and its income
 units do not need to match. The SCF has negative net worth; the model's
 borrowing limit is zero, so "wealth <= 0" in the model is the mass at the
 limit.
+
+Reference output (SCF 2025, default parameters; run of 2026-10-12)::
+
+    moment                          SCF (se)          model, median target (se)
+    mean wealth / mean income       8.518 (0.175)     3.912 (0.101)
+    median wealth / median income   2.628 (0.077)     2.628   targeted
+    Gini                            0.824 (0.004)     0.591 (0.001)
+    top 1% share                    0.313 (0.009)     0.063 (0.000)
+    top 10% share                   0.721 (0.007)     0.379 (0.001)
+    bottom 50% share                0.021 (0.001)     0.088 (0.001)
+    share with wealth <= 0          0.086 (0.004)     0.091 (0.001)
+
+    beta = 0.9521 (se 0.0023), r = 4.08%, K/Y = 2.98. The mean target
+    (8.518) is not attained: beta in [0.90, 0.999] reaches at most 7.55,
+    at r = -0.35%. SCF 2022 (in 2025 dollars) gives the same picture:
+    median target 2.726, beta = 0.9549, Gini 0.589 against 0.830; the
+    mean target 7.493 is attained only at beta = 0.9986 and r = -0.32%.
 """
 from __future__ import annotations
 

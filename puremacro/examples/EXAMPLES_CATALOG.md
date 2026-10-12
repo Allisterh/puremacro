@@ -159,6 +159,12 @@ Thirteen scripts that together span the methods catalogue. Read in this order if
 | `labor_flows_demo` | — | Labor markets: E/U/N transitions (Shimer 2-state or CPS flows) + supply-demand decomposition |
 | `report_workflow` | 80 | Render LP and IRF results as Markdown / LaTeX tables ready to drop |
 
+### Heterogeneous agents & microdata
+
+| Script | LOC | Headline |
+|---|---:|---|
+| `scf_aiyagari` | 390 | Aiyagari (1994) `dp` economy calibrated to SCF wealth-to-income ratios; untargeted Gini and top shares against the SCF with replicate-weight standard errors (needs network). |
+
 ### Data infrastructure
 
 | Script | LOC | Headline |
