@@ -12,7 +12,7 @@ import pytest
 
 import puremacro.llm.engines
 import puremacro.llm.models
-from puremacro.llm import CacheMiss, CacheUnavailable
+from puremacro.llm import CacheMiss, CacheUnavailable, ModelTooLarge
 from puremacro.narrative import _local_engines as le
 from puremacro.narrative.scoring import (
     LocalBackend, OllamaBackend, MockBackend, get_default_backend, score_llm,
@@ -87,10 +87,61 @@ def test_local_backend_and_provider_resolve_no_engine_at_construction(monkeypatc
 
 
 def test_ollama_presets_default_to_qwen3_4b():
+    # The registry alias, so the cache key is the reference model's; the server still gets its tag.
     be = OllamaBackend()
-    assert (be.model, be.engine, be.base_url) == ("qwen3:4b", "ollama", "http://localhost:11434")
+    assert (be.model, be.engine, be.base_url) == ("qwen3-4b", "ollama", "http://localhost:11434")
     p = OllamaProvider()
-    assert (p.model, p.engine, p.base_url) == ("qwen3:4b", "ollama", "http://localhost:11434")
+    assert (p.model, p.engine, p.base_url) == ("qwen3-4b", "ollama", "http://localhost:11434")
+
+
+def test_ollama_presets_pass_an_explicit_tag_through():
+    assert OllamaBackend("qwen3:4b").model == "qwen3:4b"
+    assert OllamaProvider("qwen3:4b").model == "qwen3:4b"
+
+
+def test_ollama_backend_sends_the_ollama_tag_and_shares_the_reference_cache_key(monkeypatch):
+    fake = _FakeEngine("[]", name="ollama")
+    monkeypatch.setattr(puremacro.llm.engines, "resolve_engine", lambda *a, **k: fake)
+    assert OllamaBackend().call("score this") == "[]"
+    assert fake.calls[0]["model"] == "qwen3:4b"
+    fake.reply = "unused"                                   # a second engine call would show
+    assert LocalBackend("default", mode="cache").call("score this") == "[]"
+    assert len(fake.calls) == 1
+
+
+def test_ollama_provider_sends_the_ollama_tag_and_shares_the_reference_cache_key(monkeypatch):
+    fake = _FakeEngine("0.6", name="ollama")
+    monkeypatch.setattr(puremacro.llm.engines, "resolve_engine", lambda *a, **k: fake)
+    assert OllamaProvider().score_paragraph("An uncertain outlook.", "uncertainty") == 0.6
+    assert fake.calls[0]["model"] == "qwen3:4b"
+    monkeypatch.setattr(puremacro.llm.engines, "resolve_engine", _no_engine)
+    assert LocalProvider("default", mode="cache").score_paragraph(
+        "An uncertain outlook.", "uncertainty") == 0.6
+
+
+class _TooLargeBackend:
+    model = "qwen3-8b"
+    max_tokens = 8
+    temperature = 0.0
+
+    def call(self, prompt):
+        raise ModelTooLarge("qwen3-8b", "qwen3-4b", 4.0)
+
+
+def test_score_llm_raises_model_too_large():
+    # A configuration error, identical for every record: raised, not counted as malformed.
+    with pytest.raises(ModelTooLarge):
+        score_llm([("2020-01-01", "text", "http://x"), ("2020-02-01", "text", "http://y")],
+                  backend=_TooLargeBackend(), kind="fiscal")
+
+
+def test_score_llm_raises_model_too_large_through_local_backend(monkeypatch):
+    monkeypatch.setattr(puremacro.llm.models, "device_budget_gb", lambda: 1.0)
+    monkeypatch.setattr(puremacro.llm.engines, "resolve_engine", _no_engine)
+    with pytest.raises(ModelTooLarge):
+        score_llm([("2020-01-01", "text", "http://x")], backend=LocalBackend("large"),
+                  kind="fiscal")
+
 
 
 def test_mock_backend_returns_empty_array():

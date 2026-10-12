@@ -221,9 +221,14 @@ class LocalProvider(LLMProvider):
 
 
 class OllamaProvider(LocalProvider):
-    """Preset: ``LocalProvider(engine="ollama")``."""
+    """Preset: ``LocalProvider(engine="ollama")``.
 
-    def __init__(self, model: str = "qwen3:4b", *,
+    The default is the registry alias ``qwen3-4b``, so the completion cache is keyed as for
+    ``LocalProvider("default")``; the server receives its own tag (``qwen3:4b``). An Ollama tag
+    given as ``model`` reaches the server, and keys the cache, unchanged.
+    """
+
+    def __init__(self, model: str = "qwen3-4b", *,
                  base_url: str = "http://localhost:11434", **kw):
         super().__init__(model=model, engine="ollama", base_url=base_url, **kw)
 

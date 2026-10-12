@@ -31,7 +31,7 @@ from typing import Iterable
 import pandas as pd
 
 from puremacro import credentials
-from puremacro.llm import CacheMiss
+from puremacro.llm import CacheMiss, ModelTooLarge
 from .._local_engines import BackendUnavailable
 from ..types import NarrativeEvent, VALID_SIGNS
 
@@ -337,9 +337,14 @@ class LocalBackend(_BackendBase):
 
 
 class OllamaBackend(LocalBackend):
-    """Preset: ``LocalBackend(engine="ollama")`` for a running Ollama/LM Studio."""
+    """Preset: ``LocalBackend(engine="ollama")`` for a running Ollama/LM Studio.
 
-    def __init__(self, model: str = "qwen3:4b", *,
+    The default is the registry alias ``qwen3-4b``, so the completion cache is keyed as for
+    ``LocalBackend("default")``; the server receives its own tag (``qwen3:4b``). An Ollama tag
+    given as ``model`` reaches the server, and keys the cache, unchanged.
+    """
+
+    def __init__(self, model: str = "qwen3-4b", *,
                  base_url: str = "http://localhost:11434", **kw):
         super().__init__(model=model, engine="ollama", base_url=base_url, **kw)
 
@@ -539,7 +544,9 @@ def score_llm(
     So does a :class:`puremacro.llm.CacheMiss` (including ``CacheUnavailable``),
     which a :class:`LocalBackend` raises in ``cache`` mode for a record the
     completion cache does not hold: the corpus was not scored ahead of time, and
-    dropping the record would return a silently shorter list of events. Any other
+    dropping the record would return a silently shorter list of events. A
+    :class:`puremacro.llm.ModelTooLarge` (the model needs more memory than the
+    device offers) propagates too: it would be the same for every record. Any other
     failure of a record's call (a model that cannot load, a timeout) is counted
     with the malformed events and the loop goes on.
     """
@@ -570,7 +577,7 @@ def score_llm(
         )
         try:
             response = backend.call(prompt)
-        except (BackendUnavailable, CacheMiss):
+        except (BackendUnavailable, CacheMiss, ModelTooLarge):
             raise
         except (ValueError, ArithmeticError, Exception):
             n_dropped_malformed += 1
