@@ -24,10 +24,15 @@ a course and read by a tablet that cannot run the model.
   readable by every later one, and the golden values pinned in the test suite
   keep any other implementation of the algorithm compatible with this file.
 * **Never an error.** A cache is an optimisation. A file or directory that
-  cannot be written, a corrupt file, or a Python without ``sqlite3`` (Pyodide
-  0.28 loads it on request) turns the cache into a no-op: lookups miss, writes
-  are skipped, and one warning per cache file says why. :meth:`CompletionCache.export`
+  cannot be written, a corrupt file, or a Python without ``sqlite3`` (in
+  Pyodide 0.28, run ``await pyodide.loadPackage('sqlite3')`` before importing
+  puremacro) turns the cache into a no-op: lookups find nothing, writes are
+  skipped, and one warning per cache file says why. :meth:`CompletionCache.export`
   and :meth:`CompletionCache.merge` are explicit actions, so they raise instead.
+  :attr:`CompletionCache.readable` tells a lookup that could not read the file
+  from one that found no row, and :attr:`CompletionCache.reason` says why, so
+  that ``cache`` mode in :mod:`puremacro.llm` raises :class:`CacheUnavailable`,
+  not a plain :class:`CacheMiss`, for the first.
 * **No shared state.** Every method opens its own connection and closes it
   before returning; nothing is kept at module level except the record of which
   files were already reported as unusable. A write that finds the file locked by
@@ -52,6 +57,7 @@ __all__ = [
     "CACHE_FORMAT",
     "CacheMiss",
     "CacheRow",
+    "CacheUnavailable",
     "CompletionCache",
     "cache_key",
     "default_cache_path",
@@ -149,6 +155,37 @@ class CacheMiss(LookupError):
     def __str__(self) -> str:
         return (f"no cached completion for model {self.model!r} (key {self.key[:12]}...); "
                 "run it once with a local model, or load a cache that has it")
+
+
+class CacheUnavailable(CacheMiss):
+    """A ``cache``-mode request whose lookup could not read the cache at all.
+
+    Raised by :func:`puremacro.llm.complete` in ``cache`` mode instead of a plain
+    :class:`CacheMiss` when :attr:`CompletionCache.readable` is ``False``: no
+    ``sqlite3`` (Pyodide 0.28 without ``await pyodide.loadPackage('sqlite3')``
+    run before puremacro was imported), or a file that exists but cannot be
+    opened as a cache, such as a Git LFS pointer. Being a :class:`CacheMiss`,
+    it is caught wherever a miss is.
+
+    Attributes
+    ----------
+    key : str
+        The cache key that was looked up.
+    model : str
+        The canonical model alias of the request.
+    reason : str or None
+        Why the cache cannot be read: :attr:`CompletionCache.reason`, which for a
+        missing ``sqlite3`` carries the hint on loading it.
+    """
+
+    def __init__(self, key: str, model: str, reason: str | None) -> None:
+        super().__init__(key, model)
+        self.args = (key, model, reason)    # all three round-trip through pickle
+        self.reason = reason
+
+    def __str__(self) -> str:
+        return (f"the completion cache cannot be read here, so the completion for model "
+                f"{self.model!r} (key {self.key[:12]}...) could not be looked up: {self.reason}")
 
 
 @dataclass(frozen=True)
@@ -275,16 +312,49 @@ class CompletionCache:
         be prepared (unwritable directory, corrupt file, no ``sqlite3``), and
         set to ``False`` by the first write that fails. Lookups still work on an
         existing, readable file, so a cache shipped on a read-only volume serves hits.
+    readable : bool
+        Whether a lookup can read the file (read-only property): ``False`` when
+        ``sqlite3`` is unavailable or the file exists but cannot be opened as a
+        cache; ``True`` otherwise, also when the file does not exist yet.
+    reason : str or None
+        Why the cache cannot be used, or ``None`` when it can be read and
+        written (read-only property).
     """
 
     def __init__(self, path: str | Path | None = None) -> None:
         chosen = default_cache_path() if path is None else Path(path).expanduser()
         self.path: Path = chosen.absolute()
-        self._reason = ""
+        self._reason = ""            # why the file could not be prepared, or a write failed
+        self._read_error = ""        # why the last lookup could not read the file
         self.writable: bool = self._prepare()
 
     def __repr__(self) -> str:
         return f"CompletionCache({str(self.path)!r}, writable={self.writable})"
+
+    @property
+    def readable(self) -> bool:
+        """Whether a lookup can read the cache.
+
+        ``False`` when ``sqlite3`` is unavailable (in Pyodide 0.28, unless
+        ``await pyodide.loadPackage('sqlite3')`` ran before puremacro was
+        imported) or when the file exists but cannot be opened as a cache: not
+        an SQLite file (a Git LFS pointer, a corrupt file), no ``completions``
+        table, no permission to read it. ``True`` otherwise, also when the file
+        does not exist yet: a lookup then finds no row. Found when the cache is
+        created and again by every :meth:`get`, so after a lookup that returned
+        ``None`` it says whether the row is absent (``True``) or the lookup
+        could not be made (``False``).
+        """
+        return not self._read_error
+
+    @property
+    def reason(self) -> str | None:
+        """Why the cache cannot be used, or ``None`` when it can be read and written.
+
+        The error of the last lookup, when it could not read the file; else the
+        error that stopped the cache from writing (see ``writable``).
+        """
+        return self._read_error or self._reason or None
 
     def _prepare(self) -> bool:
         try:
@@ -292,6 +362,7 @@ class CompletionCache:
                 pass
         except _unusable() as exc:
             self._reason = f"{type(exc).__name__}: {exc}"
+            self.get("")        # can lookups still read it? A cache on a read-only volume can.
             return False
         return True
 
@@ -307,13 +378,22 @@ class CompletionCache:
             UserWarning, stacklevel=3)
 
     def get(self, key: str) -> str | None:
-        """The cached completion for ``key``, or ``None`` (also when the cache is unusable)."""
+        """The cached completion for ``key``, or ``None`` (also when the cache is unusable).
+
+        Sets :attr:`readable`: ``False`` when the lookup could not read the file,
+        with the error in :attr:`reason`; ``True`` when it could, or found no file.
+        """
         try:
             with _connect(self.path, write=False) as conn:
                 row = conn.execute(
                     "SELECT completion FROM completions WHERE key = ?", (key,)).fetchone()
-        except _unusable():
+        except _unusable() as exc:
+            # No file is an empty cache: the lookup just finds nothing. Anything else (no
+            # sqlite3, a file SQLite cannot read as a cache) means no lookup was made.
+            no_file = not isinstance(exc, ImportError) and not os.path.exists(self.path)
+            self._read_error = "" if no_file else f"{type(exc).__name__}: {exc}"
             return None
+        self._read_error = ""
         return None if row is None else row[0]
 
     def set(self, row: CacheRow) -> None:

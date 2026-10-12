@@ -8,8 +8,8 @@ import stat
 from pathlib import Path
 
 import pytest
-from puremacro.llm.cache import (CACHE_FORMAT, CacheMiss, CacheRow, CompletionCache,
-                                 cache_key, default_cache_path, prompt_sha256)
+from puremacro.llm.cache import (CACHE_FORMAT, CacheMiss, CacheRow, CacheUnavailable,
+                                 CompletionCache, cache_key, default_cache_path, prompt_sha256)
 
 GOLDEN = "c630a581ab2b323492ac1db08bfc8b8f5a72655db00282142eb5762eacccb586"
 
@@ -392,6 +392,17 @@ def test_cache_miss_is_a_lookup_error_that_survives_pickling():
     assert "qwen3-4b" in str(e) and "abababababab" in str(e)
 
 
+def test_cache_unavailable_is_a_cache_miss_that_survives_pickling():
+    reason = ("ImportError: the standard-library module 'sqlite3' is not available in this "
+              "Python build (needed for 'connect'). In Pyodide 0.28 run "
+              "`await pyodide.loadPackage('sqlite3')` first.")
+    e = pickle.loads(pickle.dumps(CacheUnavailable("ab" * 32, "qwen3-4b", reason)))
+    assert type(e) is CacheUnavailable and isinstance(e, CacheMiss) and isinstance(e, LookupError)
+    assert (e.key, e.model, e.reason) == ("ab" * 32, "qwen3-4b", reason)
+    assert str(e).startswith("the completion cache cannot be read here")
+    assert reason in str(e) and "qwen3-4b" in str(e) and "abababababab" in str(e)
+
+
 def test_cache_row_is_frozen_and_positional_order_is_fixed():
     r = CacheRow("k", "m", "sha", 8, 0.0, False, "text", "mlx", "id")
     assert (r.key, r.model, r.prompt_sha256, r.max_tokens, r.temperature, r.json_mode,
@@ -518,6 +529,119 @@ def test_a_write_blocked_by_another_connection_is_skipped_not_raised(tmp_path, m
     fresh = CompletionCache(c.path)                # once the lock is gone a new object writes again
     fresh.set(_row(_k("after"), text="back"))
     assert fresh.get(_k("after")) == "back" and fresh.get(_k("before")) == "kept"
+
+
+# ---------------------------------------------------------------------------
+# `readable` and `reason`. A lookup that finds no row and a lookup that cannot read the file
+# both return None; `readable` tells them apart, so that `cache` mode can raise
+# CacheUnavailable with `reason` instead of a miss that blames the model. A file that does not
+# exist yet is readable (an empty cache); no sqlite3, or a file SQLite cannot read as a cache,
+# is not. Reading and writing fail apart: a cache on a read-only volume still reads.
+# ---------------------------------------------------------------------------
+
+# What a clone made without git-lfs leaves where the cache file should be.
+_LFS_POINTER = (b"version https://git-lfs.github.com/spec/v1\n"
+                b"oid sha256:" + b"0" * 64 + b"\nsize 24576\n")
+
+
+def test_a_usable_cache_and_one_with_no_file_yet_are_readable(tmp_path):
+    usable = CompletionCache(tmp_path / "c.sqlite")
+    assert usable.readable is True and usable.reason is None
+    usable.path.unlink()
+    assert usable.get(_k("p")) is None                    # no file: the lookup finds no row
+    assert usable.readable is True and usable.reason is None
+    ro = tmp_path / "ro"
+    ro.mkdir()
+    os.chmod(ro, stat.S_IRUSR | stat.S_IXUSR)
+    try:
+        if os.access(ro, os.W_OK):
+            pytest.skip("directory permissions do not restrict this account")
+        nowhere = CompletionCache(ro / "c.sqlite")        # cannot even be created there
+        assert nowhere.readable is True and nowhere.writable is False
+        assert "unable to open database file" in nowhere.reason        # why it cannot be written
+        assert nowhere.get(_k("p")) is None and nowhere.readable is True
+    finally:
+        os.chmod(ro, stat.S_IRWXU)
+
+
+def test_a_file_that_is_not_a_cache_is_not_readable_and_reason_names_the_problem(tmp_path):
+    pointer = tmp_path / "llm_cache.sqlite"
+    pointer.write_bytes(_LFS_POINTER)
+    c = CompletionCache(pointer)
+    assert c.readable is False and c.writable is False
+    assert "file is not a database" in c.reason
+    assert c.get(_k("p")) is None and c.readable is False
+    assert pointer.read_bytes() == _LFS_POINTER           # neither repaired nor replaced
+
+
+def test_without_sqlite3_the_cache_is_not_readable_and_reason_carries_the_hint(tmp_path,
+                                                                               monkeypatch):
+    """The placeholder of puremacro._optional_stdlib, as Pyodide 0.28 has it before
+    `await pyodide.loadPackage('sqlite3')`: unreadable even with no file, and `reason` is the
+    placeholder's ImportError with its hint."""
+    import puremacro.llm.cache as cache_module
+    from puremacro._optional_stdlib import _MissingStdlibModule
+
+    hint = "In Pyodide 0.28 run `await pyodide.loadPackage('sqlite3')` first."
+    monkeypatch.setattr(cache_module, "sqlite3", _MissingStdlibModule("sqlite3", hint))
+    c = CompletionCache(tmp_path / "c.sqlite")
+    assert c.readable is False and c.writable is False
+    assert c.reason.startswith("ImportError: ") and hint in c.reason
+    assert c.get(_k("p")) is None and c.readable is False
+
+
+def test_readable_is_found_by_reading_not_inferred_from_a_failed_preparation(tmp_path):
+    """Two read-only files that cannot be prepared, because the index or the table would have to
+    be written: one whose `completions` table lacks only the index still serves lookups; one
+    that holds another owner's table only cannot be read as a cache. The warning about writes
+    still gives the error of the write."""
+    import puremacro.llm.cache as cache_module
+
+    no_index = tmp_path / "no_index.sqlite"
+    _sql(no_index, cache_module._CREATE_TABLE)
+    _sql(no_index, "INSERT INTO completions (key, model, prompt_sha256, max_tokens, temperature, "
+                   "json_mode, completion) VALUES (?, 'qwen3-4b', 'sha', 8, 0.0, 0, 'served')",
+         (_k("p"),))
+    foreign = _add_foreign_table(tmp_path / "foreign.sqlite")
+    os.chmod(no_index, stat.S_IRUSR)
+    os.chmod(foreign, stat.S_IRUSR)
+    try:
+        if os.access(no_index, os.W_OK):
+            pytest.skip("file permissions do not restrict this account")
+        served = CompletionCache(no_index)
+        assert served.writable is False and served.readable is True
+        assert served.get(_k("p")) == "served" and served.readable is True
+        assert "readonly database" in served.reason       # why it cannot be written
+        unusable = CompletionCache(foreign)
+        assert unusable.writable is False and unusable.readable is False
+        assert "no such table: completions" in unusable.reason
+        with pytest.warns(UserWarning, match="readonly database"):
+            unusable.set(_row(_k("p")))
+    finally:
+        os.chmod(no_index, stat.S_IRUSR | stat.S_IWUSR)
+        os.chmod(foreign, stat.S_IRUSR | stat.S_IWUSR)
+
+
+def test_each_lookup_updates_readable_and_reason(tmp_path):
+    """A cache made while its file was fine, whose file is then replaced by an LFS pointer (a
+    checkout can do that) and later restored: `readable` and `reason` follow the lookups."""
+    c = CompletionCache(tmp_path / "c.sqlite")
+    c.set(_row(_k("p"), text="kept"))
+    good = c.path.read_bytes()
+    c.path.write_bytes(_LFS_POINTER)
+    assert c.get(_k("p")) is None
+    assert c.readable is False and "file is not a database" in c.reason
+    c.path.write_bytes(good)
+    assert c.get(_k("p")) == "kept"
+    assert c.readable is True and c.reason is None
+
+
+def test_readable_and_reason_are_read_only(tmp_path):
+    c = CompletionCache(tmp_path / "c.sqlite")
+    with pytest.raises(AttributeError):
+        c.readable = False
+    with pytest.raises(AttributeError):
+        c.reason = "set from outside"
 
 
 # ---------------------------------------------------------------------------

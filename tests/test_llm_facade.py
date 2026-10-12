@@ -4,7 +4,13 @@ import puremacro.llm as L
 import puremacro.llm.engines as E
 
 import contextlib
+import json
+import os
 import sqlite3
+import stat
+import subprocess
+import sys
+from pathlib import Path
 
 from puremacro.llm.cache import prompt_sha256
 
@@ -273,3 +279,102 @@ def test_chat_needs_a_turn_that_is_not_a_system_turn(fake):
     with pytest.raises(ValueError):
         L.chat([], max_tokens=8)
     assert fake.calls == []
+
+
+# ---------------------------------------------------------------- a cache that cannot be read
+#
+# In cache mode, a lookup that could not read the cache raises CacheUnavailable, a CacheMiss whose
+# reason says why, instead of a miss that tells the user to run the model. Auto mode still degrades
+# to no cache, and a file that does not exist yet is an empty cache: a plain miss.
+
+# What a clone made without git-lfs leaves where the cache file should be.
+_LFS_POINTER = (b"version https://git-lfs.github.com/spec/v1\n"
+                b"oid sha256:" + b"0" * 64 + b"\nsize 24576\n")
+
+
+def _no_engine_in_cache_mode(monkeypatch):
+    monkeypatch.setattr(E, "resolve_engine",
+                        lambda *a, **k: pytest.fail("engine resolved in cache mode"))
+
+
+def test_cache_mode_without_sqlite3_says_the_cache_cannot_be_read_and_how_to_load_it(tmp_path):
+    """Pyodide 0.28 before `await pyodide.loadPackage('sqlite3')`, simulated as test_pyodide_compat
+    does: the file holds the answer, but without sqlite3 nothing can read it."""
+    shipped = tmp_path / "shipped.sqlite"
+    key = L.cache_key("qwen3-4b", "hola", max_tokens=8, temperature=0.0, json_mode=False)
+    L.CompletionCache(shipped).set(L.CacheRow(key, "qwen3-4b", prompt_sha256("hola", None), 8, 0.0,
+                                              False, "0.7", "fake", "qwen3-4b"))
+    assert L.complete("hola", mode="cache", max_tokens=8, cache=L.CompletionCache(shipped)) == "0.7"
+    code = "\n".join([
+        "import json, sys",
+        "sys.modules['sqlite3'] = None  # simulate a build without it",
+        "import puremacro.llm as L",
+        "try:",
+        "    got = ['returned', L.complete('hola', mode='cache', max_tokens=8)]",
+        "except L.CacheMiss as e:",
+        "    kind = type(e)",
+        "    got = [f'{kind.__module__}.{kind.__qualname__}', e.key, e.model,",
+        "           getattr(e, 'reason', None), str(e)]",
+        "print(json.dumps(got))",
+    ])
+    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
+                          cwd=str(Path(__file__).resolve().parents[1]),
+                          env={**os.environ, "PUREMACRO_LLM_CACHE": str(shipped)})
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    kind, got_key, model, reason, message = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert kind == "puremacro.llm.cache.CacheUnavailable"          # caught above as a CacheMiss
+    assert (got_key, model) == (key, "qwen3-4b")
+    assert reason.startswith("ImportError: ") and "sqlite3" in reason
+    assert message.startswith("the completion cache cannot be read here")
+    assert "await pyodide.loadPackage('sqlite3')" in message
+    assert issubclass(L.CacheUnavailable, L.CacheMiss)
+
+
+def test_cache_mode_names_a_cache_file_that_is_not_a_database(monkeypatch, tmp_path):
+    """An LFS pointer where the cache file should be: cache mode says the cache cannot be read and
+    why. The same holds for a cache passed in whose file was fine when the object was made."""
+    _no_engine_in_cache_mode(monkeypatch)
+    pointer = tmp_path / "llm_cache.sqlite"
+    pointer.write_bytes(_LFS_POINTER)
+    monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(pointer))
+    with pytest.raises(L.CacheUnavailable) as ei:
+        L.complete("hola", mode="cache", max_tokens=8)
+    assert isinstance(ei.value, L.CacheMiss) and ei.value.model == "qwen3-4b"
+    assert "file is not a database" in ei.value.reason
+    assert str(ei.value).startswith("the completion cache cannot be read here")
+    assert "file is not a database" in str(ei.value)
+    assert pointer.read_bytes() == _LFS_POINTER                        # left as it was
+    mine = L.CompletionCache(tmp_path / "mine.sqlite")
+    mine.path.write_bytes(_LFS_POINTER)
+    with pytest.raises(L.CacheUnavailable, match="file is not a database"):
+        L.complete("hola", mode="cache", max_tokens=8, cache=mine)
+
+
+def test_cache_mode_with_no_cache_file_yet_is_a_plain_miss(monkeypatch, tmp_path):
+    """Also where the file cannot even be created: nothing to read is an empty cache."""
+    _no_engine_in_cache_mode(monkeypatch)
+    with pytest.raises(L.CacheMiss) as ei:                             # the suite's fresh path
+        L.complete("hola", mode="cache", max_tokens=8)
+    assert type(ei.value) is L.CacheMiss
+    ro = tmp_path / "ro"
+    ro.mkdir()
+    os.chmod(ro, stat.S_IRUSR | stat.S_IXUSR)
+    try:
+        if os.access(ro, os.W_OK):
+            pytest.skip("directory permissions do not restrict this account")
+        monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(ro / "c.sqlite"))
+        with pytest.raises(L.CacheMiss) as ei:
+            L.complete("hola", mode="cache", max_tokens=8)
+        assert type(ei.value) is L.CacheMiss and not (ro / "c.sqlite").exists()
+    finally:
+        os.chmod(ro, stat.S_IRWXU)
+
+
+def test_auto_mode_still_degrades_to_no_cache_where_the_cache_cannot_be_read(monkeypatch, fake,
+                                                                              tmp_path):
+    pointer = tmp_path / "llm_cache.sqlite"
+    pointer.write_bytes(_LFS_POINTER)
+    monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(pointer))
+    with pytest.warns(UserWarning, match="cannot be written"):
+        assert L.complete("hola", max_tokens=8) == "0.7"
+    assert len(fake.calls) == 1 and pointer.read_bytes() == _LFS_POINTER

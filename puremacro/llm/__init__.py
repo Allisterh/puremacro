@@ -10,8 +10,9 @@ run.
 
   - ``auto``: the cache first. On a miss the model is checked against the device's memory, an
     engine is found, the model runs, and its answer is stored (an empty answer never is);
-  - ``cache``: the cache only. A miss raises :class:`CacheMiss`; no engine is constructed, no
-    socket is opened and no model is loaded;
+  - ``cache``: the cache only. A miss raises :class:`CacheMiss`, and a cache that cannot be read
+    here raises :class:`CacheUnavailable`; no engine is constructed, no socket is opened and no
+    model is loaded;
   - ``off``: the model every time. The cache is neither read nor written.
 
 * **Models.** ``model`` is a tier (``default``, ``small``, ``large``), an alias of
@@ -30,10 +31,11 @@ run.
   model gets 8 tokens more than ``max_tokens`` at the engine, room for the empty think block it
   may still open its answer with; the cache key keeps the ``max_tokens`` of the call.
 * **Cache.** :class:`CompletionCache`, in ``~/.cache/puremacro/llm_cache.sqlite`` or the file
-  named by ``PUREMACRO_LLM_CACHE``. A cache that cannot be written makes ``complete`` recompute
-  answers instead of failing.
-* **Errors.** :class:`CacheMiss` (a ``LookupError``), :class:`ModelTooLarge` (a
-  ``RuntimeError`` with ``alias``, ``suggested`` and ``budget_gb``) and
+  named by ``PUREMACRO_LLM_CACHE``. A cache that cannot be written, or in ``auto`` mode one that
+  cannot be read, makes ``complete`` recompute answers instead of failing.
+* **Errors.** :class:`CacheMiss` (a ``LookupError``) and :class:`CacheUnavailable` (a
+  :class:`CacheMiss` whose ``reason`` says why the cache cannot be read), :class:`ModelTooLarge`
+  (a ``RuntimeError`` with ``alias``, ``suggested`` and ``budget_gb``) and
   :class:`LocalLLMUnavailable` (no engine can serve the model; a :class:`BackendUnavailable`).
 * **Checking a machine.** :func:`report` says what this machine offers a local model: memory,
   engines, the model that fits, the cache and the mode.
@@ -43,7 +45,9 @@ standard library and ``puremacro._optional_stdlib`` (through which the cache imp
 ``sqlite3``), and nothing else: the inference packages, the network helpers and
 :mod:`puremacro.runtime` are imported inside the functions that use them. So
 ``import puremacro.llm`` works under Pyodide, where no engine is available and ``cache`` mode is
-the one that answers.
+the one that answers. Pyodide 0.28 adds ``sqlite3`` only on request: run
+``await pyodide.loadPackage('sqlite3')`` before importing puremacro, or ``cache`` mode raises
+:class:`CacheUnavailable`, whose message gives that hint.
 """
 from __future__ import annotations
 
@@ -53,7 +57,14 @@ from typing import Any
 from . import cache as _cache
 from . import engines as _engines
 from . import models as _models
-from .cache import CacheMiss, CacheRow, CompletionCache, cache_key, default_cache_path
+from .cache import (
+    CacheMiss,
+    CacheRow,
+    CacheUnavailable,
+    CompletionCache,
+    cache_key,
+    default_cache_path,
+)
 from .engines import (
     BackendUnavailable,
     Engine,
@@ -78,6 +89,7 @@ __all__ = [
     "BackendUnavailable",
     "CacheMiss",
     "CacheRow",
+    "CacheUnavailable",
     "CompletionCache",
     "HTTPEngine",
     "LlamaCppEngine",
@@ -202,6 +214,10 @@ def complete(prompt: str, *, model: str = "default", engine: str = "auto",
     ------
     CacheMiss
         ``cache`` mode and no cached answer.
+    CacheUnavailable
+        ``cache`` mode and a cache that cannot be read here: no ``sqlite3``, or a file that
+        cannot be opened as a cache; its ``reason`` says which. It is a :class:`CacheMiss`, so
+        ``except CacheMiss`` catches it too.
     ModelTooLarge
         A model of the registry needs more memory than the device offers; raised before any
         engine is looked for, and never for a cached answer.
@@ -226,6 +242,8 @@ def complete(prompt: str, *, model: str = "default", engine: str = "auto",
         if hit is not None:
             return hit
         if mode == "cache":
+            if not store.readable:  # the lookup could not read the cache, so this is not a miss
+                raise _cache.CacheUnavailable(key, alias, store.reason)
             raise _cache.CacheMiss(key, alias)
     spec = _models.MODELS.get(alias)
     if spec is not None:            # before any engine, so a model that cannot fit probes nothing
