@@ -1966,6 +1966,7 @@
     "puremacro.narrative": [
       "BLUESKY_KNOWN_HANDLES",
       "CROSS_SOURCE_GROUPS",
+      "CorpusStore",
       "CrowdExpertSpreadResult",
       "DGLP_17",
       "DynamicTopicModel",
@@ -1983,6 +1984,7 @@
       "NarrativeSpecificationCurve",
       "NarrativeStabilityReport",
       "PolicyActionClassifier",
+      "QUERY_SOURCE_REGISTRY",
       "RiskIndex",
       "SOURCE_REGISTRY",
       "SPANISH_MACRO_LEXICON",
@@ -2082,6 +2084,7 @@
     "puremacro.narrative.harvest": [
       "NarrativeCorpus",
       "NarrativeDocument",
+      "QUERY_SOURCE_REGISTRY",
       "SOURCE_REGISTRY",
       "harvest_narrative_corpus"
     ],
@@ -2370,6 +2373,11 @@
       "MultilingualScoreResult",
       "infer_policy_stance",
       "score_multilingual"
+    ],
+    "puremacro.narrative.store": [
+      "CorpusStore",
+      "SCHEMA_VERSION",
+      "default_corpus_path"
     ],
     "puremacro.narrative.topics": [
       "DynamicTopicModel",
@@ -2931,6 +2939,38 @@
       "available_countries",
       "coverage_heatmap",
       "load_recipe"
+    ],
+    "puremacro.text": [
+      "DocumentTermMatrix",
+      "RegexTokenizer",
+      "STOPWORDS",
+      "Tokenizer",
+      "build_dtm",
+      "ngrams",
+      "segment",
+      "split_paragraphs",
+      "split_sentences",
+      "stopwords"
+    ],
+    "puremacro.text.dtm": [
+      "DocumentTermMatrix",
+      "build_dtm"
+    ],
+    "puremacro.text.segment": [
+      "segment",
+      "split_paragraphs",
+      "split_sentences"
+    ],
+    "puremacro.text.stopwords": [
+      "STOPWORDS",
+      "normalize_language",
+      "resolve_stop_words",
+      "stopwords"
+    ],
+    "puremacro.text.tokenize": [
+      "RegexTokenizer",
+      "Tokenizer",
+      "ngrams"
     ],
     "puremacro.trade": [
       "AllenArkolakisModel",
@@ -6912,6 +6952,14 @@
       "sigma",
       "summary",
       "z"
+    ],
+    "puremacro.text.dtm.DocumentTermMatrix": [
+      "X",
+      "docs",
+      "ngram_range",
+      "tokenizer",
+      "vocab",
+      "weighting"
     ],
     "puremacro.trade._results.CapacityBottleneckResult": [
       "capacity_limits",
