@@ -255,6 +255,23 @@
     "puremacro.did.types": [
       "PanelDiD"
     ],
+    "puremacro.dp": [
+      "AR1",
+      "DPSolution",
+      "Jump",
+      "Markov",
+      "Model",
+      "ModelSpecError",
+      "crra"
+    ],
+    "puremacro.dp.model": [
+      "Model"
+    ],
+    "puremacro.dp.processes": [
+      "AR1",
+      "Jump",
+      "Markov"
+    ],
     "puremacro.dsge": [
       "BayesianEstimationResult",
       "BayesianIRFResult",
@@ -1394,6 +1411,59 @@
       "fetch_wtui_m",
       "fetch_wui_m_full"
     ],
+    "puremacro.fetch.micro": [
+      "METHODS",
+      "MicroFrame",
+      "SurveyDesign",
+      "fetch_acs_pums",
+      "fetch_cps_basic",
+      "fetch_enigh",
+      "fetch_scf",
+      "replicate_variance",
+      "rubin_combine"
+    ],
+    "puremacro.fetch.micro._design": [
+      "METHODS",
+      "MicroFrame",
+      "SurveyDesign",
+      "replicate_variance",
+      "rubin_combine"
+    ],
+    "puremacro.fetch.micro.census": [
+      "CPS_IDS",
+      "MAX_VARIABLES",
+      "PUMS_IDS",
+      "codebook",
+      "fetch_acs_pums",
+      "fetch_cps_basic",
+      "fetch_records",
+      "variables"
+    ],
+    "puremacro.fetch.micro.inegi": [
+      "ID_COLUMNS",
+      "TABLES",
+      "available_years",
+      "enigh_url",
+      "fetch_enigh",
+      "read_table"
+    ],
+    "puremacro.fetch.micro.scf": [
+      "assemble",
+      "available_years",
+      "fetch_scf",
+      "prepare_replicates",
+      "prepare_summary",
+      "scf_urls"
+    ],
+    "puremacro.fetch.registry": [
+      "AUTH_LEVELS",
+      "KINDS",
+      "SourceInfo",
+      "info",
+      "load",
+      "register",
+      "sources"
+    ],
     "puremacro.financial_panel": [
       "build_financial_panel"
     ],
@@ -1949,6 +2019,7 @@
     "puremacro.narrative": [
       "BLUESKY_KNOWN_HANDLES",
       "CROSS_SOURCE_GROUPS",
+      "CorpusStore",
       "CrowdExpertSpreadResult",
       "DGLP_17",
       "DynamicTopicModel",
@@ -1966,6 +2037,7 @@
       "NarrativeSpecificationCurve",
       "NarrativeStabilityReport",
       "PolicyActionClassifier",
+      "QUERY_SOURCE_REGISTRY",
       "RiskIndex",
       "SOURCE_REGISTRY",
       "SPANISH_MACRO_LEXICON",
@@ -2065,6 +2137,7 @@
     "puremacro.narrative.harvest": [
       "NarrativeCorpus",
       "NarrativeDocument",
+      "QUERY_SOURCE_REGISTRY",
       "SOURCE_REGISTRY",
       "harvest_narrative_corpus"
     ],
@@ -2353,6 +2426,11 @@
       "MultilingualScoreResult",
       "infer_policy_stance",
       "score_multilingual"
+    ],
+    "puremacro.narrative.store": [
+      "CorpusStore",
+      "SCHEMA_VERSION",
+      "default_corpus_path"
     ],
     "puremacro.narrative.topics": [
       "DynamicTopicModel",
@@ -2914,6 +2992,38 @@
       "available_countries",
       "coverage_heatmap",
       "load_recipe"
+    ],
+    "puremacro.text": [
+      "DocumentTermMatrix",
+      "RegexTokenizer",
+      "STOPWORDS",
+      "Tokenizer",
+      "build_dtm",
+      "ngrams",
+      "segment",
+      "split_paragraphs",
+      "split_sentences",
+      "stopwords"
+    ],
+    "puremacro.text.dtm": [
+      "DocumentTermMatrix",
+      "build_dtm"
+    ],
+    "puremacro.text.segment": [
+      "segment",
+      "split_paragraphs",
+      "split_sentences"
+    ],
+    "puremacro.text.stopwords": [
+      "STOPWORDS",
+      "normalize_language",
+      "resolve_stop_words",
+      "stopwords"
+    ],
+    "puremacro.text.tokenize": [
+      "RegexTokenizer",
+      "Tokenizer",
+      "ngrams"
     ],
     "puremacro.trade": [
       "AllenArkolakisModel",
@@ -4042,6 +4152,7 @@
     ],
     "puremacro.vfi.egm": [
       "EGMSolution",
+      "egm_step",
       "solve_egm"
     ],
     "puremacro.vfi.epstein_zin": [
@@ -4510,6 +4621,47 @@
       "time",
       "treat_time",
       "unit"
+    ],
+    "puremacro.dp._egm.EGMHouseholdSolution": [
+      "R",
+      "V",
+      "aprime",
+      "aprime_by_choice",
+      "c",
+      "c_by_choice",
+      "choice_prob",
+      "egm",
+      "income",
+      "n_iter",
+      "policy_d",
+      "sup_norm"
+    ],
+    "puremacro.dp._egm.EGMLifeCycleSolution": [
+      "R",
+      "V",
+      "aprime",
+      "aprime_by_choice",
+      "c",
+      "c_by_choice",
+      "choice_prob",
+      "horizon",
+      "income",
+      "policy_d"
+    ],
+    "puremacro.dp.processes.AR1": [
+      "m",
+      "method",
+      "n",
+      "rho",
+      "sigma"
+    ],
+    "puremacro.dp.processes.Jump": [
+      "grid",
+      "rates"
+    ],
+    "puremacro.dp.processes.Markov": [
+      "P",
+      "grid"
     ],
     "puremacro.dsge._ast.BinOp": [
       "left",
@@ -5535,6 +5687,40 @@
       "series_id",
       "source",
       "units"
+    ],
+    "puremacro.fetch.micro._design.MicroFrame": [
+      "codebook",
+      "data",
+      "design",
+      "query",
+      "source",
+      "unit",
+      "vintage"
+    ],
+    "puremacro.fetch.micro._design.SurveyDesign": [
+      "implicate",
+      "method",
+      "mse",
+      "note",
+      "psu",
+      "replicate_weights",
+      "scale",
+      "strata",
+      "variance_implicate",
+      "weight"
+    ],
+    "puremacro.fetch.registry.SourceInfo": [
+      "auth",
+      "credential",
+      "description",
+      "freq",
+      "id",
+      "kind",
+      "loader",
+      "note",
+      "provider",
+      "redistributable",
+      "terms_url"
     ],
     "puremacro.forecast.penalized.PenalizedForecastResult": [
       "bic_path",
@@ -6853,6 +7039,14 @@
       "sigma",
       "summary",
       "z"
+    ],
+    "puremacro.text.dtm.DocumentTermMatrix": [
+      "X",
+      "docs",
+      "ngram_range",
+      "tokenizer",
+      "vocab",
+      "weighting"
     ],
     "puremacro.trade._results.CapacityBottleneckResult": [
       "capacity_limits",

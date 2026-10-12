@@ -48,6 +48,13 @@ Public API
 - :func:`ilostat_panel` — ILOSTAT labour panel (annual, quarterly, monthly; modelled estimates)
 - :func:`fetch_pwt` — Penn World Table 11.0 and Maddison Project Database 2023
 
+Discovery and microdata
+-----------------------
+- :mod:`puremacro.fetch.registry` — every source with its auth, terms and
+  loader: ``registry.sources("micro")``, ``registry.load("fed.scf")``
+- :mod:`puremacro.fetch.micro`    — survey microdata (ACS PUMS, CPS, SCF)
+  returned with weights and a replicate-variance design
+
 For API-key-requiring FRED via the JSON endpoint, see
 :func:`puremacro.instruments.external.load_fred`.
 """

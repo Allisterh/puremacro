@@ -87,6 +87,10 @@ _USER_DOCS = [
     "trade_stability.md",
     "trade_dynamic.md",
     "dsge_stacked_newton.md",
+    # Guides added 2026-10-12: declarative DP, survey microdata and the registry, text as data.
+    "dp.md",
+    "micro_data.md",
+    "text_analysis.md",
 ]
 
 

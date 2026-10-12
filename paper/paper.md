@@ -34,8 +34,11 @@ bibliography: paper.bib
      `validation.scorecard()` on the same tree: 114 checks, 16 subsystems,
      21 external (14 package + 5 SciPy + 2 published) / 31 analytical / 62 internal,
      all passing (4.4.0 had 110: 20 / 31 / 59; 3.4.0 had 107: 19 / 29 / 59).
-     Package development has reached 4.7.0; these counts and measurements have
-     not been refreshed for it. Re-run the commands in RELEASING.md §6.5 on the
+     Package development has reached 4.8.1; these counts and measurements have
+     not been refreshed since. The text was extended on 2026-10-12 to cover
+     `dp`, the survey microdata and `puremacro.text` (unreleased at the time).
+     The krusellsmith1998 and dolo entries in paper.bib were not checked
+     against Crossref (no access from the drafting session). Re-run the commands in RELEASING.md §6.5 on the
      chosen submission commit before submitting. -->
 
 # Summary
@@ -55,8 +58,7 @@ autocorrelation-robust and weak-instrument-robust inference
 [@arellanobond1991]; difference-in-differences and synthetic control
 [@abadie2010; @arkhangelsky2021]; mixed-frequency nowcasting
 [@giannone2008; @banburamodugno2014]; and text-based uncertainty indices
-[@bbd2016]. On the modelling side it solves dynamic programs by value-function
-iteration and endogenous grids [@carroll2006; @iskhakov2017]; heterogeneous-agent
+[@bbd2016]. On the modelling side it solves heterogeneous-agent
 economies, including sequence-space HANK models
 [@aiyagari1994; @young2010; @auclert2021]; continuous-time models [@achdou2022];
 projection methods on Chebyshev, finite-element and Smolyak grids
@@ -64,6 +66,16 @@ projection methods on Chebyshev, finite-element and Smolyak grids
 rational-expectations (DSGE) models; quantitative spatial and trade models
 [@allenarkolakis2014; @caliendoparro2015]; and climate–economy models
 [@nordhaus2018; @golosov2014].
+
+Dynamic programs are declared rather than coded: in the spirit of Dynare's model
+files, a `dp.Model` takes states, shocks, choices, a reward, constraints and a
+market-clearing condition as equations and compiles them to value-function
+iteration, endogenous grids with optional discrete choices
+[@carroll2006; @iskhakov2017], a continuous-time upwind scheme [@achdou2022] or a
+Krusell–Smith loop [@krusellsmith1998]. A data layer fetches macroeconomic series,
+policy texts (as sparse document-term matrices) and survey microdata with their
+replicate weights (Census ACS and CPS, the Survey of Consumer Finances, Mexico's
+ENIGH), so that moments carry design-based standard errors.
 
 Its estimators and solvers are written against NumPy [@numpy2020], SciPy
 [@scipy2020], pandas [@mckinney2010] and Matplotlib [@hunter2007] alone, and the
@@ -90,33 +102,37 @@ researchers in macroeconomics. It puts common estimators and models behind one
 set of conventions (shared arguments such as `lags`, `horizon` and `ci`, and
 immutable result objects with plotting and table export) and ships the evidence
 needed to trust its output: galleries of checks that users can run themselves.
+One interface spans data and models: a worked example calibrates an Aiyagari economy's
+discount factor to the median wealth-to-income ratio in the 2025 Survey of
+Consumer Finances, carrying the target's sampling error into the parameter, and
+sets untargeted moments against the data (wealth Gini 0.59 against 0.82).
 
 # State of the field
 
 statsmodels, arch and linearmodels are the reference Python implementations of
 reduced-form time series, conditional volatility and panel and
 instrumental-variable estimation. `puremacro` does not aim to replace them; it
-uses them as test oracles (see *Software design*). They do not, however, implement
+uses them as test oracles. They do not, however, implement
 the identification schemes that define structural macroeconometrics (sign,
 sign–zero, narrative and external-instrument restrictions), nor do they solve
 heterogeneous-agent or general-equilibrium models. For models, widely used tools
-are Dynare, the sequence-space Jacobian toolkit, HARK and QuantEcon.py. In their
+are Dynare, the sequence-space Jacobian toolkit, HARK and QuantEcon.py; dolo
+[@dolo] declares models in files and solves them by time iteration. In their
 domains they are more mature than `puremacro` and, for large heterogeneous-agent
 problems, faster: `puremacro` trades speed for portability.
 
 As of September 2026 the Pyodide distribution includes NumPy, SciPy, pandas,
 Matplotlib and statsmodels, but not arch, linearmodels or Numba; arch and linearmodels publish no pure-Python wheels
-that a browser could install at run time; and HARK and QuantEcon.py declare Numba
-as a required dependency, while the sequence-space Jacobian toolkit uses it in its
+that a browser could install at run time; and HARK, QuantEcon.py and dolo declare Numba
+as a required dependency, directly or through QuantEcon.py, while the sequence-space Jacobian toolkit uses it in its
 core modules. In a browser, the volatility, panel-IV and heterogeneous-agent layers
 of the usual stack are therefore unavailable, and Dynare needs a different language
 runtime altogether.
 
 Individual estimators could be contributed to existing packages. The collection's
 portability, however, depends on a library-wide invariant: one import surface
-whose numerical code uses only four core libraries. Tests enforce that constraint
-across the package; contributing an estimator elsewhere would not change its
-host's dependency graph.
+whose numerical code uses only four core libraries, and contributing an estimator elsewhere
+would not change its host's dependency graph.
 
 # Software design
 
@@ -138,8 +154,6 @@ suite's references. Repository scripts run statsmodels, arch, linearmodels and
 esda once on fixed inputs and store their outputs as package data, so the
 validation gallery can compare against them without importing them; an opt-in test
 marker recomputes the stored outputs with the installed packages to detect drift.
-The reference implementations thus certify the library without becoming its
-dependencies, which is what lets breadth and portability coexist.
 
 **Degrading rather than failing.** Where an external tool does better, `puremacro`
 uses it if present: seasonal adjustment calls X-13ARIMA-SEATS through statsmodels
@@ -154,10 +168,8 @@ paths; NumPy remains the reference path, tested in CI.
 problems slower than in JIT-compiled toolkits, and derivatives that other libraries
 obtain by automatic differentiation must be coded by hand. The browser is a
 best-effort target rather than a supported one: Parquet and Excel files need
-engines that not every Pyodide distribution provides. A headless harness runs the
-library in Node.js against a pinned Pyodide, and an opt-in release gate installs
-the package there as the playground does and runs a 31-test smoke subset. On
-3 October 2026 the harness ran the whole validation gallery inside Pyodide 0.28.3
+engines that not every Pyodide distribution provides. On
+3 October 2026 a headless Node.js harness ran the whole validation gallery inside Pyodide 0.28.3
 and 314.0.5 (the playground's version): all 114 checks passed on both, with four
 margins differing from native arithmetic by at most $5 \times 10^{-4}$.
 
@@ -169,9 +181,7 @@ exercised by about 19,100 tests, of which CI runs 18,900 on Linux, macOS and Win
 under Python 3.11–3.13 on every push and the remaining slow, reference and
 replication tests weekly and on every release tag, where they gate publication.
 Before each release tag, a script checks the suite against a recorded baseline,
-the import invariant, a snapshot of the public API, syntax on the oldest supported
-Python, and version agreement across the package metadata, changelog and citation
-file.
+the import invariant and a snapshot of the public API.
 
 ## Verification
 
@@ -193,11 +203,10 @@ results and 62 test internal consistency.
 A separate replication gallery, `puremacro.replication.scorecard()`, reproduces
 published estimates of the return to schooling [@card1995], a textbook logit of
 married women's labour-force participation on Mroz's [-@mroz1987] data, and the
-output effect of tax changes [@romer2010], as well as two qualitative predictions
-of incomplete-markets models [@huggett1993; @aiyagari1994]: precautionary saving
-holds the interest rate below the rate of time preference, and the rate falls as
-income risk rises. Most model solvers (sequence-space, continuous-time, spatial,
-and climate) are covered by unit tests but not yet by gallery checks; the trade model gained its first four checks in 4.6.0, on a 77-country, 11-sector OECD table.
+output effect of tax changes [@romer2010], and two qualitative predictions of
+incomplete-markets models [@huggett1993; @aiyagari1994]: the equilibrium interest
+rate lies below the rate of time preference and falls as income risk rises. Most model solvers (sequence-space, continuous-time, spatial,
+and climate) are covered by unit tests but not yet by gallery checks.
 
 ![The validation gallery of `puremacro` 4.6.0: 114 checks in 16 subsystems, by kind of reference; all pass. *External reference*: stored outputs of statsmodels, arch, linearmodels or esda, SciPy computed at run time, or a published table. *Analytical result*: a closed form, or an effect planted in simulated data. *Internal consistency*: agreement between alternative algorithms, identities that correct output must satisfy, or recovery of parameters from simulated data. Regenerate with `python paper/make_scorecard_fig.py`.\label{fig:scorecard}](scorecard.png){ width=80% }
 

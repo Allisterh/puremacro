@@ -4,7 +4,169 @@ This file records user-visible changes per release. Internal refactors that don'
 
 ## Unreleased
 
+**Declarative dynamic programming front end (`puremacro.dp`).** Declare states,
+shocks, choices, a reward, constraints and an optional market-clearing condition
+as equations in Dynare expression syntax (parsed by the `.mod` parser), and
+`Model.solve()` compiles them to `VFIProblem`, `FiniteHorizonProblem` or
+`stationary_equilibrium`. No return-function closures, grid broadcasting or
+positional parameter lists. Aiyagari, Huggett, the life-cycle and two-asset
+examples written as `dp` models reproduce `vfi.examples` exactly (same prices,
+policies and value functions). `vfi.Model` stays supported: `dp` has no panel simulation or Python-callable utilities yet.
+
+**Endogenous grid method for `dp` models.** `Model.solve(method="egm")` compiles
+a one-asset model whose budget is `c + a(+1) = R*a + y(z)` to `vfi.solve_egm`.
+The compiler checks that form (symbolically for the reward, numerically on the
+grid for the budget and constraints) and raises `ModelSpecError` otherwise.
+Marginal utility is the symbolic derivative of the reward, so felicities other
+than CRRA work (closed-form inverse for `crra` and `log`, bisection otherwise).
+Stationary equilibria warm-start each price evaluation. On the Aiyagari example
+the equilibrium takes 0.8 s against 4.6 s for discrete VFI, and the EGM value
+function is closer to a 1,500-point VFI solution. `vfi.solve_egm` takes
+`u_prime`/`u_prime_inv` (any concave felicity) and a `c0` warm start; CRRA calls
+are unchanged, and its inversion step is public as `vfi.egm.egm_step`.
+
+Life-cycle models (`horizon(T)`) also solve with `method="egm"`: one EGM step per
+age, with age-varying returns, income and parameters, survival, and an optional
+terminal value (its slope taken by finite differences). Two-period log-utility
+models match their closed form to 1e-12. On the 40-age example the EGM mean
+assets by age are within 0.02 of a 1,191-point VFI solution, against 0.22 for
+VFI on the same 120-point grid. Value functions interpolate linearly between
+nodes, which understates them where they are most curved (near the borrowing
+limit with gamma = 2).
+
+A discrete choice (`discrete("h", ...)`, deterministic, no taste shocks) also
+compiles to EGM, in both life cycles and infinite horizons: the Euler inversion
+for each option is followed by an upper envelope over all segments between
+adjacent endogenous points, with the borrowing-limit and top-of-grid corners
+admitted only where their Kuhn-Tucker condition holds. The reward may depend on
+the option (`crra(c, gamma) - chi*h`) and so may income; the return on assets
+may not. A dominated option reproduces plain EGM to 1e-8. On a 30-age
+labour-supply model the EGM value function on 100 points is less than half as
+far from a 793-point VFI solution as VFI on 100 points, and the two methods agree
+on a fine grid (work share by age within 0.02). Aggregates over the discrete
+choice converge slowly in the grid for either method because the
+distribution's mass sits on grid nodes. `vfi.DCEGMProblem` is unchanged: its
+horizon repeats one stationary step and returns only the first period, so it
+cannot carry age-varying income or survival.
+
+`Model.taste_shocks(scale)` adds type-I extreme value shocks to the discrete
+choice (solved by `method="egm"` only): values are log-sums, choices logit, the
+Euler right side averages marginal utility over options and the distribution
+splits mass by choice probability, so `mean("h")` is the participation rate.
+The last period matches the closed-form logit to 1e-12 and a two-period model
+matches a 200,001-point brute-force maximisation to 1e-5.
+
+**Continuous-time `dp` models (`method="hjb"`).** Declare `control("c")`,
+`drift("a", "r*a + w*e - c")`, `discount_rate("rho")` and `dp.Jump` shocks
+(Poisson generators; several are combined as their product chain), and
+`solve()` compiles to `vfi.solve_hjb_achdou`. The compiler checks that the
+drift is linear in the control with slope -1 and derives u' and its inverse from
+the reward. Prices and `clear()` work as in discrete time, with aggregates
+integrated against the KFE density; `distribution` is the mass at each node.
+The household matches `solve_hjb_achdou` to 1e-12 and the continuous-time
+Aiyagari equilibrium matches `solve_aiyagari_continuous_hjb` (r* to 1e-9).
+`solve_hjb_achdou` takes `income` (any (Na, Ne) drift before consumption) and
+`utility`/`u_prime`/`u_prime_inv`; default calls are bit-identical.
+`Model.solve(method=None)` picks `"hjb"` for a model with a drift and `"vfi"`
+otherwise.
+
+**Aggregate risk in `dp` models (Krusell-Smith).** `aggregate_shock("Z", ...)`
+and `aggregate_state("K", grid, mean="a")` add the Krusell and Smith (1998)
+forecast-rule fixed point, with prices and technology written as model
+equations (any firm, any household reward). With the same grids and starting
+distribution, the Cobb-Douglas model reproduces `vfi.krusell_smith` bit for bit
+(forecast coefficients and capital path). `solve("egm")` solves the household
+by EGM and simulates with continuous policies: on a 100-point asset grid it
+converges in 36 outer iterations (24 s) to `b1` = 0.965 and 0.969 with R^2 above
+0.9999. Discrete VFI policies sit on grid nodes, so on a 60-point grid
+simulated capital never moves and the regression is degenerate; at its
+defaults (200 points) `vfi.krusell_smith` had not converged after its 60 outer
+iterations (470 s, `b1` = 0.897 and 0.954). Loop options go in
+`solve(ks=dict(T=..., burn_in=..., seed=..., damping=..., tol=..., max_outer=..., mu0=...))`.
+Both `vfi.krusell_smith` and dp's loop now raise a `RuntimeWarning` when they stop
+at `max_outer` without converging (they used to return `converged=False`
+silently), and when simulated capital never moves under aggregate risk, the
+degenerate regression above, which would otherwise pass `tol` and look converged.
+
+`vfi.solve_egm` and dp's EGM accept a return on assets that varies with the
+exogenous state (`r` of shape (n_z,); Euler u'(c) = beta E[(1 + r') u'(c')]).
+Scalar-`r` calls are unchanged.
+
+### Added
+
+- `puremacro.fetch.registry` lists every data source (series, panels, vintage providers, microdata and the narrative text connectors) with its auth level, credential, terms and whether results may be redistributed; `registry.load(id)` returns the fetcher. `puremacro.fetch.micro` adds `fetch_acs_pums` (Census ACS PUMS, 80 replicate weights, chunked past the API's 50-variable cap), `fetch_cps_basic` (weights only) and `fetch_scf` (Fed SCF summary extract, five implicates, 999 replicate weights) and `fetch_enigh` (INEGI ENIGH, Mexico, 2016+; strata and PSUs, so standard errors come from Taylor linearisation, `SurveyDesign(method="taylor")`). Each returns a `MicroFrame` whose `mean`/`total`/`quantile`/`share` give replicate standard errors, combined across implicates by Rubin's rules. The Census fetchers set the codebook's not-applicable codes (N/A, Not in Universe, Blank, Don't Know, Refused, CPS "Met No Conditions To Assign", including CPS earnings codes served with implied decimals as `-0.01`; e.g. `WAGP == -1` for persons under 15) to `NaN` by default, read from the endpoint's `variables.json`, so they no longer enter means and totals as values; `na_to_nan=False` keeps the raw codes and `MicroFrame.codebook` lists every labelled code.
+
+- `MicroFrame.ratio`, `gini` and `top_share`: ratio of means (or of `q`-quantiles) of two columns, the Gini coefficient and the share held by the top `p`, with the same replicate/implicate standard errors as `mean`. Taylor designs (ENIGH) raise `NotImplementedError` for these rather than return an estimate without its standard error.
+
+- **Worked example: an Aiyagari economy calibrated to the SCF** (`python -m puremacro.examples.scf_aiyagari`). It fetches one SCF wave, estimates wealth-to-income ratios and concentration moments with replicate standard errors, calibrates `beta` of a `dp` Aiyagari model (EGM) to one ratio and reports the untargeted moments next to the data, with the target's sampling error carried through `beta` by the delta method. On SCF 2025, with `beta` calibrated to median wealth over median income (2.63), the model gives a wealth Gini of 0.59 against 0.82, a top 1% share of 0.06 against 0.31 and a top 10% share of 0.38 against 0.72. The mean wealth-to-income ratio (8.52) is out of reach for `beta < 1` (at most 7.55, with r < 0).
+
+- **Narrative corpus is now stored and exportable.** `harvest_narrative_corpus`
+  used to keep nothing: its SQLite table was never written (and had no text
+  column), and `use_cache`/`db_path` were ignored. A harvest given `db_path=`,
+  `store=` or `use_cache=True` (default path: `narrative_corpus.db` beside the
+  HTTP cache) now upserts into a `CorpusStore`; without them it stays in memory
+  and writes nothing to disk. The store keeps full
+  text (latest version, with a flag and the previous hash when a document
+  was edited; see `store.revised()`) and a log of harvest runs; `store.load()`
+  returns the accumulated corpus. `NarrativeCorpus` gains `to_frame(metadata=
+  "promote"|"json"|"drop")`, `to_jsonl`/`from_jsonl` (no dependency),
+  `to_parquet`/`from_parquet` (`io` extra), `from_frame`, `from_records` (any
+  connector's output, including query-driven ones), and a provenance
+  `manifest()` written next to every export, with `verify_manifest` to check a
+  re-harvest against it.
+- **New `puremacro.text`: tokenizer, segmentation and a sparse document-term
+  matrix.** `build_dtm(texts, languages=...)` returns a `DocumentTermMatrix`
+  whose `X` is a `scipy.sparse.csr_matrix` with a row-aligned `docs` frame;
+  `.filter(min_df, max_df, max_features, terms)`, `.tfidf()` (scikit-learn's
+  definition), `.aggregate(by="country", freq="MS")` (term-count panels),
+  `.transform(new_texts)`, `.to_tidy()`, and `.save(dir)` writing `X.mtx` +
+  `vocab.txt` + `docs.csv` for R (`Matrix::readMM`, quanteda, stm). The default
+  `RegexTokenizer` keeps numbers and percentages ("25", "5.25%"; or masks them
+  with `numbers="mask"`) and picks stop words from each document's language
+  (en, es, pt, de, fr, it). Any `callable(text, language) -> list[str]` (spaCy,
+  NLTK) can replace it. `NarrativeCorpus.dtm(...)` and
+  `NarrativeCorpus.segment("paragraph"|"sentence"|callable)` build on it.
+
+### Changed
+
+- `narrative.topics.TfidfVectorizer` now builds its matrix sparse, so memory
+  scales with non-zero cells rather than documents x terms. Its default
+  tokenizer and its dense return value are unchanged (results match the
+  previous version to 1e-14); pass `sparse_output=True` or `tokenizer=` to opt
+  in. `NMF` accepts sparse input, and `DynamicTopicModel` uses it.
+
 ### Fixed
+
+- `fetch.registry` listed the 67 narrative text connectors as `redistributable=True`, although their terms are marked `unaudited`. They are now `redistributable=False` until someone reviews them.
+
+- `fetch._http.cached_get` gains `params=` and `secret_params=`; an API key passed as a secret parameter is no longer written into the cache file name, the manifest, or HTTP error text.
+
+- `harvest_narrative_corpus` fixes that changed what the narrative corpus contains:
+  - In a fresh session `harvest_narrative_corpus` returned an empty corpus: it
+    looked connectors up with `getattr(sources, module_name)`, which is `None`
+    until the lazily loaded submodule has been imported, and skipped them
+    silently. Connectors are now imported on demand.
+  - Three registry entries named functions that do not exist (`us_federal_register`,
+    `us_dod_contracts`, `uk_obr`) and harvested nothing; fixed.
+  - Connectors that yield legacy `(date, text, url)` 3-tuples (the RSS/Atom
+    helpers: `uk_hmt`, `uk_obr`, `de_bmf`, `fr_tresor`, `it_mef`, `eu_ecfin`,
+    `ca_dof`, `us_treasury`, `us_dod_contracts`) were rejected by the schema
+    check, so these sources were always empty. They are now accepted.
+  - The per-record `doctype` that 33 connectors emit was ignored (harvest read
+    `doc_type`); both are now read.
+  - A failing connector was swallowed by a bare `except`. Failures are now in
+    `corpus.harvest_report` and raise a warning (`on_error="warn"|"raise"|"ignore"`);
+    the documents a connector yielded before failing are kept, as before.
+  - Newly registered: `us_treasury`, `mas`, `macro_blogs`, `bluesky`; and, via
+    `QUERY_SOURCE_REGISTRY` + `source_kwargs`, `gdelt`, `google_news`, `reddit`,
+    `hackernews`, `local_csv`. Unknown source names now raise instead of being
+    dropped silently.
+  - Harvested `doc_id`s now also hash the record's explicit title (or `id`), and
+    records sharing a key but differing in text all get text-qualified ids, so
+    the ids do not depend on feed order (a reordered `us_warn` feed no longer
+    shows up as revisions). A key with a single text keeps its plain id, which is
+    what lets the store flag revisions; if a second text later appears under that
+    key, both records get new ids and the old row stays in the store.
 
 - `kalman_filter` / `kalman_smoother` with `diffuse_states=[...]` (exact-diffuse initialisation) returned wrong filtered and smoothed states, covariances and log-likelihood whenever a diffuse state's loading was not 1. Four defects, each now checked against an exact batch posterior and the closed-form diffuse log-likelihood (2,400 random 3-state / 2-observable models agree to ≤4e-7 relative error, previously wrong in most of them):
   - The diffuse-step update of the finite covariance scaled `K0 K0'` by `F_* / F_inf` instead of `F_*` (Koopman and Durbin 2000; Durbin and Koopman 2012, §5.2). The two agree only when `F_inf = 1`, as in the local-level `Z = 1` examples and tests. A local level with `Z = 2` gave a first-period variance of 0.0625 instead of `H / Z² = 0.25`.
@@ -23,8 +185,17 @@ This file records user-visible changes per release. Internal refactors that don'
   - Ten models exceed 1e-6 against a 60-digit evaluation of the same posterior (worst 3e-2 in `P_smooth`, at most 1e-5 in `a_smooth`). In nine of them some observation resolves a diffuse direction while barely loading on it: `F_inf` is at most 2e-4 of `(|z|' sd)²`, where `sd` holds the standard deviations of the `P_inf` entering the period, against a median of 1 over all the models (the tenth, at 2e-6, has 1.5e-2). The backward pass then cancels terms of order `1/F_inf²`.
 
   Results are unchanged when the diffuse prior is fully resolved within the first period, as in a local level with `Z = 1` (`python -m puremacro.examples.exact_diffuse_kalman`), and without `diffuse_states` (bit-identical). Tests in `tests/test_state_space_coverage.py` (`TestExactDiffuseSmoother`).
+- The exact-diffuse filter took a period's observations in the order given, so a diffuse step that barely loads the direction it resolves could come before an observation that loads it strongly. That step leaves a large `P_*` for the next observation to cancel, and the smoother's expansion in `1/κ` then cancels terms of order `1/F_inf²`. Results depended on the order of the observables. In the test model a row loads the last diffuse state with weight 1e-5 and comes first; filtering with the rows swapped moved `P_filt` by 8e-8, and `a_smooth` was 6e-7 off the GLS posterior.
+  - Within each diffuse period the filter now takes first, among the observations that still carry diffuse information, the one with the largest `F_inf / F_*`. That ratio is free of the units of `y`, of the states and of the scale of the diffuse factor. The order does not change the exact result.
+  - Over the 2,898 random models of the previous entry, models above 1e-6 fall from ten to five and the worst error from 3e-2 to 2e-3. Each of the five left has a weak diffuse step in every order of its observables (smallest `F_inf / F_*` between 2e-8 and 1e-4, the same in every order): its diffuse loadings are nearly collinear within a period.
+  - Reversing the observables moves the log-likelihood by at most 5e-8 relative (2e-7 before).
+  - Filter output is bit-identical for 2,238 of 3,000 random models and within 1.4e-12 for 99%.
+  - Tests: `test_invariant_to_the_order_of_the_observables`, `test_weakly_loaded_observation_before_a_strong_one`.
 
 ### Documentation
+
+- New guides, each with a Spanish twin and with code blocks that CI runs: `docs/dp.md` (declarative dynamic programming: VFI, EGM and DC-EGM, continuous time, Krusell-Smith, and what `dp` does not cover yet), `docs/micro_data.md` (the source registry, the ACS, CPS, SCF and ENIGH providers, design-based standard errors and the SCF-calibrated Aiyagari example) and `docs/text_analysis.md` (corpus storage and export, the tokenizer and the sparse document-term matrix). README, README.es and the site navigation link them. `docs/CREDENTIALS.md` now names the microdata providers as the `census` key's consumers.
+- The JOSS paper (`paper/paper.md`) describes `puremacro.dp`, the survey microdata and the text tools, uses the SCF example as its worked case, and adds dolo to the state of the field. It stays within the 1,750-word limit (1,742 by `tests/test_paper.py`'s count).
 
 - Course lesson T02_F (Gertler-Karadi 2011, English and Spanish) reports percent deviations from `to_frame(units="pct")`. It multiplied level deviations by 100 and labelled them %, so it printed capital at -28.66% and bank net worth at -67.88% on impact where the true figures are -5.06% and -49.15% (`docs/ADVISORY.md`, 2026-09-30). The scorecard, the policy table, the three figures, the figures quoted in the text and the lesson's own checks are corrected; the spread in annualised basis points and Q, whose steady state is 1, were already right. The lesson now installs `puremacro>=4.4,<5`, the first versions with `units="pct"`. `tests/test_notebooks/test_curso_t02f_units.py` pins the printed values and, under `-m slow`, re-runs the lesson.
 
