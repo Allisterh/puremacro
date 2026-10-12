@@ -953,7 +953,10 @@ _IMPORT_AND_RUN = textwrap.dedent("""
     before = set(sys.modules)
     import puremacro.llm.engines as E
     new = set(sys.modules) - before
-    ours_or_stdlib = lambda n: n.startswith("puremacro.llm") or n.split(".")[0] in sys.stdlib_module_names
+    # The package imports its cache, which imports sqlite3 through puremacro._optional_stdlib
+    # (tests/test_pyodide_compat.py requires that route); that one module is allowed.
+    ours_or_stdlib = lambda n: (n.startswith("puremacro.llm") or n == "puremacro._optional_stdlib"
+                                or n.split(".")[0] in sys.stdlib_module_names)
     ran = {
         "mlx": E.MLXEngine().available(),
         "llamacpp": E.LlamaCppEngine().available(),
@@ -999,7 +1002,7 @@ def _probe(code):
 
 def test_the_module_imports_and_runs_with_every_inference_dependency_absent():
     out = _probe(_BLOCKER + _IMPORT_AND_RUN)
-    assert out["foreign"] == []            # nothing but puremacro.llm and the standard library
+    assert out["foreign"] == []            # nothing but puremacro.llm, its sqlite3 route and the standard library
     assert out["blocked"] == [] and out["http_helpers"] is False
     assert out["mlx"] is False and out["llamacpp"] is False    # a find_spec that raises: not installed
     assert out["engines"] == [] and out["strip"] == "0.5"

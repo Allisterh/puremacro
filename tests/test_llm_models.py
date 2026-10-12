@@ -470,7 +470,10 @@ _IMPORT_PROBE = _BLOCKER + textwrap.dedent("""
     before = set(sys.modules)
     import puremacro.llm.models as m
     new = set(sys.modules) - before
-    ours_or_stdlib = lambda n: n.startswith("puremacro.llm") or n.split(".")[0] in sys.stdlib_module_names
+    # The package imports its cache, which imports sqlite3 through puremacro._optional_stdlib
+    # (tests/test_pyodide_compat.py requires that route); that one module is allowed.
+    ours_or_stdlib = lambda n: (n.startswith("puremacro.llm") or n == "puremacro._optional_stdlib"
+                                or n.split(".")[0] in sys.stdlib_module_names)
     print(json.dumps({
         "foreign": sorted(n for n in new if not ours_or_stdlib(n)),
         "blocked": sorted(n for n in sys.modules if n.split(".")[0] in _BLOCKED),
@@ -512,7 +515,7 @@ def _probe(code):
 def test_the_module_imports_and_runs_with_every_inference_dependency_absent():
     out = _probe(_IMPORT_PROBE)
     assert out["blocked"] == []
-    assert out["foreign"] == []            # nothing but puremacro.llm and the standard library
+    assert out["foreign"] == []            # nothing but puremacro.llm, its sqlite3 route and the standard library
     assert out["alias"] == "qwen3-4b" and out["id"] == "qwen3:4b"
     assert isinstance(out["budget"], float) and out["budget"] > 0   # find_spec("mlx") raising is survived
 
