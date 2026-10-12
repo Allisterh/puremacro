@@ -7,6 +7,7 @@ and, for the Ollama case, `ollama serve` + `ollama pull qwen2.5:3b`.
 """
 import pytest
 
+from puremacro.llm.engines import resolve_engine
 from puremacro.narrative import _local_engines as le
 
 pytestmark = [pytest.mark.local_llm, pytest.mark.slow]
@@ -17,10 +18,10 @@ _UNCERTAIN = ("Officials warned of highly uncertain, unpredictable risks; the "
 
 
 def _engine_or_skip(name):
-    eng = le._make_engine(name, base_url="http://localhost:11434", timeout=5)
-    if not eng.available():
+    try:
+        return resolve_engine(name, timeout=5)
+    except le.LocalLLMUnavailable:
         pytest.skip(f"engine {name!r} not available")
-    return eng
 
 
 @pytest.mark.parametrize("engine_name", ["mlx", "llamacpp", "ollama"])

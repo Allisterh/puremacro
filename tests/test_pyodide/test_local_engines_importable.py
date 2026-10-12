@@ -34,6 +34,10 @@ _TARGETS = [
     "puremacro.narrative._local_engines",
     "puremacro.narrative.scoring",
     "puremacro.narrative.indices",
+    "puremacro.llm",
+    "puremacro.llm.engines",
+    "puremacro.llm.models",
+    "puremacro.llm.cache",
 ]
 
 
