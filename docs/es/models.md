@@ -25,6 +25,8 @@ Esto simula un choque monetario contractivo de 25 puntos básicos en una econom�
 | `nested_dmp` (paquete) | `puremacro.models.nested_dmp` | DMP con empresas heterogéneas y creencias bayesianas sobre la regla de política: estado estacionario, FRI con previsión perfecta, estimación por coincidencia de FRI, solución estocástica recursiva y análisis de bienestar |
 | `smm` | `puremacro.models.smm` | Cargador de momentos y función objetivo para estimar `dmp_regime_dependent` frente a FRI de proyecciones locales |
 
+Para el simulador de transmisión monetaria HANK frente a RANK y su laboratorio en el navegador (`curso/site/labs/`), consulte [Simulador de transmisión monetaria: HANK frente a RANK](monetary_transmission.md).
+
 `puremacro.models.__all__` reexporta:
 `DMPParameters`, `DMPState`, `dmp_steady_state`, `dmp_irf`,
 `SequenceSpaceHANKResult`, `solve_hank_sequence_space`,

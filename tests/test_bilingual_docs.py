@@ -77,6 +77,8 @@ _USER_DOCS = [
     "dp.md",
     "micro_data.md",
     "text_analysis.md",
+    # The monetary transmission simulator (HANK vs. RANK) and its browser lab.
+    "monetary_transmission.md",
 ]
 
 

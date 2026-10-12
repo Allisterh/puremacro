@@ -29,6 +29,8 @@ New Keynesian economy, and it returns in **0.21 s**.
 | `nested_dmp` (package) | `puremacro.models.nested_dmp` | heterogeneous-firm DMP with Bayesian beliefs about the policy rule: steady state, perfect-foresight IRF, IRF-matching estimation, recursive stochastic solve, welfare sweep |
 | `smm` | `puremacro.models.smm` | moment loader and objective for estimating `dmp_regime_dependent` against local-projection IRFs |
 
+For the HANK vs. RANK monetary transmission simulator and its browser lab (`curso/site/labs/`), see [Monetary Transmission Simulator: HANK vs. RANK](monetary_transmission.md).
+
 `puremacro.models.__all__` re-exports:
 `DMPParameters`, `DMPState`, `dmp_steady_state`, `dmp_irf`,
 `SequenceSpaceHANKResult`, `solve_hank_sequence_space`,

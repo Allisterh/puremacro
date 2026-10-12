@@ -89,6 +89,7 @@ nav:
           - Empirical-to-structural estimation: structural_bridge.md
           - Sequence-Space HANK: models.md
           - Non-Linear HANK Transitions: hank_nonlinear.md
+          - Monetary Transmission Simulator: monetary_transmission.md
           - Gertler-Karadi (2011) DSGE: gertler_karadi.md
           - Climate Macro (DICE): climate.md
           - DSGE Sketchpad & Dynare: dsge_build.md
@@ -165,6 +166,7 @@ nav:
           - Estimación empírica-estructural: es/structural_bridge.md
           - HANK en el espacio de secuencias: es/models.md
           - Transiciones no lineales en HANK: es/hank_nonlinear.md
+          - Simulador de transmisión monetaria: es/monetary_transmission.md
           - DSGE de Gertler-Karadi (2011): es/gertler_karadi.md
           - Macroeconomía del clima (DICE): es/climate.md
           - Cuaderno de bocetos DSGE y Dynare: es/dsge_build.md

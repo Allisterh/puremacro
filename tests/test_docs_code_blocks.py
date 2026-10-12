@@ -73,6 +73,9 @@ PAGES = [
     "docs/es/dp.md",
     "docs/es/micro_data.md",
     "docs/es/text_analysis.md",
+    # The monetary transmission simulator (English and Spanish, the same calls).
+    "docs/monetary_transmission.md",
+    "docs/es/monetary_transmission.md",
 ]
 
 _FENCE = re.compile(r"```python\n(.*?)```", re.S)
