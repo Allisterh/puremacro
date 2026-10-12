@@ -597,63 +597,6 @@ class HANKResult:
 
 
 @dataclass(frozen=True)
-class FertilitySolution:
-    """Linear solution of the fertility DSGE around its BGP.
-
-    Attributes
-    ----------
-    ss : dict[str, float]
-        Steady-state values keyed by variable name (matches VAR_NAMES).
-    params : dict[str, float]
-        All parameters used in the solve (structural + calibration +
-        shock-process).
-    G : ndarray, shape (n_states, n_states)
-        State transition (state at t given state at t-1, no shock).
-    N : ndarray, shape (n_states, n_shocks)
-        Shock impact on states.
-    F : ndarray, shape (n_controls, n_states)
-        Control policy on the LAGGED state: y_t = F x_{t-1} + L eps_t, which
-        is the partition `solve_fertility` actually builds. This entry used to
-        read "control at t given state at t", contradicting the solver, and an
-        IRF loop written against that wrong reading put every control one
-        period early.
-    L : ndarray, shape (n_controls, n_shocks)
-        Control response to contemporaneous shock.
-    klein_solution : KleinSolution or None
-        Raw QZ output for debugging.
-    var_names : tuple of str
-        All 12 endogenous variable names (states first, then controls).
-    shock_names : tuple of str
-        Shock names (ea, ep, en).
-
-    Notes
-    -----
-    The first n_states entries of var_names are the predetermined
-    variables (rows of G/N); the remaining are controls (rows of F/L).
-    """
-
-    ss: dict
-    params: dict
-    G: np.ndarray
-    N: np.ndarray
-    F: np.ndarray
-    L: np.ndarray
-    klein_solution: object
-    var_names: tuple
-    shock_names: tuple
-
-    def irf(self, shock, horizon: int = 20) -> pd.DataFrame:
-        """Impulse response to a 1-SD shock. See fertility_adj_costs.solve_fertility docstring."""
-        from puremacro.dsge.fertility_adj_costs import _compute_irf
-        return _compute_irf(self, shock, horizon)
-
-    def fevd(self, horizon: int = 20) -> pd.DataFrame:
-        """Forecast-error variance decomposition."""
-        from puremacro.dsge.fertility_adj_costs import _compute_fevd
-        return _compute_fevd(self, horizon)
-
-
-@dataclass(frozen=True)
 class DynareDR:
     """Decision rule representation matching Dynare's oo_.dr structure.
 
@@ -1191,7 +1134,6 @@ __all__ = [
     "SW07PosteriorResult",
     "NUTSResult",
     "HANKResult",
-    "FertilitySolution",
     "DynareDR",
     "Dynare2ndDR",
     "TheoreticalMomentsResult",

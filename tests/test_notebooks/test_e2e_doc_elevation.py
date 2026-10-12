@@ -59,7 +59,6 @@ SHOWCASE_CONFORMING_EXEMPLARS = [
     "14_tax_multiplier_three_ways",
     "15_lp_did",
     "16_regime_girf",
-    "17_identification_spec_curve",
     "18_beveridge_curve",
     "51_continuous_projection_collocation_and_fem",
     "52_continuous_transition_mit_shocks",
@@ -118,7 +117,6 @@ ELEVATED_PARAMETER_TABLE_COHORT: list[str] = [
     "14_tax_multiplier_three_ways",
     "15_lp_did",
     "16_regime_girf",
-    "17_identification_spec_curve",
     "18_beveridge_curve",
 ]
 

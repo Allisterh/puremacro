@@ -37,8 +37,7 @@ import) and 114 on the desktop (CPython 3.13, 21.0 s). Every pass flag agrees ac
 three platforms; four `max_margin` values (three L-BFGS-B GARCH fits and one Monte Carlo
 sup-t value) differ between WebAssembly and the desktop by 1e-8 to 5e-4 and pass on all.
 This is Pyodide under Node, not a browser tab, and it measures the gallery, not heavy
-workloads. Details, per-case timings and the commands are in
-`reviews/2026-10-03-pyodide-gallery/REPORT.md`.
+workloads. The commands are documented in `tools/pyodide/README.md`.
 
 ## How a case is validated
 

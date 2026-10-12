@@ -4,9 +4,8 @@
 
 Updated 23 September 2026 with a row for the stacked Newton-Krylov and with the rows
 revised by the post-4.3.0 audit fixes. The 20 September 2026 update followed the
-independent counterexamples in
-[the critical evaluation](https://github.com/jalonso1979/puremacro/blob/v4.3.0/reviews/2026-09-19-critical-evaluation/REVIEW.md).
-See also the [live Dynare follow-up](https://github.com/jalonso1979/puremacro/blob/v4.3.0/reviews/2026-09-20-independent-validation/REPORT.md).
+independent counterexamples of an internal critical evaluation and of its live
+Dynare follow-up.
 Feature availability, numerical convergence, and independent replication are
 separate claims. Passing a residual check does not validate an economic model.
 

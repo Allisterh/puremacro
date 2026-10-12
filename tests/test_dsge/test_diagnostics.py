@@ -1,11 +1,6 @@
 """Tests for puremacro.dsge diagnostics, residual evaluation, and eigenvalue spectrum."""
 from __future__ import annotations
 
-import importlib.util
-import sys
-import types
-from pathlib import Path
-
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -50,84 +45,6 @@ def growth_model():
         params=GROWTH_PARAMS,
         guess=GROWTH_GUESS,
     )
-
-
-# --- Fertility Model Helper (Broken BGP endpoint replication) ----------------
-
-_FERTILITY_HELPER_NAME = "_puremacro_tests_fertility_bk_common"
-
-
-def _load_fertility_helper():
-    """Load docs/research/fertility_bk_diagnosis/scripts/common.py under a private name.
-
-    ``sys.path.insert(0, scripts_dir); import common`` binds the generic name
-    ``common`` in ``sys.modules``: whichever module of that name was imported
-    first anywhere in the pytest session wins, and this helper is then silently
-    replaced by a stranger. Loading it by path under a unique name cannot
-    collide and leaves ``sys.path`` alone.
-    """
-    if _FERTILITY_HELPER_NAME in sys.modules:
-        return sys.modules[_FERTILITY_HELPER_NAME]
-    path = (
-        Path(__file__).resolve().parents[2]
-        / "docs" / "research" / "fertility_bk_diagnosis" / "scripts" / "common.py"
-    )
-    spec = importlib.util.spec_from_file_location(_FERTILITY_HELPER_NAME, path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[_FERTILITY_HELPER_NAME] = module
-    try:
-        spec.loader.exec_module(module)
-    except BaseException:
-        sys.modules.pop(_FERTILITY_HELPER_NAME, None)
-        raise
-    return module
-
-
-def _build_broken_fertility_model():
-    """Build the Alonso-Ortiz fertility model at the broken BGP calibration point."""
-    cm = _load_fertility_helper()
-
-    # The historical LM BGP endpoint lies on a flat manifold and changes with
-    # SciPy/LAPACK. Use a fixed published calibration and a deliberately
-    # perturbed exact steady state to test diagnostics independently of LM.
-    from puremacro.dsge.fertility_adj_costs import FERTILITY_PINNED_CALIBRATION, exact_steady_state
-    params = dict(FERTILITY_PINNED_CALIBRATION)
-    for shock, spec in cm.FERTILITY_SHOCK_PROCESSES.items():
-        prefix = {"ea": "a", "en": "n", "ep": "p"}[shock]
-        params[f"rho{prefix}"] = spec["rho"]
-        params[f"sigma{prefix}"] = spec["sigma"]
-    ss = exact_steady_state(params)
-    z_ss = ss.copy()
-    z_ss[cm.VAR_NAMES.index("c")] *= 1.2
-
-    def fert_eqs(lead, curr, lag, shocks, p):
-        z_lead = np.array([getattr(lead, v) for v in cm.VAR_NAMES])
-        z_curr = np.array([getattr(curr, v) for v in cm.VAR_NAMES])
-        z_lag = np.array([getattr(lag, v) for v in cm.VAR_NAMES])
-        eps = np.array([getattr(shocks, s) for s in cm.SHOCK_NAMES])
-        p_dict = {k: getattr(p, k) for k in p._names} if hasattr(p, "_names") else dict(p)
-        return cm.model_residuals(z_lead, z_curr, z_lag, eps, p_dict)
-
-    return build_dynare(
-        fert_eqs,
-        variables=cm.VAR_NAMES,
-        shocks=cm.SHOCK_NAMES,
-        params=params,
-        steady_state=dict(zip(cm.VAR_NAMES, z_ss)),
-        check_steady_state=False,
-        strict=False,
-        method="central",
-    )
-
-
-def test_fertility_helper_loads_even_when_common_is_already_taken(monkeypatch):
-    """The helper must not depend on the generic name ``common`` being free."""
-    monkeypatch.setitem(sys.modules, "common", types.ModuleType("common"))
-    monkeypatch.delitem(sys.modules, _FERTILITY_HELPER_NAME, raising=False)
-    cm = _load_fertility_helper()
-    assert cm.__name__ == _FERTILITY_HELPER_NAME
-    assert hasattr(cm, "build_params") and hasattr(cm, "VAR_NAMES")
-    assert sys.modules["common"].__dict__.get("build_params") is None
 
 
 # --- 1. check() Tests ---------------------------------------------------------
@@ -177,33 +94,6 @@ def test_check_unit_circle_plot(growth_model):
     # Check that scatter collections and plot lines were added
     assert len(ax.collections) >= 2  # stable scatter + explosive scatter
     assert len(ax.lines) >= 3        # unit circle + axes lines
-    plt.close(fig)
-
-
-def test_check_fertility_matches_independent_generalized_spectrum():
-    """A fixed off-equilibrium fertility point has reproducible diagnostics.
-
-    The historical 1.0685 root was tied to an unfrozen, nonunique LM endpoint;
-    it is not a portable reference value for a newly solved calibration.
-    """
-    import scipy.linalg
-    model = _build_broken_fertility_model()
-    table = check(model)
-    roots = scipy.linalg.eigvals(model.B, model.A)
-    expected = np.sort(np.abs(roots))
-    # Infinite pencil eigenvalues may appear as huge finite QZ quotients.
-    expected[expected > 1e12] = np.inf
-    actual = table.modulus.copy()
-    actual[actual > 1e12] = np.inf
-    np.testing.assert_allclose(actual, expected, rtol=1e-6, atol=1e-6)
-    explosive = int(np.sum(expected >= 1 + 1e-6))
-    assert table.n_explosive == explosive
-    assert table.is_determinate == (explosive == table.n_forward)
-    if table.loadings:
-        for loading in table.loadings.values():
-            assert max(abs(v) for v in loading.values()) == pytest.approx(1.0)
-    fig, ax = plt.subplots()
-    assert table.plot(ax=ax) is ax
     plt.close(fig)
 
 
@@ -263,30 +153,6 @@ def test_resid_exact_steady_state(growth_model):
     assert len(r) == 3
     assert np.max(np.abs(r.values)) < 1e-12
     # Verify sorting: abs(r[0]) >= abs(r[1]) >= ...
-    abs_vals = np.abs(r.values)
-    assert np.all(abs_vals[:-1] >= abs_vals[1:])
-
-
-def test_resid_fertility_matches_direct_equation_evaluation():
-    """Residual diagnostics reproduce the equations at a fixed invalid point."""
-    model = _build_broken_fertility_model()
-    r = resid(model)
-
-    assert isinstance(r, pd.Series)
-    assert len(r) == 12
-
-    # Compare with an independent direct evaluation, not a nonunique LM endpoint.
-    norm_l2 = float(np.linalg.norm(r.values))
-    norm_linf = float(np.max(np.abs(r.values)))
-    cm = _load_fertility_helper()
-    z = model.steady_state.loc[list(cm.VAR_NAMES)].to_numpy()
-    direct = cm.model_residuals(z, z, z, np.zeros(cm.N_SHOCKS), model._params)
-    assert norm_l2 > 1e-3
-    np.testing.assert_allclose(np.sort(np.abs(r.values)), np.sort(np.abs(direct)), atol=1e-12)
-
-    # Largest residual heads the series
-    assert abs(r.iloc[0]) == pytest.approx(norm_linf, rel=1e-6)
-    # Series is monotonically decreasing in absolute magnitude
     abs_vals = np.abs(r.values)
     assert np.all(abs_vals[:-1] >= abs_vals[1:])
 

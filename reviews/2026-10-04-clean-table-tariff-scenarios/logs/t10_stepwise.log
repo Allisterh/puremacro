@@ -1,4 +1,0 @@
-rate 0.01: converged=False iters=40 max_resid=4.576e-01 [978s]
-stepwise continuation stalled at rate 0.01
-done
-exit=0

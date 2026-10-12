@@ -1224,7 +1224,6 @@ tocar nada.
 | `var.irf.gfevd` → `connectedness.spillover_index` | Dividía por un piso absoluto de `1e-12`, rompiendo una invarianza de escala que el estimando tiene por construcción | Ninguna varianza residual cae cerca del piso | La conectividad total pasó de **13.43 a 39.48** en un mismo VAR al reescalar una variable |
 | `dsge.gensys` | `Impact` omitía el término `Pi N`: resolvía como si los errores de expectativas no respondieran a los choques | `Pi N = 0` | En `y_t = a E_t y_{t+1} + eps_t` (verdad `y_t = eps_t`) devolvía **`[0, -2]`**: la variable no respondía a su propio choque |
 | `dsge.gensys` | Lanzaba excepción con cualquier modelo **sin raíces inestables**; la prueba de unicidad era vacua | El modelo tiene al menos una raíz inestable | `x_t = rho x_{t-1} + eps` no podía resolverse |
-| `dsge.fertility_adj_costs` `irf`/`fevd` | Avanzaba el estado antes de aplicar `F`, pero los controles leen el estado *rezagado* | Sólo el horizonte 0 | Toda IRF de control **un periodo adelantada**: el `y(h)` reportado era el `y(h+1)` correcto |
 | `did.sun_abraham` | `lo`/`hi` promediaban los extremos por cohorte en vez de usar el `se` agregado | Una sola cohorte por tiempo de evento | Bandas **`sqrt(K)` veces más anchas** — 1.73 con K=3, 1.37 con K=2 — e inconsistentes con el `se` de su propia fila |
 | `inference.weak_iv.kleibergen_paap_f` | El sándwich HC0 dividía entre `n` dos veces mientras el pan invertía el producto cruzado crudo `Z'Z`, que ya lleva ambos factores | Nunca — toda llamada estaba afectada | Devolvía **exactamente `n^2` veces** el estadístico correcto: 235,470 frente a una verdad de 5.89 con n=200. Los umbrales de Stock-Yogo rondan 10, así que reportaba "instrumentos fortísimos" para todo conjunto de datos y **jamás podía diagnosticar un instrumento débil** |
 | `inference.weak_iv.kleibergen_paap_f` | La función de influencia usaba `kron(Z_t, V_t)` donde el `vec` por columnas y el pan exigen `kron(V_t, Z_t)` | `k = 1` (un regresor endógeno) — ahí coinciden | Varianza robusta incorrecta con dos o más regresores endógenos |
@@ -1232,6 +1231,8 @@ tocar nada.
 | `lp.panel_lp_dk` (vía `_focal_dk_se`) | El ancho de banda de Bartlett salía del número de filas `N*T`, pero el núcleo corre sobre la suma transversal de longitud `T` | `N = 1` | Ancho inflado por `N^(2/9)`: **7 -> 10 -> 13** con T=100 fijo al pasar N de 10 a 50 a 200. Agregar países cambiaba la autocorrelación supuesta |
 | `lp.mean_group_panel_lp` | No ordenaba su entrada, mientras `lp_hac` construye rezagos con `.shift()` posicional | Quien llama ya pasaba un marco ordenado | En un panel cuya respuesta verdadera en h=1 es 0.8: **0.765 ordenado, 0.055 con las mismas filas barajadas**. Silencioso, y atenuado hacia cero |
 | 25 sitios de valor-p en 16 módulos | `1 - cdf` en vez de la función de supervivencia | El valor-p supera ~1e-16 | Devolvían **exactamente 0.0** en la cola. Normal bilateral en \|z\| = 9 es 2.3e-19; chi-cuadrada 200 con 5 gl es 2.8e-41 |
+
+Un hallazgo más, en un modelo que ya no forma parte de puremacro, ya no figura aquí.
 
 ### Qué hay que volver a correr
 
@@ -1243,9 +1244,6 @@ tocar nada.
   sean pequeñas en las unidades empleadas.
 - **Cualquier IRF de `gensys`.** La matriz de impacto era incorrecta para todo
   modelo con comportamiento prospectivo, que son todos los que gensys atiende.
-- **Cualquier IRF o FEVD del DSGE de fecundidad**, incluidas las figuras de
-  `docs/research/fertility_bk_diagnosis/`. Desplace las sendas de control un
-  periodo hacia atrás, o vuelva a correrlas.
 - **Cualquier banda de estudio de eventos de Sun–Abraham** en un tiempo de
   evento con más de una cohorte. Las estimaciones puntuales y el `se` se
   sostienen; los intervalos eran demasiado anchos. **Corrección
@@ -1262,10 +1260,7 @@ detectarlo: tres pruebas en `tests/test_dsge_gensys_coverage.py` y el caso de
 validación `dsge.gensys_shock_impact_identity`, cuya propia cita enunciaba el
 modelo **sin** su término `Pi eta_t` — álgebra correcta a partir de una premisa
 truncada. La banda de `sun_abraham` contradecía el error estándar impreso a su
-lado en la misma fila, así que ésa no requería referencia externa alguna. Y el
-docstring de `FertilitySolution` describía `F` actuando sobre el estado actual
-mientras el solver lo construye contra el rezagado; el bucle de IRF se escribió
-siguiendo el docstring.
+lado en la misma fila, así que ésa no requería referencia externa alguna.
 
 ---
 
@@ -1343,8 +1338,7 @@ Se dice aquí en vez de dejar que un usuario lo descubra:
   proxy que haya producido antes del 2026-09-02 es incorrecta.** El código
   permanece en el historial de git en la etiqueta `v3.4.0`.
 - **Los cuadernos de este repositorio ya se volvieron a ejecutar.**
-  `notebooks/14_tax_multiplier_three_ways`,
-  `notebooks/17_identification_spec_curve`, sus gemelos `_es`,
+  `notebooks/14_tax_multiplier_three_ways`, su gemelo `_es`,
   `notebooks/course/06_lp_narrativa_es` y la compilación de
   `playground/` muestran números posteriores a la corrección desde
   1.9.0. `notebooks/08_garch_volatility` no requirió cambio: llama a

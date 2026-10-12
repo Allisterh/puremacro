@@ -154,7 +154,7 @@ print(f"peak tightness: {peak_theta['theta']:.2f} vacancies per unemployed "
 assert us["theta"].max() > 1.5, "the 2022 tightness peak should exceed 1.5"
 
 # %% [markdown]
-# **Leyendo el bucle.** La era 2008-2019 traza un circuito antihorario
+# **Lectura de los resultados.** La era 2008-2019 traza un circuito antihorario
 # completo: el desplome resbala hacia abajo-derecha sobre una curva
 # estable, la recuperación vuelve por un sendero visiblemente *exterior*
 # (el desplazamiento de 2010-13 que lanzó una literatura de desajuste), y
@@ -223,75 +223,6 @@ print("countries plotted:", top6)
 # arriba y a la izquierda de la nube pre-2020 de cada país en la mayoría
 # de los paneles: el tensamiento post-COVID fue un fenómeno continental,
 # no una peculiaridad estadounidense.
-
-# %% [markdown]
-## Dependencia de estado: ¿muerde más fuerte la incertidumbre en mercados laborales tensos u holgados?
-#
-# Si la cobertura de vacantes es lenta cuando el mercado está tenso, las firmas podrían posponer
-# las contrataciones de manera más cautelosa ante la incertidumbre — o a la inversa: tal vez los
-# mercados holgados, donde la demanda es débil, es donde un choque de EPU inclina a las empresas
-# a congelar las nóminas.
-#
-# Evaluamos esto mediante **proyecciones locales dependientes del estado** (`puremacro.lp.lp_state_dep`),
-# interactuando el choque de EPU con la tensión del mercado laboral $\theta_t$:
-#
-# $$ y_{t+h} - y_{t-1} = F(\theta_{t-1}) \cdot \left[ \alpha_h^H + \beta_h^H \, \text{EPU}_t \right] + (1 - F(\theta_{t-1})) \cdot \left[ \alpha_h^L + \beta_h^L \, \text{EPU}_t \right] + \Gamma_h' W_t + \varepsilon_{t+h} $$
-#
-# donde $F(\theta)$ es una función de transición logística que suaviza entre los regímenes
-# tenso ($H$) y holgado ($L$).
-
-# %%
-from puremacro.lp import lp_state_dep
-
-spec = load_csv("speccurve17_panel")
-spec["date"] = pd.to_datetime(spec["date"])
-m = spec.merge(us[["date", "urate", "theta"]], on="date", how="inner").dropna().sort_values("date")
-m["log_theta"] = np.log(m["theta"])
-print(f"merged monthly sample: {len(m)} months "
-      f"{m['date'].min().date()}..{m['date'].max().date()}")
-
-fig, axes = _nbstyle.figura(1, 2, figsize=(9.8, 4.0))
-for ax, yvar, lab in ((axes[0], "ip", "industrial production, %"),
-                      (axes[1], "urate", "unemployment rate, pp")):
-    r = lp_state_dep(m, y=yvar, x="epu", state="log_theta",
-                     horizons=range(0, 25), n_lags=6)
-    ax.axhline(0, color=_nbstyle.SPINE, lw=0.8)
-    ax.fill_between(r["h"], r["lo_H"], r["hi_H"], color=_nbstyle.S2["color"],
-                    alpha=0.20)
-    ax.plot(r["h"], r["beta_H"], **_nbstyle.S2,
-            label="tight (high θ)")
-    ax.fill_between(r["h"], r["lo_L"], r["hi_L"], color=_nbstyle.S1["color"],
-                    alpha=0.20)
-    ax.plot(r["h"], r["beta_L"], **_nbstyle.S1,
-            label="slack (low θ)")
-    ax.set_xlabel("months after EPU shock", fontsize=9, color=_nbstyle.TEXTO)
-    ax.set_title(lab, fontsize=10)
-axes[0].set_ylabel("response per +1σ EPU", fontsize=9, color=_nbstyle.TEXTO)
-axes[0].legend(fontsize=8, frameon=True, facecolor=_nbstyle.FONDO, edgecolor=_nbstyle.SPINE)
-fig.suptitle("State-dependent LP: uncertainty shocks by labor-market tightness (90% bands)", fontsize=11)
-
-r_ip = lp_state_dep(m, y="ip", x="epu", state="log_theta",
-                    horizons=[12], n_lags=6)
-print(f"IP at h=12: slack {r_ip['beta_L'].iloc[0]:+.2f} "
-      f"[{r_ip['lo_L'].iloc[0]:+.2f},{r_ip['hi_L'].iloc[0]:+.2f}] vs "
-      f"tight {r_ip['beta_H'].iloc[0]:+.2f} "
-      f"[{r_ip['lo_H'].iloc[0]:+.2f},{r_ip['hi_H'].iloc[0]:+.2f}]")
-
-# %% [markdown]
-# **Lectura de los resultados.** En esta muestra la respuesta es un nulo — y vale
-# la pena enseñarlo como tal. Ningún horizonte en ningún régimen es
-# significativo al 90%, y las estimaciones puntuales se inclinan en la
-# dirección *opuesta* al prior de "la incertidumbre muerde más en
-# mercados holgados": las respuestas de IP en régimen tenso son
-# levemente negativas, las de régimen holgado rondan cero. Con una sola
-# serie agregada, 25 años, un proxy sin identificar y pesos logísticos
-# que hacen que ambos regímenes compartan la mayoría de las
-# observaciones, esa es la resolución esperable — los hallazgos de
-# dependencia de estado de la literatura se apoyan en muestras más
-# largas, choques identificados o variación de panel (que es justo
-# donde entran el panel de distritos de Main Street y
-# `puremacro.lp.panel`). Las advertencias de inferencia del notebook 07
-# no son decoración; esta figura es su aspecto en la práctica.
 
 # %% [markdown]
 # ## Tu turno — elige un país, parte una era

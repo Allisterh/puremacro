@@ -390,12 +390,3 @@ def test_lp_hac_docstring_does_not_credit_pmw_for_the_bandwidth():
     assert "Plagborg-Møller-Wolf 2021 recommendation" not in doc
     assert "truncation lag ``h + 1``" in doc
     assert "No reference is claimed" in doc
-
-
-def test_spec_curve_tool_credits_mopm():
-    from pathlib import Path
-
-    src = (Path(__file__).resolve().parents[1]
-           / "tools/run_uncertainty_ident_spec_curve.py").read_text(encoding="utf-8")
-    assert "Plagborg-Moller-Wolf (2021) lag-augmented LP" not in src
-    assert "Montiel Olea & Plagborg-Moller (2021) lag-augmented LP" in src

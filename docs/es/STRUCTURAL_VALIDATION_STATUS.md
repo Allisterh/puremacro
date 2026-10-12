@@ -5,8 +5,7 @@
 Actualizado el 23 de septiembre de 2026 con una fila para el Newton-Krylov apilado y con
 las filas revisadas por las correcciones de la auditoría posterior a 4.3.0. La
 actualización del 20 de septiembre de 2026 siguió a los contraejemplos independientes de
-[la evaluación crítica](https://github.com/jalonso1979/puremacro/blob/v4.3.0/reviews/2026-09-19-critical-evaluation/REVIEW.md).
-Véase también el [seguimiento con Dynare en vivo](https://github.com/jalonso1979/puremacro/blob/v4.3.0/reviews/2026-09-20-independent-validation/REPORT.md).
+una evaluación crítica interna y de su seguimiento con Dynare en vivo.
 La disponibilidad de una función, la convergencia numérica y la
 replicación independiente son afirmaciones distintas. Superar una comprobación
 de residuos no valida un modelo económico.

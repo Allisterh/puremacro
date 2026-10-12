@@ -2,28 +2,21 @@
 
 # Evidencia independiente y estimación estructural
 
-El [flujo de pronósticos entre países](cross_country_forecasting.md) añade un
-panel fijo de tres países, una evaluación con ventana creciente y procedencia
-portátil. Usa una edición reciente de datos revisados; no es evidencia causal
-ni de tiempo real. Está incluido en puremacro 4.8.1.
-
 Estos flujos de investigación conectan validación independiente y estimación
 estructural. Funcionan sin conexión desde el paquete
 instalado con las dependencias numéricas estándar y conservan los supuestos,
 las unidades y el alcance de la evidencia.
 
-Los [estudios con datos reales](empirical_research.md) añaden estimación SW07
-con momentos observados y diagnósticos condicionales a la calibración, y una
+El [estudio con datos reales](empirical_research.md) añade una
 replicación base de Romer–Romer (2010) con datos originales, software independiente
 y valores publicados redondeados. El ejemplo NK sintético sigue siendo una
-prueba de recuperación; los nuevos estudios tienen datos, supuestos y
+prueba de recuperación; el estudio empírico tiene datos, supuestos y
 conclusiones propios.
 
 | Tarea | API | Guía |
 |---|---|---|
 | Revisar evidencia numérica y de datos | `puremacro.validation.run_research_benchmarks` | [Benchmarks independientes](research_benchmarks.md) |
 | Ajustar modelos a momentos empíricos correlacionados | `puremacro.structural.fit_structural` y `lp_moment_targets` | [Puente estructural](structural_bridge.md) |
-| Comparar correcciones de momentos y ponderaciones SW07 | `puremacro.structural.run_sw07_estimator_experiment` | [Controles emparejados del estimador](sw07_estimator_experiment.md) |
 
 ## Benchmarks
 

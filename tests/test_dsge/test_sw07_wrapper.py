@@ -139,28 +139,3 @@ def test_dsge_posterior_result_default_model_name_is_unknown():
         model_name="MyModel",
     )
     assert res2.model_name == "MyModel"
-
-
-def test_fertility_solution_dataclass_is_frozen_with_expected_fields():
-    import dataclasses
-    import numpy as np
-    import pytest
-    from puremacro.dsge._results import FertilitySolution
-
-    res = FertilitySolution(
-        ss={"c": 1.0, "k": 5.0},
-        params={"alpha": 0.4},
-        G=np.eye(5),
-        N=np.zeros((5, 3)),
-        F=np.zeros((7, 5)),
-        L=np.zeros((7, 3)),
-        klein_solution=None,
-        var_names=("a", "mun", "ph", "k", "n", "c", "y", "l_w", "u", "i", "b", "l_o"),
-        shock_names=("ea", "ep", "en"),
-    )
-    assert res.ss["c"] == 1.0
-    assert res.G.shape == (5, 5)
-    assert res.shock_names == ("ea", "ep", "en")
-    assert dataclasses.is_dataclass(res)
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        res.ss = {}

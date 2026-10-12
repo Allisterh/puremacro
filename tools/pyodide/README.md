@@ -61,4 +61,3 @@ time, and per case `id`, `subsystem`, `mechanism`, `tol`, `passed`, `max_margin`
 with a desktop run of the same file (`--desktop-json`). `--pyodide` points it at another
 Pyodide package, for example the playground kernel's `pyodide@314.0.5` installed in a
 scratch directory; `--preload` is for diagnosis only (the playground preloads nothing).
-Results of the 2026-10-03 run are in `reviews/2026-10-03-pyodide-gallery/`.

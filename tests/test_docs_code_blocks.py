@@ -29,10 +29,6 @@ matplotlib.use("Agg")
 REPO = Path(__file__).resolve().parents[1]
 
 PAGES = [
-    "docs/sw07_estimator_experiment.md",
-    "docs/es/sw07_estimator_experiment.md",
-    "docs/sw07_finite_sample.md",
-    "docs/es/sw07_finite_sample.md",
     "docs/empirical_research.md",
     "docs/es/empirical_research.md",
     "docs/research_workflows.md",

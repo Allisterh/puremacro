@@ -79,7 +79,7 @@ def test_notebook_inventory_and_counts():
         p for p in CURSO_DIR.glob("*.ipynb")
         if not p.name.startswith("_") and ".ipynb_checkpoints" not in p.parts
     ]
-    assert len(showcase) >= 130
+    assert len(showcase) >= 128
     assert {p.stem for p in showcase} == {
         p.stem for p in NB_DIR.glob("*.py") if not p.name.startswith("_")
     }

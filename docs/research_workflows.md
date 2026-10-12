@@ -2,26 +2,19 @@
 
 # Independent evidence and structural estimation
 
-The [cross-country forecasting workflow](cross_country_forecasting.md) adds a
-frozen three-country GDP panel, an expanding-window comparison, and portable
-data provenance. It is latest-vintage forecast evidence, with no real-time or
-causal claim; it is included in puremacro 4.8.1.
-
 These research workflows connect independent validation and structural
 estimation. Each can run offline from an installed package with
 the standard numerical dependencies.
 
-The [real-data studies](empirical_research.md) add observed-moment SW07
-estimation with explicit conditional-calibration diagnostics and an original-data
+The [real-data study](empirical_research.md) adds an original-data
 Romer–Romer (2010) baseline replication against independent software and published
 rounding targets. The synthetic NK example below remains a parameter-recovery
-test; the new empirical studies have their own data, assumptions and conclusions.
+test; the empirical study has its own data, assumptions and conclusions.
 
 | Task | Entry point | Guide |
 |---|---|---|
 | Inspect independent numerical/data evidence | `puremacro.validation.run_research_benchmarks` | [Research benchmarks](research_benchmarks.md) |
 | Fit structural models to correlated empirical moments | `puremacro.structural.fit_structural` and `lp_moment_targets` | [Empirical-to-structural bridge](structural_bridge.md) |
-| Compare SW07 moment corrections and weights | `puremacro.structural.run_sw07_estimator_experiment` | [Paired estimator controls](sw07_estimator_experiment.md) |
 
 ## 1. Run the independent benchmarks
 

@@ -1147,7 +1147,6 @@ each reproduced against a known truth before being touched.
 | `var.irf.gfevd` → `connectedness.spillover_index` | Divided by an absolute `1e-12` floor, breaking a scale invariance the estimand has by construction | No residual variance falls near the floor — i.e. the units happen to be large enough | Total connectedness moved **13.43 → 39.48** on one fixed VAR when a single variable was rescaled |
 | `dsge.gensys` | `Impact` dropped the `Pi N` term: solved as though expectation errors did not respond to shocks | `Pi N = 0` — no forward-looking behaviour left | On `y_t = a E_t y_{t+1} + eps_t` (truth `y_t = eps_t`) it returned **`[0, -2]`**: the variable did not respond to its own shock |
 | `dsge.gensys` | Raised on any model with **no unstable roots** (`Z2` a zero-column slice); uniqueness test was vacuous | The model has at least one unstable root | `x_t = rho x_{t-1} + eps` could not be solved at all |
-| `dsge.fertility_adj_costs` `irf`/`fevd` | Advanced the state before applying `F`, but controls read the *lagged* state | Horizon 0 only | Every control IRF **one period early**: reported `y(h)` was the correct `y(h+1)` |
 | `did.sun_abraham` | Event-study `lo`/`hi` averaged the per-cohort interval edges instead of using the aggregated `se` | One cohort per event time | Bands **`sqrt(K)` too wide** — measured 1.73 at K=3, 1.37 at K=2 — and inconsistent with the `se` in the same row |
 | `inference.weak_iv.kleibergen_paap_f` | HC0 sandwich divided by `n` twice while the bread inverted the raw `Z'Z`, which already carries both factors | Never — every call was affected | Returned **exactly `n^2` times** the correct statistic: 235,470 against a truth of 5.89 at n=200. Stock-Yogo thresholds are near 10, so it reported "overwhelmingly strong" for every dataset and **could never diagnose a weak instrument** |
 | `inference.weak_iv.kleibergen_paap_f` | Influence function used `kron(Z_t, V_t)` where the column-major `vec` and the bread both require `kron(V_t, Z_t)` | `k = 1` (one endogenous regressor) — then the two coincide | Wrong robust variance for two or more endogenous regressors |
@@ -1155,6 +1154,8 @@ each reproduced against a known truth before being touched.
 | `lp.panel_lp_dk` (via `_focal_dk_se`) | Bartlett bandwidth derived from the panel row count `N*T`, but the kernel runs on the length-`T` cross-sectional sum | `N = 1` | Bandwidth inflated by `N^(2/9)`: **7 -> 10 -> 13** at fixed T=100 as N went 10 -> 50 -> 200. Adding countries changed the assumed autocorrelation |
 | `lp.mean_group_panel_lp` | Did not sort its input, while `lp_hac` builds lags with positional `.shift()` | The caller already passed a sorted frame | On a panel whose true h=1 response is 0.8: **0.765 sorted, 0.055 with the same rows shuffled**. Silent, and attenuated toward zero |
 | 25 p-value sites across 16 modules | `1 - cdf` instead of the survival function | The p-value is above ~1e-16 | Returned **exactly 0.0** in the tail. Two-sided normal at \|z\| = 9 is 2.3e-19; chi-square 200 on 5 df is 2.8e-41 |
+
+One further finding, in a model that has since been removed from puremacro, is no longer listed.
 
 ### What to re-run
 
@@ -1165,9 +1166,6 @@ each reproduced against a known truth before being touched.
   units you used.
 - **Any `gensys` IRF.** The impact matrix was wrong for every model with
   forward-looking behaviour, which is every model gensys is for.
-- **Any fertility-DSGE IRF or FEVD**, including the figures under
-  `docs/research/fertility_bk_diagnosis/`. Shift the control paths back one
-  period, or re-run.
 - **Any Sun–Abraham event-study band** at an event time with more than one
   contributing cohort. The point estimates and `se` stand; the intervals were
   too wide. **Correction (2026-09-30):** the `se` did not stand; it treated
@@ -1182,10 +1180,7 @@ three tests in `tests/test_dsge_gensys_coverage.py`, and the validation case
 `dsge.gensys_shock_impact_identity`, whose own citation stated the model
 **without** its `Pi eta_t` term — correct algebra from a truncated premise. The
 `sun_abraham` band contradicted the standard error printed beside it in the same
-row, so that one needed no external reference at all. And
-`FertilitySolution`'s docstring described `F` as acting on the current state
-while the solver builds it against the lagged one; the IRF loop was written
-against the docstring.
+row, so that one needed no external reference at all.
 
 ---
 
@@ -1259,8 +1254,7 @@ Stated here rather than left for a user to discover:
   produced before 2026-09-02 is wrong.** The code remains in git history at
   tag `v3.4.0` if you need to consult it.
 - **This repository's own notebooks have been re-executed.**
-  `notebooks/14_tax_multiplier_three_ways`,
-  `notebooks/17_identification_spec_curve`, their `_es` twins,
+  `notebooks/14_tax_multiplier_three_ways`, its `_es` twin,
   `notebooks/course/06_lp_narrativa_es` and the `playground/` build all
   display post-fix numbers as of 1.9.0. `notebooks/08_garch_volatility`
   needed no change: it calls `dcc_fit(panel)`, and the default
