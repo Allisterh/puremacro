@@ -1,59 +1,16 @@
 > 🇬🇧 [English](../spatial_and_trade_ge.md) · 🇪🇸 Español
 
-# Economía espacial cuantitativa y equilibrio general de comercio
+# Equilibrio general espacial cuantitativo
 
-`puremacro.trade` y `puremacro.spatial` implementan marcos computacionales de equilibrio general de vanguardia para el comercio internacional y la geografía económica cuantitativa:
-1. El modelo de comercio ricardiano multisectorial y multipaís con eslabonamientos insumo-producto, bienes intermedios y aranceles desarrollado por **Caliendo y Parro (2015, *Review of Economic Studies*)**, resuelto mediante **Álgebra Exacta de Sombreros** (*Exact Hat Algebra*).
-2. El modelo continuo de equilibrio espacial geográfico con movilidad laboral, externalidades de aglomeración y fuerzas de congestión desarrollado por **Allen y Arkolakis (2014, *Quarterly Journal of Economics*)**.
+`puremacro.spatial` implementa el modelo continuo de equilibrio espacial geográfico con movilidad laboral, externalidades de aglomeración y fuerzas de congestión desarrollado por **Allen y Arkolakis (2014, *Quarterly Journal of Economics*)**.
 
-Ambos modelos se encuentran simétricamente expuestos en los submódulos `puremacro.trade` y `puremacro.spatial`. Cumplen de forma estricta el contrato de ejecución en Python puro / Pyodide (cero dependencias en C++, basado exclusivamente en NumPy/SciPy/Pandas/Matplotlib), permitiendo evaluaciones contrafactuales de política económica —tales como guerras comerciales, escaladas arancelarias recíprocas, inversiones regionales en infraestructura de transporte y perturbaciones ambientales localizadas.
+El modelo cumple de forma estricta el contrato de ejecución en Python puro / Pyodide (cero dependencias en C++, basado exclusivamente en NumPy/SciPy/Pandas/Matplotlib), permitiendo evaluaciones contrafactuales de política económica —tales como inversiones regionales en infraestructura de transporte y perturbaciones ambientales localizadas.
 
 ---
 
 ## 1. Marco teórico y algorítmico
 
-### 1.1 Modelo de comercio ricardiano multisectorial con eslabonamientos insumo-producto de Caliendo-Parro (2015)
-
-Considérese una economía global con $N$ países ($n, i = 1, \dots, N$) y $J$ sectores ($j, k = 1, \dots, J$). La producción en el país $n$ y sector $j$ combina trabajo $L_n^j$ con insumos intermedios provenientes de todos los sectores $k = 1, \dots, J$ bajo rendimientos constantes a escala:
-
-$$Y_n^j = z_n^j \left( L_n^j \right)^{\gamma_n^j} \prod_{k=1}^J \left( M_n^{j, k} \right)^{\gamma_n^{j, k}}$$
-
-donde $\gamma_n^j > 0$ es la participación del valor agregado, $\gamma_n^{j, k} \ge 0$ es la participación del costo del insumo intermedio $k$ en la producción del bien $j$, y las participaciones de costos suman la unidad:
-
-$$\gamma_n^j + \sum_{k=1}^J \gamma_n^{j, k} = 1, \quad \forall n, j$$
-
-La minimización de costos determina el costo unitario de la canasta de insumos:
-
-$$c_n^j = \Upsilon_n^j w_n^{\gamma_n^j} \prod_{k=1}^J \left( P_n^k \right)^{\gamma_n^{j, k}}$$
-
-donde $w_n$ denota el salario competitivo en el país $n$, $P_n^k$ es el índice de precios compuesto del sector $k$, e $\Upsilon_n^j$ es una constante tecnológica.
-
-### 1.2 Formulación de Álgebra Exacta de Sombreros
-
-Siguiendo la metodología de **Álgebra Exacta de Sombreros** (*Exact Hat Algebra*) de Dekle, Eaton y Kortum (2007) generalizada por Caliendo y Parro (2015), las variaciones contrafactuales se expresan en términos de cambios proporcionales $\hat{x} \equiv x' / x$. Esto permite resolver equilibrios contrafactuales directamente a partir de cuotas observadas de comercio bilateral en el equilibrio base $\pi_{ni}^j$ y matrices insumo-producto, sin requerir la estimación de fundamentos inobservables (tales como niveles absolutos de tecnología $T_n^j$ o costos bilaterales tipo iceberg $d_{ni}^j$).
-
-Dada una variación arancelaria contrafactual bruta $\hat{\tau}_{ni}^j \equiv (1 + t_{ni}'^j) / (1 + t_{ni}^j)$:
-
-1. **Variación de costos unitarios**:
-   $$\hat{c}_n^j = \hat{w}_n^{\gamma_n^j} \prod_{k=1}^J \left( \hat{P}_n^k \right)^{\gamma_n^{j, k}}$$
-2. **Variación de cuotas de comercio bilateral (Gravedad de Eaton-Kortum)**:
-   $$\hat{\pi}_{ni}^j = \left( \frac{\hat{c}_i^j \hat{\tau}_{ni}^j}{\hat{P}_n^j} \right)^{-\theta_j}$$
-   donde $\theta_j > 0$ es la elasticidad comercial sectorial.
-3. **Variación de índices de precios sectoriales**:
-   $$\hat{P}_n^j = \left( \sum_{i=1}^N \pi_{ni}^j \left( \hat{c}_i^j \hat{\tau}_{ni}^j \right)^{-\theta_j} \right)^{-\frac{1}{\theta_j}}$$
-4. **Gasto y vaciado de mercados de bienes**:
-   El gasto contrafactual sectorial $X_n'^j$ y el producto bruto $Y_n'^j$ resuelven el balance insumo-producto leontiefiano global:
-   $$X_n'^j = \alpha_n^j I_n' + \sum_{k=1}^J \gamma_n^{k, j} Y_n'^k, \quad Y_n'^j = \sum_{i=1}^N \frac{\pi_{in}'^j}{\tau_{in}'^j} X_i'^j$$
-   donde $I_n' = w_n' L_n + R_n' + D_n'$ es el ingreso nacional compuesto por ingresos laborales, recaudación arancelaria $R_n'$ y desbalances comerciales exógenos $D_n'$.
-5. **Vaciado de mercado laboral y tanteo salarial (*Tâtonnement*)**:
-   Los salarios $\hat{w}_n$ se actualizan iterativamente hasta que el exceso de demanda laboral satisface la tolerancia requerida:
-   $$\left| \sum_{j=1}^J \gamma_n^j Y_n'^j - w_n' L_n \right| < \text{tol}$$
-6. **Variaciones de ingreso real y bienestar agregado**:
-   $$\widehat{\mathcal{W}}_n = \frac{\hat{I}_n}{\hat{P}_n}, \quad \text{donde} \quad \hat{P}_n = \prod_{j=1}^J \left( \hat{P}_n^j \right)^{\alpha_n^j}$$
-
----
-
-### 1.3 Modelo gravitacional espacial geográfico con movilidad laboral de Allen-Arkolakis (2014)
+### 1.1 Modelo gravitacional espacial geográfico con movilidad laboral de Allen-Arkolakis (2014)
 
 Allen y Arkolakis (2014) formulan un modelo de equilibrio general espacial continuo sobre $N$ regiones geográficas donde los trabajadores migran libremente hasta igualar el nivel de utilidad real en todas partes.
 
@@ -74,7 +31,7 @@ El vaciado del mercado de bienes iguala el ingreso laboral regional con el valor
 
 $$w_i L_i = \sum_{j=1}^N \pi_{ij} w_j L_j = \left( \frac{w_i}{A_i} \right)^{-\theta} \text{FMA}_i$$
 
-### 1.4 Aglomeración, congestión y equilibrio espacial
+### 1.2 Aglomeración, congestión y equilibrio espacial
 
 La utilidad de un trabajador representativo en la localización $i$ depende de los salarios reales, amenidades locales $a_i$ y la población endógena $L_i$:
 
@@ -98,30 +55,26 @@ $$\alpha + \beta \le \frac{\theta}{1 + \theta} \quad \text{y} \quad \alpha \le \
 
 ---
 
-## 2. Opciones metodológicas y comparativa de modelos
+## 2. Opciones metodológicas y del modelo
 
-| Dimensión | Caliendo-Parro (2015) | Allen-Arkolakis (2014) |
-|---|---|---|
-| **Mecanismo económico central** | Comercio multisectorial con eslabonamientos insumo-producto y aranceles | Movilidad laboral espacial con aglomeración y congestión |
-| **Enfoque de resolución** | Álgebra Exacta de Sombreros sobre cuotas comerciales observadas | Mapeo de contracción de punto fijo sobre $(w_i, L_i)$ |
-| **Márgenes endógenos** | Precios sectoriales, salarios, cuotas de gasto intermedio y final | Distribución de población, salarios, acceso a mercados |
-| **Movilidad laboral** | Inmóvil entre países; móvil entre sectores domésticos | Libre movilidad espacial continua entre regiones |
-| **Casos de uso principales** | Tratados de libre comercio, guerras arancelarias, TLCAN/T-MEC | Trenes de alta velocidad, corredores carreteros, choques climáticos |
-| **Tasa de convergencia** | 10–30 iteraciones ($< 0.01$ s) | 20–50 iteraciones ($< 0.005$ s) |
+| Dimensión | Allen-Arkolakis (2014) |
+|---|---|
+| **Mecanismo económico central** | Movilidad laboral espacial con aglomeración y congestión |
+| **Enfoque de resolución** | Mapeo de contracción de punto fijo sobre $(w_i, L_i)$ |
+| **Márgenes endógenos** | Distribución de población, salarios, acceso a mercados |
+| **Movilidad laboral** | Libre movilidad espacial continua entre regiones |
+| **Casos de uso principales** | Trenes de alta velocidad, corredores carreteros, choques climáticos |
+| **Tasa de convergencia** | 20–50 iteraciones ($< 0.005$ s) |
 
 ### 2.1 Backends de hardware (`backend=`, 3.4.0)
 
-Ambos solucionadores de punto fijo aceptan un argumento `backend` — `"numpy"`
+El solucionador de punto fijo acepta un argumento `backend` — `"numpy"`
 (el valor por omisión), `"mlx"` (Apple Silicon) o `"cupy"` (NVIDIA):
 
 ```python
 aa_res = aa_model.solve_equilibrium(backend="mlx")
 cf_res = aa_model.solve_counterfactual(trade_costs_new=tau_new, backend="mlx")
 ```
-
-`puremacro.trade.solve_trade_equilibrium(..., backend=...)` admite el mismo
-argumento y traslada al dispositivo las dos contracciones de flujos bilaterales
-que se ejecutan en cada iteración.
 
 Conviene conocer tres propiedades antes de recurrir a ellos:
 
@@ -132,15 +85,11 @@ Conviene conocer tres propiedades antes de recurrir a ellos:
   contracción con MLX en `AllenArkolakisModel` se ejecuta en float32 hasta un
   piso de 1e-6; el resultado se refina después con la contracción float64 de
   NumPy, inicializada en la solución del dispositivo, de manera que `converged`
-  se refiere a la tolerancia `tol` solicitada. El solucionador de comercio
-  mantiene float64 en todo momento y ejecuta MLX en el flujo de CPU, porque los
-  residuos en float32 hacen divergir su jacobiano por diferencias finitas.
+  se refiere a la tolerancia `tol` solicitada.
 - **El fallo es explícito y no fatal.** Un backend no instalado, un espacio de
   nombres de arreglos que no puede importarse o una excepción en el dispositivo
   emiten un `RuntimeWarning` y recurren a NumPy. Un resultado acelerado que no
-  convergió tampoco se devuelve nunca, pero cada solucionador lo resuelve de
-  distinta manera: `solve_trade_equilibrium` advierte y repite la resolución
-  completa con la implementación de referencia en NumPy, mientras que
+  convergió tampoco se devuelve nunca:
   `AllenArkolakisModel` remata la solución del dispositivo con la contracción
   float64 de NumPy descrita arriba — sin advertencia, porque entonces
   `converged` es el veredicto de NumPy a la tolerancia `tol` solicitada.
@@ -150,21 +99,11 @@ from puremacro._backend import available_backends
 available_backends()          # ('numpy', 'numba', 'mlx') en esta máquina
 ```
 
-Los contrafactuales arancelarios en GPU — jacobianos por lotes, continuación por
-homotopía y los solucionadores opcionales con `torch` / `mlx` — constituyen una
-superficie aparte, documentada en [`docs/es/trade_gpu.md`](trade_gpu.md).
-
 ---
 
 ## 3. Calibración canónica y especificaciones espaciales
 
-### 1. Caliendo-Parro: Economía global de 3 países y 2 sectores
-- Países: Estados Unidos (`USA`), China (`CHN`), Alemania (`DEU`).
-- Sectores: Manufacturas (transable, $\theta = 5.0$) y Servicios (no transable, $\theta = 4.0$).
-- Participación de valor agregado: $\gamma_n^j = 0.50$; participación insumo-producto: $\gamma_n^{j, k} = 0.25$.
-- Aranceles iniciales: libre comercio en el estado base $\tau_{ni}^j = 1.0$.
-
-### 2. Allen-Arkolakis: Geografía urbana de 4 ciudades en EE. UU.
+### 1. Allen-Arkolakis: Geografía urbana de 4 ciudades en EE. UU.
 - Ciudades: Nueva York, Los Ángeles, Chicago, Houston (con coordenadas geográficas reales de latitud y longitud).
 - Elasticidad comercial: $\theta = 4.0$.
 - Elasticidad de aglomeración: $\alpha = 0.08$; elasticidad de congestión: $\beta = -0.35$.
@@ -174,47 +113,13 @@ superficie aparte, documentada en [`docs/es/trade_gpu.md`](trade_gpu.md).
 
 ## 4. Ejemplos prácticos ejecutables
 
-El siguiente script simula un choque arancelario bilateral del $25\%$ en el modelo Caliendo-Parro y evalúa una inversión en infraestructura de transporte en Allen-Arkolakis:
+El siguiente script evalúa una inversión en infraestructura de transporte en Allen-Arkolakis:
 
 ```python
 import numpy as np
-from puremacro.trade import CaliendoParroModel
 from puremacro.spatial import AllenArkolakisModel
 
-# 1. Economía de 3 países y 2 sectores en Caliendo-Parro con aranceles
-N, J = 3, 2
-trade_shares = np.zeros((J, N, N))
-trade_shares[0] = np.array([
-    [0.60, 0.20, 0.20],
-    [0.20, 0.60, 0.20],
-    [0.20, 0.20, 0.60],
-])
-trade_shares[1] = np.eye(N)  # Sector no transable
-
-gamma_va = np.full((N, J), 0.50)
-gamma_io = np.full((N, J, J), 0.25)
-alpha = np.full((N, J), 0.50)
-theta = np.array([5.0, 4.0])
-labor_income = np.array([100.0, 100.0, 100.0])
-
-cp_model = CaliendoParroModel(
-    trade_shares=trade_shares,
-    gamma_va=gamma_va,
-    gamma_io=gamma_io,
-    alpha=alpha,
-    theta=theta,
-    labor_income=labor_income,
-    nontradables=[1],
-    country_codes=["USA", "CHN", "DEU"],
-    sector_codes=["Manufactures", "Services"],
-)
-
-# Simular choque arancelario bilateral del 25% en manufacturas
-cp_res = cp_model.simulate_tariff_shock("USA", "CHN", sector="Manufactures", tariff_rate=0.25)
-assert cp_res.converged
-assert len(cp_res.welfare_pct) == 3
-
-# 2. Modelo de equilibrio general espacial de 4 ciudades en Allen-Arkolakis
+# Modelo de equilibrio general espacial de 4 ciudades en Allen-Arkolakis
 coords = np.array([
     [40.7128, -74.0060],  # NYC
     [34.0522, -118.2437], # LA
@@ -239,7 +144,6 @@ assert np.isclose(np.sum(aa_res.population), 100.0)
 infra_res = aa_model.simulate_infrastructure_shock("NYC", "CHI", cost_reduction=0.20)
 assert infra_res.converged
 
-print(f"Caliendo-Parro: Variación de bienestar en EE. UU.: {cp_res.welfare_pct[0]:+.2f}%")
 print(f"Allen-Arkolakis: Población en NYC: {aa_res.population[0]:.2f}, LA: {aa_res.population[1]:.2f}")
 print(f"Impacto en bienestar por infraestructura: {infra_res.welfare_pct:+.2f}%")
 ```
@@ -249,46 +153,6 @@ print(f"Impacto en bienestar por infraestructura: {infra_res.welfare_pct:+.2f}%"
 ## 5. Especificación completa de la API
 
 ```text
-CaliendoParroModel(
-    trade_shares: np.ndarray,
-    gamma_va: np.ndarray,
-    gamma_io: np.ndarray,
-    alpha: np.ndarray,
-    theta: np.ndarray,
-    labor_income: np.ndarray,
-    deficits: np.ndarray | None = None,
-    tariffs: np.ndarray | None = None,
-    country_codes: Sequence[str] | None = None,
-    sector_codes: Sequence[str] | None = None,
-    nontradables: Sequence[int | str] | None = None,
-)
-
-CaliendoParroModel.solve_counterfactual(
-    tariffs_new: np.ndarray | None = None,
-    tau_hat: np.ndarray | None = None,
-    d_hat: np.ndarray | None = None,
-    deficits_new: np.ndarray | None = None,
-    deficit_rule: str = "fixed",
-    tol: float = 1e-8,
-    max_iter: int = 1500,
-    damping: float = 0.35,
-) -> CaliendoParroResult
-
-CaliendoParroModel.simulate_tariff_shock(
-    importer: str | int,
-    exporter: str | int,
-    sector: str | int | None = None,
-    tariff_rate: float = 0.10,
-    **kwargs: Any,
-) -> CaliendoParroResult
-
-CaliendoParroModel.simulate_trade_war(
-    coalition_a: Sequence[str | int],
-    coalition_b: Sequence[str | int],
-    tariff_rate: float = 0.25,
-    **kwargs: Any,
-) -> CaliendoParroResult
-
 AllenArkolakisModel(
     trade_costs: np.ndarray,
     fundamental_productivity: np.ndarray,
@@ -350,17 +214,6 @@ AllenArkolakisModel.simulate_climate_shock(
 
 ## 6. Interfaz de resultados y contrafactuales de política
 
-### `CaliendoParroResult`
-- `res.w_hat`: Cambio proporcional en salarios nominales $\hat{w}_n$.
-- `res.P_index_hat`: Cambio proporcional en el índice de precios al consumidor $\hat{P}_n$.
-- `res.real_wage_hat`: Cambio proporcional en salarios reales $\hat{w}_n / \hat{P}_n$.
-- `res.welfare_pct`: Cambio porcentual en el bienestar nacional $(\widehat{\mathcal{W}}_n - 1) \times 100$.
-- `res.tariff_revenue_prime`: Ingresos arancelarios contrafactuales por país.
-- `res.summary() -> pd.DataFrame`: Tabla resumen a nivel de país con bienestar, salarios, precios e ingresos.
-- `res.sector_summary() -> pd.DataFrame`: Desglose sectorial por país del producto bruto y niveles de precios.
-- `res.to_frame()`, `res.to_markdown()`, `res.to_latex()`, `res.to_typst()`: Formatos de exportación y publicación académica.
-- `res.plot(kind="welfare") -> matplotlib.figure.Figure`: Gráfico de barras con impactos en el bienestar por país.
-
 ### `AllenArkolakisResult`
 - `res.wages`: Salarios nominales regionales de equilibrio $w_i$.
 - `res.population`: Distribución espacial de la población $L_i$, conservando estrictamente $\sum L_i = \bar{L}$.
@@ -375,57 +228,6 @@ AllenArkolakisModel.simulate_climate_shock(
 
 ---
 
-## 7. Datos de calibración incluidos y atribución
-
-Dos tablas insumo-producto interpaís (ICIO) de la OCDE de 77 países y 11
-sectores viajan dentro del paquete, de modo que `load_icio_data` no necesita
-ningún archivo externo a su instalación. Desde 4.6.0, `source="oecd2020"` es la
-tabla limpia de 2020 de la edición 2023 de las ICIO (agregada por
-`tools/build_icio_77c_11s.py`, procedencia en `OECD2020_ICIO_PROVENANCE`, valor
-agregado mundial 7.97e7 millones de USD); úsela para cualquier trabajo empírico.
-`source="legacy"` es el fixture de regresión para la paridad con MATLAB,
-construido a partir de una exportación corrupta (véanse los avisos del
-2026-09-22 y 2026-10-03); es lo que una llamada sin `source=` sigue devolviendo,
-con un `FutureWarning`, hasta que el valor por defecto pase a `"oecd2020"` en 5.0.
-
-```python
-from puremacro.trade.data import load_icio_data, bundled_icio_path
-
-clean = load_icio_data(source="oecd2020")   # (850, 1078) float64, 77 países x 11 sectores
-legacy = load_icio_data(source="legacy")    # el fixture de paridad con MATLAB, misma forma
-print(bundled_icio_path("oecd2020").name)   # icio_77c_11s_oecd2020.npz
-```
-
-La matriz se redistribuye conforme a las condiciones de uso de la OCDE, que
-permiten la reutilización con atribución. **Si publica resultados calculados a
-partir de ella, cite las tablas insumo-producto interpaís de la OCDE**, no a
-puremacro; la OCDE no está afiliada a este proyecto ni lo respalda. La licencia
-MIT de puremacro cubre su propio código, no estos datos de terceros.
-
-Los resultados de referencia de MATLAB con los que se comparan las pruebas de
-paridad se incluyen junto a ella y se obtienen con
-`load_reference_solution(scenario)`, `available_reference_scenarios()` y
-`load_reference_workbook_sheet(sheet)`. Son copias literales, así que esas
-comparaciones siguen siendo una verificación externa y no puremacro
-calificando su propia salida.
-
-En la tabla limpia, las referencias de MATLAB cubren solo el escenario base. Los
-escenarios arancelarios de EE. UU. del modelo heredado no tienen ahí un
-equilibrio conectado con la base: la senda tiene un pliegue en un arancel de
-alrededor del 0.89% (véase "Presupuestos, ahorro externo y numerario" en
-[Contabilidad del comercio](trade_accounting.md) y
-`reviews/2026-10-04-clean-table-tariff-scenarios/REPORT.md`). Para resolver
-tablas de tamaño completo use
-`solve_trade_equilibrium(calib, method="equilibrated_newton")`. Aplica Newton
-al jacobiano equilibrado por filas y columnas y, si falla, su `metadata` indica
-el país cuya dirección de nivel de precios se ha vuelto singular.
-
-El aviso completo, con la procedencia y el SHA-256 de cada archivo, está en
-`puremacro/trade/_datafiles/SOURCES.md`, que se instala con el paquete.
-
 ## Referencias bibliográficas
 
 - Allen, T., & Arkolakis, C. (2014). "Trade and the Topography of the Spatial Economy." *The Quarterly Journal of Economics*, 129(3), 1085–1140.
-- Caliendo, L., & Parro, F. (2015). "Estimates of the Trade and Welfare Effects of NAFTA." *The Review of Economic Studies*, 82(1), 1–44.
-- Dekle, R., Eaton, J., & Kortum, S. (2007). "Unbalanced Trade." *American Economic Review*, 97(2), 351–355.
-- Eaton, J., & Kortum, S. (2002). "Technology, Geography, and Trade." *Econometrica*, 70(5), 1741–1779.

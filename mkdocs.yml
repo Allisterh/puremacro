@@ -109,7 +109,7 @@ nav:
           - Parameter Gradients (IFT): vfi_analytic_gradients.md
       - Frontier Macro & Spatial Economics:
           - Deep Macro & Neural Networks: deep_macro.md
-          - Quantitative Spatial & Trade General Equilibrium: spatial_and_trade_ge.md
+          - Quantitative Spatial General Equilibrium: spatial_and_trade_ge.md
       - Running Anywhere (iPad / browser): tablet.md
       - Performance & Benchmarks: benchmarks.md
       - Reference:
@@ -185,7 +185,7 @@ nav:
           - Gradientes paramétricos (TFI): es/vfi_analytic_gradients.md
       - Macroeconomía de frontera y economía espacial:
           - Deep Macro y redes neuronales: es/deep_macro.md
-          - Economía espacial cuantitativa y equilibrio general de comercio: es/spatial_and_trade_ge.md
+          - Equilibrio general espacial cuantitativo: es/spatial_and_trade_ge.md
       - Ejecución en cualquier entorno (iPad / navegador): es/tablet.md
       - Rendimiento y pruebas comparativas: es/benchmarks.md
       - Referencia:
