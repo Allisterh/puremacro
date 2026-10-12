@@ -397,8 +397,39 @@ def get_default_backend(model: str = "default", **kw) -> _BackendBase:
 # ---------------------------------------------------------------------------
 # Top-level scoring loop
 # ---------------------------------------------------------------------------
+def _drop_plus_signs(text: str) -> str:
+    """``text`` without the ``+`` that precedes a digit outside JSON strings.
+
+    JSON has no unary plus, yet the prompts write ``"sign": -1 | 0 | +1`` and models copy
+    it (``"sign": +1``). Characters inside double-quoted strings, escapes included, are
+    left as they are.
+    """
+    out: list[str] = []
+    in_string = escaped = False
+    for i, ch in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+        elif ch == "+" and i + 1 < len(text) and text[i + 1].isdigit():
+            continue
+        out.append(ch)
+    return "".join(out)
+
+
 def _parse_response(text: str) -> list[dict]:
-    """Best-effort JSON-array extraction from an LLM response."""
+    """Best-effort JSON-array extraction from an LLM response.
+
+    After a surrounding code fence is removed, a ``+`` before a digit outside strings is
+    dropped (``"sign": +1`` reads as ``1``). A JSON array is returned as it is; a JSON
+    object is accepted when it carries an ``"events"`` list, which is returned. Otherwise
+    the text from the first ``[`` to the last ``]`` is tried. Anything else gives ``[]``.
+    """
     text = text.strip()
     if text.startswith("```"):
         text = text.strip("`")
@@ -406,14 +437,16 @@ def _parse_response(text: str) -> list[dict]:
             text = text[4:]
         text = text.strip()
     try:
-        parsed = json.loads(text)
+        parsed = json.loads(_drop_plus_signs(text))
     except json.JSONDecodeError:
         try:
             i = text.index("[")
             j = text.rindex("]")
-            parsed = json.loads(text[i:j + 1])
+            parsed = json.loads(_drop_plus_signs(text[i:j + 1]))
         except (ValueError, json.JSONDecodeError, Exception):
             return []
+    if isinstance(parsed, dict) and isinstance(parsed.get("events"), list):
+        return parsed["events"]
     if not isinstance(parsed, list):
         return []
     return parsed
@@ -446,7 +479,15 @@ def _profile_from_timing_fields(
     """Build implementation_profile from the LLM's timing fields.
 
     Prefers ``implementation_date`` (ISO string) over ``horizon_quarters``
-    (int 0–16 fallback). Both null or unparseable → empty list.
+    (int 0–16 fallback), which is read only when there is no date. Both null or
+    unparseable → empty list.
+
+    An empty list means "implemented in the announcement quarter, at the
+    announcement date" (``NarrativeEvent.effective_profile``). So a date in the
+    announcement quarter, and a horizon of 0, give the empty list: the start of
+    that quarter would predate the announcement, which ``NarrativeEvent``
+    refuses. A date in a later quarter gives ``[(start of that quarter, 1.0)]``,
+    a horizon ``h`` in 1..16 ``[(start of the h-th quarter after, 1.0)]``.
 
     Refuses to emit a profile that predates the announcement quarter.
     """
@@ -457,7 +498,7 @@ def _profile_from_timing_fields(
         try:
             impl_q = pd.Period(pd.Timestamp(impl_date_str), freq="Q").to_timestamp()
             ann_q = pd.Period(pd.Timestamp(announcement), freq="Q").to_timestamp()
-            if impl_q >= ann_q:
+            if impl_q > ann_q:
                 return [(impl_q, 1.0)]
         except (ValueError, TypeError, Exception):
             pass
@@ -466,12 +507,11 @@ def _profile_from_timing_fields(
     if horizon_q is not None:
         try:
             h = int(horizon_q)
+            if 1 <= h <= 16:
+                ann_q = pd.Period(pd.Timestamp(announcement), freq="Q")
+                return [((ann_q + h).to_timestamp(), 1.0)]
         except (ValueError, TypeError, Exception):
             return []
-        if 0 <= h <= 16:
-            ann_q = pd.Period(pd.Timestamp(announcement), freq="Q")
-            impl_q = (ann_q + h).to_timestamp()
-            return [(impl_q, 1.0)]
     return []
 
 
@@ -542,22 +582,27 @@ def score_llm(
             mag_key = _MAGNITUDE_KEY_BY_KIND[kind]
             magnitude_unit = _MAGNITUDE_UNIT_BY_KIND[kind]
             profile = _profile_from_timing_fields(ev_dict, announcement=date)
-            out.append(NarrativeEvent(
-                date=pd.Timestamp(date),
-                country=country,
-                magnitude=float(ev_dict[mag_key]),
-                magnitude_unit=magnitude_unit,
-                target=ev_dict["target"],
-                subtarget=ev_dict.get("subtarget"),
-                sign=int(ev_dict["sign"]),
-                confidence=float(ev_dict["confidence"]),
-                source_text=str(ev_dict.get("excerpt", text))[:500],
-                source_url=str(source_url),
-                scoring_method="llm",
-                implementation_profile=profile,
-                kind=kind,
-                language=record_lang,
-            ))
+            try:
+                event = NarrativeEvent(
+                    date=pd.Timestamp(date),
+                    country=country,
+                    magnitude=float(ev_dict[mag_key]),
+                    magnitude_unit=magnitude_unit,
+                    target=ev_dict["target"],
+                    subtarget=ev_dict.get("subtarget"),
+                    sign=int(ev_dict["sign"]),
+                    confidence=float(ev_dict["confidence"]),
+                    source_text=str(ev_dict.get("excerpt", text))[:500],
+                    source_url=str(source_url),
+                    scoring_method="llm",
+                    implementation_profile=profile,
+                    kind=kind,
+                    language=record_lang,
+                )
+            except ValueError:      # an event NarrativeEvent refuses is dropped, not raised
+                n_dropped_malformed += 1
+                continue
+            out.append(event)
     if n_dropped_malformed:
         print(f"[score_llm] dropped {n_dropped_malformed} malformed events.")
     return out
