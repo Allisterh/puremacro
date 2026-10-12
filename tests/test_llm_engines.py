@@ -14,7 +14,9 @@ modules (``mlx_lm``, ``llama_cpp``, ``huggingface_hub``), and every probe is ans
 on 127.0.0.1 or by a patched ``available``: an Ollama running on the developer's machine must
 not decide a test.
 """
+import http.client
 import importlib.util
+import io
 import json
 import os
 import socket
@@ -674,6 +676,47 @@ def test_the_servers_own_error_message_is_passed_on(llm_stub_server):
         E.HTTPEngine(base_url=llm_stub_server.url, api="openai").complete(
             "qwen3-4b", "hola", system=None, thinking=True, **_CALL)
     assert not isinstance(ei.value, E.BackendUnavailable)
+
+
+class _UnreadableBody(io.BytesIO):
+    """The body of an error reply that cannot be read: the server sent the status line and the
+    headers, then the connection broke or went silent."""
+
+    def __init__(self, error):
+        super().__init__()
+        self.error = error
+
+    def read(self, *args):
+        raise self.error
+
+
+@pytest.mark.parametrize("lost", [
+    ConnectionResetError(54, "Connection reset by peer"),
+    http.client.IncompleteRead(b"", 120),          # an HTTPException, which `except OSError` misses
+    TimeoutError("timed out"),                     # the socket timed out reading the body
+], ids=["reset", "incomplete-read", "timeout"])
+@pytest.mark.parametrize("status,expected", [
+    (400, RuntimeError), (404, E.LocalLLMUnavailable), (503, E.LocalLLMUnavailable),
+], ids=["400", "404", "503"])
+def test_an_error_body_that_cannot_be_read_is_mapped_as_an_empty_one(monkeypatch, status,
+                                                                      expected, lost):
+    def answer(body):
+        """What complete() raises when the server answers ``status`` with ``body``."""
+        sent = []
+
+        def urlopen(request, *args, **kwargs):
+            sent.append(urllib.error.HTTPError(request.full_url, status, "error", {}, body))
+            raise sent[-1]
+
+        monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+        with pytest.raises(RuntimeError) as ei:    # the status decides, never the read error
+            E.HTTPEngine(base_url="http://h:1", api="openai").complete(
+                "m", "hola", system=None, thinking=False, **_CALL)
+        assert ei.value.__cause__ is sent[-1]
+        return ei.value
+
+    unread, empty = answer(_UnreadableBody(lost)), answer(io.BytesIO(b""))
+    assert type(unread) is type(empty) is expected and str(unread) == str(empty)
 
 
 @pytest.mark.parametrize("reply", [
