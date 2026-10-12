@@ -255,6 +255,23 @@
     "puremacro.did.types": [
       "PanelDiD"
     ],
+    "puremacro.dp": [
+      "AR1",
+      "DPSolution",
+      "Jump",
+      "Markov",
+      "Model",
+      "ModelSpecError",
+      "crra"
+    ],
+    "puremacro.dp.model": [
+      "Model"
+    ],
+    "puremacro.dp.processes": [
+      "AR1",
+      "Jump",
+      "Markov"
+    ],
     "puremacro.dsge": [
       "BayesianEstimationResult",
       "BayesianIRFResult",
@@ -4042,6 +4059,7 @@
     ],
     "puremacro.vfi.egm": [
       "EGMSolution",
+      "egm_step",
       "solve_egm"
     ],
     "puremacro.vfi.epstein_zin": [
@@ -4510,6 +4528,47 @@
       "time",
       "treat_time",
       "unit"
+    ],
+    "puremacro.dp._egm.EGMHouseholdSolution": [
+      "R",
+      "V",
+      "aprime",
+      "aprime_by_choice",
+      "c",
+      "c_by_choice",
+      "choice_prob",
+      "egm",
+      "income",
+      "n_iter",
+      "policy_d",
+      "sup_norm"
+    ],
+    "puremacro.dp._egm.EGMLifeCycleSolution": [
+      "R",
+      "V",
+      "aprime",
+      "aprime_by_choice",
+      "c",
+      "c_by_choice",
+      "choice_prob",
+      "horizon",
+      "income",
+      "policy_d"
+    ],
+    "puremacro.dp.processes.AR1": [
+      "m",
+      "method",
+      "n",
+      "rho",
+      "sigma"
+    ],
+    "puremacro.dp.processes.Jump": [
+      "grid",
+      "rates"
+    ],
+    "puremacro.dp.processes.Markov": [
+      "P",
+      "grid"
     ],
     "puremacro.dsge._ast.BinOp": [
       "left",
