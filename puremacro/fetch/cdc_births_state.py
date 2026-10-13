@@ -1,20 +1,29 @@
-"""State × month / state × quarter US births series.
+"""State x month / state x quarter US births series.
 
-Source today: NBER NCHS Natality state×month aggregations 1968-2002,
-already produced by the sibling Fertility project's
-`climate_fertility/fetch_cdc_births.py` and saved to
-`Fertility/data/PROCESSED/nber_state_month_births.csv`. This loader
-reads that file, normalizes state_abbr → state_fips, and exposes
-monthly and quarterly accessors.
+Sources:
+
+* NBER's NCHS Natality state x month aggregates, 1968-2002, read from a
+  processed CSV, ``<root>/PROCESSED/nber_state_month_births.csv``, where
+  ``<root>`` is the directory named by the ``PUREMACRO_FERTILITY_ROOT``
+  environment variable. The variable has no default: when it is unset the
+  fetch functions raise :class:`NatalityRootError`, which names it.
+* CDC Socrata VSRR provisional state x month counts (2023-present), fetched
+  on demand and cached under ``data/raw/cdc_socrata_natality/``.
+
+``fetch_monthly(write_artifact=True)`` also writes the combined monthly
+series to ``<root>/PROCESSED/state_month_births.csv`` when that directory
+exists.
 
 Future extension: CDC WONDER Natality (D27 / D66 datasets) covers
-2003-present at state×month. Adding it would require an XML POST to
+2003-present at state x month. Adding it would require an XML POST to
 `https://wonder.cdc.gov/controller/datarequest/...` and is *not*
-implemented here — see TODO at the bottom of the module.
+implemented here; see the TODO at the bottom of the module.
 
 Public API:
     fetch_monthly() -> pd.DataFrame[state_fips, date, births_state_m]
     fetch_quarterly() -> pd.DataFrame[state_fips, date, births_state_q]
+    fetch_yearly() -> pd.DataFrame[state_fips, year, births_state_a, source]
+    natality_root() -> Path   (raises NatalityRootError when the variable is unset)
 """
 from __future__ import annotations
 
@@ -26,18 +35,44 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+#: Environment variable naming the directory that holds the natality extracts
+#: this module and ``cdc_births_county`` read and write. It has no default: an
+#: unset variable raises :class:`NatalityRootError` inside the fetch functions.
+ENV_ROOT = "PUREMACRO_FERTILITY_ROOT"
 
-#: Root of the separate project's data tree this module reads when it is
-#: present. It was an absolute path naming one person's Google Drive account,
-#: so on every other machine it silently could not resolve. `PUREMACRO_MAV_ROOT`
-#: is the same variable `puremacro/examples/*.py` and `fetch/wui*.py` read.
-_FERTILITY_DATA = Path(os.environ.get(
-    "PUREMACRO_FERTILITY_ROOT",
-    Path(os.environ.get("PUREMACRO_MAV_ROOT",
-                        Path.home() / "Library" / "CloudStorage" / "My Drive"))
-    .parent / "Fertility" / "data")) / "PROCESSED"
-_NBER_STATE_MONTH = _FERTILITY_DATA / "nber_state_month_births.csv"
-_CANONICAL_MONTHLY = _FERTILITY_DATA / "state_month_births.csv"
+
+class NatalityRootError(RuntimeError):
+    """``PUREMACRO_FERTILITY_ROOT`` is not set, so the natality extracts cannot be located."""
+
+
+def optional_natality_root() -> Path | None:
+    """The directory named by ``PUREMACRO_FERTILITY_ROOT``, or ``None`` when it is unset."""
+    value = os.environ.get(ENV_ROOT)
+    return Path(value).expanduser() if value else None
+
+
+def natality_root() -> Path:
+    """The directory named by ``PUREMACRO_FERTILITY_ROOT``; raises when it is unset."""
+    root = optional_natality_root()
+    if root is None:
+        raise NatalityRootError(
+            f"{ENV_ROOT} is not set. Point it at the directory that holds the processed "
+            "natality extracts (<root>/PROCESSED/nber_state_month_births.csv); there is no "
+            "default location."
+        )
+    return root
+
+
+def _processed_dir() -> Path:
+    return natality_root() / "PROCESSED"
+
+
+def _nber_state_month_path() -> Path:
+    return _processed_dir() / "nber_state_month_births.csv"
+
+
+def _canonical_monthly_path() -> Path:
+    return _processed_dir() / "state_month_births.csv"
 
 _STATE_ABBR_TO_FIPS = {
     "AL": "01", "AK": "02", "AZ": "04", "AR": "05", "CA": "06",
@@ -55,9 +90,13 @@ _STATE_ABBR_TO_FIPS = {
 
 
 def _load_nber_state_month(path: Path | None = None) -> pd.DataFrame:
-    """Load Fertility/.../nber_state_month_births.csv → (state_fips, date, births)."""
+    """Load <root>/PROCESSED/nber_state_month_births.csv -> (state_fips, date, births).
+
+    Raises :class:`NatalityRootError` when ``path`` is None and
+    ``PUREMACRO_FERTILITY_ROOT`` is unset.
+    """
     if path is None:
-        path = _NBER_STATE_MONTH
+        path = _nber_state_month_path()
     if not path.exists():
         logger.warning("state-month source not found: %s", path)
         return pd.DataFrame(columns=["state_fips", "date", "births_state_m"])
@@ -111,6 +150,8 @@ def fetch_monthly(
     WONDER's API forbids state-level grouping for natality and the NCHS
     All-County Natality file is RDC-restricted. Manual WONDER web export
     is the workaround for that window.
+
+    Raises :class:`NatalityRootError` when ``PUREMACRO_FERTILITY_ROOT`` is unset.
     """
     nber = _load_nber_state_month()
     parts = [nber] if not nber.empty else []
@@ -130,15 +171,16 @@ def fetch_monthly(
         ["state_fips", "date"]
     ).reset_index(drop=True)
 
-    if write_artifact and _FERTILITY_DATA.exists() and not df.empty:
+    if write_artifact and not df.empty and _processed_dir().exists():
+        canonical = _canonical_monthly_path()
         out = df.rename(columns={"births_state_m": "births"}).copy()
         out["year"] = out["date"].dt.year
         out["month"] = out["date"].dt.month
         out = out[["state_fips", "year", "month", "births"]]
-        _CANONICAL_MONTHLY.parent.mkdir(parents=True, exist_ok=True)
-        out.to_csv(_CANONICAL_MONTHLY, index=False)
+        canonical.parent.mkdir(parents=True, exist_ok=True)
+        out.to_csv(canonical, index=False)
         logger.info("wrote %s (%d rows, %d-%d)",
-                    _CANONICAL_MONTHLY, len(out), out["year"].min(), out["year"].max())
+                    canonical, len(out), out["year"].min(), out["year"].max())
     return df
 
 
@@ -150,6 +192,8 @@ def fetch_yearly(*, refresh: bool = False) -> pd.DataFrame:
     base years filtered out). Where both sources have a year, Census
     wins because it explicitly publishes calendar-year totals; NBER
     sums could differ slightly due to monthly imputations.
+
+    Raises :class:`NatalityRootError` when ``PUREMACRO_FERTILITY_ROOT`` is unset.
     """
     parts = []
     nber = _load_nber_state_month()
@@ -204,4 +248,4 @@ def fetch_quarterly() -> pd.DataFrame:
 #   https://wonder.cdc.gov/controller/datarequest/{D66,D27}
 # parsing the tab-delimited table (rows 0..N then "---" then totals).
 # Set `accept_datause_restrictions=true` in the request XML. Append the
-# returned rows to _CANONICAL_MONTHLY.
+# returned rows to the canonical monthly CSV, <root>/PROCESSED/state_month_births.csv.

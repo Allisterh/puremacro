@@ -20,13 +20,13 @@ So the longest publicly-aggregable county-year series is **1982–2004**
 
 Two source paths
 ----------------
-1) **Local fixed-width PUB** (preferred when present). The Fertility
-   project has cached raw zips at
-   `Fertility/data/United States/nvss_natality_raw/Nat[YYYY].zip` and
-   their accompanying `natality[YYYY].dct` dictionary files (1982-1993).
-   We parse the dct to find `cntyrfip` and `recwt` column positions
-   (the schema shifts in 1990) and read fixed-width directly. Disk-
-   bound (~1-3 min/year), no network.
+1) **Local fixed-width PUB** (preferred when present): the raw NBER zips
+   `<root>/United States/nvss_natality_raw/Nat[YYYY].zip` and their
+   accompanying `natality[YYYY].dct` dictionary files, where `<root>` is the
+   directory named by the `PUREMACRO_FERTILITY_ROOT` environment variable
+   (no default; see `cdc_births_state.natality_root`). We parse the dct to
+   find `cntyrfip` and `recwt` column positions (the schema shifts in 1990)
+   and read fixed-width directly. Disk-bound (~1-3 min/year), no network.
 
 2) **NBER CSV streaming** (fallback for years not on disk). We stream
    `https://data.nber.org/natality/{year}/natl{year}.csv` line by line;
@@ -35,12 +35,12 @@ Two source paths
 Per-year aggregations are cached as small CSVs under
 `data/raw/nchs_county_year/`, so subsequent runs are instant.
 
-Cooperation with the Fertility project
---------------------------------------
-Aggregated artifact is written to
-`Fertility/data/PROCESSED/nchs_county_year_births.csv` so both projects
-read from one canonical file (Fertility currently only has state×month
-aggregates from `nber_state_month_births.csv`).
+Artifacts
+---------
+With ``write_artifact=True`` (the default) the aggregated series is written
+to `<root>/PROCESSED/nchs_county_year_births.csv`, and the NCHS + Census
+PEP combination to `<root>/PROCESSED/county_year_births.csv`, when that
+directory exists. Nothing is written when the variable is unset.
 
 Public API:
     fetch(years=range(1982, 2005), refresh=False) -> pd.DataFrame
@@ -55,11 +55,12 @@ import logging
 import re
 import zipfile
 from collections import defaultdict
-import os
 from pathlib import Path
 from typing import Iterable, Optional
 
 import pandas as pd
+
+from .cdc_births_state import ENV_ROOT, NatalityRootError, natality_root, optional_natality_root
 
 logger = logging.getLogger(__name__)
 
@@ -70,23 +71,31 @@ _NBER_URL = "https://data.nber.org/natality/{year}/natl{year}.csv"
 # rather than the source ~1.4 GB microdata.
 _LOCAL_CACHE = Path(__file__).resolve().parent.parent.parent / "data" / "raw" / "nchs_county_year"
 
-#: Root of the separate project's data tree this module reads when it is
-#: present. It was an absolute path naming one person's Google Drive account,
-#: so on every other machine it silently could not resolve. `PUREMACRO_MAV_ROOT`
-#: is the same variable `puremacro/examples/*.py` and `fetch/wui*.py` read.
-_FERTILITY_ROOT = Path(os.environ.get(
-    "PUREMACRO_FERTILITY_ROOT",
-    Path(os.environ.get("PUREMACRO_MAV_ROOT",
-                        Path.home() / "Library" / "CloudStorage" / "My Drive"))
-    .parent / "Fertility" / "data"))
+# Paths under the directory named by PUREMACRO_FERTILITY_ROOT (see
+# cdc_births_state). They are resolved inside the fetch functions, never at
+# import, so the variable is required only when a fetch actually runs.
 
-# Canonical artifact location shared with the Fertility project.
-_FERTILITY_DATA = _FERTILITY_ROOT / "PROCESSED"
-_FERTILITY_ARTIFACT = _FERTILITY_DATA / "nchs_county_year_births.csv"
-_COMBINED_ARTIFACT = _FERTILITY_DATA / "county_year_births.csv"
 
-# Local raw zips + dct dictionary files cached by the Fertility project.
-_FERTILITY_NATALITY_RAW = _FERTILITY_ROOT / "United States" / "nvss_natality_raw"
+def _processed_dir() -> Path | None:
+    """``<root>/PROCESSED``, or ``None`` when the root is unset."""
+    root = optional_natality_root()
+    return None if root is None else root / "PROCESSED"
+
+
+def nchs_artifact_path() -> Path:
+    """``<root>/PROCESSED/nchs_county_year_births.csv``; raises when the root is unset."""
+    return natality_root() / "PROCESSED" / "nchs_county_year_births.csv"
+
+
+def combined_artifact_path() -> Path:
+    """``<root>/PROCESSED/county_year_births.csv``; raises when the root is unset."""
+    return natality_root() / "PROCESSED" / "county_year_births.csv"
+
+
+def _raw_natality_dir() -> Path | None:
+    """``<root>/United States/nvss_natality_raw``, or ``None`` when the root is unset."""
+    root = optional_natality_root()
+    return None if root is None else root / "United States" / "nvss_natality_raw"
 
 # Residence-county FIPS columns vary by year. 1982-2002 ship a single
 # 5-char `cntyrfip` (state+county FIPS). 2003-2004 split it: `mrcntyfips`
@@ -154,9 +163,10 @@ def _stream_url(url: str, *, timeout: int = 60):
     """Yield decoded CSV lines from a URL without buffering the whole file."""
     import requests            # deferred; see the module docstring
 
+    from .. import __version__
     resp = requests.get(
         url,
-        headers={"User-Agent": "uncertainty_examples/1.0 (research@itam.mx)"},
+        headers={"User-Agent": f"puremacro/{__version__} (+https://github.com/jalonso1979/puremacro)"},
         timeout=timeout,
         stream=True,
     )
@@ -195,10 +205,14 @@ def _parse_dct(dct_path: Path) -> dict[str, tuple[int, int]]:
 def _aggregate_year_local(year: int) -> Optional[pd.DataFrame]:
     """Parse the locally-cached Nat[YYYY].zip + dct → (county_fips, births).
 
-    Returns None if either the zip or the dct file is missing.
+    Returns None if the root is unset or either the zip or the dct file is
+    missing.
     """
-    zip_path = _FERTILITY_NATALITY_RAW / f"Nat{year}.zip"
-    dct_path = _FERTILITY_NATALITY_RAW / f"natality{year}.dct"
+    raw_dir = _raw_natality_dir()
+    if raw_dir is None:
+        return None
+    zip_path = raw_dir / f"Nat{year}.zip"
+    dct_path = raw_dir / f"natality{year}.dct"
     if not zip_path.exists() or not dct_path.exists():
         return None
 
@@ -412,12 +426,13 @@ def _year_cache_path(year: int) -> Path:
 def available_local_years() -> list[int]:
     """Years for which we already have data — local PUB OR cached aggregation."""
     years: set[int] = set()
-    if _FERTILITY_NATALITY_RAW.exists():
-        for zp in _FERTILITY_NATALITY_RAW.glob("Nat*.zip"):
+    raw_dir = _raw_natality_dir()
+    if raw_dir is not None and raw_dir.exists():
+        for zp in raw_dir.glob("Nat*.zip"):
             m = re.search(r"Nat(\d{4})\.zip", zp.name)
             if m:
                 year = int(m.group(1))
-                if (_FERTILITY_NATALITY_RAW / f"natality{year}.dct").exists():
+                if (raw_dir / f"natality{year}.dct").exists():
                     years.add(year)
     if _LOCAL_CACHE.exists():
         for cp in _LOCAL_CACHE.glob("nchs_county_*.csv"):
@@ -440,26 +455,42 @@ def fetch(
     ----------
     years : iterable of int or None
         If None (default), uses the years for which local PUB files exist
-        in the Fertility project's nvss_natality_raw folder (currently
-        1982-1993). Pass an explicit range to extend; years not in the
-        local cache will be streamed from NBER (slow, ~20 min/year)
-        unless ``local_only=True``.
+        under ``<root>/United States/nvss_natality_raw``, where ``<root>``
+        is the directory named by ``PUREMACRO_FERTILITY_ROOT``. Pass an
+        explicit range to extend; years not in the local cache will be
+        streamed from NBER (slow, ~20 min/year) unless ``local_only=True``.
     refresh : bool
         Re-aggregate every year, ignoring per-year caches.
     write_artifact : bool
-        Also write the combined frame to the canonical CSV in the
-        Fertility project's PROCESSED folder (when that path exists).
+        Also write the combined frame to the canonical CSVs under
+        ``<root>/PROCESSED`` (when that directory exists; never when the
+        root is unset).
     local_only : bool
         If True (default), skip streaming for years without a local PUB
         file. If False, stream from NBER as a fallback.
+
+    Raises
+    ------
+    NatalityRootError
+        When ``PUREMACRO_FERTILITY_ROOT`` is unset and the call needs the
+        local files, i.e. ``years`` is None or ``local_only`` is True.
     """
     _LOCAL_CACHE.mkdir(parents=True, exist_ok=True)
+    raw_dir = _raw_natality_dir()
+    if raw_dir is None and (years is None or local_only):
+        raise NatalityRootError(
+            f"{ENV_ROOT} is not set. Point it at the directory that holds the raw NBER "
+            "natality files (<root>/United States/nvss_natality_raw/Nat<YYYY>.zip with "
+            "natality<YYYY>.dct) and the PROCESSED artifacts; there is no default "
+            "location. To stream from NBER without local files, pass years= and "
+            "local_only=False."
+        )
     if years is None:
         years = available_local_years()
         if not years:
             logger.warning(
                 "No local NCHS PUB files found at %s — pass years= to enable streaming",
-                _FERTILITY_NATALITY_RAW,
+                raw_dir,
             )
             years = []
 
@@ -486,8 +517,10 @@ def fetch(
     combined = pd.concat(frames, ignore_index=True)
     combined = combined.sort_values(["county_fips", "year"]).reset_index(drop=True)
 
-    if write_artifact and _FERTILITY_DATA.exists():
-        _FERTILITY_ARTIFACT.parent.mkdir(parents=True, exist_ok=True)
+    processed = _processed_dir()
+    if write_artifact and processed is not None and processed.exists():
+        nchs_path = nchs_artifact_path()
+        nchs_path.parent.mkdir(parents=True, exist_ok=True)
         all_cached = []
         for csv_path in sorted(_LOCAL_CACHE.glob("nchs_county_*.csv")):
             try:
@@ -499,21 +532,21 @@ def fetch(
             nchs_assembled = nchs_assembled.sort_values(
                 ["county_fips", "year"]
             ).reset_index(drop=True)
-            nchs_assembled.to_csv(_FERTILITY_ARTIFACT, index=False)
+            nchs_assembled.to_csv(nchs_path, index=False)
             logger.info(
                 "wrote NCHS artifact (%d rows, %d years, %d counties) to %s",
                 len(nchs_assembled), nchs_assembled["year"].nunique(),
-                nchs_assembled["county_fips"].nunique(), _FERTILITY_ARTIFACT,
+                nchs_assembled["county_fips"].nunique(), nchs_path,
             )
-            _write_combined_artifact(nchs_assembled)
+            _write_combined_artifact(nchs_assembled, combined_artifact_path())
         else:
-            combined.to_csv(_FERTILITY_ARTIFACT, index=False)
+            combined.to_csv(nchs_path, index=False)
 
     return combined
 
 
-def _write_combined_artifact(nchs: pd.DataFrame) -> None:
-    """Combine NCHS + Census PEP into a single county_year_births.csv.
+def _write_combined_artifact(nchs: pd.DataFrame, combined_path: Path) -> None:
+    """Combine NCHS + Census PEP into a single county_year_births.csv at ``combined_path``.
 
     Source preference per year:
       - Census PEP when the year is in its calendar-year coverage
@@ -532,7 +565,7 @@ def _write_combined_artifact(nchs: pd.DataFrame) -> None:
             "Census PEP fetch failed (%s); combined artifact = NCHS only", e,
         )
         nchs.assign(source=nchs.get("source", "nber_natality")).to_csv(
-            _COMBINED_ARTIFACT, index=False,
+            combined_path, index=False,
         )
         return
 
@@ -545,9 +578,9 @@ def _write_combined_artifact(nchs: pd.DataFrame) -> None:
     nchs_keep = nchs[~nchs["year"].isin(pep_years)].copy()
     combined = pd.concat([pep, nchs_keep], ignore_index=True)
     combined = combined.sort_values(["county_fips", "year"]).reset_index(drop=True)
-    combined.to_csv(_COMBINED_ARTIFACT, index=False)
+    combined.to_csv(combined_path, index=False)
     logger.info(
         "wrote combined artifact (%d rows, years %d-%d, %d counties) to %s",
         len(combined), combined["year"].min(), combined["year"].max(),
-        combined["county_fips"].nunique(), _COMBINED_ARTIFACT,
+        combined["county_fips"].nunique(), combined_path,
     )
