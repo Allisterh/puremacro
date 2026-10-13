@@ -298,8 +298,8 @@ import puremacro.llm as llm
 print(llm.report(probe_servers=False))
 ```
 
-On a Mac with mlx-lm and llama-cpp-python installed it reads like this (the numbers are this
-machine's):
+On a Mac with mlx-lm and llama-cpp-python installed it reads like this (an example: the numbers
+depend on the machine and the cache):
 
 ```text
 puremacro.llm

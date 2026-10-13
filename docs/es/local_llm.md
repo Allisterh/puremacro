@@ -308,8 +308,8 @@ import puremacro.llm as llm
 print(llm.report(probe_servers=False))
 ```
 
-En una Mac con mlx-lm y llama-cpp-python instalados se lee así (las cifras son las de esa
-máquina):
+En una Mac con mlx-lm y llama-cpp-python instalados se lee así (un ejemplo: las cifras dependen
+de la máquina y de la caché):
 
 ```text
 puremacro.llm
