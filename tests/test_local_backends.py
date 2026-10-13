@@ -88,10 +88,22 @@ def test_local_backend_and_provider_resolve_no_engine_at_construction(monkeypatc
 
 def test_ollama_presets_default_to_qwen3_4b():
     # The registry alias, so the cache key is the reference model's; the server still gets its tag.
+    # base_url is None, so PUREMACRO_LLM_BASE_URL, else the default Ollama URL, names the server.
     be = OllamaBackend()
-    assert (be.model, be.engine, be.base_url) == ("qwen3-4b", "ollama", "http://localhost:11434")
+    assert (be.model, be.engine, be.base_url) == ("qwen3-4b", "ollama", None)
     p = OllamaProvider()
-    assert (p.model, p.engine, p.base_url) == ("qwen3-4b", "ollama", "http://localhost:11434")
+    assert (p.model, p.engine, p.base_url) == ("qwen3-4b", "ollama", None)
+    assert OllamaBackend(base_url="http://h:1").base_url == "http://h:1"
+    assert OllamaProvider(base_url="http://h:1").base_url == "http://h:1"
+
+
+def test_ollama_presets_follow_the_server_the_environment_names(monkeypatch, llm_stub_server):
+    monkeypatch.setenv("PUREMACRO_LLM_BASE_URL", llm_stub_server.url)
+    llm_stub_server.chat_content = "[]"
+    assert OllamaBackend().call("score this") == "[]"
+    assert llm_stub_server.last_body["model"] == "qwen3:4b"
+    llm_stub_server.chat_content = "0.6"
+    assert OllamaProvider().score_paragraph("An uncertain outlook.", "uncertainty") == 0.6
 
 
 def test_ollama_presets_pass_an_explicit_tag_through():
@@ -268,6 +280,110 @@ def test_local_backend_mode_argument_overrides_environment(monkeypatch):
     monkeypatch.setattr(puremacro.llm.engines, "resolve_engine", _no_engine)
     with pytest.raises(CacheMiss):
         LocalBackend("default", mode="cache").call("hello")
+
+
+# ---------------------------------------------------------------- names checked at construction
+# A misspelt engine or mode is a configuration error, identical for every record. Found at the
+# first call it would be counted as a malformed event by score_llm and the corpus would come back
+# empty; so the constructors check the names, as the engine resolution of 4.8.1 did.
+
+_BAD_NAMES = [
+    pytest.param({"engine": "foo"}, r"unknown engine 'foo'; expected 'auto' or one of \[", id="engine-foo"),
+    pytest.param({"engine": "olama"}, r"unknown engine 'olama'", id="engine-olama"),
+    pytest.param({"mode": "x"}, r"unknown mode 'x'; use 'auto', 'cache' or 'off'", id="mode-x"),
+    pytest.param({"mode": "cahce"}, r"unknown mode 'cahce'", id="mode-cahce"),
+]
+
+
+@pytest.mark.parametrize("kw, message", _BAD_NAMES)
+def test_local_backend_refuses_an_unknown_engine_or_mode_at_construction(kw, message, monkeypatch):
+    monkeypatch.setattr(puremacro.llm.engines, "resolve_engine", _no_engine)
+    monkeypatch.setattr(puremacro.llm.engines, "available_engines", _no_engine)
+    with pytest.raises(ValueError, match=message):
+        LocalBackend(**kw)
+
+
+@pytest.mark.parametrize("kw, message", _BAD_NAMES)
+def test_local_provider_refuses_an_unknown_engine_or_mode_at_construction(kw, message, monkeypatch):
+    monkeypatch.setattr(puremacro.llm.engines, "resolve_engine", _no_engine)
+    monkeypatch.setattr(puremacro.llm.engines, "available_engines", _no_engine)
+    with pytest.raises(ValueError, match=message):
+        LocalProvider(**kw)
+
+
+def test_the_engine_names_and_the_modes_are_accepted_at_construction(monkeypatch):
+    monkeypatch.setattr(puremacro.llm.engines, "resolve_engine", _no_engine)
+    monkeypatch.setattr(puremacro.llm.engines, "available_engines", _no_engine)
+    for name in ("auto", "mlx", "llamacpp", "ollama", "openai"):
+        assert LocalBackend(engine=name).engine == name
+        assert LocalProvider(engine=name).engine == name
+    for mode in ("auto", "cache", "off", None):
+        assert LocalBackend(mode=mode).mode == mode
+        assert LocalProvider(mode=mode).mode == mode
+
+
+def test_the_engine_name_check_is_the_public_validator_of_puremacro_llm(monkeypatch):
+    # Both constructors hand the name to puremacro.llm.validate_engine_name, "auto" included, and
+    # keep what it returns; nothing is probed.
+    seen = []
+
+    def validator(name):
+        seen.append(name)
+        if name == "foo":
+            raise ValueError(f"the facade's validator saw {name!r}")
+        return name
+
+    monkeypatch.setattr(puremacro.llm, "validate_engine_name", validator)
+    with pytest.raises(ValueError, match="the facade's validator saw 'foo'"):
+        LocalBackend(engine="foo")
+    assert LocalBackend(engine="auto").engine == "auto"
+    with pytest.raises(ValueError, match="the facade's validator saw 'foo'"):
+        LocalProvider(engine="foo")
+    assert seen == ["foo", "auto", "foo"]
+    monkeypatch.undo()                                           # the real validator again
+    with pytest.raises(ValueError, match=r"unknown engine 'foo'; expected 'auto' or one of \["):
+        LocalBackend(engine="foo")
+
+
+def test_local_backend_refuses_a_misspelt_mode_variable_at_construction(monkeypatch):
+    # mode=None defers to PUREMACRO_LLM_MODE at every call; a variable that names no mode is
+    # found at construction, not swallowed per record.
+    monkeypatch.setenv("PUREMACRO_LLM_MODE", "cahce")
+    with pytest.raises(ValueError, match="PUREMACRO_LLM_MODE"):
+        LocalBackend()
+    with pytest.raises(ValueError, match="PUREMACRO_LLM_MODE"):
+        LocalProvider()
+
+
+def test_score_llm_raises_on_a_misspelt_mode_variable_instead_of_zero_events(monkeypatch, capsys):
+    monkeypatch.setenv("PUREMACRO_LLM_MODE", "cahce")
+    monkeypatch.setattr(puremacro.llm.engines, "resolve_engine", _no_engine)
+    with pytest.raises(ValueError, match="PUREMACRO_LLM_MODE"):
+        score_llm([("2020-03-15", "text", "u")], backend=LocalBackend(), kind="fiscal")
+    assert "malformed" not in capsys.readouterr().out
+
+
+def test_get_default_backend_and_provider_refuse_a_misspelt_engine(monkeypatch, capsys):
+    # Not the Mock fallback: that is for "no engine found", not for a name that is no engine.
+    monkeypatch.setattr(puremacro.llm.engines, "available_engines", lambda **k: [])
+    with pytest.raises(ValueError, match="unknown engine 'olama'"):
+        get_default_backend(engine="olama")
+    with pytest.raises(ValueError, match="unknown engine 'olama'"):
+        get_default_provider(engine="olama")
+    assert capsys.readouterr().out == ""
+
+
+def test_get_default_backend_and_provider_keep_the_mock_fallback_for_an_absent_engine(monkeypatch, capsys):
+    monkeypatch.setattr(puremacro.llm.engines, "available_engines", lambda **k: ["mlx"])
+    assert isinstance(get_default_backend(engine="ollama"), MockBackend)
+    assert isinstance(get_default_provider(engine="ollama"), MockProvider)
+    assert capsys.readouterr().out.count("engine=mock") == 2
+
+
+def test_scoring_llm_no_longer_imports_ssl():
+    # Nothing in the module used it: the unverified-context fallback it once served is gone.
+    import puremacro.narrative.scoring.llm as scoring_llm
+    assert not hasattr(scoring_llm, "ssl")
 
 
 # The sha256 of each prompt template and of the paragraph prompt, as they are in 4.8.1

@@ -9,8 +9,10 @@ Through 4.8.1 this module held the local inference engines of the narrative scor
   ``HTTPEngine``, ``resolve_engine`` and ``resolve_model_id`` are the objects of
   :mod:`puremacro.llm`, not copies, so an ``except BackendUnavailable`` written here catches the
   ``LocalLLMUnavailable`` that the engines raise.
-* ``MODEL_ALIASES`` is the registry :data:`puremacro.llm.MODELS` laid out by engine, the way the
-  table of 4.8.1 was.
+* ``MODEL_ALIASES`` is a read-only view of the registry :data:`puremacro.llm.MODELS` laid out by
+  engine, the way the table of 4.8.1 was. It is not consulted: ``resolve_model_id`` reads the
+  registry, so an entry added here changes nothing, and a name outside the registry is the
+  engine's own id, which passes through unchanged.
 * ``chat`` is :func:`puremacro.llm.complete` under the signature of 4.8.1: it reads the
   completion cache first, and its ``base_url`` defaults to None, so that
   ``PUREMACRO_LLM_BASE_URL`` and then the default local servers (Ollama on 11434, OpenAI-compatible
@@ -49,7 +51,8 @@ __all__ = [
 #   llamacpp: a (repository, exact file name) pair
 #   ollama:   an `ollama pull` tag
 #   openai:   the "model" field sent to OpenAI-compatible servers
-# A name outside the table is not ours to interpret and reaches the engine unchanged.
+# A read-only view: resolve_model_id reads MODELS, not this dict. A name outside the registry is
+# not ours to interpret and reaches the engine unchanged.
 MODEL_ALIASES: dict[str, dict[str, str | tuple[str, str]]] = {
     alias: {"mlx": spec.mlx, "llamacpp": spec.llamacpp, "ollama": spec.ollama,
             "openai": spec.openai}

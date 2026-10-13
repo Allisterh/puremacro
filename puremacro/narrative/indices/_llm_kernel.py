@@ -185,6 +185,12 @@ class LocalProvider(LLMProvider):
     corpus is scored with no engine installed. ``name`` is ``"local"`` and ``model`` the
     canonical alias (:func:`puremacro.llm.canonical`), so the SQLite score cache rows of
     this kernel are shared by every engine. Robustly extracts the first float in the reply.
+
+    ``engine`` and ``mode`` are checked at construction, which probes nothing: an engine that
+    is neither ``"auto"`` nor a name of :mod:`puremacro.llm.engines`, or a mode outside
+    ``auto``, ``cache`` and ``off`` (``PUREMACRO_LLM_MODE`` included, when ``mode`` is None),
+    raises ``ValueError`` there, as the engine resolution of 4.8.1 did, instead of at the
+    first paragraph.
     """
 
     name = "local"
@@ -192,9 +198,10 @@ class LocalProvider(LLMProvider):
     def __init__(self, model: str = "default", *,
                  engine: str = "auto", base_url: str | None = None,
                  timeout: float = 120.0, mode: str | None = None):
-        from puremacro.llm import canonical
+        from puremacro.llm import canonical, current_mode, validate_engine_name
+        current_mode(mode)      # the mode given, else PUREMACRO_LLM_MODE: an unknown name raises
         self.model = canonical(model)
-        self.engine = engine
+        self.engine = validate_engine_name(engine)   # "auto" or a known name; nothing is probed
         self.base_url = base_url
         self.timeout = timeout
         self.mode = mode
@@ -225,11 +232,13 @@ class OllamaProvider(LocalProvider):
 
     The default is the registry alias ``qwen3-4b``, so the completion cache is keyed as for
     ``LocalProvider("default")``; the server receives its own tag (``qwen3:4b``). An Ollama tag
-    given as ``model`` reaches the server, and keys the cache, unchanged.
+    given as ``model`` reaches the server, and keys the cache, unchanged. ``base_url`` is None
+    unless given, so the server is ``PUREMACRO_LLM_BASE_URL``, else Ollama's default
+    ``http://localhost:11434``.
     """
 
     def __init__(self, model: str = "qwen3-4b", *,
-                 base_url: str = "http://localhost:11434", **kw):
+                 base_url: str | None = None, **kw):
         super().__init__(model=model, engine="ollama", base_url=base_url, **kw)
 
 

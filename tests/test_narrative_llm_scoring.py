@@ -135,8 +135,41 @@ def test_score_llm_legacy_response_without_timing_fields_works():
     assert events[0].implementation_profile == []
 
 
+# A timing field the model got wrong costs the profile, not the event: the event is kept with
+# the empty profile, which effective_profile reads as the announcement date.
+_EARLIER_QUARTER_DATES = ["2009-12-31", "2009-01-01", "2005-06-15", "1999-12-31"]
+_OUT_OF_RANGE_HORIZONS = [17, 20, 100, -1, -5, "many"]
+
+
+@pytest.mark.parametrize("impl_date", _EARLIER_QUARTER_DATES)
+def test_an_implementation_date_in_an_earlier_quarter_keeps_the_event_with_the_default_profile(impl_date):
+    stub = _StubBackend([_one_event_response(implementation_date=impl_date)])
+    events = score_llm(_one_text_input("2010-01-15"), backend=stub, country="USA")
+    assert len(events) == 1
+    assert events[0].implementation_profile == []
+    assert events[0].effective_profile == [(pd.Timestamp("2010-01-15"), 1.0)]
+
+
+@pytest.mark.parametrize("horizon", _OUT_OF_RANGE_HORIZONS)
+def test_an_out_of_range_horizon_keeps_the_event_with_the_default_profile(horizon):
+    stub = _StubBackend([_one_event_response(implementation_date=None, horizon_quarters=horizon)])
+    events = score_llm(_one_text_input("2010-01-15"), backend=stub, country="USA")
+    assert len(events) == 1
+    assert events[0].implementation_profile == []
+    assert events[0].effective_profile == [(pd.Timestamp("2010-01-15"), 1.0)]
+
+
+def test_a_record_date_that_is_not_a_date_raises_before_the_model_is_asked():
+    # The record's date is the caller's, not the model's: a bad one raised in 4.8.1 and raises
+    # here, instead of counting the record's events as malformed; and no completion is spent on it.
+    stub = _StubBackend([_one_event_response(implementation_date="2010-04-01")])
+    with pytest.raises(ValueError):
+        score_llm([("not-a-date", "press text", "https://example.org/x")], backend=stub, country="USA")
+    assert len(stub._responses) == 1
+
+
 # ---------------------------------------------------------------------------
-# Answers of a real qwen3-4b (Task 13), announced 2020-03-15. Through 4.8.1 a
+# Answers of a real qwen3-4b, announced 2020-03-15. Through 4.8.1 a
 # same-quarter implementation date gave the profile [(2020-01-01, 1.0)], which
 # predates the announcement, so NarrativeEvent raised and score_llm aborted.
 # ---------------------------------------------------------------------------
@@ -203,7 +236,7 @@ def test_an_unbuildable_event_is_dropped_not_raised(monkeypatch, capsys):
     real = llm_mod._profile_from_timing_fields
 
     def far_before_for_the_first(ev_dict, *, announcement):
-        if str(announcement) == "2020-03-15":
+        if pd.Timestamp(announcement) == pd.Timestamp("2020-03-15"):
             return [(pd.Timestamp("2015-01-01"), 1.0)]      # NarrativeEvent refuses this
         return real(ev_dict, announcement=announcement)
 

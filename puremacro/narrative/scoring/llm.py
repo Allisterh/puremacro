@@ -22,7 +22,6 @@ multilingual extraction).
 from __future__ import annotations
 
 import json
-from puremacro._optional_stdlib import ssl
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -314,15 +313,23 @@ class LocalBackend(_BackendBase):
     OpenAI-compatible), else ``PUREMACRO_LLM_BASE_URL`` or the default local servers.
     ``json_mode`` is off by default: the prompts ask for a JSON array, which an engine's
     object-only JSON mode would forbid.
+
+    ``engine`` and ``mode`` are checked at construction, which probes nothing: an engine that
+    is neither ``"auto"`` nor a name of :mod:`puremacro.llm.engines`, or a mode outside
+    ``auto``, ``cache`` and ``off`` (``PUREMACRO_LLM_MODE`` included, when ``mode`` is None),
+    raises ``ValueError`` there, as the engine resolution of 4.8.1 did. Found at the first
+    call instead, the error would be counted by :func:`score_llm` as a malformed event of
+    every record and the corpus would come back empty.
     """
 
     def __init__(self, model: str = "default", *,
                  engine: str = "auto", base_url: str | None = None,
                  timeout: float = 120.0, json_mode: bool = False,
                  mode: str | None = None, **kw):
-        from puremacro.llm import canonical
+        from puremacro.llm import canonical, current_mode, validate_engine_name
+        current_mode(mode)      # the mode given, else PUREMACRO_LLM_MODE: an unknown name raises
         super().__init__(model=canonical(model), **kw)
-        self.engine = engine
+        self.engine = validate_engine_name(engine)   # "auto" or a known name; nothing is probed
         self.base_url = base_url
         self.timeout = timeout
         self.json_mode = json_mode
@@ -341,11 +348,13 @@ class OllamaBackend(LocalBackend):
 
     The default is the registry alias ``qwen3-4b``, so the completion cache is keyed as for
     ``LocalBackend("default")``; the server receives its own tag (``qwen3:4b``). An Ollama tag
-    given as ``model`` reaches the server, and keys the cache, unchanged.
+    given as ``model`` reaches the server, and keys the cache, unchanged. ``base_url`` is None
+    unless given, so the server is ``PUREMACRO_LLM_BASE_URL``, else Ollama's default
+    ``http://localhost:11434``.
     """
 
     def __init__(self, model: str = "qwen3-4b", *,
-                 base_url: str = "http://localhost:11434", **kw):
+                 base_url: str | None = None, **kw):
         super().__init__(model=model, engine="ollama", base_url=base_url, **kw)
 
 
@@ -549,6 +558,10 @@ def score_llm(
     device offers) propagates too: it would be the same for every record. Any other
     failure of a record's call (a model that cannot load, a timeout) is counted
     with the malformed events and the loop goes on.
+
+    A record whose ``date`` is not a date raises ``ValueError`` before its text is
+    sent, as in 4.8.1: the date is the caller's, not the model's, and is never
+    counted as a malformed event.
     """
     if kind not in _PROMPTS:
         raise ValueError(f"kind {kind!r} not in {sorted(_PROMPTS)}")
@@ -571,6 +584,7 @@ def score_llm(
         else:
             date, text, source_url = record
             record_lang = language
+        announced = pd.Timestamp(date)      # the caller's date: a bad one raises, as in 4.8.1
         prompt = _build_prompt(
             kind=kind, language=record_lang, country=country,
             date=str(date), text=text,
@@ -588,10 +602,10 @@ def score_llm(
                 continue
             mag_key = _MAGNITUDE_KEY_BY_KIND[kind]
             magnitude_unit = _MAGNITUDE_UNIT_BY_KIND[kind]
-            profile = _profile_from_timing_fields(ev_dict, announcement=date)
+            profile = _profile_from_timing_fields(ev_dict, announcement=announced)
             try:
                 event = NarrativeEvent(
-                    date=pd.Timestamp(date),
+                    date=announced,
                     country=country,
                     magnitude=float(ev_dict[mag_key]),
                     magnitude_unit=magnitude_unit,
