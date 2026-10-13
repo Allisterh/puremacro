@@ -166,3 +166,25 @@ show_colab_offload_dialog("sw07_colab.ipynb")
 # 3. Al volver el cartucho desde Google Drive:
 # posterior = load_colab_result("sw07_posterior.pmz")
 ```
+
+---
+
+## Modelos locales en el iPad
+
+El Python propio de la app Juno (no el kernel Pyodide de juno.sh) incluye MLX y mlx-lm, así que
+`puremacro.llm` ejecuta un modelo de lenguaje en el propio iPad, y con él las funciones narrativas
+con LLM (`score_llm`, `llm_prob_kernel`). Los motores se eligen por lo que se puede importar,
+nunca por el sistema operativo, de modo que allí se elige MLX. Tres cosas que conviene saber:
+
+- **Mantenga Juno en primer plano** mientras se descarga el modelo y mientras se puntúa un
+  corpus; una app suspendida detiene ambas cosas. La caché de completados conserva cada
+  respuesta ya calculada.
+- **Los modelos persisten en el contenedor de la app.** El primer completado descarga el modelo
+  de referencia, `qwen3-4b` (unos 2.3 GB); las sesiones posteriores lo encuentran allí.
+- **Menos cómputo**: 117 GFLOPS en un producto de matrices float32 en un iPad Pro M4, frente a
+  430 en una Mac M3 Pro. Una caché construida en una Mac y llevada al iPad responde en modo
+  `cache` sin ningún modelo, y eso es también lo que puede hacer el navegador.
+
+Un completado con el mlx-lm de Juno aún no se ha verificado en un dispositivo. La instalación,
+la escalera de modelos, los modos, la distribución de una caché y la solución de problemas están
+en [Modelos de lenguaje locales](local_llm.md).

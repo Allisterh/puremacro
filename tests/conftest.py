@@ -264,7 +264,7 @@ class _LLMStub:
         The decoded JSON body of the last POST; None before the first.
     chat_content, score_content : str or None
         The ``content`` of the two chat replies (None is sent as JSON null).
-        They start as ``"[]"`` and ``"0.7"``, as in tests/test_local_engines.py.
+        They start as ``"[]"`` and ``"0.7"``: an empty list of events and a score.
     probe_reply : tuple of (int, str, bytes) or None
         When set, the ``(status, content type, body)`` both model lists answer
         with instead: a server that is up but is not an LLM server.

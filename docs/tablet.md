@@ -257,6 +257,25 @@ generate_colab_notebook(
 - **Guided Authentication**: Automatically generates cells prompting for Google account login (`auth.authenticate_user()`) and Drive mounting (`drive.mount('/content/drive')`).
 - **Cloud Acceleration**: Colab provides free cloud GPUs, multi-core CPUs, and expansive RAM, returning `.pmz` cartridges or LaTeX tables back to your Drive.
 
+## Local models on the iPad
+
+The Juno app's own Python (not the Pyodide kernel of juno.sh) ships MLX and mlx-lm, so
+`puremacro.llm` runs a language model on the iPad itself, and the narrative LLM features
+(`score_llm`, `llm_prob_kernel`) with it. Engines are chosen by what can be imported, never by
+the operating system, so MLX is picked there. Three things to know:
+
+- **Keep Juno in front** while the model downloads and while a corpus is scored; a suspended app
+  stops both. The completion cache keeps every answer already computed.
+- **Models persist in the app's container.** The first completion downloads the reference model,
+  `qwen3-4b` (about 2.3 GB); later sessions find it there.
+- **Compute is smaller**: 117 GFLOPS for a float32 matrix product on an iPad Pro M4, against 430
+  on an M3 Pro Mac. A cache built on a Mac and shipped to the iPad answers in `cache` mode with
+  no model at all, and that is also what the browser can do.
+
+A completion through Juno's mlx-lm build has not yet been verified on a device. Installation,
+the model ladder, the modes, shipping a cache and troubleshooting are in
+[Local language models](local_llm.md).
+
 ## Installing on Juno
 
 Every base dependency ships with Pyodide, so a dependency-resolving install

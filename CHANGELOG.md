@@ -126,6 +126,31 @@ Scalar-`r` calls are unchanged.
   (en, es, pt, de, fr, it). Any `callable(text, language) -> list[str]` (spaCy,
   NLTK) can replace it. `NarrativeCorpus.dtm(...)` and
   `NarrativeCorpus.segment("paragraph"|"sentence"|callable)` build on it.
+- `puremacro.llm`: one entry point for local language models (MLX, llama.cpp, Ollama and
+  OpenAI-compatible servers) with a device-independent completion cache and memory-based model
+  selection; the narrative LLM features now run on the iPad under Juno.
+  - `complete(prompt, *, model="default", engine="auto", mode=None, system=None,
+    max_tokens=256, temperature=0.0, json_mode=False, timeout=120.0, base_url=None,
+    cache=None)` and `chat(messages, **kw)`. `engine="auto"` takes the first available of MLX,
+    llama.cpp, Ollama on port 11434 and OpenAI-compatible servers on ports 8080 (llamafile,
+    llama-server) and 1234 (LM Studio); `base_url=` or `PUREMACRO_LLM_BASE_URL` names one
+    server instead.
+  - Modes `auto` (cache, then model, then store), `cache` (cache only; a miss raises `CacheMiss`,
+    an unreadable cache `CacheUnavailable`; no engine, socket or model) and `off` (model only),
+    from `mode=`, else `PUREMACRO_LLM_MODE`.
+  - `CompletionCache` (SQLite, `~/.cache/puremacro/llm_cache.sqlite` or `PUREMACRO_LLM_CACHE`)
+    keyed on the canonical model alias and the prompt before any chat template, so a row written
+    by one engine answers the same call on any other; `export`, `merge` and `stats` to ship one.
+  - A model ladder of three Qwen3 models (Apache-2.0): `qwen3-1.7b` (`small`), `qwen3-4b`
+    (`default`, the reference model) and `qwen3-8b` (`large`). `pick_model()` sizes the model to
+    the device's memory (`device_budget_gb()`), `ModelTooLarge` refuses a model that does not
+    fit, and `PUREMACRO_LLM_MODEL` changes what `default` means. The four models of 4.8.1 keep
+    their names.
+  - The Qwen3 thinking is switched off on every engine and any `<think>` block left is removed
+    (`strip_thinking`).
+  - `report()` lists the host, memory, budget, engines, chosen model, cache and mode.
+  - `pip install "puremacro[local-llm]"` now also installs `huggingface_hub`, through which
+    llama.cpp fetches the registry's GGUF files.
 
 ### Changed
 
@@ -142,7 +167,57 @@ Scalar-`r` calls are unchanged.
   tables, and one file for both would let each get in the other's way. If you had
   pointed `PUREMACRO_LLM_CACHE` at a score cache, set the new variable instead.
 
+- The local narrative backends go through `puremacro.llm.complete`, so they read and fill the
+  completion cache and follow the mode:
+  - `LocalBackend`, `LocalProvider`, `get_default_backend` and `get_default_provider` default to
+    `model="default"` (`qwen3-4b`; it was `qwen2.5-3b-instruct`), take a new `mode=` argument,
+    and resolve no engine when they are built, so a cache-backed `score_llm` or
+    `llm_prob_kernel` runs with no engine installed. `base_url` defaults to None:
+    `PUREMACRO_LLM_BASE_URL`, then the default local servers.
+  - `LocalBackend`'s `json_mode` now defaults to False: the prompts ask for a JSON array, which
+    llama.cpp's object-only JSON mode cannot produce.
+  - `LocalProvider.name` is `"local"` and its `model` the canonical alias, so the score cache of
+    `llm_prob_kernel` is shared by every engine. Score-cache rows written by 4.8.1, keyed on the
+    engine name, no longer hit.
+  - `OllamaBackend` and `OllamaProvider` default to the registry alias `qwen3-4b`: the server
+    still gets `qwen3:4b`, and the cache is shared with `LocalBackend("default")`. An explicit
+    Ollama tag passes through unchanged and keys the cache on the tag.
+  - In `cache` mode `score_llm` raises `CacheMiss` / `CacheUnavailable` for a record the cache
+    does not hold, instead of dropping it. `score_llm` also raises `ModelTooLarge` instead of
+    dropping every record as malformed.
+  - `get_default_backend` / `get_default_provider` look for engines with
+    `puremacro.llm.engines.available_engines(base_url=…)` (in `cache` mode, nothing is probed).
+    The print lines `[puremacro] local LLM backend: engine=…`,
+    `[puremacro] local LLM provider: engine=…`, `[puremacro] using MockBackend (zero events).`
+    and `[puremacro] using MockProvider.` are replaced by the install hint (when no engine is
+    found) plus one status line,
+    `[puremacro] local LLM: mode=<mode> engine=<name|cache|mock> model=<alias>`.
+  - The example `puremacro.examples.narrative_local_llm` uses `"default"` and
+    `ollama pull qwen3:4b`.
+- `puremacro.narrative._local_engines` is now a compatibility re-export of `puremacro.llm`. Its
+  `chat` reads the completion cache, and its `base_url` defaults to None
+  (`PUREMACRO_LLM_BASE_URL`, then the default local servers) instead of Ollama's URL.
+  `MODEL_ALIASES` is built from the registry, with exact GGUF file names instead of globs.
+- Local engines: MLX is chosen whenever `mlx` and `mlx_lm` can be imported, on any platform;
+  llama.cpp offloads every layer to the GPU (`n_gpu_layers=-1`; it ran on the CPU) and loads
+  registry files through `huggingface_hub`, which finds a downloaded file offline; `engine="auto"`
+  also tries OpenAI-compatible servers on ports 8080 and 1234; and a server URL ending in `/v1`
+  (LM Studio's documented form) is accepted.
+
 ### Fixed
+
+- The MLX engine was never selected on iPadOS: it required `platform.system() == "Darwin"` and
+  `platform.machine() == "arm64"`. Engines are now chosen by what can be imported.
+- `score_llm`:
+  - It aborted the whole corpus when an event's implementation date fell in the announcement
+    quarter, or `horizon_quarters` was 0. Such events now get an empty implementation profile
+    (implemented at the announcement), and any event `NarrativeEvent` refuses is dropped as
+    malformed instead of raising.
+  - Answers with `"sign": +1` (not valid JSON, but what the prompt's own schema line suggests)
+    or wrapped in `{"events": [...]}` are now parsed, instead of yielding zero events.
+- The llama.cpp ids of 4.8.1 were filename globs (`*Q4_K_M.gguf`), and the one for
+  `qwen2.5-3b-instruct` matched no file on macOS and Linux, where matching is case-sensitive.
+  Registry entries now name the exact file.
 
 - `fetch.registry` listed the 67 narrative text connectors as `redistributable=True`, although their terms are marked `unaudited`. They are now `redistributable=False` until someone reviews them.
 
@@ -203,6 +278,7 @@ Scalar-`r` calls are unchanged.
 
 - New guides, each with a Spanish twin and with code blocks that CI runs: `docs/dp.md` (declarative dynamic programming: VFI, EGM and DC-EGM, continuous time, Krusell-Smith, and what `dp` does not cover yet), `docs/micro_data.md` (the source registry, the ACS, CPS, SCF and ENIGH providers, design-based standard errors and the SCF-calibrated Aiyagari example) and `docs/text_analysis.md` (corpus storage and export, the tokenizer and the sparse document-term matrix). README, README.es and the site navigation link them. `docs/CREDENTIALS.md` now names the microdata providers as the `census` key's consumers.
 - The JOSS paper (`paper/paper.md`) describes `puremacro.dp`, the survey microdata and the text tools, uses the SCF example as its worked case, and adds dolo to the state of the field. It stays within the 1,750-word limit (1,742 by `tests/test_paper.py`'s count).
+- New guide `docs/local_llm.md` (Spanish twin `docs/es/local_llm.md`): what runs where, installation per platform (iPad, Mac, Windows, Linux, Colab), the model ladder with licences, the modes, shipping a completion cache, the environment variables, the iPad notes and `report()`. Its model-free code blocks run in CI. `docs/tablet.md` gains a section "Local models on the iPad"; README, README.es and the site navigation link the guide, and the README's local-model section now describes `puremacro.llm`.
 
 - Course lesson T02_F (Gertler-Karadi 2011, English and Spanish) reports percent deviations from `to_frame(units="pct")`. It multiplied level deviations by 100 and labelled them %, so it printed capital at -28.66% and bank net worth at -67.88% on impact where the true figures are -5.06% and -49.15% (`docs/ADVISORY.md`, 2026-09-30). The scorecard, the policy table, the three figures, the figures quoted in the text and the lesson's own checks are corrected; the spread in annualised basis points and Q, whose steady state is 1, were already right. The lesson now installs `puremacro>=4.4,<5`, the first versions with `units="pct"`. `tests/test_notebooks/test_curso_t02f_units.py` pins the printed values and, under `-m slow`, re-runs the lesson.
 

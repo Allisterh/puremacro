@@ -572,6 +572,14 @@ Connectors hit by WAF / bot-protection (EUR-Lex, EU Parliament, CBO) fall back
 to the Wayback Machine via the shared `puremacro.narrative.sources._wayback`
 helper. Coverage is constrained by what Wayback has snapshotted.
 
+**Local language models** (`puremacro.llm`). The LLM features above (`score_llm`,
+`llm_prob_kernel`) run on a small model on the user's own device, with no API key:
+`puremacro.llm.complete(prompt)` picks MLX (Mac, and the iPad under the Juno app), llama.cpp,
+Ollama or an OpenAI-compatible server, and sizes the model (Qwen3 1.7B, 4B or 8B, Apache-2.0) to
+the device's memory. Every answer goes into a completion cache keyed by model and prompt, not by
+engine, so a cache built once on a Mac answers the same calls on an iPad, on Windows, in Colab or
+in the browser, where `cache` mode reads it with no model installed. See `docs/local_llm.md`.
+
 **Data pipelines** (newly absorbed; see `ARCHITECTURE.md`)
 
 - **Fetchers** (`fetch.*`) — FRED / ALFRED, SDMX-CSV
@@ -895,7 +903,7 @@ Install an engine once (any one):
 
 ```bash
 pip install "puremacro[local-llm]"     # MLX (Apple Silicon) + llama.cpp (any OS)
-# or install Ollama (https://ollama.com) — no Python deps — then:  ollama pull qwen2.5:3b
+# or install Ollama (https://ollama.com) — no Python deps — then:  ollama pull qwen3:4b
 ```
 
 Then swap in a local backend (same signatures as the paid backends):
@@ -903,20 +911,24 @@ Then swap in a local backend (same signatures as the paid backends):
 ```python
 # requires: a local LLM engine (llama-cpp-python or mlx-lm) and a scored `records` corpus
 from puremacro.narrative.scoring import score_llm, LocalBackend
-events = score_llm(records, backend=LocalBackend("qwen2.5-3b-instruct", engine="auto"))
+events = score_llm(records, backend=LocalBackend("default", engine="auto"))
 
 from puremacro.narrative.indices import llm_prob_kernel, LocalProvider
-idx = llm_prob_kernel(records, provider=LocalProvider("qwen2.5-3b-instruct"),
+idx = llm_prob_kernel(records, provider=LocalProvider("default"),
                       category="economic uncertainty")
 ```
 
 `engine="auto"` picks the best installed engine (Apple GPU via MLX → llama.cpp →
-a running Ollama server; for LM Studio / vLLM / any OpenAI-compatible server,
-pass `engine="openai"` with `base_url=`). Models: `qwen2.5-3b-instruct` (default),
-`gemma2-2b` (Google), `llama3.2-3b` (Meta), `phi3.5` (Microsoft), or any raw
-engine model id. See `puremacro/examples/narrative_local_llm.py` and the
-`local_llm_uncertainty` notebook. (Local inference is desktop-only — it does not
-run inside the browser playground.)
+a running Ollama server → an OpenAI-compatible server on port 8080 or 1234; for
+any other server pass `base_url=`). Models: `"default"` is the reference model
+`qwen3-4b`; `"small"` (`qwen3-1.7b`) and `"large"` (`qwen3-8b`) are the other
+rungs, and the 4.8.1 names (`qwen2.5-3b-instruct`, `gemma2-2b`, `llama3.2-3b`,
+`phi3.5`) or any raw engine model id still work. Answers are cached by model and
+prompt, so `PUREMACRO_LLM_MODE=cache` scores a corpus that was scored once
+anywhere, with no engine installed. See `docs/local_llm.md`,
+`puremacro/examples/narrative_local_llm.py` and the `local_llm_uncertainty`
+notebook. (Local inference runs on desktops and on the iPad under the Juno app;
+inside the browser playground only the cache answers.)
 
 ## Pyodide compatibility
 
@@ -1093,6 +1105,7 @@ All notebooks strictly adhere to the Pyodide contract and the 7-section pedagogi
 - **`docs/forecast.md`** — Penalized macroeconomic forecasting: Coordinate-descent Elastic Net and Adaptive Lasso.
 - **`docs/reporting.md`** — Publication reporting pipeline (LaTeX tabular, Typst tables, Markdown, significance stars).
 - **`docs/tablet.md`** — Running on iPad, Juno, and WebAssembly, with Google Colab compute offloading.
+- **`docs/local_llm.md`** — Local language models (`puremacro.llm`) on the iPad, Mac, Windows, Linux and Colab: engines, the Qwen3 model ladder, modes and the shippable completion cache (Spanish twin under `docs/es/`).
 - **`docs/benchmarks.md`** — Performance and computational benchmarks across econometric engines.
 - **`docs/national_accounts.md`** — OECD Quarterly National Accounts extraction, deflators, and accounting identities.
 - **`docs/real_time_data.md`** — Real-time data vintages, revision triangles, and Mankiw-Shapiro news-vs-noise testing.
