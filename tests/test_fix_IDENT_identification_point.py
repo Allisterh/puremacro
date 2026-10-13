@@ -1,6 +1,6 @@
 """identification() evaluates every Jacobian column at the requested parameter point.
 
-Regression tests for the IDENT defect (reviews/2026-09-30-notebook-review):
+Regression tests for the IDENT defect (the 2026-09-30 notebook review):
 before the fix the base state space, the shock covariance, the analytic
 SE_/CORR_/ME_ columns and the one-sided fallback baseline were all taken at the
 model's calibration, and each structural column at (user theta_j, calibrated

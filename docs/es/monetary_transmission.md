@@ -42,7 +42,7 @@ Las participaciones de la literatura son las de Kaplan, Moll y Violante (2018): 
 
 ### 1.3 Recetas Prácticas en Python
 
-#### Receta 1: Alza de Tasa de Política Monetaria (25 bps)
+#### Receta 1: Alza de Tasa de Política Monetaria (25 pb trimestrales, 100 pb anualizados)
 ```python
 from puremacro.models import MonetaryTransmissionSimulator
 
@@ -60,7 +60,7 @@ sim_mon = MonetaryTransmissionSimulator(
 # PMC agregada en estado estacionario
 print(f"PMC Agregada HANK: {sim_mon.steady_state_mpc:.4f}")
 
-# Simular alza de 25 bps con persistencia rho=0.7 en 40 trimestres
+# Simular alza de 25 pb trimestrales (100 pb anualizados) con persistencia rho=0.7 en 40 trimestres
 res_mon = sim_mon.simulate_rate_shock(magnitude=0.0025, rho=0.7, T=40)
 
 print(repr(res_mon))

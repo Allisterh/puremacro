@@ -333,7 +333,7 @@ def test_the_absent_dep_blocker_actually_blocks():
 # Standard-library modules that Pyodide 0.28 does not vendor
 # ---------------------------------------------------------------------------
 #
-# The 2026-10-03 headless gallery run (reviews/2026-10-03-pyodide-gallery) found
+# The 2026-10-03 headless gallery run found
 # that importing ``puremacro.narrative`` failed on Pyodide 0.28.3 because the
 # import chain reached ``import sqlite3`` and ``import ssl`` at module level;
 # both are unvendored there (load-on-request) while Pyodide 314 and CPython

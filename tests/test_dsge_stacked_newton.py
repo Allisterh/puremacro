@@ -865,9 +865,9 @@ def test_converged_start_takes_zero_steps(ramsey):
     np.testing.assert_allclose(res.to_numpy(), np.tile(y_ss, (10, 1)), rtol=0.0, atol=1e-12)
     # step_tol=None (or inf) is the residual-only rule: accepted without any linear solve
     for residual_only in (None, float("inf")):
-        io_rule = solve_stacked_newton_krylov(prob, np.tile(y_ss, (10, 1)), tol=1e-8, step_tol=residual_only)
-        assert io_rule.converged and io_rule.iterations == 0 and io_rule.linear_history == ()
-        assert io_rule.metadata["converged_by"] == "residual" and io_rule.metadata["step_tol"] is None
+        residual_rule = solve_stacked_newton_krylov(prob, np.tile(y_ss, (10, 1)), tol=1e-8, step_tol=residual_only)
+        assert residual_rule.converged and residual_rule.iterations == 0 and residual_rule.linear_history == ()
+        assert residual_rule.metadata["converged_by"] == "residual" and residual_rule.metadata["step_tol"] is None
 
 
 # ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-PROJ = Path(__file__).resolve().parents[2]   # uncertainty_examples/puremacro
+PROJ = Path(__file__).resolve().parents[2]   # the repository root
 
 
 def _load(path: Path, name: str):

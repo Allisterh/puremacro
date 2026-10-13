@@ -42,7 +42,7 @@ The literature shares are those of Kaplan, Moll, and Violante (2018): indirect e
 
 ### 1.3 Python Usage & Transmission Recipes
 
-#### Recipe 1: Monetary Policy Tightening (25 bps Hike)
+#### Recipe 1: Monetary Policy Tightening (25 bp Quarterly Hike, 100 bp Annualized)
 ```python
 from puremacro.models import MonetaryTransmissionSimulator
 
@@ -60,7 +60,7 @@ sim_mon = MonetaryTransmissionSimulator(
 # Steady-state aggregate MPC
 print(f"HANK Steady-State MPC: {sim_mon.steady_state_mpc:.4f}")
 
-# Simulate a 25 bps rate hike with persistence rho=0.7 over 40 quarters
+# Simulate a 25 bp quarterly (100 bp annualized) rate hike with persistence rho=0.7 over 40 quarters
 res_mon = sim_mon.simulate_rate_shock(magnitude=0.0025, rho=0.7, T=40)
 
 print(repr(res_mon))

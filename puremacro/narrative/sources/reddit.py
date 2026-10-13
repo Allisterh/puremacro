@@ -25,7 +25,7 @@ from typing import Iterator
 import requests
 
 
-_USER_AGENT = "puremacro/0.28 (https://github.com/jalonso1979/uncertainty_examples)"
+_USER_AGENT = "puremacro (+https://github.com/jalonso1979/puremacro)"
 
 
 def iter_reddit(

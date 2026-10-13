@@ -134,8 +134,9 @@ def cached_get(
         cacheable = False
 
     # Many federal data hosts (BLS Akamai, FRB) block default python-requests UA.
-    # Set a research-identifying default; callers can override via headers=.
-    final_headers = {"User-Agent": "uncertainty_examples/1.0 (research@itam.mx)"}
+    # Set an identifying default; callers can override via headers=.
+    from .. import __version__
+    final_headers = {"User-Agent": f"puremacro/{__version__} (+https://github.com/jalonso1979/puremacro)"}
     if headers:
         final_headers.update(headers)
     try:

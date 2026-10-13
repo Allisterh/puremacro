@@ -1,4 +1,4 @@
-"""Shared regime dates across the uncertainty_examples library.
+"""Shared regime dates across the puremacro library.
 
 Two distinct schemes — pick by *scope*:
 

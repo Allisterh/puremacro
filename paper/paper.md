@@ -27,19 +27,21 @@ bibliography: paper.bib
      public ORCID registry (checked 2026-09-13); confirm it is yours. Set `date` to
      the day you submit. -->
 
-<!-- Evidence snapshot: this draft reports measurements from 4.6.0.
-     Every count in the text (modules, lines, tests, swept library modules,
-     validation checks, notebook pairs, commits) was recomputed from the 4.6.0 tree
-     (commit d2634362) on 2026-10-04, and `scorecard.png` was regenerated from
-     `validation.scorecard()` on the same tree: 114 checks, 16 subsystems,
-     21 external (14 package + 5 SciPy + 2 published) / 31 analytical / 62 internal,
-     all passing (4.4.0 had 110: 20 / 31 / 59; 3.4.0 had 107: 19 / 29 / 59).
-     Package development has reached 4.8.1; these counts and measurements have
-     not been refreshed since. The text was extended on 2026-10-12 to cover
-     `dp`, the survey microdata and `puremacro.text` (unreleased at the time).
-     The krusellsmith1998 and dolo entries in paper.bib were not checked
-     against Crossref (no access from the drafting session). Re-run the commands in RELEASING.md §6.5 on the
-     chosen submission commit before submitting. -->
+<!-- Evidence snapshot. The validation-gallery counts (checks, subsystems, kinds
+     of reference) and `scorecard.png` were recomputed from `validation.scorecard()`
+     on the 5.0 development tree on 2026-10-13, after the trade modules left the
+     package: 110 checks, 15 subsystems, 20 external (13 package + 5 SciPy +
+     2 published) / 31 analytical / 59 internal, all passing (4.6.0 had 114 with
+     four trade cases; 4.4.0 had 110: 20 / 31 / 59; 3.4.0 had 107: 19 / 29 / 59).
+     Every other count in the text (modules, lines, tests, swept library modules,
+     notebook pairs, commits) was recomputed from the 4.6.0 tree (commit d2634362)
+     on 2026-10-04 and has not been refreshed since; the module and line counts
+     include the trade modules that 5.0 removes. The text was extended on
+     2026-10-12 to cover `dp`, the survey microdata and `puremacro.text`
+     (unreleased at the time). The krusellsmith1998 and dolo entries in paper.bib
+     were not checked against Crossref (no access from the drafting session).
+     Re-run the commands in RELEASING.md §6.5 on the chosen submission commit
+     before submitting. -->
 
 # Summary
 
@@ -63,8 +65,8 @@ economies, including sequence-space HANK models
 [@aiyagari1994; @young2010; @auclert2021]; continuous-time models [@achdou2022];
 projection methods on Chebyshev, finite-element and Smolyak grids
 [@judd1992; @mcgrattan1996; @smolyak1963; @kruegerkubler2004]; linear
-rational-expectations (DSGE) models; quantitative spatial and trade models
-[@allenarkolakis2014; @caliendoparro2015]; and climate–economy models
+rational-expectations (DSGE) models; quantitative spatial models
+[@allenarkolakis2014]; and climate–economy models
 [@nordhaus2018; @golosov2014].
 
 Dynamic programs are declared rather than coded: in the spirit of Dynare's model
@@ -97,8 +99,8 @@ and conventions, sometimes with a commercial licence. Installation problems
 consume class time, and students' managed laptops or tablets may not support
 the full stack.
 
-`puremacro` is written for that audience: instructors, students and applied
-researchers in macroeconomics. It puts common estimators and models behind one
+`puremacro` is written for instructors, students and applied researchers in
+macroeconomics. It puts common estimators and models behind one
 set of conventions (shared arguments such as `lags`, `horizon` and `ci`, and
 immutable result objects with plotting and table export) and ships the evidence
 needed to trust its output: galleries of checks that users can run themselves.
@@ -170,7 +172,7 @@ obtain by automatic differentiation must be coded by hand. The browser is a
 best-effort target rather than a supported one: Parquet and Excel files need
 engines that not every Pyodide distribution provides. On
 3 October 2026 a headless Node.js harness ran the whole validation gallery inside Pyodide 0.28.3
-and 314.0.5 (the playground's version): all 114 checks passed on both, with four
+and 314.0.5 (the playground's version): every check passed on both, with four
 margins differing from native arithmetic by at most $5 \times 10^{-4}$.
 
 <!-- AUTHOR: re-run `python tools/pyodide_gallery.py` on the submitted commit and
@@ -185,20 +187,19 @@ the import invariant and a snapshot of the public API.
 
 ## Verification
 
-The measurements below describe version 4.6.0 (commit `d2634362`); they have not
-been refreshed for 4.7.0.
+The gallery counts below were recomputed on 2026-10-13 on the 5.0 development tree;
+the scale measurements above describe version 4.6.0 (commit `d2634362`).
 
-The validation gallery, `puremacro.validation.scorecard()`, runs 114 checks across
-16 subsystems in under a minute, with none of the oracle packages installed; all
+The validation gallery, `puremacro.validation.scorecard()`, runs 110 checks across
+15 subsystems in under a minute, with none of the oracle packages installed; all
 pass (\autoref{fig:scorecard}). The checks differ in strength, and each records
-its reference. Twenty-one compare against an external reference: stored outputs of
-statsmodels, arch, linearmodels and esda, SciPy results computed at run time, a
-published table, or, for the trade model, the solution of the author's legacy
-MATLAB implementation. Agreement with independent implementations is typically at
+its reference. Twenty compare against an external reference: stored outputs of
+statsmodels, arch, linearmodels and esda, SciPy results computed at run time, or a
+published table. Agreement with independent implementations is typically at
 machine precision (median relative difference of order $10^{-15}$); the exception
 is GARCH, whose estimates differ from arch's by up to 0.35% because the two
 packages use different optimisers. Thirty-one checks compare against analytical
-results and 62 test internal consistency.
+results and 59 test internal consistency.
 
 A separate replication gallery, `puremacro.replication.scorecard()`, reproduces
 published estimates of the return to schooling [@card1995], a textbook logit of
@@ -208,7 +209,7 @@ incomplete-markets models [@huggett1993; @aiyagari1994]: the equilibrium interes
 rate lies below the rate of time preference and falls as income risk rises. Most model solvers (sequence-space, continuous-time, spatial,
 and climate) are covered by unit tests but not yet by gallery checks.
 
-![The validation gallery of `puremacro` 4.6.0: 114 checks in 16 subsystems, by kind of reference; all pass. *External reference*: stored outputs of statsmodels, arch, linearmodels or esda, SciPy computed at run time, or a published table. *Analytical result*: a closed form, or an effect planted in simulated data. *Internal consistency*: agreement between alternative algorithms, identities that correct output must satisfy, or recovery of parameters from simulated data. Regenerate with `python paper/make_scorecard_fig.py`.\label{fig:scorecard}](scorecard.png){ width=80% }
+![The validation gallery of `puremacro`: 110 checks in 15 subsystems, by kind of reference; all pass. *External reference*: stored outputs of statsmodels, arch, linearmodels or esda, SciPy computed at run time, or a published table. *Analytical result*: a closed form, or an effect planted in simulated data. *Internal consistency*: agreement between alternative algorithms, identities that correct output must satisfy, or recovery of parameters from simulated data. Regenerate with `python paper/make_scorecard_fig.py`.\label{fig:scorecard}](scorecard.png){ width=80% }
 
 # Research impact statement
 
@@ -267,7 +268,7 @@ and CI.
          families. Confirm that no other assistant (Copilot, ChatGPT, Cursor,
          Gemini, ...) was used without leaving a trailer.
      (2) TOOLS AND MODELS, PRIVATE PERIOD (2026-04-28 to 2026-07-20, inside the
-         private `uncertainty_examples` monorepo and squashed into the first
+         private monorepo and squashed into the first
          public commit, so no trailer records it): list every AI tool and model
          used then, and say roughly how much of the code it produced. The
          sentence above currently covers only the public repository.

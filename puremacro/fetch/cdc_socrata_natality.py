@@ -27,6 +27,16 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
+def _user_agent() -> str:
+    from .. import __version__
+    return f"puremacro/{__version__} (+https://github.com/jalonso1979/puremacro)"
+
+
+def _user_agent() -> str:
+    from .. import __version__
+    return f"puremacro/{__version__} (+https://github.com/jalonso1979/puremacro)"
+
+
 _SOCRATA_URL = "https://data.cdc.gov/resource/hmz2-vwda.json"
 _PAGE_LIMIT = 5000
 
@@ -71,7 +81,7 @@ def _socrata_get(params: dict, *, timeout: int = 60) -> list[dict]:
         q["$limit"] = _PAGE_LIMIT
         q["$offset"] = offset
         resp = requests.get(_SOCRATA_URL, params=q, timeout=timeout,
-                            headers={"User-Agent": "uncertainty_examples/1.0 (research@itam.mx)"})
+                            headers={"User-Agent": _user_agent()})
         resp.raise_for_status()
         chunk = resp.json()
         if not chunk:

@@ -725,7 +725,6 @@ def _format(findings, limit=200):
     return f"{len(findings)} research-guard finding(s): {head}\n" + "\n".join(lines)
 
 
-@pytest.mark.xfail(strict=True, reason="green once Task 8 lands")
 def test_the_tree_has_no_research_content():
     findings = scan_entries(git_entries(REPO))
     if findings:
