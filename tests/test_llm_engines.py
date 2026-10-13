@@ -1,11 +1,11 @@
 # tests/test_llm_engines.py
 """Engines of ``puremacro.llm`` (spec section 3.2).
 
-The first block is the contract of the task brief, with the controller's rulings applied: the
-stub servers are the shared ``llm_stub_server`` and ``llm_stub_404_server`` fixtures of
+The first block is the contract of that section, with the decisions taken while it was built:
+the stub servers are the shared ``llm_stub_server`` and ``llm_stub_404_server`` fixtures of
 tests/conftest.py, and llama.cpp switches thinking off through the model's chat handler
 (``test_llamacpp_wraps_chat_handler_when_thinking``) rather than with a ``/no_think`` suffix.
-The blocks below pin the rest of the rulings (what each engine sends, the server order and
+The blocks below pin the rest of those decisions (what each engine sends, the server order and
 URLs, the probe timeout, the error paths) and the rule that keeps the module importable where
 mlx, llama.cpp and sockets do not exist.
 
@@ -38,7 +38,7 @@ _ENV_URL = "PUREMACRO_LLM_BASE_URL"     # removed before every test by tests/con
 _CALL = dict(max_tokens=8, temperature=0.0, json_mode=False)
 
 
-# ---------------------------------------------------------------- the brief's contract
+# ---------------------------------------------------------------- the contract
 
 def test_mlx_available_by_import_not_platform(monkeypatch):
     import importlib.util, platform, sys
@@ -264,8 +264,42 @@ def test_http_engine_rejects_an_unknown_api():
         E.HTTPEngine(base_url="http://h:1", api="vllm")
 
 
+def test_http_engine_defaults_to_the_local_ollama_server_as_in_4_8_1():
+    """``HTTPEngine()`` is a compatibility name (re-exported by puremacro.narrative._local_engines)
+    and 4.8.1 built it without arguments: Ollama on the first default server."""
+    from puremacro.narrative import _local_engines as le
+
+    eng = E.HTTPEngine()
+    assert (eng.base_url, eng.api, eng.name) == ("http://localhost:11434", "ollama", "ollama")
+    assert eng.base_url == E.DEFAULT_SERVERS[0][1] and (eng.timeout, eng.probe_timeout) == (120.0, 3.0)
+    assert le.HTTPEngine is E.HTTPEngine and le.HTTPEngine().base_url == "http://localhost:11434"
+    assert E.HTTPEngine(api="openai").name == "openai"                 # each default stands alone
+    assert E.HTTPEngine(base_url="http://h:1/").api == "ollama"
+
+
+@pytest.mark.parametrize("name", ["auto", "mlx", "llamacpp", "ollama", "openai"])
+def test_validate_engine_name_returns_auto_and_the_four_engine_names(name):
+    assert E.validate_engine_name(name) == name
+    assert "validate_engine_name" in E.__all__
+
+
+@pytest.mark.parametrize("name", ["olama", "MLX", " mlx", "gpt", "", None, 3])
+def test_validate_engine_name_rejects_the_rest_with_the_resolvers_message_and_probes_nothing(monkeypatch, name):
+    """What ``resolve_engine`` would raise for the name, raised without constructing an engine, so
+    that callers (the narrative backends) can refuse a typo when they are built."""
+    for cls in (E.MLXEngine, E.LlamaCppEngine, E.HTTPEngine):
+        monkeypatch.setattr(cls, "available", lambda self: pytest.fail("probed"))
+    with pytest.raises(ValueError) as checked:
+        E.validate_engine_name(name)
+    with pytest.raises(ValueError) as resolved:
+        E.resolve_engine(name)
+    assert str(checked.value) == str(resolved.value)
+    assert repr(name) in str(checked.value) and "'auto'" in str(checked.value)
+    assert "['mlx', 'llamacpp', 'ollama', 'openai']" in str(checked.value)
+
+
 @pytest.mark.parametrize("raw,expected", [
-    ("<think>\n\n</think>\n\n0.3", "0.3"),                 # what /no_think leaves (Task 1 spike)
+    ("<think>\n\n</think>\n\n0.3", "0.3"),                 # what /no_think leaves
     ("<think>a</think>x <think>b</think>y", "x y"),
     ("0.4 <think>cut off by the token limit", "0.4"),
     ("Use the </think> tag.", "Use the </think> tag."),    # a closing tag alone is not thinking
@@ -339,12 +373,34 @@ def _fake_mlx_lm(monkeypatch, *, template_returns="P", reply="0.5", load_error=N
     return seen
 
 
-def test_mlx_without_thinking_applies_the_template_as_before(monkeypatch):
+def test_mlx_applies_the_template_with_thinking_off_whatever_the_flag(monkeypatch):
+    """``enable_thinking=False`` goes to the template on every call, not only when the facade knows
+    the model thinks: a template without the variable ignores the keyword, and a Qwen3 named by its
+    repository id (which the registry does not know) would otherwise think its token budget away."""
     seen = _fake_mlx_lm(monkeypatch, reply=" 0.6 ")
     assert E.MLXEngine().complete("mid", "hola", **_CALL) == "0.6"       # a 4.8.1-style call
     assert seen["template"] == [{"messages": [{"role": "user", "content": "hola"}],
-                                 "add_generation_prompt": True}]
+                                 "add_generation_prompt": True, "enable_thinking": False}]
     assert seen["generate"] == [{"model": "MODEL", "prompt": "P", "max_tokens": 8, "verbose": False}]
+    E.MLXEngine().complete("mid", "hola", thinking=False, **_CALL)
+    assert seen["template"][-1]["enable_thinking"] is False
+
+
+def test_mlx_switches_thinking_off_for_a_pass_through_model_id_too(monkeypatch):
+    """Through the facade: a model outside the registry reaches MLX under its own id with
+    ``thinking=False`` (the facade cannot know it thinks), the template still gets
+    ``enable_thinking=False``, the think block that comes back is stripped, and no token allowance
+    is added (the key keeps the caller's ``max_tokens``)."""
+    import puremacro.llm as L
+
+    seen = _fake_mlx_lm(monkeypatch, reply="<think>\n\n</think>\n\n0.5")
+    monkeypatch.setattr(E.MLXEngine, "available", lambda self: True)
+    model_id = "mlx-community/Qwen3-4B-8bit"
+    assert L.complete("hola", model=model_id, engine="mlx", mode="off", max_tokens=8) == "0.5"
+    assert seen["load"] == [(model_id, {})]
+    assert seen["template"] == [{"messages": [{"role": "user", "content": "hola"}],
+                                 "add_generation_prompt": True, "enable_thinking": False}]
+    assert seen["generate"][0]["max_tokens"] == 8
 
 
 @pytest.mark.parametrize("system", [None, ""])
@@ -690,6 +746,24 @@ def test_the_servers_own_error_message_is_passed_on(llm_stub_server):
         E.HTTPEngine(base_url=llm_stub_server.url, api="openai").complete(
             "qwen3-4b", "hola", system=None, thinking=True, **_CALL)
     assert not isinstance(ei.value, E.BackendUnavailable)
+
+
+def test_a_servers_top_level_message_is_passed_on_when_there_is_no_error_field(llm_stub_server):
+    """vLLM answers ``{"object": "error", "message": ..., "code": 404}``: neither Ollama's ``error``
+    string nor the OpenAI ``error.message`` object. The message is passed on all the same."""
+    vllm = {"object": "error", "message": "The model `qwen3-8b` does not exist.",
+            "type": "NotFoundError", "code": 404}
+    assert E._server_message(json.dumps(vllm)) == "The model `qwen3-8b` does not exist."
+    assert E._server_message(json.dumps({"error": "e", "message": "m"})) == "e"    # `error` first
+    assert E._server_message(json.dumps({"error": {"message": "e"}, "message": "m"})) == "e"
+    assert E._server_message(json.dumps({"message": {"text": "m"}})) == ""         # not a string
+    assert E._server_message(json.dumps({"code": 404})) == ""
+    assert E._server_message(json.dumps(["message"])) == "" and E._server_message("") == ""
+    llm_stub_server.chat_reply = (404, "application/json", json.dumps(vllm).encode())
+    with pytest.raises(E.LocalLLMUnavailable, match="does not exist") as ei:
+        E.HTTPEngine(base_url=llm_stub_server.url, api="openai").complete(
+            "qwen3-8b", "hola", system=None, thinking=True, **_CALL)
+    assert "HTTP 404" in str(ei.value) and "'qwen3-8b'" in str(ei.value)
 
 
 class _UnreadableBody(io.BytesIO):

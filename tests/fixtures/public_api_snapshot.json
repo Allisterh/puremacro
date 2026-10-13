@@ -1763,7 +1763,8 @@
       "pick_model",
       "report",
       "resolve_model_id",
-      "strip_thinking"
+      "strip_thinking",
+      "validate_engine_name"
     ],
     "puremacro.llm.cache": [
       "CACHE_FORMAT",
@@ -1786,7 +1787,8 @@
       "MLXEngine",
       "available_engines",
       "resolve_engine",
-      "strip_thinking"
+      "strip_thinking",
+      "validate_engine_name"
     ],
     "puremacro.llm.models": [
       "ALIASES",

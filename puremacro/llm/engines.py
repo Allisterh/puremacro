@@ -27,13 +27,20 @@ Three engines run a model on the user's own machine, and :func:`resolve_engine` 
   ``http://localhost:1234/v1`` that LM Studio and OpenAI clients document names the same server
   as ``http://localhost:1234`` and ``http://h:1/v1/v1`` names ``http://h:1/v1``.
 * **Thinking.** ``complete(..., thinking=True)`` says that the model thinks before it answers
-  (``ModelSpec.thinking``) and that the thinking is to be switched off for the call. MLX
-  applies the chat template with ``enable_thinking=False``; llama.cpp passes the same switch to
-  the template through the model's chat handler, or appends ``/no_think`` to the user turn when
-  no handler can be found; Ollama gets ``"think": false``; an OpenAI-compatible server gets both
+  (``ModelSpec.thinking``) and that the thinking is to be switched off for the call. llama.cpp
+  then passes ``enable_thinking=False`` to the template through the model's chat handler, or
+  appends ``/no_think`` to the user turn when no handler can be found; Ollama gets
+  ``"think": false``; an OpenAI-compatible server gets both
   ``chat_template_kwargs={"enable_thinking": false}`` and the ``/no_think`` suffix, since
-  servers differ in which of the two they honour. Whatever thinking gets through is removed by
-  :func:`strip_thinking`, which every engine applies to what it returns.
+  servers differ in which of the two they honour. MLX applies the chat template with
+  ``enable_thinking=False`` on every call, whatever ``thinking`` says: a template without the
+  variable ignores the keyword, and a thinking model named by its repository id, which the
+  registry does not know, would otherwise think its token budget away. Whatever thinking gets
+  through is removed by :func:`strip_thinking`, which every engine applies to what it returns.
+* **Names.** :func:`validate_engine_name` says whether a string is ``"auto"`` or one of the four
+  engine names, with the ``ValueError`` :func:`resolve_engine` would raise and without
+  constructing or probing anything, so a caller that resolves its engine later can refuse a typo
+  when it is built.
 * **System prompt.** A non-empty ``system`` text becomes a leading ``{"role": "system"}``
   message on every engine.
 * **Errors.** :class:`LocalLLMUnavailable`, a :class:`BackendUnavailable`, means that the engine
@@ -76,6 +83,7 @@ __all__ = [
     "available_engines",
     "resolve_engine",
     "strip_thinking",
+    "validate_engine_name",
 ]
 
 _ENV_BASE_URL = "PUREMACRO_LLM_BASE_URL"
@@ -136,8 +144,9 @@ class Engine(Protocol):
 
         ``model_id`` is already this engine's id for the model. ``system``, when not empty, is
         sent as a leading system message. ``thinking`` is True for a model that thinks before
-        it answers; the engine then switches the thinking off for this call. Both have the
-        defaults every engine gives them, so a call written for 4.8.1, without either, is valid.
+        it answers; the engine then switches the thinking off for this call (MLX switches it
+        off on every call). Both have the defaults every engine gives them, so a call written
+        for 4.8.1, without either, is valid.
         """
         ...
 
@@ -243,18 +252,19 @@ class MLXEngine:
     def complete(self, model_id: str, prompt: str, *, system: str | None = None,
                  max_tokens: int, temperature: float, json_mode: bool,
                  thinking: bool = False) -> str:
-        """The model's reply; see :meth:`Engine.complete`."""
+        """The model's reply; see :meth:`Engine.complete`.
+
+        The chat template gets ``enable_thinking=False`` whatever ``thinking`` says (see the
+        module docstring): a Qwen3 template honours it, any other ignores the keyword.
+        """
         try:
             from mlx_lm import generate
         except ImportError as exc:
             raise _missing("mlx-lm", exc) from exc
         model, tokenizer = self._load(model_id)
         messages = _messages(prompt, system)
-        if thinking:
-            templated = tokenizer.apply_chat_template(messages, add_generation_prompt=True,
-                                                      enable_thinking=False)
-        else:
-            templated = tokenizer.apply_chat_template(messages, add_generation_prompt=True)
+        templated = tokenizer.apply_chat_template(messages, add_generation_prompt=True,
+                                                  enable_thinking=False)
         if isinstance(templated, Mapping):     # a BatchEncoding: transformers 5 returns one
             templated = templated["input_ids"]  # unless the caller asks for plain ids
         # Token ids (what mlx-lm 0.32 returns) and rendered text are both valid prompts.
@@ -446,7 +456,9 @@ def _error_body(exc: Any) -> str:
 def _server_message(body: str) -> str:
     """The error message an LLM server put in the body of an error reply, or ``""``.
 
-    Ollama sends ``{"error": "..."}``, OpenAI-compatible servers ``{"error": {"message": ...}}``.
+    Ollama sends ``{"error": "..."}``, OpenAI-compatible servers ``{"error": {"message": ...}}``,
+    and vLLM ``{"object": "error", "message": "...", "code": ...}``: ``error`` is read first, a
+    top-level ``message`` when there is no ``error`` field.
     """
     import json
 
@@ -454,7 +466,9 @@ def _server_message(body: str) -> str:
         reply = json.loads(body)
     except Exception:
         return ""
-    error = reply.get("error") if isinstance(reply, dict) else None
+    if not isinstance(reply, dict):
+        return ""
+    error = reply.get("error") if "error" in reply else reply.get("message")
     if isinstance(error, dict):
         error = error.get("message")
     return " ".join(error.split())[:300] if isinstance(error, str) else ""
@@ -475,16 +489,20 @@ def _root_url(url: str) -> str:
 class HTTPEngine:
     """A local inference server, reached over ``urllib``.
 
+    Without arguments it is Ollama on its default port, as it was in 4.8.1 (the class is still
+    importable from ``puremacro.narrative._local_engines``).
+
     Parameters
     ----------
     base_url : str
-        Root URL of the server, such as ``http://localhost:11434``. Trailing slashes are dropped
-        and then one trailing ``/v1``, so ``http://localhost:1234/v1``, the form LM Studio and
-        OpenAI clients document, names the same server as ``http://localhost:1234``.
+        Root URL of the server; ``http://localhost:11434`` (Ollama's port) by default. Trailing
+        slashes are dropped and then one trailing ``/v1``, so ``http://localhost:1234/v1``, the
+        form LM Studio and OpenAI clients document, names the same server as
+        ``http://localhost:1234``.
     api : {"ollama", "openai"}
-        ``"ollama"`` posts to Ollama's ``/api/chat``; ``"openai"`` to ``/v1/chat/completions``
-        (llama-server, llamafile, LM Studio, vLLM; Ollama serves it too). It is also the
-        engine's ``name``.
+        ``"ollama"`` (the default) posts to Ollama's ``/api/chat``; ``"openai"`` to
+        ``/v1/chat/completions`` (llama-server, llamafile, LM Studio, vLLM; Ollama serves it
+        too). It is also the engine's ``name``.
     timeout : float
         Seconds to wait for a completion.
     probe_timeout : float
@@ -492,8 +510,8 @@ class HTTPEngine:
         ``timeout``).
     """
 
-    def __init__(self, *, base_url: str, api: str, timeout: float = 120.0,
-                 probe_timeout: float = _PROBE_TIMEOUT) -> None:
+    def __init__(self, *, base_url: str = DEFAULT_SERVERS[0][1], api: str = "ollama",
+                 timeout: float = 120.0, probe_timeout: float = _PROBE_TIMEOUT) -> None:
         if api not in ("ollama", "openai"):
             raise ValueError(f"api must be 'ollama' or 'openai'; got {api!r}")
         self.base_url = _root_url(base_url)
@@ -616,6 +634,23 @@ def _servers(base_url: str | None) -> tuple[tuple[str, str], ...]:
     return DEFAULT_SERVERS if url is None else (("ollama", url), ("openai", url))
 
 
+def validate_engine_name(name: str) -> str:
+    """``name`` when it is ``"auto"`` or an engine name: ``mlx``, ``llamacpp``, ``ollama``, ``openai``.
+
+    Names are exact: no case folding, no surrounding blanks. Nothing is constructed or probed,
+    so a caller that keeps an ``engine`` argument and resolves it later (the narrative backends)
+    can refuse a typo when it is built instead of at the first call.
+
+    Raises
+    ------
+    ValueError
+        Anything else, with the message :func:`resolve_engine` raises for the same name.
+    """
+    if name == "auto" or name in _ENGINE_NAMES:
+        return name
+    raise ValueError(f"unknown engine {name!r}; expected 'auto' or one of {list(_ENGINE_NAMES)}")
+
+
 def resolve_engine(engine: str = "auto", *, base_url: str | None = None,
                    timeout: float = 120.0, probe_timeout: float = _PROBE_TIMEOUT) -> Engine:
     """A usable engine, or :class:`LocalLLMUnavailable`.
@@ -632,8 +667,10 @@ def resolve_engine(engine: str = "auto", *, base_url: str | None = None,
     LocalLLMUnavailable
         No engine (or not the one named) is available.
     ValueError
-        ``engine`` is not one of the names above.
+        ``engine`` is not one of the names above (:func:`validate_engine_name`); nothing is
+        probed first.
     """
+    engine = validate_engine_name(engine)
     if engine == "auto":
         tried = ["mlx", "llamacpp"]
         for local in (MLXEngine(), LlamaCppEngine()):
@@ -650,15 +687,13 @@ def resolve_engine(engine: str = "auto", *, base_url: str | None = None,
         if local.available():
             return local
         raise LocalLLMUnavailable(f"engine {engine!r} is not available. {INSTALL_HINT}")
-    if engine in ("ollama", "openai"):
-        servers = [HTTPEngine(base_url=url, api=api, timeout=timeout, probe_timeout=probe_timeout)
-                   for api, url in _servers(base_url) if api == engine]
-        for server in servers:
-            if server.available():
-                return server
-        where = " or ".join(server.base_url for server in servers)
-        raise LocalLLMUnavailable(f"engine {engine!r} is not available at {where}. {INSTALL_HINT}")
-    raise ValueError(f"unknown engine {engine!r}; expected 'auto' or one of {list(_ENGINE_NAMES)}")
+    servers = [HTTPEngine(base_url=url, api=api, timeout=timeout, probe_timeout=probe_timeout)
+               for api, url in _servers(base_url) if api == engine]   # "ollama" or "openai"
+    for server in servers:
+        if server.available():
+            return server
+    where = " or ".join(server.base_url for server in servers)
+    raise LocalLLMUnavailable(f"engine {engine!r} is not available at {where}. {INSTALL_HINT}")
 
 
 def available_engines(*, probe_servers: bool = True, base_url: str | None = None,

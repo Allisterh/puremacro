@@ -79,11 +79,17 @@ def test_chat_multi_turn_role_prefixes(fake):
     assert fake.calls[0]["prompt"] == "User: a\n\nAssistant: b\n\nUser: c"
 
 def test_unwritable_cache_still_returns_live_text(monkeypatch, fake, tmp_path):
-    import os, stat
-    ro = tmp_path / "ro"; ro.mkdir(); os.chmod(ro, stat.S_IRUSR | stat.S_IXUSR)
-    monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(ro / "c.sqlite"))
-    assert L.complete("hola", max_tokens=8) == "0.7"
-    os.chmod(ro, stat.S_IRWXU)
+    ro = tmp_path / "ro"
+    ro.mkdir()
+    os.chmod(ro, stat.S_IRUSR | stat.S_IXUSR)
+    try:
+        if os.access(ro, os.W_OK):      # root, or Windows: directory permissions are not enforced
+            pytest.skip("directory permissions do not restrict this account")
+        monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(ro / "c.sqlite"))
+        with pytest.warns(UserWarning, match="cannot be written"):
+            assert L.complete("hola", max_tokens=8) == "0.7"
+    finally:
+        os.chmod(ro, stat.S_IRWXU)
 
 def test_report_mentions_mode_engines_model_and_cache(fake):
     r = L.report()
@@ -91,9 +97,9 @@ def test_report_mentions_mode_engines_model_and_cache(fake):
         assert needle in r
 
 
-# ---------------------------------------------------------------- beyond the eleven of the brief
+# ---------------------------------------------------------------- beyond the eleven above
 #
-# Each test below pins one ruling of the plan: the token allowance of thinking models, the
+# Each test below pins one decision of the design: the token allowance of thinking models, the
 # fit check before any engine is looked for, the row the cache keeps, the mode rules, the
 # routes to the engines module, report() and chat().
 
@@ -197,6 +203,62 @@ def test_the_mode_argument_wins_over_the_variable_and_both_are_checked(monkeypat
     monkeypatch.setenv("PUREMACRO_LLM_MODE", "loud")
     with pytest.raises(ValueError, match="PUREMACRO_LLM_MODE"):
         L.current_mode()
+
+
+@pytest.mark.parametrize("temperature", [float("nan"), float("inf"), -float("inf"), -0.1, -1,
+                                         "hot", "0.5", True, None, [0.5]],
+                         ids=["nan", "inf", "-inf", "-0.1", "-1", "str", "numstr", "bool", "None",
+                              "list"])
+def test_temperature_must_be_a_finite_number_that_is_not_negative(monkeypatch, fake, temperature):
+    """Refused before the cache is opened, in every mode: ``nan`` would otherwise be keyed as the
+    text ``nan`` and never hit, and no engine takes a negative temperature."""
+    monkeypatch.setattr(E, "resolve_engine",
+                        lambda *a, **k: pytest.fail("engine resolved for a bad temperature"))
+    for mode in L.MODES:
+        with pytest.raises(ValueError, match="temperature") as ei:
+            L.complete("hola", mode=mode, max_tokens=8, temperature=temperature)
+        assert type(ei.value) is ValueError and repr(temperature) in str(ei.value)
+    assert not L.default_cache_path().exists()
+
+
+def test_temperatures_that_are_valid_reach_the_engine_and_the_key_as_given(recorder):
+    for temperature in (0.0, 0.7, 2):
+        assert L.complete("hola", max_tokens=8, temperature=temperature) == "0.7"
+    assert [c["temperature"] for c in recorder.calls] == [0.0, 0.7, 2]
+    assert L.complete("hola", mode="cache", max_tokens=8, temperature=2.0) == "0.7"   # same key as 2
+    assert L.complete("hola", mode="cache", max_tokens=8, temperature=-0.0) == "0.7"  # -0.0 keys as 0.0
+    assert L.cache_key("qwen3-4b", "hola", max_tokens=8, temperature=0.0, json_mode=False) == \
+        "c630a581ab2b323492ac1db08bfc8b8f5a72655db00282142eb5762eacccb586"        # v1 untouched
+
+
+def test_an_unknown_engine_name_is_refused_before_the_cache_is_read(monkeypatch, fake):
+    """A typo in ``engine`` is a ValueError at the call, whatever the mode, even when the cache has
+    the answer: it would otherwise pass unnoticed until the first miss."""
+    assert L.complete("hola", max_tokens=8) == "0.7"                           # cached now
+    monkeypatch.setattr(E, "resolve_engine", lambda *a, **k: pytest.fail("resolved an unknown engine"))
+    for mode in L.MODES:
+        with pytest.raises(ValueError, match="'olama'"):
+            L.complete("hola", mode=mode, max_tokens=8, engine="olama")
+    with pytest.raises(ValueError, match="'olama'"):
+        L.get_engine("olama")
+    assert L.validate_engine_name is E.validate_engine_name and "validate_engine_name" in L.__all__
+    assert L.validate_engine_name("auto") == "auto" and L.validate_engine_name("ollama") == "ollama"
+    assert L.complete("hola", mode="cache", max_tokens=8, engine="ollama") == "0.7"   # a known name
+
+
+def test_a_live_answer_that_is_not_valid_unicode_is_returned_and_not_stored(monkeypatch, recwarn):
+    """A lone surrogate in a model's text cannot be stored as UTF-8; the answer is still returned (it
+    used to raise UnicodeEncodeError after the model had answered) and the cache keeps writing."""
+    f = FakeEngine(reply="half \ud83d")
+    monkeypatch.setattr(E, "resolve_engine", lambda *a, **k: f)
+    monkeypatch.setattr(L.models, "device_budget_gb", lambda: 11.4)
+    assert L.complete("p", max_tokens=8) == "half \ud83d"
+    with pytest.raises(L.CacheMiss):
+        L.complete("p", mode="cache", max_tokens=8)
+    f.reply = "0.7"
+    assert L.complete("q", max_tokens=8) == "0.7"
+    assert L.complete("q", mode="cache", max_tokens=8) == "0.7"
+    assert not [w for w in recwarn if "cache" in str(w.message).lower()]
 
 
 def test_engine_name_base_url_and_timeout_reach_the_resolver(monkeypatch):
@@ -348,6 +410,18 @@ def test_cache_mode_names_a_cache_file_that_is_not_a_database(monkeypatch, tmp_p
     mine.path.write_bytes(_LFS_POINTER)
     with pytest.raises(L.CacheUnavailable, match="file is not a database"):
         L.complete("hola", mode="cache", max_tokens=8, cache=mine)
+
+
+def test_cache_mode_says_the_cache_cannot_be_read_when_its_path_runs_through_a_file(monkeypatch, tmp_path):
+    """PUREMACRO_LLM_CACHE names the child of a file: no cache can ever be there, so this is not an
+    empty cache (a miss that blames the model) but a cache that cannot be read, and why."""
+    _no_engine_in_cache_mode(monkeypatch)
+    blocker = tmp_path / "llm_cache.sqlite"
+    blocker.write_text("x")
+    monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(blocker / "c.sqlite"))
+    with pytest.raises(L.CacheUnavailable) as ei:
+        L.complete("hola", mode="cache", max_tokens=8)
+    assert "NotADirectoryError" in ei.value.reason and blocker.read_text() == "x"
 
 
 def test_cache_mode_with_no_cache_file_yet_is_a_plain_miss(monkeypatch, tmp_path):

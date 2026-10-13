@@ -23,7 +23,7 @@ def test_golden_key_non_ascii_with_system():
                   max_tokens=16, temperature=0.0, json_mode=False)
     assert k == "0fb187545fac544435c8fec55bd98117e4504c10088a756d9b24bc44452d7f7d"
 
-def test_key_ignores_engine_but_not_params():
+def test_key_depends_on_max_tokens_and_json_mode():
     base = dict(max_tokens=8, temperature=0.0, json_mode=False)
     assert cache_key("qwen3-4b", "hola", **base) != cache_key("qwen3-4b", "hola", **{**base, "max_tokens": 9})
     assert cache_key("qwen3-4b", "hola", **base) != cache_key("qwen3-4b", "hola", **{**base, "json_mode": True})
@@ -73,7 +73,7 @@ def test_cache_miss_carries_key_and_model():
 
 
 # ---------------------------------------------------------------------------
-# Beyond the eight tests of the brief: behaviour that spec section 3.4 states
+# Beyond the eight tests above: behaviour that spec section 3.4 states
 # (key format, export/merge, degrade-to-no-cache) or that the code decides.
 # ---------------------------------------------------------------------------
 
@@ -197,6 +197,31 @@ def test_set_keeps_the_first_completion_for_a_key(tmp_path):
     assert c.get(_k("p")) == "first" and c.stats()["rows"] == 1
 
 
+def test_a_completion_that_is_not_valid_unicode_is_skipped_and_the_cache_keeps_writing(tmp_path, recwarn):
+    """A lone surrogate (what a bad decode leaves in a model's text) cannot be stored as UTF-8:
+    sqlite3 raises UnicodeEncodeError, which is neither an sqlite3.Error nor an OSError. The row is
+    skipped, nothing is raised, and the cache is not declared unwritable: the file is fine."""
+    c = CompletionCache(tmp_path / "c.sqlite")
+    c.set(_row(_k("p"), text="half \ud83d"))                  # no raise
+    assert c.get(_k("p")) is None and c.writable is True
+    c.set(_row(_k("q"), text="whole 😀"))
+    assert c.get(_k("q")) == "whole 😀" and c.stats()["rows"] == 1
+    assert _n_cache_warnings(recwarn) == 0
+
+
+def test_a_prompt_that_is_not_valid_unicode_cannot_be_hashed():
+    """The key hashes UTF-8, and a lone surrogate has no UTF-8: a clear ValueError, raised before
+    anything is looked up, instead of a UnicodeEncodeError from inside the key function."""
+    for prompt, system, model in [("half \ud83d", None, "qwen3-4b"), ("hola", "\udcff", "qwen3-4b"),
+                                  ("hola", None, "m\ud83d")]:
+        with pytest.raises(ValueError, match="surrogate") as ei:
+            cache_key(model, prompt, system=system, max_tokens=8, temperature=0.0, json_mode=False)
+        assert type(ei.value) is ValueError                      # not the UnicodeEncodeError itself
+        assert isinstance(ei.value.__cause__, UnicodeEncodeError)
+    with pytest.raises(ValueError, match="surrogate"):
+        prompt_sha256("hola", system="\udcff")
+
+
 def test_stats_groups_by_model(tmp_path):
     c = CompletionCache(tmp_path / "c.sqlite")
     for i in range(3):
@@ -230,12 +255,18 @@ def test_export_and_merge_preserve_every_column_including_created_at(tmp_path):
     assert _sql(c.path, f"SELECT {cols} FROM completions") == _sql(a.path, f"SELECT {cols} FROM completions")
 
 
-def test_export_since_compares_created_at_as_iso_text(tmp_path):
-    a = CompletionCache(tmp_path / "a.sqlite")
+def _three_rows_around_midnight(path):
+    """A cache with rows stamped just before, exactly at and well after 2026-02-01 00:00:00 UTC."""
+    a = CompletionCache(path)
     for prompt, stamp in [("old", "2026-01-31 23:59:59"), ("edge", "2026-02-01 00:00:00"),
                           ("new", "2026-03-15 12:00:00")]:
         a.set(_row(_k(prompt), text=prompt))
         _sql(a.path, "UPDATE completions SET created_at = ? WHERE key = ?", (stamp, _k(prompt)))
+    return a
+
+
+def test_export_since_takes_a_date_a_date_time_and_the_iso_t_separator(tmp_path):
+    a = _three_rows_around_midnight(tmp_path / "a.sqlite")
     assert a.export(tmp_path / "d1.sqlite", since="2026-02-01") == 2                  # a date
     assert a.export(tmp_path / "d2.sqlite", since="2026-02-01 00:00:00") == 2         # inclusive
     assert a.export(tmp_path / "d3.sqlite", since="2026-02-01T00:00:00") == 2         # ISO 'T'
@@ -244,6 +275,31 @@ def test_export_since_compares_created_at_as_iso_text(tmp_path):
     assert a.export(tmp_path / "d6.sqlite", since="2026-02-01", model="qwen3-1.7b") == 0
     assert a.export(tmp_path / "d7.sqlite", since="2026-02-01", model="qwen3-4b") == 2
     assert sorted(r[0] for r in _sql(tmp_path / "d1.sqlite", "SELECT completion FROM completions")) == ["edge", "new"]
+
+
+def test_export_since_takes_every_isoformat_form_and_converts_an_offset_to_utc(tmp_path):
+    """`created_at` is UTC, written `YYYY-MM-DD HH:MM:SS`. `datetime.isoformat()` writes a 'T', often
+    a 'Z' or an offset, and a fraction; each is parsed, an aware value is converted to UTC and the
+    comparison is made on the stored form, so none of them silently drops the rows of that second
+    (text comparison made every one of them do so) and an offset moves the boundary the right way."""
+    a = _three_rows_around_midnight(tmp_path / "a.sqlite")
+    midnight_utc = ["2026-02-01T00:00:00Z", "2026-02-01T00:00:00+00:00", "2026-02-01T00:00:00.000",
+                    "2026-02-01T00:00:00.000Z", "2026-02-01 00:00:00+00:00",
+                    "2026-01-31T22:00:00-02:00", "2026-02-01T01:00:00+01:00"]
+    for i, since in enumerate(midnight_utc):
+        assert a.export(tmp_path / f"m{i}.sqlite", since=since) == 2, since          # edge and new
+    assert a.export(tmp_path / "after.sqlite", since="2026-01-31T23:00:00-02:00") == 1   # 01:00 UTC
+    assert a.export(tmp_path / "before.sqlite", since="2026-02-01T00:30:00+01:00") == 3  # 23:30 UTC
+
+
+@pytest.mark.parametrize("since", ["yesterday", "2026-13-01", "2026-02-01 25:00:00", "",
+                                   "2026-02-01T00:00:00+25:00", "01/02/2026"])
+def test_export_since_that_is_not_a_date_is_a_value_error_and_creates_nothing(tmp_path, since):
+    a = CompletionCache(tmp_path / "a.sqlite")
+    a.set(_row(_k("p")))
+    with pytest.raises(ValueError, match="since"):
+        a.export(tmp_path / "out.sqlite", since=since)
+    assert not (tmp_path / "out.sqlite").exists()
 
 
 def test_export_creates_missing_directories_and_an_empty_result_is_a_valid_cache(tmp_path):
@@ -562,6 +618,55 @@ def test_a_usable_cache_and_one_with_no_file_yet_are_readable(tmp_path):
         assert nowhere.get(_k("p")) is None and nowhere.readable is True
     finally:
         os.chmod(ro, stat.S_IRWXU)
+
+
+def test_a_path_that_runs_through_a_file_means_the_cache_cannot_be_read_not_that_it_is_empty(tmp_path):
+    """PUREMACRO_LLM_CACHE=<a file>/c.sqlite: no file can ever be there, so a lookup that finds
+    nothing is not an empty cache but a cache that cannot be read, and `reason` names the path
+    problem besides SQLite's refusal. (The old test was `os.path.exists`, which is False here too.)"""
+    blocker = tmp_path / "not_a_directory"
+    blocker.write_text("x")
+    c = CompletionCache(blocker / "c.sqlite")
+    assert c.writable is False and c.readable is False
+    assert c.get(_k("p")) is None and c.readable is False
+    assert "NotADirectoryError" in c.reason and "unable to open database file" in c.reason
+    assert blocker.read_text() == "x"
+
+
+def test_a_directory_that_cannot_be_searched_means_the_cache_cannot_be_read(tmp_path):
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    CompletionCache(locked / "c.sqlite").set(_row(_k("hola"), text="¡Hola!"))   # the row is there
+    os.chmod(locked, 0)
+    try:
+        if os.access(locked, os.R_OK | os.X_OK):
+            pytest.skip("directory permissions do not restrict this account")
+        c = CompletionCache(locked / "c.sqlite")
+        assert c.writable is False and c.readable is False       # not "no file yet"
+        assert "PermissionError" in c.reason
+        assert c.get(_k("hola")) is None and c.readable is False
+    finally:
+        os.chmod(locked, stat.S_IRWXU)
+
+
+def test_writable_is_settled_by_the_first_write_not_at_construction(tmp_path):
+    """Preparing the file runs `CREATE ... IF NOT EXISTS` statements only, which write nothing to
+    a file that already has the table, so a read-only file reads as writable until the first write
+    fails; `repr` shows the same flag. The attribute's docstring says so."""
+    p = tmp_path / "c.sqlite"
+    CompletionCache(p).set(_row(_k("hola"), text="¡Hola!"))
+    os.chmod(p, stat.S_IRUSR)
+    try:
+        if os.access(p, os.W_OK):
+            pytest.skip("file permissions do not restrict this account")
+        c = CompletionCache(p)
+        assert c.writable is True and "writable=True" in repr(c)
+        with pytest.warns(UserWarning, match="readonly database"):
+            c.set(_row(_k("nuevo")))
+        assert c.writable is False and "writable=False" in repr(c)
+    finally:
+        os.chmod(p, stat.S_IRUSR | stat.S_IWUSR)
+    assert "first write" in CompletionCache.__doc__
 
 
 def test_a_file_that_is_not_a_cache_is_not_readable_and_reason_names_the_problem(tmp_path):

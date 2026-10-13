@@ -25,7 +25,9 @@ run.
 * **Engines.** ``engine="auto"`` takes the first available of MLX, llama.cpp, Ollama and the
   OpenAI-compatible servers (see :mod:`puremacro.llm.engines`); ``base_url``, else
   ``PUREMACRO_LLM_BASE_URL``, names one server instead. :func:`get_engine` returns the engine
-  itself and :func:`available_engines` the names of those available.
+  itself, :func:`available_engines` the names of those available, and
+  :func:`validate_engine_name` says whether a name is one ``engine`` takes, without probing
+  anything.
 * **Thinking models.** The Qwen3 models think before they answer. The engines switch the
   thinking off, and :func:`strip_thinking` removes whatever thinking still comes back. Such a
   model gets 8 tokens more than ``max_tokens`` at the engine, room for the empty think block it
@@ -37,6 +39,8 @@ run.
   :class:`CacheMiss` whose ``reason`` says why the cache cannot be read), :class:`ModelTooLarge`
   (a ``RuntimeError`` with ``alias``, ``suggested`` and ``budget_gb``) and
   :class:`LocalLLMUnavailable` (no engine can serve the model; a :class:`BackendUnavailable`).
+  A ``mode`` or ``engine`` that is not a known name, and a ``temperature`` that is not a finite
+  number of zero or more, are a ``ValueError`` raised before the cache is read, in every mode.
 * **Checking a machine.** :func:`report` says what this machine offers a local model: memory,
   engines, the model that fits, the cache and the mode.
 
@@ -51,6 +55,8 @@ the one that answers. Pyodide 0.28 adds ``sqlite3`` only on request: run
 """
 from __future__ import annotations
 
+import math
+import numbers
 import os
 from typing import Any
 
@@ -73,6 +79,7 @@ from .engines import (
     LocalLLMUnavailable,
     MLXEngine,
     strip_thinking,
+    validate_engine_name,
 )
 from .models import (
     MODELS,
@@ -113,6 +120,7 @@ __all__ = [
     "report",
     "resolve_model_id",
     "strip_thinking",
+    "validate_engine_name",
 ]
 
 MODES = ("auto", "cache", "off")
@@ -158,6 +166,22 @@ def current_mode(mode: str | None = None) -> str:
     if raw.lower() not in MODES:
         raise ValueError(f"{_ENV_MODE}={raw!r} is not a mode; use 'auto', 'cache' or 'off'")
     return raw.lower()
+
+
+def _check_temperature(temperature: Any) -> Any:
+    """``temperature`` once checked: a real number, not a bool, finite and zero or more.
+
+    ``nan`` would be keyed as the text ``nan`` and never hit, no engine takes a negative or
+    infinite temperature, and ``True`` or ``"0.5"`` would reach an engine as something it does
+    not expect. ``-0.0`` comes back as ``0.0`` so both share one key; every other value is passed
+    on as given, so the ``v1`` key function is untouched.
+    """
+    if isinstance(temperature, bool) or not isinstance(temperature, numbers.Real):
+        raise ValueError(f"temperature must be a real number >= 0; got {temperature!r}")
+    value = float(temperature)
+    if not math.isfinite(value) or value < 0:
+        raise ValueError(f"temperature must be a finite number >= 0; got {temperature!r}")
+    return 0.0 if value == 0 else temperature
 
 
 def complete(prompt: str, *, model: str = "default", engine: str = "auto",
@@ -224,15 +248,20 @@ def complete(prompt: str, *, model: str = "default", engine: str = "auto",
     LocalLLMUnavailable
         No engine, or not the one named, can serve the model.
     ValueError
-        ``mode``, ``PUREMACRO_LLM_MODE`` or ``engine`` is not a valid name.
+        ``mode``, ``PUREMACRO_LLM_MODE`` or ``engine`` is not a valid name, or ``temperature``
+        is not a finite number of zero or more, or ``prompt`` or ``system`` is not valid Unicode
+        text (a lone surrogate). All are raised before the cache is read, in every mode, so a
+        typo does not pass unnoticed while the cache has the answer.
 
     Other failures of the engine, such as an answer that does not come within ``timeout`` or a
     request the server turns down, propagate as the engine raises them.
     """
+    mode = current_mode(mode)
+    engine = _engines.validate_engine_name(engine)
+    temperature = _check_temperature(temperature)
     alias = _models.canonical(model)
     key = _cache.cache_key(alias, prompt, system=system, max_tokens=max_tokens,
                            temperature=temperature, json_mode=json_mode)
-    mode = current_mode(mode)
     # Off mode neither reads nor writes a cache, so it builds none (CompletionCache() creates the
     # directory, the file and the table) and leaves one passed as ``cache`` untouched.
     store: CompletionCache | None = None
@@ -298,8 +327,9 @@ def get_engine(engine: str = "auto", *, timeout: float = 120.0,
     LocalLLMUnavailable
         No engine, or not the one named, is available.
     ValueError
-        ``engine`` is not a known name.
+        ``engine`` is not a known name (:func:`validate_engine_name`); nothing is probed first.
     """
+    engine = _engines.validate_engine_name(engine)
     return _engines.resolve_engine(engine, base_url=base_url, timeout=timeout)
 
 

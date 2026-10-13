@@ -100,6 +100,16 @@ def test_model_aliases_are_the_registry_by_engine():
                                            "ollama": spec.ollama, "openai": spec.openai}
 
 
+def test_model_aliases_is_a_read_only_view_so_an_added_entry_changes_nothing(monkeypatch):
+    # 4.8.1 read this table; resolve_model_id reads the registry of puremacro.llm, and a name
+    # outside the registry is the engine's own id, passed through unchanged. The docstring says so.
+    monkeypatch.setitem(le.MODEL_ALIASES, "my-alias",
+                        {"mlx": "me/My-4bit", "llamacpp": ("me/My-GGUF", "my.gguf"),
+                         "ollama": "my:tag", "openai": "my"})
+    assert le.resolve_model_id("my-alias", "ollama") == "my-alias"
+    assert "read-only" in le.__doc__ and "unchanged" in le.__doc__
+
+
 # ---------------------------------------------------------------- the engines, through the shim
 
 def test_http_engine_ollama_available_and_complete(llm_stub_server):
@@ -134,8 +144,9 @@ def test_mlx_engine_complete_with_fake_module(monkeypatch):
     captured = {}
 
     class _Tok:
-        def apply_chat_template(self, messages, add_generation_prompt=True):
+        def apply_chat_template(self, messages, add_generation_prompt=True, **kwargs):
             captured["messages"] = messages
+            captured["kwargs"] = kwargs          # a real tokenizer takes template variables here
             return "PROMPT:" + messages[-1]["content"]
 
     fake = types.ModuleType("mlx_lm")
@@ -151,6 +162,7 @@ def test_mlx_engine_complete_with_fake_module(monkeypatch):
                        max_tokens=32, temperature=0.0, json_mode=True)
     assert out == "gen(PROMPT:hello|32)"
     assert captured["messages"][-1]["content"] == "hello"
+    assert captured["kwargs"] == {"enable_thinking": False}   # thinking off for every model id
 
 
 def test_llamacpp_engine_complete_with_fake_module(monkeypatch):

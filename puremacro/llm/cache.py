@@ -27,12 +27,19 @@ a course and read by a tablet that cannot run the model.
   cannot be written, a corrupt file, or a Python without ``sqlite3`` (in
   Pyodide 0.28, run ``await pyodide.loadPackage('sqlite3')`` before importing
   puremacro) turns the cache into a no-op: lookups find nothing, writes are
-  skipped, and one warning per cache file says why. :meth:`CompletionCache.export`
-  and :meth:`CompletionCache.merge` are explicit actions, so they raise instead.
-  :attr:`CompletionCache.readable` tells a lookup that could not read the file
-  from one that found no row, and :attr:`CompletionCache.reason` says why, so
-  that ``cache`` mode in :mod:`puremacro.llm` raises :class:`CacheUnavailable`,
-  not a plain :class:`CacheMiss`, for the first.
+  skipped, and one warning per cache file says why. A completion that is not
+  valid Unicode text (a lone surrogate, left behind by a bad decode) has no
+  UTF-8 form for SQLite to store, so that one row is skipped and the cache goes
+  on writing; a prompt that is not valid Unicode cannot be hashed and is a
+  ``ValueError`` from :func:`cache_key`, a bad argument rather than a cache
+  failure. :meth:`CompletionCache.export` and :meth:`CompletionCache.merge` are
+  explicit actions, so they raise instead. :attr:`CompletionCache.readable`
+  tells a lookup that could not read the file from one that found no row, and
+  :attr:`CompletionCache.reason` says why, so that ``cache`` mode in
+  :mod:`puremacro.llm` raises :class:`CacheUnavailable`, not a plain
+  :class:`CacheMiss`, for the first. "No file" means exactly that: a path that
+  cannot be looked up at all (its parent is a file, a directory on the way
+  cannot be searched) is a cache that cannot be read, not an empty one.
 * **No shared state.** Every method opens its own connection and closes it
   before returning; nothing is kept at module level except the record of which
   files were already reported as unusable. A write that finds the file locked by
@@ -48,6 +55,7 @@ import os
 import warnings
 from collections.abc import Iterator
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -96,6 +104,18 @@ _WARNED: set[str] = set()
 # Keys
 # ---------------------------------------------------------------------------
 
+def _utf8(text: str, what: str) -> bytes:
+    """``text`` as UTF-8. A lone surrogate (text that is not valid Unicode, what a
+    bad decode leaves behind) has no UTF-8 form: a ``ValueError`` naming ``what``,
+    not a ``UnicodeEncodeError`` from inside the key function."""
+    try:
+        return text.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ValueError(
+            f"the {what} is not valid Unicode text (a lone surrogate at position {exc.start}) "
+            f"and cannot be hashed for the cache key") from exc
+
+
 def prompt_sha256(prompt: str, system: str | None = None) -> str:
     """SHA-256 (hex) of the system prompt and the prompt, as the caller wrote them.
 
@@ -103,8 +123,15 @@ def prompt_sha256(prompt: str, system: str | None = None) -> str:
     prompt counts as the empty string. Nothing is templated first: templates
     differ between engines, and hashing after templating would defeat
     cross-engine cache hits.
+
+    Raises
+    ------
+    ValueError
+        The prompt or the system prompt is not valid Unicode text (a lone
+        surrogate), so it has no UTF-8 to hash.
     """
-    return hashlib.sha256(((system or "") + "\x1f" + prompt).encode("utf-8")).hexdigest()
+    return hashlib.sha256(_utf8((system or "") + "\x1f" + prompt,
+                                "system prompt or prompt")).hexdigest()
 
 
 def cache_key(model: str, prompt: str, *, system: str | None = None,
@@ -115,10 +142,16 @@ def cache_key(model: str, prompt: str, *, system: str | None = None,
     id. ``temperature`` is rounded to three decimals, ``max_tokens`` truncated
     to an integer, ``json_mode`` reduced to 0 or 1. The engine is not part of
     the key: the same request gives the same key on every engine.
+
+    Raises
+    ------
+    ValueError
+        ``prompt``, ``system`` or ``model`` is not valid Unicode text (a lone
+        surrogate); see :func:`prompt_sha256`.
     """
     fields = [CACHE_FORMAT, model, prompt_sha256(prompt, system), str(int(max_tokens)),
               f"{float(temperature):.3f}", "1" if json_mode else "0"]
-    return hashlib.sha256("|".join(fields).encode("utf-8")).hexdigest()
+    return hashlib.sha256(_utf8("|".join(fields), "model name")).hexdigest()
 
 
 def default_cache_path() -> Path:
@@ -249,16 +282,32 @@ def _connect(path: Path, *, write: bool) -> Iterator[Any]:
 
 
 def _utc_text(moment: str) -> str:
-    """An ISO-8601 date or date-time as ``created_at`` is stored: ``YYYY-MM-DD[ HH:MM:SS]``.
+    """An ISO-8601 date or date-time as ``created_at`` is stored: ``YYYY-MM-DD HH:MM:SS`` in UTC.
 
-    SQLite writes ``CURRENT_TIMESTAMP`` (UTC) with a space between date and time,
-    and the comparison is on text, so a ``T`` separator would sort after every
-    time of that day and silently drop it.
+    SQLite writes ``CURRENT_TIMESTAMP`` in UTC, with a space between date and
+    time and no fraction, and the comparison is on text, so the value has to be
+    put in exactly that form: a ``T`` separator, a ``Z``, an offset or a
+    fraction would otherwise sort the rows of that second away silently.
+    ``datetime.fromisoformat`` parses it; an aware value is converted to UTC, a
+    naive one is taken as UTC already, a date alone means its midnight.
+
+    Raises
+    ------
+    ValueError
+        ``moment`` is not an ISO-8601 date or date-time.
     """
-    text = moment.strip()
-    if len(text) > 10 and text[10] == "T":
-        return text[:10] + " " + text[11:]
-    return text
+    text = str(moment).strip()
+    if text.endswith(("Z", "z")):          # the UTC designator, which fromisoformat takes too
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError as exc:
+        raise ValueError(
+            f"since={moment!r} is not an ISO-8601 date or date-time (such as '2026-10-01' or "
+            f"'2026-10-01T08:00:00Z'): {exc}") from exc
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc)
+    return parsed.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _copy_rows(src: Path, dst: Path, *, model: str | None = None, since: str | None = None) -> int:
@@ -310,8 +359,12 @@ class CompletionCache:
     writable : bool
         Whether writes are expected to work: ``False`` when the file could not
         be prepared (unwritable directory, corrupt file, no ``sqlite3``), and
-        set to ``False`` by the first write that fails. Lookups still work on an
-        existing, readable file, so a cache shipped on a read-only volume serves hits.
+        otherwise settled by the first write. Preparing the file runs
+        ``CREATE ... IF NOT EXISTS`` statements only, which write nothing to a
+        file that already has the table, so a read-only file reads ``True``
+        until its first :meth:`set` fails and sets it ``False``. Lookups still
+        work on an existing, readable file, so a cache shipped on a read-only
+        volume serves hits.
     readable : bool
         Whether a lookup can read the file (read-only property): ``False`` when
         ``sqlite3`` is unavailable or the file exists but cannot be opened as a
@@ -377,6 +430,28 @@ class CompletionCache:
             "a writable file to keep them.",
             UserWarning, stacklevel=3)
 
+    def _read_failure(self, exc: BaseException) -> str:
+        """Why a lookup that raised ``exc`` could not read the file, or ``""`` when there is
+        simply no file yet.
+
+        Only a path that could hold a file but does not (``os.stat`` raises
+        ``FileNotFoundError``) is an empty cache. A file that is there and that
+        SQLite cannot read as a cache, a path that cannot be looked up at all
+        (its parent is a file, a directory on the way cannot be searched: any
+        other ``OSError``, which is added to the text) and a missing ``sqlite3``
+        all mean that no lookup was made.
+        """
+        text = f"{type(exc).__name__}: {exc}"
+        if isinstance(exc, ImportError):
+            return text
+        try:
+            os.stat(self.path)
+        except FileNotFoundError:
+            return ""
+        except OSError as problem:
+            return f"{text} ({type(problem).__name__}: {problem})"
+        return text
+
     def get(self, key: str) -> str | None:
         """The cached completion for ``key``, or ``None`` (also when the cache is unusable).
 
@@ -388,10 +463,7 @@ class CompletionCache:
                 row = conn.execute(
                     "SELECT completion FROM completions WHERE key = ?", (key,)).fetchone()
         except _unusable() as exc:
-            # No file is an empty cache: the lookup just finds nothing. Anything else (no
-            # sqlite3, a file SQLite cannot read as a cache) means no lookup was made.
-            no_file = not isinstance(exc, ImportError) and not os.path.exists(self.path)
-            self._read_error = "" if no_file else f"{type(exc).__name__}: {exc}"
+            self._read_error = self._read_failure(exc)
             return None
         self._read_error = ""
         return None if row is None else row[0]
@@ -401,7 +473,10 @@ class CompletionCache:
 
         Never raises because of the cache: when the write cannot be done, the
         cache stops writing (``writable`` becomes ``False``) and one warning per
-        cache file says why.
+        cache file says why. A row whose text is not valid Unicode (a lone
+        surrogate in the completion, which SQLite cannot store as UTF-8) is
+        skipped on its own, without a word and without touching ``writable``:
+        the file is fine, that one answer has no storable form.
         """
         if not self.writable:
             self._warn_once()
@@ -416,6 +491,8 @@ class CompletionCache:
                      float(row.temperature), 1 if row.json_mode else 0, row.completion,
                      row.engine, row.engine_model_id))
                 conn.commit()
+        except UnicodeEncodeError:
+            return                        # this row cannot be stored; the cache can go on
         except _unusable() as exc:
             self.writable = False
             self._reason = f"{type(exc).__name__}: {exc}"
@@ -433,12 +510,17 @@ class CompletionCache:
         model : str, optional
             Only rows of this canonical model alias.
         since : str, optional
-            Only rows with ``created_at >= since``, compared as ISO-8601 text in
-            UTC (``"2026-10-01"`` or ``"2026-10-01 08:00:00"``; a ``T`` between
-            date and time is accepted).
+            Only rows with ``created_at >= since``. An ISO-8601 date
+            (``"2026-10-01"``, meaning its midnight) or date-time, with a space
+            or a ``T`` between date and time, with or without a fraction, naive
+            (taken as UTC, which is how ``created_at`` is written) or with a
+            ``Z`` or an offset (converted to UTC): every form
+            ``datetime.isoformat()`` writes.
 
         Raises
         ------
+        ValueError
+            ``since`` is not an ISO-8601 date or date-time; nothing is created.
         FileNotFoundError
             This cache has no file yet, so there is nothing to export.
         sqlite3.Error, OSError

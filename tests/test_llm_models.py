@@ -1,7 +1,7 @@
 # tests/test_llm_models.py
 """Model registry and tier picker of ``puremacro.llm`` (spec section 3.3).
 
-The first block is the contract of the task brief. The blocks below pin the ids the
+The first block is the contract of that section. The blocks below pin the ids the
 registry ships (Hugging Face file names checked on 2026-10-12), the edge cases of the
 picker and of the budget probe, and the rule that keeps the module importable where
 mlx, llama.cpp and sockets do not exist.
@@ -26,7 +26,7 @@ _ENV = "PUREMACRO_LLM_MODEL"     # removed before every test by tests/conftest.p
 GIB = 1024 ** 3
 
 
-# ---------------------------------------------------------------- the brief's contract
+# ---------------------------------------------------------------- the contract
 
 def test_ladder_ids():
     assert M.MODELS["qwen3-4b"].mlx == "mlx-community/Qwen3-4B-4bit"
@@ -203,7 +203,7 @@ def test_an_override_outside_the_registry_reaches_every_engine_as_written(monkey
         assert M.resolve_model_id("default", engine) == "qwen3:4b"   # never the word "default"
 
 
-@pytest.mark.parametrize("engine", ["alias", "license", "params_b", "thinking"])
+@pytest.mark.parametrize("engine", ["approx_gb", "license", "params_b", "thinking"])
 def test_resolve_model_id_reads_the_four_engine_fields_and_no_other(engine):
     assert M.resolve_model_id("qwen3-4b", engine) == "qwen3-4b"
 
