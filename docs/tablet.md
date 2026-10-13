@@ -276,6 +276,10 @@ A completion through Juno's mlx-lm build has not yet been verified on a device. 
 the model ladder, the modes, shipping a cache and troubleshooting are in
 [Local language models](local_llm.md).
 
+The micropip steps under [Installing on Juno](#installing-on-juno) are for the browser kernel of
+juno.sh (Pyodide). The Juno app's own Python has no `pip` or `micropip`: install puremacro there
+through Juno's package manager.
+
 ## Installing on Juno
 
 Every base dependency ships with Pyodide, so a dependency-resolving install

@@ -666,7 +666,7 @@ Las funciones LLM narrativas (`score_llm`, `llm_prob_kernel`) se ejecutan sobre 
 Instale un motor una sola vez (cualquiera de los siguientes):
 
 ```bash
-pip install "puremacro[local-llm]"     # MLX (Apple Silicon) + llama.cpp (cualquier SO)
+pip install "puremacro[local-llm]"     # llama.cpp (cualquier SO) + mlx-lm en todo Mac; MLX solo funciona en Apple silicon
 # o instale Ollama (https://ollama.com) — sin dependencias Python — y luego:  ollama pull qwen3:4b
 ```
 

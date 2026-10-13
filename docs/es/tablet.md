@@ -188,3 +188,6 @@ nunca por el sistema operativo, de modo que allí se elige MLX. Tres cosas que c
 Un completado con el mlx-lm de Juno aún no se ha verificado en un dispositivo. La instalación,
 la escalera de modelos, los modos, la distribución de una caché y la solución de problemas están
 en [Modelos de lenguaje locales](local_llm.md).
+
+El Python propio de la app Juno no tiene `pip` ni `micropip`: instale puremacro allí con el
+gestor de paquetes de Juno. `micropip` solo existe en el kernel de navegador de juno.sh (Pyodide).

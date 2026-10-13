@@ -902,7 +902,7 @@ free; this closes the last paid gap.
 Install an engine once (any one):
 
 ```bash
-pip install "puremacro[local-llm]"     # MLX (Apple Silicon) + llama.cpp (any OS)
+pip install "puremacro[local-llm]"     # llama.cpp (any OS) + mlx-lm on any Mac; MLX itself runs only on Apple silicon
 # or install Ollama (https://ollama.com) — no Python deps — then:  ollama pull qwen3:4b
 ```
 

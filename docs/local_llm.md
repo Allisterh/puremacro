@@ -64,14 +64,16 @@ the model; see [On the iPad](#on-the-ipad).
 **Mac.** Either the Python engines:
 
 ```bash
-pip install "puremacro[local-llm]"     # mlx-lm (macOS only), llama-cpp-python and huggingface_hub
+pip install "puremacro[local-llm]"     # llama-cpp-python, huggingface_hub, and mlx-lm on any Mac
 ```
 
 or the Ollama app (https://ollama.com), then `ollama pull qwen3:4b`. MLX is the one puremacro
-picks when both are present. The `[local-llm]` extra builds llama-cpp-python from source, which
-needs the Xcode command-line tools. Do not use the prebuilt Metal wheel of llama-cpp-python
-0.3.36 from the project's extra index: it is corrupt (half of its files fail their CRC check).
-To build llama.cpp with Metal explicitly:
+picks when both are present. The extra installs mlx-lm on every Mac, Intel ones included, but
+MLX runs only on Apple silicon: on an Intel Mac use llama.cpp
+(`pip install puremacro llama-cpp-python huggingface_hub`) or Ollama. The `[local-llm]` extra
+builds llama-cpp-python from source, which needs the Xcode command-line tools. Do not use the
+prebuilt Metal wheel of llama-cpp-python 0.3.36 from the project's extra index: it is corrupt
+(half of its files fail their CRC check). To build llama.cpp with Metal explicitly:
 
 ```bash
 CMAKE_ARGS="-DGGML_METAL=on" pip install llama-cpp-python --no-binary llama-cpp-python
@@ -85,20 +87,22 @@ Or download a llamafile and run it as a local server; it listens on port 8080 wi
 OpenAI-compatible API, which `engine="auto"` finds. `pip install "puremacro[local-llm]"` also
 works where llama-cpp-python builds (a C compiler and CMake are needed).
 
-**Colab.** Choose a GPU runtime (Runtime → Change runtime type → T4 GPU), then in one cell:
+**Colab.** Choose a GPU runtime (Runtime → Change runtime type → T4 GPU), then paste into one
+code cell:
 
-```bash
+```text
 # requires: Colab with a GPU runtime (not yet verified on device)
-pip install -q --only-binary=llama-cpp-python llama-cpp-python \
-    --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
-pip install -q huggingface_hub puremacro
+%pip install -q --only-binary=llama-cpp-python llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
+%pip install -q huggingface_hub puremacro
 ```
 
 The CUDA wheel is about 1.8 GB; `--only-binary` makes the cell fail fast instead of starting a
 long CPU-only build. The engine offloads every layer to the GPU (`n_gpu_layers=-1`). The other
-route is Ollama inside the notebook: install it with Ollama's Linux install script, start
-`ollama serve` in the background and run `ollama pull qwen3:4b`; `engine="auto"` then finds it on
-port 11434.
+route is Ollama inside the notebook. First install what its Linux install script needs,
+`apt-get -qq update; apt-get -qq install -y zstd pciutils lshw` (`zstd` because newer Ollama
+Linux bundles are `.tar.zst` archives, `pciutils` and `lshw` for the script's GPU detection);
+then run `curl -fsSL https://ollama.com/install.sh | sh`, start `ollama serve` in the background
+and run `ollama pull qwen3:4b`; `engine="auto"` then finds it on port 11434.
 
 **Browser (JupyterLite, juno.sh).** No engine runs under Pyodide. Ship a cache (see
 [The cache and how to ship one](#the-cache-and-how-to-ship-one)) and use `cache` mode. Pyodide
@@ -135,9 +139,11 @@ files and the Ollama tags. OpenAI-compatible servers receive the alias itself as
   `suggested` and `budget_gb`) before any engine is looked for. A cached answer is served
   whatever the device.
 - **Names.** `model=` takes a tier name, an alias, or an engine's own id (an Ollama tag, a
-  `.gguf` path, a Hugging Face repository), which reaches the engine unchanged and is not
-  checked against the budget. `PUREMACRO_LLM_MODEL` changes what `default` means, and nothing
-  else.
+  `.gguf` path, a Hugging Face repository), which reaches the engine unchanged. Such an id has
+  no entry in the model registry, so it is not checked against the budget and is not treated as
+  a thinking model: the engine gets no thinking switch and no extra tokens (see Thinking), and
+  only `strip_thinking` cleans the answer. Use the alias (`qwen3-4b`, not `qwen3:4b`) to get
+  the switch. `PUREMACRO_LLM_MODEL` changes what `default` means, and nothing else.
 - **Thinking.** The Qwen3 models think before they answer. The engines switch that off (MLX and
   llama.cpp through the chat template, Ollama with `"think": false`, OpenAI-compatible servers
   with `chat_template_kwargs` and a `/no_think` suffix), and `strip_thinking` removes any
@@ -187,7 +193,9 @@ The narrative features follow the mode:
 - `OllamaBackend()` and `OllamaProvider()` default to the alias `qwen3-4b`: the server receives
   its tag `qwen3:4b`, and the cache rows are those of `LocalBackend("default")`. An explicit tag,
   `OllamaBackend("qwen3:4b")`, reaches the server unchanged and then keys the cache on the tag,
-  so its rows are not shared with the alias.
+  so its rows are not shared with the alias. Nor is it known to think: the request goes without
+  `"think": false` and without the 8 extra tokens, and only `strip_thinking` cleans the answer.
+  Keep the alias to get the switch.
 
 ```python
 from puremacro.narrative.scoring import get_default_backend

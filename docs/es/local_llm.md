@@ -65,14 +65,17 @@ completado descarga el modelo; véase [En el iPad](#en-el-ipad).
 **Mac.** O bien los motores de Python:
 
 ```bash
-pip install "puremacro[local-llm]"     # mlx-lm (macOS only), llama-cpp-python and huggingface_hub
+pip install "puremacro[local-llm]"     # llama-cpp-python, huggingface_hub, and mlx-lm on any Mac
 ```
 
 o bien la app de Ollama (https://ollama.com) y después `ollama pull qwen3:4b`. Si están los dos,
-puremacro elige MLX. El extra `[local-llm]` compila llama-cpp-python desde el código fuente, lo
-que requiere las herramientas de línea de comandos de Xcode. No use la rueda Metal precompilada
-de llama-cpp-python 0.3.36 del índice adicional del proyecto: está corrupta (la mitad de sus
-archivos falla la comprobación CRC). Para compilar llama.cpp con Metal de forma explícita:
+puremacro elige MLX. El extra instala mlx-lm en cualquier Mac, también en los Intel, pero MLX
+solo funciona en Apple silicon: en un Mac Intel use llama.cpp
+(`pip install puremacro llama-cpp-python huggingface_hub`) u Ollama. El extra `[local-llm]`
+compila llama-cpp-python desde el código fuente, lo que requiere las herramientas de línea de
+comandos de Xcode. No use la rueda Metal precompilada de llama-cpp-python 0.3.36 del índice
+adicional del proyecto: está corrupta (la mitad de sus archivos falla la comprobación CRC). Para
+compilar llama.cpp con Metal de forma explícita:
 
 ```bash
 CMAKE_ARGS="-DGGML_METAL=on" pip install llama-cpp-python --no-binary llama-cpp-python
@@ -86,21 +89,24 @@ descargue un llamafile y ejecútelo como servidor local; escucha en el puerto 80
 compatible con OpenAI, que `engine="auto"` encuentra. `pip install "puremacro[local-llm]"`
 también funciona donde llama-cpp-python compila (hacen falta un compilador de C y CMake).
 
-**Colab.** Elija un entorno con GPU (Entorno de ejecución → Cambiar tipo de entorno → GPU T4) y,
-en una sola celda:
+**Colab.** Elija un entorno con GPU (Entorno de ejecución → Cambiar tipo de entorno → GPU T4) y
+pegue en una sola celda de código:
 
-```bash
+```text
 # requires: Colab with a GPU runtime (not yet verified on device)
-pip install -q --only-binary=llama-cpp-python llama-cpp-python \
-    --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
-pip install -q huggingface_hub puremacro
+%pip install -q --only-binary=llama-cpp-python llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
+%pip install -q huggingface_hub puremacro
 ```
 
 La rueda CUDA pesa unos 1.8 GB; `--only-binary` hace que la celda falle pronto en lugar de
 iniciar una larga compilación solo para CPU. El motor descarga todas las capas en la GPU
-(`n_gpu_layers=-1`). La otra vía es Ollama dentro del cuaderno: instálelo con el script de
-instalación de Ollama para Linux, arranque `ollama serve` en segundo plano y ejecute
-`ollama pull qwen3:4b`; `engine="auto"` lo encuentra entonces en el puerto 11434.
+(`n_gpu_layers=-1`). La otra vía es Ollama dentro del cuaderno. Instale primero lo que necesita
+su script de instalación para Linux,
+`apt-get -qq update; apt-get -qq install -y zstd pciutils lshw` (`zstd` porque los paquetes
+recientes de Ollama para Linux son archivos `.tar.zst`; `pciutils` y `lshw`, para que el script
+detecte la GPU); después ejecute `curl -fsSL https://ollama.com/install.sh | sh`, arranque
+`ollama serve` en segundo plano y ejecute `ollama pull qwen3:4b`; `engine="auto"` lo encuentra
+entonces en el puerto 11434.
 
 **Navegador (JupyterLite, juno.sh).** Bajo Pyodide no corre ningún motor. Distribuya una caché
 (véase [La caché y cómo distribuirla](#la-cache-y-como-distribuirla)) y use el modo `cache`.
@@ -139,8 +145,11 @@ arrancaron.
   Una respuesta en caché se sirve sea cual sea el dispositivo.
 - **Nombres.** `model=` acepta un nivel, un alias o el identificador propio de un motor (una
   etiqueta de Ollama, una ruta `.gguf`, un repositorio de Hugging Face), que llega al motor sin
-  cambios y no se compara con el presupuesto. `PUREMACRO_LLM_MODEL` cambia lo que significa
-  `default`, y nada más.
+  cambios. Ese identificador no figura en el registro de modelos, así que no se compara con el
+  presupuesto ni se trata como un modelo que razona: el motor no recibe el interruptor de
+  razonamiento ni tokens adicionales (véase Razonamiento), y solo `strip_thinking` limpia la
+  respuesta. Use el alias (`qwen3-4b`, no `qwen3:4b`) para obtener el interruptor.
+  `PUREMACRO_LLM_MODEL` cambia lo que significa `default`, y nada más.
 - **Razonamiento.** Los modelos Qwen3 razonan antes de responder. Los motores lo desactivan (MLX
   y llama.cpp mediante la plantilla de chat, Ollama con `"think": false`, los servidores
   compatibles con OpenAI con `chat_template_kwargs` y un sufijo `/no_think`), y `strip_thinking`
@@ -192,7 +201,9 @@ Las funciones narrativas siguen el modo:
 - `OllamaBackend()` y `OllamaProvider()` usan por defecto el alias `qwen3-4b`: el servidor recibe
   su etiqueta `qwen3:4b` y las filas de caché son las de `LocalBackend("default")`. Una etiqueta
   explícita, `OllamaBackend("qwen3:4b")`, llega al servidor sin cambios y entonces indexa la caché
-  por la etiqueta, de modo que sus filas no se comparten con el alias.
+  por la etiqueta, de modo que sus filas no se comparten con el alias. Tampoco se sabe que razona:
+  la petición va sin `"think": false` y sin los 8 tokens adicionales, y solo `strip_thinking`
+  limpia la respuesta. Conserve el alias para obtener el interruptor.
 
 ```python
 from puremacro.narrative.scoring import get_default_backend
