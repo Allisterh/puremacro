@@ -64,16 +64,16 @@ the model; see [On the iPad](#on-the-ipad).
 **Mac.** Either the Python engines:
 
 ```bash
-pip install "puremacro[local-llm]"     # llama-cpp-python, huggingface_hub, and mlx-lm on any Mac
+pip install "puremacro[local-llm]"     # llama-cpp-python, huggingface_hub, and mlx-lm on Apple silicon
 ```
 
 or the Ollama app (https://ollama.com), then `ollama pull qwen3:4b`. MLX is the one puremacro
-picks when both are present. The extra installs mlx-lm on every Mac, Intel ones included, but
-MLX runs only on Apple silicon: on an Intel Mac use llama.cpp
-(`pip install puremacro llama-cpp-python huggingface_hub`) or Ollama. The `[local-llm]` extra
-builds llama-cpp-python from source, which needs the Xcode command-line tools. Do not use the
-prebuilt Metal wheel of llama-cpp-python 0.3.36 from the project's extra index: it is corrupt
-(half of its files fail their CRC check). To build llama.cpp with Metal explicitly:
+picks when both are present. The extra installs mlx-lm on Apple silicon only; on an Intel Mac
+it installs llama-cpp-python and huggingface_hub, and Ollama works there too. The `[local-llm]`
+extra builds llama-cpp-python from source, which needs the Xcode command-line tools. Do not use
+the prebuilt Metal wheel of llama-cpp-python 0.3.36 from the project's extra index: as of
+2026-10-12 it is corrupt (half of its files fail their CRC check). To build llama.cpp with Metal
+explicitly:
 
 ```bash
 CMAKE_ARGS="-DGGML_METAL=on" pip install llama-cpp-python --no-binary llama-cpp-python
@@ -137,7 +137,10 @@ files and the Ollama tags. OpenAI-compatible servers receive the alias itself as
   8 GB. `pick_model()` turns it into a model; `check_fits` refuses a model whose minimum budget
   the device does not reach, and `complete()` then raises `ModelTooLarge` (with `alias`,
   `suggested` and `budget_gb`) before any engine is looked for. A cached answer is served
-  whatever the device.
+  whatever the device. The budget is the local device's even when `PUREMACRO_LLM_BASE_URL` or
+  `base_url=` names another machine: a registry alias above it is refused before that server is
+  asked; the engine's own model id (`qwen3:8b`) bypasses the check, at the cost of a different
+  cache key and no thinking switch.
 - **Names.** `model=` takes a tier name, an alias, or an engine's own id (an Ollama tag, a
   `.gguf` path, a Hugging Face repository), which reaches the engine unchanged. Such an id has
   no entry in the model registry, so it is not checked against the budget and is not treated as

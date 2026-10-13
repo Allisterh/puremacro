@@ -171,10 +171,12 @@ show_colab_offload_dialog("sw07_colab.ipynb")
 
 ## Modelos locales en el iPad
 
-El Python propio de la app Juno (no el kernel Pyodide de juno.sh) incluye MLX y mlx-lm, así que
-`puremacro.llm` ejecuta un modelo de lenguaje en el propio iPad, y con él las funciones narrativas
-con LLM (`score_llm`, `llm_prob_kernel`). Los motores se eligen por lo que se puede importar,
-nunca por el sistema operativo, de modo que allí se elige MLX. Tres cosas que conviene saber:
+El Python propio de la app Juno (no el kernel Pyodide de juno.sh) incluye MLX y mlx-lm. En el
+iPad con Juno se selecciona MLX, donde `mlx` y `mlx-lm` importan; una completación ahí aún no
+está verificada en un dispositivo. Los motores se eligen por lo que se puede importar, nunca por
+el sistema operativo, y por eso allí se elige MLX; las funciones narrativas con LLM (`score_llm`,
+`llm_prob_kernel`) pasan por la misma puerta de entrada de `puremacro.llm`. Tres cosas que
+conviene saber:
 
 - **Mantenga Juno en primer plano** mientras se descarga el modelo y mientras se puntúa un
   corpus; una app suspendida detiene ambas cosas. La caché de completados conserva cada

@@ -65,17 +65,16 @@ completado descarga el modelo; véase [En el iPad](#en-el-ipad).
 **Mac.** O bien los motores de Python:
 
 ```bash
-pip install "puremacro[local-llm]"     # llama-cpp-python, huggingface_hub, and mlx-lm on any Mac
+pip install "puremacro[local-llm]"     # llama-cpp-python, huggingface_hub, and mlx-lm on Apple silicon
 ```
 
 o bien la app de Ollama (https://ollama.com) y después `ollama pull qwen3:4b`. Si están los dos,
-puremacro elige MLX. El extra instala mlx-lm en cualquier Mac, también en los Intel, pero MLX
-solo funciona en Apple silicon: en un Mac Intel use llama.cpp
-(`pip install puremacro llama-cpp-python huggingface_hub`) u Ollama. El extra `[local-llm]`
+puremacro elige MLX. El extra instala mlx-lm solo en Apple silicon; en un Mac Intel instala
+llama-cpp-python y huggingface_hub, y Ollama también funciona allí. El extra `[local-llm]`
 compila llama-cpp-python desde el código fuente, lo que requiere las herramientas de línea de
 comandos de Xcode. No use la rueda Metal precompilada de llama-cpp-python 0.3.36 del índice
-adicional del proyecto: está corrupta (la mitad de sus archivos falla la comprobación CRC). Para
-compilar llama.cpp con Metal de forma explícita:
+adicional del proyecto: al 2026-10-12 está corrupta (la mitad de sus archivos falla la
+comprobación CRC). Para compilar llama.cpp con Metal de forma explícita:
 
 ```bash
 CMAKE_ARGS="-DGGML_METAL=on" pip install llama-cpp-python --no-binary llama-cpp-python
@@ -142,7 +141,11 @@ arrancaron.
   memoria física; si no, 8 GB supuestos. `pick_model()` lo convierte en un modelo; `check_fits`
   rechaza un modelo cuyo presupuesto mínimo el dispositivo no alcanza, y `complete()` lanza
   entonces `ModelTooLarge` (con `alias`, `suggested` y `budget_gb`) antes de buscar ningún motor.
-  Una respuesta en caché se sirve sea cual sea el dispositivo.
+  Una respuesta en caché se sirve sea cual sea el dispositivo. El presupuesto es el del
+  dispositivo local incluso cuando `PUREMACRO_LLM_BASE_URL` o `base_url=` nombran otra máquina:
+  un alias del registro que lo supere se rechaza antes de consultar a ese servidor; el
+  identificador propio del motor (`qwen3:8b`) evita la comprobación, a costa de una clave de
+  caché distinta y de perder el interruptor de razonamiento.
 - **Nombres.** `model=` acepta un nivel, un alias o el identificador propio de un motor (una
   etiqueta de Ollama, una ruta `.gguf`, un repositorio de Hugging Face), que llega al motor sin
   cambios. Ese identificador no figura en el registro de modelos, así que no se compara con el

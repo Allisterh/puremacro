@@ -128,7 +128,8 @@ Scalar-`r` calls are unchanged.
   `NarrativeCorpus.segment("paragraph"|"sentence"|callable)` build on it.
 - `puremacro.llm`: one entry point for local language models (MLX, llama.cpp, Ollama and
   OpenAI-compatible servers) with a device-independent completion cache and memory-based model
-  selection; the narrative LLM features now run on the iPad under Juno.
+  selection. MLX is selected on the iPad under Juno, where `mlx` and `mlx-lm` import; a
+  completion there is not yet verified on a device.
   - `complete(prompt, *, model="default", engine="auto", mode=None, system=None,
     max_tokens=256, temperature=0.0, json_mode=False, timeout=120.0, base_url=None,
     cache=None)` and `chat(messages, **kw)`. `engine="auto"` takes the first available of MLX,
@@ -141,6 +142,11 @@ Scalar-`r` calls are unchanged.
   - `CompletionCache` (SQLite, `~/.cache/puremacro/llm_cache.sqlite` or `PUREMACRO_LLM_CACHE`)
     keyed on the canonical model alias and the prompt before any chat template, so a row written
     by one engine answers the same call on any other; `export`, `merge` and `stats` to ship one.
+    `export(since=...)` takes any ISO 8601 form (`Z`, offsets, fractional seconds) and compares
+    in UTC; an answer that is not valid UTF-8 is returned but not stored; a cache path that cannot
+    be read raises `CacheUnavailable` in cache mode rather than counting as a miss.
+  - `complete()` refuses a `temperature` that is negative, not finite or not a number, and an
+    `engine` name it does not know (`validate_engine_name` is public), before the cache is read.
   - A model ladder of three Qwen3 models (Apache-2.0): `qwen3-1.7b` (`small`), `qwen3-4b`
     (`default`, the reference model) and `qwen3-8b` (`large`). `pick_model()` sizes the model to
     the device's memory (`device_budget_gb()`), `ModelTooLarge` refuses a model that does not
@@ -150,7 +156,12 @@ Scalar-`r` calls are unchanged.
     (`strip_thinking`).
   - `report()` lists the host, memory, budget, engines, chosen model, cache and mode.
   - `pip install "puremacro[local-llm]"` now also installs `huggingface_hub`, through which
-    llama.cpp fetches the registry's GGUF files.
+    llama.cpp fetches the registry's GGUF files, and installs `mlx-lm` only on Apple silicon
+    (`platform_machine == 'arm64'`), so the extra no longer fails on an Intel Mac, where `mlx`
+    has no wheel.
+  - The `local_llm_uncertainty` notebooks and the `_tutor.py` copies still show the 4.8.1 model
+    names (`qwen2.5-3b-instruct`, `qwen2.5:3b` and the tutor's `qwen2.5:3b-instruct`), which
+    still resolve; they are synced in a separate change.
 
 ### Changed
 
@@ -174,6 +185,9 @@ Scalar-`r` calls are unchanged.
     and resolve no engine when they are built, so a cache-backed `score_llm` or
     `llm_prob_kernel` runs with no engine installed. `base_url` defaults to None:
     `PUREMACRO_LLM_BASE_URL`, then the default local servers.
+  - They check `engine` and `mode` when they are built (`PUREMACRO_LLM_MODE` included): a
+    misspelt name raises `ValueError` there, as the engine resolution of 4.8.1 did, and not at
+    the first record.
   - `LocalBackend`'s `json_mode` now defaults to False: the prompts ask for a JSON array, which
     llama.cpp's object-only JSON mode cannot produce.
   - `LocalProvider.name` is `"local"` and its `model` the canonical alias, so the score cache of
@@ -182,6 +196,9 @@ Scalar-`r` calls are unchanged.
   - `OllamaBackend` and `OllamaProvider` default to the registry alias `qwen3-4b`: the server
     still gets `qwen3:4b`, and the cache is shared with `LocalBackend("default")`. An explicit
     Ollama tag passes through unchanged and keys the cache on the tag.
+  - `OllamaBackend` and `OllamaProvider` now default `base_url` to None, so
+    `PUREMACRO_LLM_BASE_URL` applies to them as it does to `LocalBackend(engine='ollama')`;
+    without the variable they still use the local Ollama server.
   - In `cache` mode `score_llm` raises `CacheMiss` / `CacheUnavailable` for a record the cache
     does not hold, instead of dropping it. `score_llm` also raises `ModelTooLarge` instead of
     dropping every record as malformed.
@@ -197,7 +214,10 @@ Scalar-`r` calls are unchanged.
 - `puremacro.narrative._local_engines` is now a compatibility re-export of `puremacro.llm`. Its
   `chat` reads the completion cache, and its `base_url` defaults to None
   (`PUREMACRO_LLM_BASE_URL`, then the default local servers) instead of Ollama's URL.
-  `MODEL_ALIASES` is built from the registry, with exact GGUF file names instead of globs.
+  `MODEL_ALIASES` is a read-only view of `puremacro.llm.MODELS` built from the registry, with
+  exact GGUF file names instead of globs: adding an entry to it changes nothing, and a custom
+  model id passes through to the engine unchanged. `HTTPEngine()` keeps its 4.8.1 defaults
+  (Ollama API at http://localhost:11434).
 - Local engines: MLX is chosen whenever `mlx` and `mlx_lm` can be imported, on any platform;
   llama.cpp offloads every layer to the GPU (`n_gpu_layers=-1`; it ran on the CPU) and loads
   registry files through `huggingface_hub`, which finds a downloaded file offline; `engine="auto"`
@@ -2989,8 +3009,8 @@ Providers disagree about what a vintage date *is*, and the difference is load-be
 - **Quarterly National Accounts (QNA) Historical Vintages (`puremacro.fetch.qna_vintages`, `puremacro.vintages`)**:
   - Implemented multi-country historical publication vintage retrieval across **45+ economies** (all 38 OECD member states, G7, G20, and key emerging markets) from the 1960s to present.
   - Standardized core macroeconomic expenditure variables: `gdp_real`, `con_real`, `gfcf_real` (investment), `govcon_real`, `exports_real`, `imports_real`, `deflator`, and `gdp_nom`.
-  - Added [`get_qna_vintage_catalog()`](file:///Users/jalonso/Documents/RESEARCH/puremacro/puremacro/fetch/qna_vintages.py) returning full metadata catalogs.
-  - Added [`QNAVintagePanel`](file:///Users/jalonso/Documents/RESEARCH/puremacro/puremacro/fetch/qna_vintages.py) analytics engine:
+  - Added [`get_qna_vintage_catalog()`](puremacro/fetch/qna_vintages.py) returning full metadata catalogs.
+  - Added [`QNAVintagePanel`](puremacro/fetch/qna_vintages.py) analytics engine:
     - `.as_of(vintage_date)`: Point-in-time real-time dataset slicing as known on historical publication dates (Orphanides 2001, Croushore & Stark 2001).
     - `.revision_matrix(country, variable)`: $(T \times V)$ observation-by-vintage historical revision triangle.
     - `.first_release()` vs. `.latest_release()` series extraction.
@@ -3025,7 +3045,7 @@ Providers disagree about what a vintage date *is*, and the difference is load-be
     $$r_{i,t} = \mu + \sqrt{\tau_t \cdot g_{i,t}} \cdot \varepsilon_{i,t}$$
     where $\log \tau_t = m + \theta \sum_{l=1}^L w(l; w_2) X_{t-l}$ models the low-frequency trend component (via external macro driver or realized volatility $RV_t$) and $g_{i,t}$ captures high-frequency GARCH(1,1) dynamics.
   - Added single-parameter Beta polynomial memory weighting with monotonic decay.
-  - Returned immutable [`GarchMidasResult`](file:///Users/jalonso/Documents/RESEARCH/puremacro/puremacro/midas.py) with full parameter decomposition, variances ($\tau_t, g_{i,t}, \sigma_{i,t}$), and formatted `.summary()`.
+  - Returned immutable [`GarchMidasResult`](puremacro/midas.py) with full parameter decomposition, variances ($\tau_t, g_{i,t}, \sigma_{i,t}$), and formatted `.summary()`.
 - **Time-Domain Filters & Decompositions (`puremacro.cycles`)**:
   - `baxter_king_filter`: Baxter & King (1999, *REStat*) bandpass filter isolating cyclical periodicities with lead-lag truncation $K$ and zero-frequency gain constraint.
   - `christiano_fitzgerald_filter`: Christiano & Fitzgerald (2003, *IER*) asymmetric random-walk optimal bandpass filter for the full sample with zero end-point observation loss.
@@ -3043,7 +3063,7 @@ Providers disagree about what a vintage date *is*, and the difference is load-be
   - `28_weak_iv_anderson_rubin` (`anderson_rubin_weak_iv_demo.py`): Exact quadratic HAC confidence set inversion for weak identification in LP-IV.
   - `29_synthetic_did` (`synthetic_did_california_prop99.py`): Dual-weighted Synthetic DiD combining unit SCM weights and temporal DiD weights with intercept shifts.
 - **Rosetta Stone Syntax Cheatsheet**:
-  - Comprehensive translation tables connecting `puremacro` with Stata, MATLAB/Dynare, and statsmodels across [`README.md`](file:///Users/jalonso/Documents/RESEARCH/puremacro/README.md) and [`README.es.md`](file:///Users/jalonso/Documents/RESEARCH/puremacro/README.es.md).
+  - Comprehensive translation tables connecting `puremacro` with Stata, MATLAB/Dynare, and statsmodels across [`README.md`](README.md) and [`README.es.md`](README.es.md).
 - **Advanced Narrative Econometrics & Pure-Python NLP (`puremacro.narrative`, `puremacro.var.identify`)**:
   - `puremacro.var.identify.narrative_sign`: Added Ludvigson, Ma & Ng (2021, *JME*) `shock_bound` magnitude inequality restrictions ($|\\varepsilon_{t,j}| \\ge \\bar{c}$ or $|\\varepsilon_{t,j}| \\le \\underline{c}$) and conjugate Normal-Inverse-Wishart Bayesian parameter sampling (`bayes_draws=True`).
   - `puremacro.narrative.topics`: Pure-Python `TfidfVectorizer`, `NMF` (multiplicative update Non-negative Matrix Factorization), and `DynamicTopicModel` for extracting dated macro topic distributions without scikit-learn or heavy binary dependencies.

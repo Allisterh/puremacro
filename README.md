@@ -927,8 +927,9 @@ rungs, and the 4.8.1 names (`qwen2.5-3b-instruct`, `gemma2-2b`, `llama3.2-3b`,
 prompt, so `PUREMACRO_LLM_MODE=cache` scores a corpus that was scored once
 anywhere, with no engine installed. See `docs/local_llm.md`,
 `puremacro/examples/narrative_local_llm.py` and the `local_llm_uncertainty`
-notebook. (Local inference runs on desktops and on the iPad under the Juno app;
-inside the browser playground only the cache answers.)
+notebook. (Local inference runs on desktops. MLX is selected on the iPad under Juno,
+where `mlx` and `mlx-lm` import; a completion there is not yet verified on a device.
+Inside the browser playground only the cache answers.)
 
 ## Pyodide compatibility
 

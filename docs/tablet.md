@@ -259,10 +259,11 @@ generate_colab_notebook(
 
 ## Local models on the iPad
 
-The Juno app's own Python (not the Pyodide kernel of juno.sh) ships MLX and mlx-lm, so
-`puremacro.llm` runs a language model on the iPad itself, and the narrative LLM features
-(`score_llm`, `llm_prob_kernel`) with it. Engines are chosen by what can be imported, never by
-the operating system, so MLX is picked there. Three things to know:
+The Juno app's own Python (not the Pyodide kernel of juno.sh) ships MLX and mlx-lm. MLX is
+selected on the iPad under Juno, where `mlx` and `mlx-lm` import; a completion there is not yet
+verified on a device. Engines are chosen by what can be imported, never by the operating
+system, which is why MLX is the one picked there, and the narrative LLM features (`score_llm`,
+`llm_prob_kernel`) go through the same `puremacro.llm` entry point. Three things to know:
 
 - **Keep Juno in front** while the model downloads and while a corpus is scored; a suspended app
   stops both. The completion cache keeps every answer already computed.
