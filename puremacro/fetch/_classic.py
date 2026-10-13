@@ -40,7 +40,6 @@ def _safe_urlopen(url: str, timeout: float = 30.0) -> bytes:
     UAs (silent timeout). Honest UA gets 0.1s response.
     """
     from .. import __version__
-    from .. import __version__
     from .._http import safe_get_bytes
     return safe_get_bytes(
         url,

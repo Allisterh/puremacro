@@ -225,8 +225,8 @@ print(f"PINN converged: {sol.converged}")
 print(f"Final training loss: {sol.loss_history[-1]:.4e}")
 ```
 
-### 8. Quantitative Spatial Economics & Trade General Equilibrium (puremacro 3.3)
-Evaluate the general equilibrium welfare, trade flow, and real wage impacts of tariffs, supply chain disruptions, and transport infrastructure investments:
+### 8. Quantitative Spatial Economics (puremacro 3.3)
+Evaluate the general equilibrium welfare, trade flow, and real wage effects of changes in bilateral trade costs and of transport infrastructure investments:
 ```python
 import numpy as np
 from puremacro.spatial import AllenArkolakisModel

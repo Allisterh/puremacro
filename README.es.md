@@ -221,8 +221,8 @@ print(f"PINN convergente: {sol.converged}")
 print(f"Pérdida final de entrenamiento: {sol.loss_history[-1]:.4e}")
 ```
 
-### 8. Economía Espacial Cuantitativa y Equilibrio General Comercial (puremacro 3.3)
-Evalúa los efectos de equilibrio general sobre el bienestar, los flujos comerciales y los salarios reales ante choques arancelarios, disrupciones en cadenas de suministro e inversiones en infraestructura regional:
+### 8. Economía Espacial Cuantitativa (puremacro 3.3)
+Evalúa los efectos de equilibrio general sobre el bienestar, los flujos comerciales y los salarios reales ante cambios en los costos bilaterales de comercio e inversiones en infraestructura de transporte:
 ```python
 import numpy as np
 from puremacro.spatial import AllenArkolakisModel

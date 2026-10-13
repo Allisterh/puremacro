@@ -32,11 +32,6 @@ def _user_agent() -> str:
     return f"puremacro/{__version__} (+https://github.com/jalonso1979/puremacro)"
 
 
-def _user_agent() -> str:
-    from .. import __version__
-    return f"puremacro/{__version__} (+https://github.com/jalonso1979/puremacro)"
-
-
 _SOCRATA_URL = "https://data.cdc.gov/resource/hmz2-vwda.json"
 _PAGE_LIMIT = 5000
 
