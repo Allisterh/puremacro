@@ -73,6 +73,46 @@ def test_read_changelog_version(tmp_path):
     assert release_check.read_changelog_version(f) == "0.46.0"
 
 
+@pytest.mark.parametrize(
+    "heading,expected",
+    [
+        ("## 5.0.0a1 (unreleased)", "5.0.0a1"),
+        ("## 5.0.0a1 (2026-10-20)", "5.0.0a1"),
+        ("## 4.8.1 (2026-10-11)", "4.8.1"),
+    ],
+    ids=["alpha-unreleased", "alpha-dated", "final"],
+)
+def test_read_changelog_version_accepts_a_pre_release(tmp_path, heading, expected):
+    """A ``## 5.0.0a1`` heading is the version ``5.0.0a1``, not ``5.0.0``.
+
+    Gate 4 compares the CHANGELOG heading with the four other version-bearing
+    files, so a reader that drops the PEP 440 pre-release suffix reports a false
+    mismatch (``5.0.0`` against ``5.0.0a1``) on every alpha, beta or rc heading.
+    """
+    f = tmp_path / "CHANGELOG.md"
+    f.write_text(
+        f"# Changelog\n\nIntro paragraph.\n\n{heading}\n\nSome content.\n\n"
+        "## 4.8.0 (2026-10-10)\nOlder.\n",
+        encoding="utf-8",
+    )
+    assert release_check.read_changelog_version(f) == expected
+
+
+def test_the_other_version_readers_accept_a_pre_release(tmp_path):
+    """The four other readers already keep the suffix; pin that so Gate 4 can compare 5.0.0a1 everywhere."""
+    (tmp_path / "pyproject.toml").write_text('[project]\nversion = "5.0.0a1"\n', encoding="utf-8")
+    (tmp_path / "__init__.py").write_text('__version__ = "5.0.0a1"\n', encoding="utf-8")
+    (tmp_path / "CITATION.cff").write_text("cff-version: 1.2.0\nversion: 5.0.0a1\n", encoding="utf-8")
+    (tmp_path / "jupyter_lite_config.json").write_text(
+        json.dumps({"PipliteAddon": {"piplite_urls": ["./wheels/puremacro-5.0.0a1-py3-none-any.whl"]}}),
+        encoding="utf-8",
+    )
+    assert release_check.read_pyproject_version(tmp_path / "pyproject.toml") == "5.0.0a1"
+    assert release_check.read_init_version(tmp_path / "__init__.py") == "5.0.0a1"
+    assert release_check.read_citation_version(tmp_path / "CITATION.cff") == "5.0.0a1"
+    assert release_check.read_playground_pin_version(tmp_path / "jupyter_lite_config.json") == "5.0.0a1"
+
+
 def test_gate4_version_sync_pass():
     r = release_check.gate_version_sync(
         pyproject_version="0.46.0",

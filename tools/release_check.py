@@ -50,8 +50,10 @@ def read_init_version(path: Path) -> str:
 
 
 def read_changelog_version(path: Path) -> str:
+    """Version of the first ``## X.Y.Z`` heading, keeping a PEP 440 pre-release
+    suffix (``## 5.0.0a1 (unreleased)`` reads ``5.0.0a1``, not ``5.0.0``)."""
     for line in Path(path).read_text(encoding="utf-8").splitlines():
-        m = re.match(r"^##\s+(\d+\.\d+\.\d+)", line)
+        m = re.match(r"^##\s+(\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?)", line)
         if m:
             return m.group(1)
     raise ValueError(f"no '## X.Y.Z' heading in {path}")

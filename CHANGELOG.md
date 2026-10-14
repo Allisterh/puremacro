@@ -217,6 +217,7 @@ Scalar-`r` calls are unchanged.
 - `pyproject.toml` and `MANIFEST.in` drop the removed packages, their data files and the `gpu` extra (torch and MLX were used only by the removed solvers; the `accel`/`backend` and `cuda` extras are unchanged).
 - The notebook integrity test restores matplotlib's `rcParams` after exercising `_nbstyle.apply_style()`, so `tests/test_dsge/test_diagnostics.py::test_check_unit_circle_plot` passes in any test order.
 - `.gitignore` no longer lists LaTeX intermediates of a directory that is not part of the repository.
+- `tools/release_check.py` reads a PEP 440 pre-release heading (`## 5.0.0a1`) from this file, so the version-sync gate compares `5.0.0a1` across the five version-bearing files instead of reporting `5.0.0` against `5.0.0a1`; `tests/test_release_check.py` pins every reader on a pre-release value. The deprecation-target tests for the `puremacro.lp.garch_utils` and `SigmaObject` shims compare `packaging` versions, so their 5.0.0 removal stays in the future of 5.0.0a1.
 
 ## Releases before 5.0
 
