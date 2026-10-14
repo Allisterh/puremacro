@@ -1,0 +1,887 @@
+# tests/test_llm_cache.py
+import contextlib
+import hashlib
+import os
+import pickle
+import sqlite3
+import stat
+from pathlib import Path
+
+import pytest
+from puremacro.llm.cache import (CACHE_FORMAT, CacheMiss, CacheRow, CacheUnavailable,
+                                 CompletionCache, cache_key, default_cache_path, prompt_sha256)
+
+GOLDEN = "c630a581ab2b323492ac1db08bfc8b8f5a72655db00282142eb5762eacccb586"
+
+def test_golden_key():
+    assert CACHE_FORMAT == "v1"
+    assert prompt_sha256("hola") == "3173f87dc99e79b2df6105b53594c5459bb363bd663c1b9d908195688481bc5f"
+    assert cache_key("qwen3-4b", "hola", max_tokens=8, temperature=0.0, json_mode=False) == GOLDEN
+
+def test_golden_key_non_ascii_with_system():
+    k = cache_key("qwen3-4b", "¿Qué es el PIB?", system="Eres un asistente.",
+                  max_tokens=16, temperature=0.0, json_mode=False)
+    assert k == "0fb187545fac544435c8fec55bd98117e4504c10088a756d9b24bc44452d7f7d"
+
+def test_key_depends_on_max_tokens_and_json_mode():
+    base = dict(max_tokens=8, temperature=0.0, json_mode=False)
+    assert cache_key("qwen3-4b", "hola", **base) != cache_key("qwen3-4b", "hola", **{**base, "max_tokens": 9})
+    assert cache_key("qwen3-4b", "hola", **base) != cache_key("qwen3-4b", "hola", **{**base, "json_mode": True})
+
+def test_round_trip_and_stats(tmp_path):
+    c = CompletionCache(tmp_path / "c.sqlite")
+    k = cache_key("qwen3-4b", "hola", max_tokens=8, temperature=0.0, json_mode=False)
+    assert c.get(k) is None
+    c.set(CacheRow(k, "qwen3-4b", prompt_sha256("hola"), 8, 0.0, False, "¡Hola!", "mlx", "mlx-community/Qwen3-4B-4bit"))
+    assert c.get(k) == "¡Hola!"
+    s = c.stats()
+    assert s["rows"] == 1 and s["by_model"] == {"qwen3-4b": 1} and s["bytes"] > 0
+
+def test_export_filters_by_model_and_merge_ignores_duplicates(tmp_path):
+    a = CompletionCache(tmp_path / "a.sqlite")
+    for model, text in [("qwen3-4b", "x"), ("qwen3-1.7b", "y")]:
+        k = cache_key(model, "p", max_tokens=8, temperature=0.0, json_mode=False)
+        a.set(CacheRow(k, model, prompt_sha256("p"), 8, 0.0, False, text))
+    assert a.export(tmp_path / "b.sqlite", model="qwen3-4b") == 1
+    b = CompletionCache(tmp_path / "b.sqlite")
+    assert b.stats()["rows"] == 1
+    assert b.merge(tmp_path / "a.sqlite") == 1      # only the 1.7b row is new
+    assert b.merge(tmp_path / "a.sqlite") == 0
+
+def test_default_path_from_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(tmp_path / "x.sqlite"))
+    assert default_cache_path() == tmp_path / "x.sqlite"
+
+def test_unwritable_path_degrades_to_no_cache(tmp_path, recwarn):
+    ro = tmp_path / "ro"; ro.mkdir(); os.chmod(ro, stat.S_IRUSR | stat.S_IXUSR)
+    if os.access(ro, os.W_OK):      # root, or Windows: directory permissions are not enforced
+        os.chmod(ro, stat.S_IRWXU)
+        pytest.skip("directory permissions do not restrict this account")
+    c = CompletionCache(ro / "c.sqlite")
+    assert c.writable is False
+    k = cache_key("qwen3-4b", "hola", max_tokens=8, temperature=0.0, json_mode=False)
+    c.set(CacheRow(k, "qwen3-4b", prompt_sha256("hola"), 8, 0.0, False, "t"))   # no raise
+    assert c.get(k) is None
+    assert sum("cache" in str(w.message).lower() for w in recwarn) == 1
+    c.set(CacheRow(k, "qwen3-4b", prompt_sha256("hola"), 8, 0.0, False, "t"))
+    assert sum("cache" in str(w.message).lower() for w in recwarn) == 1          # warned once
+    os.chmod(ro, stat.S_IRWXU)
+
+def test_cache_miss_carries_key_and_model():
+    e = CacheMiss("k", "qwen3-4b")
+    assert e.key == "k" and e.model == "qwen3-4b"
+
+
+# ---------------------------------------------------------------------------
+# Beyond the eight tests above: behaviour that spec section 3.4 states
+# (key format, export/merge, degrade-to-no-cache) or that the code decides.
+# ---------------------------------------------------------------------------
+
+def _k(prompt, model="qwen3-4b"):
+    return cache_key(model, prompt, max_tokens=8, temperature=0.0, json_mode=False)
+
+
+def _row(key, text="t", model="qwen3-4b"):
+    return CacheRow(key, model, prompt_sha256("p"), 8, 0.0, False, text)
+
+
+def _sql(path, statement, args=()):
+    """Run one statement against a cache file with a throw-away connection."""
+    with contextlib.closing(sqlite3.connect(path)) as conn:
+        rows = conn.execute(statement, args).fetchall()
+        conn.commit()
+    return rows
+
+
+def _n_cache_warnings(recwarn):
+    return sum("cache" in str(w.message).lower() for w in recwarn)
+
+
+def _reference_key(model, prompt, system, max_tokens, temperature, json_mode):
+    """Spec 3.4 written out literally, independent of the module under test."""
+    p = hashlib.sha256(((system or "") + "\x1f" + prompt).encode("utf-8")).hexdigest()
+    s = "|".join(["v1", model, p, str(int(max_tokens)),
+                  f"{float(temperature):.3f}", "1" if json_mode else "0"])
+    return hashlib.sha256(s.encode("utf-8")).hexdigest()
+
+
+@pytest.mark.parametrize("model, prompt, system, max_tokens, temperature, json_mode", [
+    ("qwen3-4b", "hola", None, 8, 0.0, False),
+    ("qwen3-1.7b", "¿Qué es el PIB?", "Eres un asistente.", 256, 0.7, True),
+    ("qwen3-8b", "línea 1\nlínea 2 — 日本語", "", 1, 1.0, False),
+    ("qwen3:4b", "x|y", "a|b", 512, 0.0004, True),
+])
+def test_key_follows_the_specification_formula(model, prompt, system, max_tokens, temperature, json_mode):
+    got = cache_key(model, prompt, system=system, max_tokens=max_tokens,
+                    temperature=temperature, json_mode=json_mode)
+    assert got == _reference_key(model, prompt, system, max_tokens, temperature, json_mode)
+    assert prompt_sha256(prompt, system) == hashlib.sha256(
+        ((system or "") + "\x1f" + prompt).encode("utf-8")).hexdigest()
+
+
+def test_key_depends_on_every_input_and_rounds_temperature_to_three_decimals():
+    base = dict(system=None, max_tokens=8, temperature=0.0, json_mode=False)
+    k0 = cache_key("qwen3-4b", "hola", **base)
+    assert cache_key("qwen3-4b", "hola", **{**base, "system": ""}) == k0           # None is ""
+    assert cache_key("qwen3-4b", "hola", **{**base, "temperature": 0.0004}) == k0  # 3 decimals
+    for change in ({"system": "S"}, {"temperature": 0.001}, {"max_tokens": 9}, {"json_mode": True}):
+        assert cache_key("qwen3-4b", "hola", **{**base, **change}) != k0, change
+    assert cache_key("qwen3-1.7b", "hola", **base) != k0
+    assert cache_key("qwen3-4b", "hol", **base) != k0
+    # system and prompt are separated, not just concatenated
+    assert cache_key("m", "b", **{**base, "system": "a"}) != cache_key("m", "ab", **base)
+
+
+def test_default_path_without_env_is_under_the_home_cache_directory(monkeypatch):
+    expected = Path.home() / ".cache" / "puremacro" / "llm_cache.sqlite"
+    monkeypatch.delenv("PUREMACRO_LLM_CACHE", raising=False)
+    assert default_cache_path() == expected
+    monkeypatch.setenv("PUREMACRO_LLM_CACHE", "")
+    assert default_cache_path() == expected
+
+
+def test_env_path_expands_the_home_directory(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.setenv("PUREMACRO_LLM_CACHE", "~/llm.sqlite")
+    assert default_cache_path() == tmp_path / "llm.sqlite"
+
+
+def test_cache_without_arguments_uses_the_default_path(monkeypatch, tmp_path):
+    monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(tmp_path / "sub" / "env.sqlite"))
+    c = CompletionCache()
+    assert c.path == tmp_path / "sub" / "env.sqlite"
+    assert c.writable is True and c.path.is_file()       # parent directory created too
+
+
+def test_relative_path_is_anchored_when_the_cache_is_created(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    c = CompletionCache("rel.sqlite")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)                          # a notebook that calls os.chdir
+    c.set(_row(_k("p")))
+    assert c.path.is_absolute() and c.path.resolve() == (tmp_path / "rel.sqlite").resolve()
+    assert c.get(_k("p")) == "t" and not (elsewhere / "rel.sqlite").exists()
+
+
+def test_paths_with_uri_special_characters_read_back_what_was_written(tmp_path):
+    """Reads open the file through a SQLite URI and writes through the plain path: a
+    name like `c#1 %41+é.sqlite` must mean the same file to both (`%41` is "A" if
+    the URI were not percent-encoded)."""
+    c = CompletionCache(tmp_path / "my cache" / "c#1 %41+é&'.sqlite")
+    c.set(_row(_k("p"), text="ok"))
+    assert c.get(_k("p")) == "ok" and c.stats()["rows"] == 1
+    assert c.export(tmp_path / "out dir" / "x%20y.sqlite") == 1
+    assert CompletionCache(tmp_path / "out dir" / "x%20y.sqlite").get(_k("p")) == "ok"
+    assert sorted(p.name for p in (tmp_path / "my cache").iterdir()) == ["c#1 %41+é&'.sqlite"]
+
+
+def test_stored_columns_and_types(tmp_path):
+    c = CompletionCache(tmp_path / "c.sqlite")
+    c.set(CacheRow("k1", "qwen3-4b", "sha", 8, 0.5, True, "ok", "mlx", "mlx-community/Qwen3-4B-4bit"))
+    c.set(CacheRow("k2", "qwen3-4b", "sha", 8, 0.0, False, "no provenance"))
+    rows = _sql(c.path, "SELECT key, model, prompt_sha256, max_tokens, temperature, json_mode, "
+                        "completion, engine, engine_model_id, typeof(created_at) FROM completions ORDER BY key")
+    assert rows == [
+        ("k1", "qwen3-4b", "sha", 8, 0.5, 1, "ok", "mlx", "mlx-community/Qwen3-4B-4bit", "text"),
+        ("k2", "qwen3-4b", "sha", 8, 0.0, 0, "no provenance", None, None, "text"),
+    ]
+    assert _sql(c.path, "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'completions_model'")
+
+
+def test_set_keeps_the_first_completion_for_a_key(tmp_path):
+    c = CompletionCache(tmp_path / "c.sqlite")
+    c.set(_row(_k("p"), text="first"))
+    c.set(_row(_k("p"), text="second"))
+    assert c.get(_k("p")) == "first" and c.stats()["rows"] == 1
+
+
+def test_a_completion_that_is_not_valid_unicode_is_skipped_and_the_cache_keeps_writing(tmp_path, recwarn):
+    """A lone surrogate (what a bad decode leaves in a model's text) cannot be stored as UTF-8:
+    sqlite3 raises UnicodeEncodeError, which is neither an sqlite3.Error nor an OSError. The row is
+    skipped, nothing is raised, and the cache is not declared unwritable: the file is fine."""
+    c = CompletionCache(tmp_path / "c.sqlite")
+    c.set(_row(_k("p"), text="half \ud83d"))                  # no raise
+    assert c.get(_k("p")) is None and c.writable is True
+    c.set(_row(_k("q"), text="whole 😀"))
+    assert c.get(_k("q")) == "whole 😀" and c.stats()["rows"] == 1
+    assert _n_cache_warnings(recwarn) == 0
+
+
+def test_a_prompt_that_is_not_valid_unicode_cannot_be_hashed():
+    """The key hashes UTF-8, and a lone surrogate has no UTF-8: a clear ValueError, raised before
+    anything is looked up, instead of a UnicodeEncodeError from inside the key function."""
+    for prompt, system, model in [("half \ud83d", None, "qwen3-4b"), ("hola", "\udcff", "qwen3-4b"),
+                                  ("hola", None, "m\ud83d")]:
+        with pytest.raises(ValueError, match="surrogate") as ei:
+            cache_key(model, prompt, system=system, max_tokens=8, temperature=0.0, json_mode=False)
+        assert type(ei.value) is ValueError                      # not the UnicodeEncodeError itself
+        assert isinstance(ei.value.__cause__, UnicodeEncodeError)
+    with pytest.raises(ValueError, match="surrogate"):
+        prompt_sha256("hola", system="\udcff")
+
+
+def test_stats_groups_by_model(tmp_path):
+    c = CompletionCache(tmp_path / "c.sqlite")
+    for i in range(3):
+        c.set(_row(_k(f"p{i}"), model="qwen3-4b"))
+    c.set(_row(_k("p0", "qwen3-1.7b"), model="qwen3-1.7b"))
+    s = c.stats()
+    assert s["rows"] == 4 and s["by_model"] == {"qwen3-1.7b": 1, "qwen3-4b": 3}
+    assert s["path"] == str(c.path) and s["bytes"] == c.path.stat().st_size
+
+
+def test_reads_do_not_recreate_a_deleted_file_but_writes_do(tmp_path):
+    c = CompletionCache(tmp_path / "c.sqlite")
+    c.path.unlink()
+    assert c.get(_k("p")) is None
+    assert c.stats() == {"rows": 0, "by_model": {}, "bytes": 0, "path": str(c.path)}
+    assert not c.path.exists()
+    c.set(_row(_k("p"), text="back"))
+    assert c.get(_k("p")) == "back"
+
+
+def test_export_and_merge_preserve_every_column_including_created_at(tmp_path):
+    a = CompletionCache(tmp_path / "a.sqlite")
+    a.set(CacheRow(_k("p"), "qwen3-4b", prompt_sha256("p"), 8, 0.0, True, "ok", "mlx", "mlx-community/Qwen3-4B-4bit"))
+    _sql(a.path, "UPDATE completions SET created_at = '2026-02-01 10:00:00'")
+    cols = ("key, model, prompt_sha256, max_tokens, temperature, json_mode, completion, "
+            "engine, engine_model_id, created_at")
+    assert a.export(tmp_path / "b.sqlite") == 1
+    assert _sql(tmp_path / "b.sqlite", f"SELECT {cols} FROM completions") == _sql(a.path, f"SELECT {cols} FROM completions")
+    c = CompletionCache(tmp_path / "c.sqlite")
+    assert c.merge(tmp_path / "b.sqlite") == 1
+    assert _sql(c.path, f"SELECT {cols} FROM completions") == _sql(a.path, f"SELECT {cols} FROM completions")
+
+
+def _three_rows_around_midnight(path):
+    """A cache with rows stamped just before, exactly at and well after 2026-02-01 00:00:00 UTC."""
+    a = CompletionCache(path)
+    for prompt, stamp in [("old", "2026-01-31 23:59:59"), ("edge", "2026-02-01 00:00:00"),
+                          ("new", "2026-03-15 12:00:00")]:
+        a.set(_row(_k(prompt), text=prompt))
+        _sql(a.path, "UPDATE completions SET created_at = ? WHERE key = ?", (stamp, _k(prompt)))
+    return a
+
+
+def test_export_since_takes_a_date_a_date_time_and_the_iso_t_separator(tmp_path):
+    a = _three_rows_around_midnight(tmp_path / "a.sqlite")
+    assert a.export(tmp_path / "d1.sqlite", since="2026-02-01") == 2                  # a date
+    assert a.export(tmp_path / "d2.sqlite", since="2026-02-01 00:00:00") == 2         # inclusive
+    assert a.export(tmp_path / "d3.sqlite", since="2026-02-01T00:00:00") == 2         # ISO 'T'
+    assert a.export(tmp_path / "d4.sqlite", since="2026-02-01 00:00:01") == 1
+    assert a.export(tmp_path / "d5.sqlite", since="2026-03-16") == 0
+    assert a.export(tmp_path / "d6.sqlite", since="2026-02-01", model="qwen3-1.7b") == 0
+    assert a.export(tmp_path / "d7.sqlite", since="2026-02-01", model="qwen3-4b") == 2
+    assert sorted(r[0] for r in _sql(tmp_path / "d1.sqlite", "SELECT completion FROM completions")) == ["edge", "new"]
+
+
+def test_export_since_takes_every_isoformat_form_and_converts_an_offset_to_utc(tmp_path):
+    """`created_at` is UTC, written `YYYY-MM-DD HH:MM:SS`. `datetime.isoformat()` writes a 'T', often
+    a 'Z' or an offset, and a fraction; each is parsed, an aware value is converted to UTC and the
+    comparison is made on the stored form, so none of them silently drops the rows of that second
+    (text comparison made every one of them do so) and an offset moves the boundary the right way."""
+    a = _three_rows_around_midnight(tmp_path / "a.sqlite")
+    midnight_utc = ["2026-02-01T00:00:00Z", "2026-02-01T00:00:00+00:00", "2026-02-01T00:00:00.000",
+                    "2026-02-01T00:00:00.000Z", "2026-02-01 00:00:00+00:00",
+                    "2026-01-31T22:00:00-02:00", "2026-02-01T01:00:00+01:00"]
+    for i, since in enumerate(midnight_utc):
+        assert a.export(tmp_path / f"m{i}.sqlite", since=since) == 2, since          # edge and new
+    assert a.export(tmp_path / "after.sqlite", since="2026-01-31T23:00:00-02:00") == 1   # 01:00 UTC
+    assert a.export(tmp_path / "before.sqlite", since="2026-02-01T00:30:00+01:00") == 3  # 23:30 UTC
+
+
+@pytest.mark.parametrize("since", ["yesterday", "2026-13-01", "2026-02-01 25:00:00", "",
+                                   "2026-02-01T00:00:00+25:00", "01/02/2026"])
+def test_export_since_that_is_not_a_date_is_a_value_error_and_creates_nothing(tmp_path, since):
+    a = CompletionCache(tmp_path / "a.sqlite")
+    a.set(_row(_k("p")))
+    with pytest.raises(ValueError, match="since"):
+        a.export(tmp_path / "out.sqlite", since=since)
+    assert not (tmp_path / "out.sqlite").exists()
+
+
+def test_export_creates_missing_directories_and_an_empty_result_is_a_valid_cache(tmp_path):
+    a = CompletionCache(tmp_path / "a.sqlite")
+    a.set(_row(_k("p")))
+    dest = tmp_path / "ship" / "course" / "llm_cache.sqlite"
+    assert a.export(dest, model="no-such-model") == 0
+    assert CompletionCache(dest).stats()["rows"] == 0
+    assert a.export(dest) == 1 and CompletionCache(dest).get(_k("p")) == "t"
+
+
+def test_export_to_itself_inserts_nothing(tmp_path):
+    a = CompletionCache(tmp_path / "a.sqlite")
+    a.set(_row(_k("p")))
+    assert a.export(a.path) == 0 and a.merge(a.path) == 0
+    assert a.stats()["rows"] == 1
+
+
+def test_merge_and_export_from_a_missing_file_raise_and_create_nothing(tmp_path):
+    a = CompletionCache(tmp_path / "a.sqlite")
+    with pytest.raises(FileNotFoundError):
+        a.merge(tmp_path / "nope.sqlite")
+    assert not (tmp_path / "nope.sqlite").exists()
+    a.path.unlink()
+    with pytest.raises(FileNotFoundError):
+        a.export(tmp_path / "out.sqlite")
+    assert not (tmp_path / "out.sqlite").exists()
+
+
+def test_corrupt_cache_file_degrades_to_no_cache(tmp_path, recwarn):
+    p = tmp_path / "c.sqlite"
+    p.write_bytes(b"this is not a sqlite database " * 40)
+    c = CompletionCache(p)
+    assert c.writable is False and c.get(_k("p")) is None
+    assert c.stats()["rows"] == 0
+    c.set(_row(_k("p")))                                  # no raise
+    c.set(_row(_k("q")))
+    assert _n_cache_warnings(recwarn) == 1
+
+
+def test_missing_sqlite3_module_degrades_to_no_cache(tmp_path, monkeypatch, recwarn):
+    """Pyodide 0.28 ships sqlite3 as a load-on-request package: the placeholder from
+    puremacro._optional_stdlib raises ImportError on any attribute access."""
+    import puremacro.llm.cache as cache_module
+
+    class NoSqlite:
+        def __getattr__(self, name):
+            raise ImportError("the standard-library module 'sqlite3' is not available")
+
+    monkeypatch.setattr(cache_module, "sqlite3", NoSqlite())
+    c = CompletionCache(tmp_path / "c.sqlite")
+    assert c.writable is False
+    assert c.get(_k("p")) is None and c.stats()["rows"] == 0
+    c.set(_row(_k("p")))
+    c.set(_row(_k("q")))
+    assert _n_cache_warnings(recwarn) == 1
+    assert not (tmp_path / "c.sqlite").exists()
+
+
+def test_existing_cache_in_a_read_only_directory_still_serves_hits(tmp_path, recwarn):
+    shipped = tmp_path / "shipped"
+    CompletionCache(shipped / "c.sqlite").set(_row(_k("hola"), text="¡Hola!"))
+    os.chmod(shipped, stat.S_IRUSR | stat.S_IXUSR)
+    try:
+        if os.access(shipped, os.W_OK):
+            pytest.skip("directory permissions do not restrict this account")
+        c = CompletionCache(shipped / "c.sqlite")
+        assert c.get(_k("hola")) == "¡Hola!" and c.stats()["rows"] == 1
+        c.set(_row(_k("nuevo")))                          # the journal cannot be created: no raise
+        assert c.writable is False and c.get(_k("nuevo")) is None
+        assert c.get(_k("hola")) == "¡Hola!"
+        assert _n_cache_warnings(recwarn) == 1
+    finally:
+        os.chmod(shipped, stat.S_IRWXU)
+
+
+def test_one_warning_per_unusable_cache_file_not_per_object(tmp_path, recwarn):
+    p = tmp_path / "bad.sqlite"
+    p.write_bytes(b"garbage" * 100)
+    CompletionCache(p).set(_row(_k("p")))
+    CompletionCache(p).set(_row(_k("p")))                 # a new object for the same file
+    assert _n_cache_warnings(recwarn) == 1
+    q = tmp_path / "bad2.sqlite"
+    q.write_bytes(b"garbage" * 100)
+    CompletionCache(q).set(_row(_k("p")))                 # a different file warns again
+    assert _n_cache_warnings(recwarn) == 2
+
+
+def test_warning_names_the_file_and_the_remedy(tmp_path):
+    p = tmp_path / "bad.sqlite"
+    p.write_bytes(b"garbage" * 100)
+    with pytest.warns(UserWarning, match="PUREMACRO_LLM_CACHE") as w:
+        CompletionCache(p).set(_row(_k("p")))
+    assert str(p) in str(w[0].message)
+
+
+def test_every_method_closes_the_connection_it_opened(tmp_path, monkeypatch, recwarn):
+    """One connection per call, closed in `finally`: nothing stays open, on the
+    success paths and on the failure paths alike."""
+    import puremacro.llm.cache as cache_module
+
+    opened = []
+
+    class Spy:
+        def __getattr__(self, name):
+            if name != "connect":
+                return getattr(sqlite3, name)
+
+            def connect(*args, **kwargs):
+                conn = sqlite3.connect(*args, **kwargs)
+                opened.append(conn)
+                return conn
+            return connect
+
+    monkeypatch.setattr(cache_module, "sqlite3", Spy())
+    a = CompletionCache(tmp_path / "a.sqlite")
+    a.set(_row(_k("p")))
+    a.get(_k("p"))
+    a.get(_k("absent"))
+    a.stats()
+    a.export(tmp_path / "b.sqlite")
+    CompletionCache(tmp_path / "b.sqlite").merge(a.path)
+    with pytest.raises(sqlite3.Error):                    # the source has no `completions` table
+        a.merge(_empty_database(tmp_path / "empty.sqlite"))
+    bad = tmp_path / "bad.sqlite"
+    bad.write_bytes(b"garbage" * 100)
+    broken = CompletionCache(bad)                         # fails while preparing the schema
+    broken.get(_k("p"))
+    broken.stats()
+    broken.set(_row(_k("p")))
+    assert len(opened) >= 10
+    for conn in opened:
+        with pytest.raises(sqlite3.ProgrammingError):     # "Cannot operate on a closed database"
+            conn.execute("SELECT 1")
+
+
+def _empty_database(path):
+    _sql(path, "CREATE TABLE unrelated (x)")
+    return path
+
+
+def test_cache_miss_is_a_lookup_error_that_survives_pickling():
+    e = pickle.loads(pickle.dumps(CacheMiss("ab" * 32, "qwen3-4b")))
+    assert isinstance(e, LookupError)
+    assert (e.key, e.model) == ("ab" * 32, "qwen3-4b")
+    assert "qwen3-4b" in str(e) and "abababababab" in str(e)
+
+
+def test_cache_unavailable_is_a_cache_miss_that_survives_pickling():
+    reason = ("ImportError: the standard-library module 'sqlite3' is not available in this "
+              "Python build (needed for 'connect'). In Pyodide 0.28 run "
+              "`await pyodide.loadPackage('sqlite3')` first.")
+    e = pickle.loads(pickle.dumps(CacheUnavailable("ab" * 32, "qwen3-4b", reason)))
+    assert type(e) is CacheUnavailable and isinstance(e, CacheMiss) and isinstance(e, LookupError)
+    assert (e.key, e.model, e.reason) == ("ab" * 32, "qwen3-4b", reason)
+    assert str(e).startswith("the completion cache cannot be read here")
+    assert reason in str(e) and "qwen3-4b" in str(e) and "abababababab" in str(e)
+
+
+def test_cache_row_is_frozen_and_positional_order_is_fixed():
+    r = CacheRow("k", "m", "sha", 8, 0.0, False, "text", "mlx", "id")
+    assert (r.key, r.model, r.prompt_sha256, r.max_tokens, r.temperature, r.json_mode,
+            r.completion, r.engine, r.engine_model_id) == ("k", "m", "sha", 8, 0.0, False, "text", "mlx", "id")
+    assert CacheRow("k", "m", "sha", 8, 0.0, False, "text").engine is None
+    with pytest.raises(AttributeError):
+        r.completion = "changed"
+
+
+# ---------------------------------------------------------------------------
+# One file, several owners. A cache file is an ordinary SQLite file, so it can hold
+# tables this module does not own (anyone may point PUREMACRO_LLM_CACHE at a file that
+# already has the narrative score cache's `llm_scores` table in it). The cache must
+# leave them alone, ship only its own rows, and degrade (not raise) when the file is
+# read-only or locked by another connection.
+# ---------------------------------------------------------------------------
+
+def _tables(path):
+    return sorted(r[0] for r in _sql(path, "SELECT name FROM sqlite_master WHERE type = 'table'"))
+
+
+def _add_foreign_table(path, rows=2):
+    """Another owner's table, as the narrative score cache would leave it in the file."""
+    _sql(path, "CREATE TABLE IF NOT EXISTS llm_scores "
+               "(key TEXT PRIMARY KEY, provider TEXT, model TEXT, score REAL)")
+    for i in range(rows):
+        _sql(path, "INSERT OR REPLACE INTO llm_scores VALUES (?, 'local', 'qwen3-4b', ?)",
+             (f"s{i}", i / 10))
+    return path
+
+
+def test_tables_other_code_keeps_in_the_file_are_left_alone(tmp_path):
+    shared = _add_foreign_table(tmp_path / "shared.sqlite")
+    scores = lambda p: _sql(p, "SELECT * FROM llm_scores ORDER BY key")     # noqa: E731
+    kept = scores(shared)
+    c = CompletionCache(shared)                    # `completions` is created beside `llm_scores`
+    assert c.writable is True and _tables(shared) == ["completions", "llm_scores"]
+    c.set(_row(_k("p"), text="t"))
+    assert c.get(_k("p")) == "t"
+    s = c.stats()
+    assert s["rows"] == 1 and s["by_model"] == {"qwen3-4b": 1}   # the other table's rows are not ours
+    assert s["bytes"] == shared.stat().st_size                   # but the file is one file
+    assert c.export(tmp_path / "ship.sqlite") == 1               # export ships the completions alone
+    assert _tables(tmp_path / "ship.sqlite") == ["completions"]
+    other = _add_foreign_table(tmp_path / "other.sqlite", rows=3)
+    CompletionCache(other).set(_row(_k("q"), text="u"))
+    assert c.merge(other) == 1 and c.stats()["rows"] == 2        # merge takes completions, not the rest
+    assert scores(shared) == kept                                # the other table is exactly as it was
+    assert len(scores(other)) == 3                               # and so is the source's
+
+
+def test_a_table_added_to_the_file_later_does_not_disturb_the_cache(tmp_path):
+    c = CompletionCache(tmp_path / "c.sqlite")
+    c.set(_row(_k("p"), text="kept"))
+    _add_foreign_table(c.path)                     # the other owner arrives second
+    assert c.get(_k("p")) == "kept" and c.stats()["rows"] == 1
+    c.set(_row(_k("q"), text="more"))
+    assert c.stats()["rows"] == 2 and _tables(c.path) == ["completions", "llm_scores"]
+
+
+def test_a_read_only_cache_file_serves_hits_and_never_raises(tmp_path, recwarn):
+    """A cache shipped as a read-only *file* in a writable directory, with another owner's
+    table in it: hits are served, a new completion is skipped with one warning."""
+    shipped = tmp_path / "shipped.sqlite"
+    CompletionCache(shipped).set(_row(_k("hola"), text="¡Hola!"))
+    _add_foreign_table(shipped)
+    os.chmod(shipped, stat.S_IRUSR)
+    try:
+        if os.access(shipped, os.W_OK):
+            pytest.skip("file permissions do not restrict this account")
+        c = CompletionCache(shipped)
+        assert c.get(_k("hola")) == "¡Hola!" and c.stats()["rows"] == 1
+        c.set(_row(_k("nuevo")))                   # attempt to write a readonly database: no raise
+        assert c.writable is False and c.get(_k("nuevo")) is None
+        assert c.get(_k("hola")) == "¡Hola!"
+        assert _n_cache_warnings(recwarn) == 1
+    finally:
+        os.chmod(shipped, stat.S_IRUSR | stat.S_IWUSR)
+
+
+def test_a_read_only_file_with_only_another_owners_table_degrades(tmp_path, recwarn):
+    scores_only = _add_foreign_table(tmp_path / "scores.sqlite")
+    os.chmod(scores_only, stat.S_IRUSR)
+    try:
+        if os.access(scores_only, os.W_OK):
+            pytest.skip("file permissions do not restrict this account")
+        c = CompletionCache(scores_only)           # `completions` cannot be created
+        assert c.writable is False
+        assert c.get(_k("p")) is None and c.stats()["rows"] == 0
+        c.set(_row(_k("p")))                       # no raise
+        assert _n_cache_warnings(recwarn) == 1
+        assert len(_sql(scores_only, "SELECT * FROM llm_scores")) == 2     # the other table is intact
+    finally:
+        os.chmod(scores_only, stat.S_IRUSR | stat.S_IWUSR)
+
+
+class _ShortTimeout:
+    """`sqlite3` that waits 50 ms for a lock instead of the default five seconds."""
+
+    def __getattr__(self, name):
+        if name != "connect":
+            return getattr(sqlite3, name)
+        return lambda *args, **kwargs: sqlite3.connect(*args, **{**kwargs, "timeout": 0.05})
+
+
+def test_a_write_blocked_by_another_connection_is_skipped_not_raised(tmp_path, monkeypatch, recwarn):
+    """Another owner of the file keeps a write transaction open, as a caller does when it stores
+    a completion in the middle of its own transaction on the shared file: the blocked write is
+    skipped like any other failed write, and readers are not blocked."""
+    import puremacro.llm.cache as cache_module
+
+    c = CompletionCache(tmp_path / "c.sqlite")
+    c.set(_row(_k("before"), text="kept"))
+    monkeypatch.setattr(cache_module, "sqlite3", _ShortTimeout())
+    holder = sqlite3.connect(c.path)
+    try:
+        holder.execute("BEGIN IMMEDIATE")          # takes the write lock and keeps it
+        c.set(_row(_k("blocked")))                 # waits 50 ms, then is skipped: no raise
+        assert c.get(_k("before")) == "kept" and c.get(_k("blocked")) is None
+        assert _n_cache_warnings(recwarn) == 1
+    finally:
+        holder.rollback()
+        holder.close()
+    fresh = CompletionCache(c.path)                # once the lock is gone a new object writes again
+    fresh.set(_row(_k("after"), text="back"))
+    assert fresh.get(_k("after")) == "back" and fresh.get(_k("before")) == "kept"
+
+
+# ---------------------------------------------------------------------------
+# `readable` and `reason`. A lookup that finds no row and a lookup that cannot read the file
+# both return None; `readable` tells them apart, so that `cache` mode can raise
+# CacheUnavailable with `reason` instead of a miss that blames the model. A file that does not
+# exist yet is readable (an empty cache); no sqlite3, or a file SQLite cannot read as a cache,
+# is not. Reading and writing fail apart: a cache on a read-only volume still reads.
+# ---------------------------------------------------------------------------
+
+# What a clone made without git-lfs leaves where the cache file should be.
+_LFS_POINTER = (b"version https://git-lfs.github.com/spec/v1\n"
+                b"oid sha256:" + b"0" * 64 + b"\nsize 24576\n")
+
+
+def test_a_usable_cache_and_one_with_no_file_yet_are_readable(tmp_path):
+    usable = CompletionCache(tmp_path / "c.sqlite")
+    assert usable.readable is True and usable.reason is None
+    usable.path.unlink()
+    assert usable.get(_k("p")) is None                    # no file: the lookup finds no row
+    assert usable.readable is True and usable.reason is None
+    ro = tmp_path / "ro"
+    ro.mkdir()
+    os.chmod(ro, stat.S_IRUSR | stat.S_IXUSR)
+    try:
+        if os.access(ro, os.W_OK):
+            pytest.skip("directory permissions do not restrict this account")
+        nowhere = CompletionCache(ro / "c.sqlite")        # cannot even be created there
+        assert nowhere.readable is True and nowhere.writable is False
+        assert "unable to open database file" in nowhere.reason        # why it cannot be written
+        assert nowhere.get(_k("p")) is None and nowhere.readable is True
+    finally:
+        os.chmod(ro, stat.S_IRWXU)
+
+
+def test_a_path_that_runs_through_a_file_means_the_cache_cannot_be_read_not_that_it_is_empty(tmp_path):
+    """PUREMACRO_LLM_CACHE=<a file>/c.sqlite: no file can ever be there, so a lookup that finds
+    nothing is not an empty cache but a cache that cannot be read, and `reason` names the path
+    problem besides SQLite's refusal. (The old test was `os.path.exists`, which is False here too.)"""
+    blocker = tmp_path / "not_a_directory"
+    blocker.write_text("x")
+    c = CompletionCache(blocker / "c.sqlite")
+    assert c.writable is False and c.readable is False
+    assert c.get(_k("p")) is None and c.readable is False
+    assert "NotADirectoryError" in c.reason and "unable to open database file" in c.reason
+    assert blocker.read_text() == "x"
+
+
+def test_a_directory_that_cannot_be_searched_means_the_cache_cannot_be_read(tmp_path):
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    CompletionCache(locked / "c.sqlite").set(_row(_k("hola"), text="¡Hola!"))   # the row is there
+    os.chmod(locked, 0)
+    try:
+        if os.access(locked, os.R_OK | os.X_OK):
+            pytest.skip("directory permissions do not restrict this account")
+        c = CompletionCache(locked / "c.sqlite")
+        assert c.writable is False and c.readable is False       # not "no file yet"
+        assert "PermissionError" in c.reason
+        assert c.get(_k("hola")) is None and c.readable is False
+    finally:
+        os.chmod(locked, stat.S_IRWXU)
+
+
+def test_writable_is_settled_by_the_first_write_not_at_construction(tmp_path):
+    """Preparing the file runs `CREATE ... IF NOT EXISTS` statements only, which write nothing to
+    a file that already has the table, so a read-only file reads as writable until the first write
+    fails; `repr` shows the same flag. The attribute's docstring says so."""
+    p = tmp_path / "c.sqlite"
+    CompletionCache(p).set(_row(_k("hola"), text="¡Hola!"))
+    os.chmod(p, stat.S_IRUSR)
+    try:
+        if os.access(p, os.W_OK):
+            pytest.skip("file permissions do not restrict this account")
+        c = CompletionCache(p)
+        assert c.writable is True and "writable=True" in repr(c)
+        with pytest.warns(UserWarning, match="readonly database"):
+            c.set(_row(_k("nuevo")))
+        assert c.writable is False and "writable=False" in repr(c)
+    finally:
+        os.chmod(p, stat.S_IRUSR | stat.S_IWUSR)
+    assert "first write" in CompletionCache.__doc__
+
+
+def test_a_file_that_is_not_a_cache_is_not_readable_and_reason_names_the_problem(tmp_path):
+    pointer = tmp_path / "llm_cache.sqlite"
+    pointer.write_bytes(_LFS_POINTER)
+    c = CompletionCache(pointer)
+    assert c.readable is False and c.writable is False
+    assert "file is not a database" in c.reason
+    assert c.get(_k("p")) is None and c.readable is False
+    assert pointer.read_bytes() == _LFS_POINTER           # neither repaired nor replaced
+
+
+def test_without_sqlite3_the_cache_is_not_readable_and_reason_carries_the_hint(tmp_path,
+                                                                               monkeypatch):
+    """The placeholder of puremacro._optional_stdlib, as Pyodide 0.28 has it before
+    `await pyodide.loadPackage('sqlite3')`: unreadable even with no file, and `reason` is the
+    placeholder's ImportError with its hint."""
+    import puremacro.llm.cache as cache_module
+    from puremacro._optional_stdlib import _MissingStdlibModule
+
+    hint = "In Pyodide 0.28 run `await pyodide.loadPackage('sqlite3')` first."
+    monkeypatch.setattr(cache_module, "sqlite3", _MissingStdlibModule("sqlite3", hint))
+    c = CompletionCache(tmp_path / "c.sqlite")
+    assert c.readable is False and c.writable is False
+    assert c.reason.startswith("ImportError: ") and hint in c.reason
+    assert c.get(_k("p")) is None and c.readable is False
+
+
+def test_readable_is_found_by_reading_not_inferred_from_a_failed_preparation(tmp_path):
+    """Two read-only files that cannot be prepared, because the index or the table would have to
+    be written: one whose `completions` table lacks only the index still serves lookups; one
+    that holds another owner's table only cannot be read as a cache. The warning about writes
+    still gives the error of the write."""
+    import puremacro.llm.cache as cache_module
+
+    no_index = tmp_path / "no_index.sqlite"
+    _sql(no_index, cache_module._CREATE_TABLE)
+    _sql(no_index, "INSERT INTO completions (key, model, prompt_sha256, max_tokens, temperature, "
+                   "json_mode, completion) VALUES (?, 'qwen3-4b', 'sha', 8, 0.0, 0, 'served')",
+         (_k("p"),))
+    foreign = _add_foreign_table(tmp_path / "foreign.sqlite")
+    os.chmod(no_index, stat.S_IRUSR)
+    os.chmod(foreign, stat.S_IRUSR)
+    try:
+        if os.access(no_index, os.W_OK):
+            pytest.skip("file permissions do not restrict this account")
+        served = CompletionCache(no_index)
+        assert served.writable is False and served.readable is True
+        assert served.get(_k("p")) == "served" and served.readable is True
+        assert "readonly database" in served.reason       # why it cannot be written
+        unusable = CompletionCache(foreign)
+        assert unusable.writable is False and unusable.readable is False
+        assert "no such table: completions" in unusable.reason
+        with pytest.warns(UserWarning, match="readonly database"):
+            unusable.set(_row(_k("p")))
+    finally:
+        os.chmod(no_index, stat.S_IRUSR | stat.S_IWUSR)
+        os.chmod(foreign, stat.S_IRUSR | stat.S_IWUSR)
+
+
+def test_each_lookup_updates_readable_and_reason(tmp_path):
+    """A cache made while its file was fine, whose file is then replaced by an LFS pointer (a
+    checkout can do that) and later restored: `readable` and `reason` follow the lookups."""
+    c = CompletionCache(tmp_path / "c.sqlite")
+    c.set(_row(_k("p"), text="kept"))
+    good = c.path.read_bytes()
+    c.path.write_bytes(_LFS_POINTER)
+    assert c.get(_k("p")) is None
+    assert c.readable is False and "file is not a database" in c.reason
+    c.path.write_bytes(good)
+    assert c.get(_k("p")) == "kept"
+    assert c.readable is True and c.reason is None
+
+
+def test_readable_and_reason_are_read_only(tmp_path):
+    c = CompletionCache(tmp_path / "c.sqlite")
+    with pytest.raises(AttributeError):
+        c.readable = False
+    with pytest.raises(AttributeError):
+        c.reason = "set from outside"
+
+
+# ---------------------------------------------------------------------------
+# Two caches, two files, two variables. The narrative score cache (`llm_prob_kernel`) keeps
+# an `llm_scores` table in the file named by PUREMACRO_LLM_SCORES_CACHE. It used to read
+# PUREMACRO_LLM_CACHE as well, which put that table inside the completion cache, made a
+# read-only shipped completion cache stop the kernel, and blocked every completion a provider
+# stored while the kernel held its transaction (five seconds per window, then the cache gave up).
+# ---------------------------------------------------------------------------
+
+def _score_one_document(provider=None):
+    """One document of three sentence windows through the narrative score kernel."""
+    import pandas as pd
+    from puremacro.narrative.indices import MockProvider, llm_prob_kernel
+
+    text = "One sentence here. A second sentence there. And a third one."
+    records = [(pd.Timestamp("2024-01-01"), text, "u", {})]
+    return list(llm_prob_kernel(records, provider=provider or MockProvider(),
+                                category="u", window="sentence"))
+
+
+def test_the_score_cache_has_its_own_file_and_its_own_variable(tmp_path, monkeypatch):
+    completions, scores = tmp_path / "completions.sqlite", tmp_path / "scores.sqlite"
+    monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(completions))
+    monkeypatch.setenv("PUREMACRO_LLM_SCORES_CACHE", str(scores))
+    CompletionCache().set(_row(_k("p"), text="t"))
+    before = completions.read_bytes()
+    assert len(_score_one_document()) == 1
+    assert _tables(scores) == ["llm_scores"]
+    assert _tables(completions) == ["completions"]       # no score table inside the completion cache
+    assert completions.read_bytes() == before            # and nothing else changed in it
+
+
+def test_the_score_cache_default_does_not_follow_the_completion_cache_variable(tmp_path, monkeypatch):
+    from puremacro.narrative.indices import _llm_kernel
+
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))         # Path.home() on Windows
+    monkeypatch.delenv("PUREMACRO_LLM_SCORES_CACHE", raising=False)
+    monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(tmp_path / "completions.sqlite"))
+    assert _llm_kernel._cache_path() == home / ".cache" / "puremacro" / "llm_scores.sqlite"
+    monkeypatch.setenv("PUREMACRO_LLM_SCORES_CACHE", str(tmp_path / "scores.sqlite"))
+    assert _llm_kernel._cache_path() == tmp_path / "scores.sqlite"
+
+
+def test_a_provider_that_stores_completions_is_not_blocked_by_the_score_kernel(
+        tmp_path, monkeypatch, recwarn):
+    """What `LocalProvider` does once it goes through `puremacro.llm`: every window it scores
+    leaves a completion in the default completion cache, while the kernel has an uncommitted
+    insert in its own cache. Two files: all three completions are stored, none is skipped."""
+    import puremacro.llm.cache as cache_module
+    from puremacro.narrative.indices import MockProvider
+
+    class StoresACompletionPerWindow(MockProvider):
+        name, model = "local", "qwen3-4b"
+
+        def score_paragraph(self, text, category):
+            CompletionCache().set(CacheRow(_k(text), "qwen3-4b", prompt_sha256(text), 8, 0.0,
+                                           False, "0.5"))
+            return 0.5
+
+    monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(tmp_path / "completions.sqlite"))
+    monkeypatch.setenv("PUREMACRO_LLM_SCORES_CACHE", str(tmp_path / "scores.sqlite"))
+    monkeypatch.setattr(cache_module, "sqlite3", _ShortTimeout())    # a lock costs 50 ms, not 5 s
+    _score_one_document(StoresACompletionPerWindow())
+    assert CompletionCache().stats()["rows"] == 3
+    assert _n_cache_warnings(recwarn) == 0
+
+
+def test_a_read_only_completion_cache_does_not_stop_the_score_kernel(tmp_path, monkeypatch):
+    shipped = tmp_path / "shipped.sqlite"
+    CompletionCache(shipped).set(_row(_k("hola"), text="¡Hola!"))
+    os.chmod(shipped, stat.S_IRUSR)
+    try:
+        if os.access(shipped, os.W_OK):
+            pytest.skip("file permissions do not restrict this account")
+        monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(shipped))
+        monkeypatch.setenv("PUREMACRO_LLM_SCORES_CACHE", str(tmp_path / "scores.sqlite"))
+        assert len(_score_one_document()) == 1       # used to raise "attempt to write a readonly database"
+        assert CompletionCache().get(_k("hola")) == "¡Hola!"
+        assert _tables(shipped) == ["completions"]
+        assert _tables(tmp_path / "scores.sqlite") == ["llm_scores"]
+    finally:
+        os.chmod(shipped, stat.S_IRUSR | stat.S_IWUSR)
+
+
+def test_the_suite_gives_each_cache_its_own_file_off_the_users_home():
+    """The autouse fixture in conftest.py gives every test a file for each cache, so tests
+    that score a document (the local-LLM example, for one) or complete a prompt never write
+    to ~/.cache/puremacro, and the two caches never share a file."""
+    from puremacro.narrative.indices import _llm_kernel
+
+    scores, completions = _llm_kernel._cache_path(), default_cache_path()
+    home = Path.home() / ".cache" / "puremacro"
+    assert scores != completions
+    assert scores != home / "llm_scores.sqlite" and completions != home / "llm_cache.sqlite"
+
+
+# ---------------------------------------------------------------------------
+# How the suite keeps tests off real caches (the autouse fixture in tests/conftest.py): both
+# variables are set for every test whatever the shell exports, to a file no other test uses, and
+# without a numbered temp directory per test.
+# ---------------------------------------------------------------------------
+
+_CACHE_FILES_SEEN: list[tuple[str, str]] = []     # (completions, scores) of each run of the test below
+
+
+@pytest.mark.parametrize("run", ["first", "second"])
+def test_every_test_gets_cache_files_of_its_own_under_the_session_temp_directory(
+        run, request, tmp_path_factory):
+    """Run twice; the module-level list is how the second run learns what the first one had.
+    To see the first assertion guard the export case, run this file with either variable exported
+    to a path of your own: a fixture that respects the export leaves the path outside the session's
+    temp directory, and the same for both runs."""
+    base = tmp_path_factory.getbasetemp()
+    completions = Path(os.environ["PUREMACRO_LLM_CACHE"])
+    scores = Path(os.environ["PUREMACRO_LLM_SCORES_CACHE"])
+    assert completions.is_relative_to(base), f"completion cache outside {base}: {completions}"
+    assert scores.is_relative_to(base), f"score cache outside {base}: {scores}"
+    assert completions != scores
+    assert str(completions) not in {c for c, _ in _CACHE_FILES_SEEN}, "files shared between tests"
+    assert str(scores) not in {s for _, s in _CACHE_FILES_SEEN}, "files shared between tests"
+    _CACHE_FILES_SEEN.append((str(completions), str(scores)))
+    # `tmp_path` makes a numbered directory per test and pytest rescans the base directory for the
+    # next number each time, so over a 20,000-test run it costs minutes. This test did not ask for
+    # one, so nothing in its fixtures may.
+    assert "tmp_path" not in request.fixturenames
+
+
+def test_the_score_kernel_creates_the_directory_of_its_cache_file(tmp_path, monkeypatch):
+    """The suite's fixture points the score cache into a directory it does not create (making one
+    per test is what makes a full run slow), so the kernel has to create it, as the completion
+    cache does (test_cache_without_arguments_uses_the_default_path)."""
+    scores = tmp_path / "not" / "yet" / "there" / "scores.sqlite"
+    monkeypatch.setenv("PUREMACRO_LLM_SCORES_CACHE", str(scores))
+    assert len(_score_one_document()) == 1
+    assert scores.is_file() and _tables(scores) == ["llm_scores"]

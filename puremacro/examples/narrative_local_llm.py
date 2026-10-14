@@ -3,7 +3,7 @@
 No API key, no paid API. Install a local engine once:
 
     pip install "puremacro[local-llm]"     # MLX (Apple Silicon) + llama.cpp
-    # OR install Ollama (https://ollama.com) and: ollama pull qwen2.5:3b
+    # OR install Ollama (https://ollama.com) and: ollama pull qwen3:4b
 
 Then:  python -m puremacro.examples.narrative_local_llm
 
@@ -18,7 +18,7 @@ modelo local.
 Sin clave de API ni API de pago. Instala un motor local una sola vez:
 
     pip install "puremacro[local-llm]"     # MLX (Apple Silicon) + llama.cpp
-    # O instala Ollama (https://ollama.com) y: ollama pull qwen2.5:3b
+    # O instala Ollama (https://ollama.com) y: ollama pull qwen3:4b
 
 Luego:  python -m puremacro.examples.narrative_local_llm
 
@@ -46,14 +46,14 @@ _CORPUS = [
 def main() -> None:
     print("=== puremacro local LLM demo (free, $0) ===")
 
-    backend = get_default_backend("qwen2.5-3b-instruct")
+    backend = get_default_backend("default")
     events = score_llm(_CORPUS, backend=backend, kind="fiscal")
     print(f"[events] extracted {len(events)} fiscal event(s)")
     for ev in events:
         print(f"  - {ev.date.date()} sign={ev.sign} mag={ev.magnitude} "
               f"{ev.magnitude_unit}: {ev.source_text[:80]}")
 
-    provider = get_default_provider("qwen2.5-3b-instruct")
+    provider = get_default_provider("default")
     series = list(llm_prob_kernel(_CORPUS, provider=provider,
                                   category="economic uncertainty"))
     print("[index] P(uncertainty) per document:")

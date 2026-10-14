@@ -675,15 +675,21 @@ their SPA frontends; only `bi` uses HTML scraping.
 Subsequent F1 slices queued: B (business surveys), C (forecaster
 surveys), D (alt-data).
 
-#### Local LLM engines (`narrative/_local_engines.py`)
+#### Local LLM engines (`puremacro/llm/`)
 
-A lazily-imported engine layer lets the two LLM call sites run on a local model
-at $0. `resolve_engine("auto")` selects `MLXEngine` (Apple GPU) → `LlamaCppEngine`
-(GGUF) → `HTTPEngine` (Ollama / OpenAI-compatible, urllib). `LocalBackend`
-(scoring) and `LocalProvider` (indices) are thin wrappers; `MODEL_ALIASES` maps a
-friendly model name to per-engine ids. Heavy engine imports stay inside methods
-so `import puremacro` remains Pyodide-clean; the `[local-llm]` extra carries the
-optional packages.
+`puremacro.llm` lets the two LLM call sites, and any other code, run on a local
+model at $0. `engines.py` holds `MLXEngine` (Apple GPU; chosen whenever `mlx` and
+`mlx_lm` import, which includes the iPad under Juno), `LlamaCppEngine` (GGUF) and
+`HTTPEngine` (Ollama / OpenAI-compatible, urllib); `resolve_engine("auto")` tries
+them in that order. `models.py` is the registry (`MODELS`, the Qwen3 ladder plus
+the 4.8.1 models) with the memory-based `pick_model`; `cache.py` is the SQLite
+completion cache keyed by canonical model and prompt, never by engine; the facade
+(`complete`, `chat`, modes `auto` / `cache` / `off`, `report`) is `__init__.py`.
+`LocalBackend` (scoring) and `LocalProvider` (indices) call `complete`.
+`narrative/_local_engines.py` is a compatibility re-export of these names (plus
+`MODEL_ALIASES` and the 4.8.1 `chat` signature). Heavy engine imports stay inside
+functions so `import puremacro.llm` remains Pyodide-clean; the `[local-llm]` extra
+carries the optional packages. User guide: `docs/local_llm.md`.
 
 ### `puremacro.vfi` — heterogeneous-agent dynamic programming
 

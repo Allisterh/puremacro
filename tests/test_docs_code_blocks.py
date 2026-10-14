@@ -72,6 +72,9 @@ PAGES = [
     # The monetary transmission simulator (English and Spanish, the same calls).
     "docs/monetary_transmission.md",
     "docs/es/monetary_transmission.md",
+    # Local language models: the blocks that need no model (cache mode, report) run here.
+    "docs/local_llm.md",
+    "docs/es/local_llm.md",
 ]
 
 _FENCE = re.compile(r"```python\n(.*?)```", re.S)

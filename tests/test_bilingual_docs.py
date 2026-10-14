@@ -77,6 +77,8 @@ _USER_DOCS = [
     "text_analysis.md",
     # The monetary transmission simulator (HANK vs. RANK) and its browser lab.
     "monetary_transmission.md",
+    # Local language models (puremacro.llm), added with the package.
+    "local_llm.md",
 ]
 
 
