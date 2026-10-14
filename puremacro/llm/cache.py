@@ -244,6 +244,23 @@ class CacheRow:
 # SQLite plumbing
 # ---------------------------------------------------------------------------
 
+def _runs_through_a_file(path: Path) -> bool:
+    """Whether the nearest existing ancestor of ``path`` is not a directory.
+
+    Such a path can never hold a file. POSIX says so with ``NotADirectoryError``;
+    Windows reports it as a missing path, so ``os.stat`` alone cannot tell it
+    from "no file yet".
+    """
+    parent = os.path.dirname(os.path.abspath(path))
+    while True:
+        if os.path.exists(parent):
+            return not os.path.isdir(parent)
+        up = os.path.dirname(parent)
+        if up == parent:
+            return False
+        parent = up
+
+
 def _unusable() -> tuple[type[BaseException], ...]:
     """The exceptions that mean "this cache cannot be used here", not "this code is wrong".
 
@@ -447,6 +464,10 @@ class CompletionCache:
         try:
             os.stat(self.path)
         except FileNotFoundError:
+            # Windows reports a path that runs through a file as missing (ENOENT), where POSIX
+            # raises NotADirectoryError: look at the nearest ancestor that exists.
+            if _runs_through_a_file(self.path):
+                return f"{text} (NotADirectoryError: a component of the path is a file)"
             return ""
         except OSError as problem:
             return f"{text} ({type(problem).__name__}: {problem})"
