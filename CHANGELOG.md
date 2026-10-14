@@ -2,7 +2,7 @@
 
 This file records user-visible changes per release. Internal refactors that don't change behaviour are listed under "Internal" so a returning user can see what shifted under the hood without surprise.
 
-## 5.0.0a1 (unreleased)
+## 5.0.0a1 (2026-10-14)
 
 This pre-release removes material that is not part of the library and prepares the 5.0 line. 4.8.1 remains on PyPI for anyone who needs what was removed.
 
