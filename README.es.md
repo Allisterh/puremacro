@@ -492,6 +492,8 @@ Las fuentes disponibles incluyen:
 
 Los conectores bloqueados por WAF / protección anti-bot (EUR-Lex, Parlamento Europeo, CBO) recurren a la Wayback Machine mediante el helper compartido `puremacro.narrative.sources._wayback`. La cobertura está limitada por lo que Wayback haya archivado.
 
+**Modelos de lenguaje locales** (`puremacro.llm`). Las funciones con LLM anteriores (`score_llm`, `llm_prob_kernel`) se ejecutan sobre un modelo pequeño en el propio dispositivo, sin clave de API: `puremacro.llm.complete(prompt)` elige MLX (Mac, y el iPad con la app Juno), llama.cpp, Ollama o un servidor compatible con OpenAI, y ajusta el modelo (Qwen3 1.7B, 4B u 8B, Apache-2.0) a la memoria del dispositivo. Cada respuesta se guarda en una caché de completados indexada por modelo y prompt, no por motor, así que una caché construida una vez en una Mac responde las mismas llamadas en un iPad, en Windows, en Colab o en el navegador, donde el modo `cache` la lee sin ningún modelo instalado. Véase `docs/es/local_llm.md`.
+
 **Pipelines de datos** (incorporados recientemente; véase `ARCHITECTURE.md`)
 
 - **Captadores** (`fetch.*`) — FRED / ALFRED, SDMX-CSV (OCDE, Eurostat, BCE, SDMX-Central del FMI), EPU / GPR / WUI / JLN / Fernald, OCDE-MEI / QNA / Energía / Tipos de cambio, ILOSTAT, Yahoo, hoja rosa del Banco Mundial, además de cargadores FRED por estado para el seguimiento subnacional de EE. UU.
@@ -664,8 +666,8 @@ Las funciones LLM narrativas (`score_llm`, `llm_prob_kernel`) se ejecutan sobre 
 Instale un motor una sola vez (cualquiera de los siguientes):
 
 ```bash
-pip install "puremacro[local-llm]"     # MLX (Apple Silicon) + llama.cpp (cualquier SO)
-# o instale Ollama (https://ollama.com) — sin dependencias Python — y luego:  ollama pull qwen2.5:3b
+pip install "puremacro[local-llm]"     # llama.cpp (cualquier SO) + mlx-lm en todo Mac; MLX solo funciona en Apple silicon
+# o instale Ollama (https://ollama.com) — sin dependencias Python — y luego:  ollama pull qwen3:4b
 ```
 
 Luego utilice un backend local (mismas firmas que los backends de pago):
@@ -673,14 +675,14 @@ Luego utilice un backend local (mismas firmas que los backends de pago):
 ```python
 # requires: un motor LLM local (llama-cpp-python o mlx-lm) y un corpus `records`
 from puremacro.narrative.scoring import score_llm, LocalBackend
-events = score_llm(records, backend=LocalBackend("qwen2.5-3b-instruct", engine="auto"))
+events = score_llm(records, backend=LocalBackend("default", engine="auto"))
 
 from puremacro.narrative.indices import llm_prob_kernel, LocalProvider
-idx = llm_prob_kernel(records, provider=LocalProvider("qwen2.5-3b-instruct"),
+idx = llm_prob_kernel(records, provider=LocalProvider("default"),
                       category="economic uncertainty")
 ```
 
-`engine="auto"` selecciona el mejor motor instalado (GPU de Apple via MLX → llama.cpp → un servidor Ollama en ejecución; para LM Studio / vLLM / cualquier servidor compatible con OpenAI, pase `engine="openai"` con `base_url=`). Modelos disponibles: `qwen2.5-3b-instruct` (por defecto), `gemma2-2b` (Google), `llama3.2-3b` (Meta), `phi3.5` (Microsoft), o cualquier identificador de modelo del motor. Véanse `puremacro/examples/narrative_local_llm.py` y el cuaderno `local_llm_uncertainty`. (La inferencia local es solo para escritorio: requiere una instalación local de Python y no funciona bajo Pyodide.)
+`engine="auto"` selecciona el mejor motor instalado (GPU de Apple via MLX → llama.cpp → un servidor Ollama en ejecución → un servidor compatible con OpenAI en el puerto 8080 o 1234; para cualquier otro servidor pase `base_url=`). Modelos: `"default"` es el modelo de referencia `qwen3-4b`; `"small"` (`qwen3-1.7b`) y `"large"` (`qwen3-8b`) son los otros peldaños, y los nombres de 4.8.1 (`qwen2.5-3b-instruct`, `gemma2-2b`, `llama3.2-3b`, `phi3.5`) o cualquier identificador de modelo del motor siguen funcionando. Las respuestas se guardan en caché por modelo y prompt, así que `PUREMACRO_LLM_MODE=cache` puntúa sin ningún motor instalado un corpus que se puntuó una vez en cualquier máquina. Véanse `docs/es/local_llm.md`, `puremacro/examples/narrative_local_llm.py` y el cuaderno `local_llm_uncertainty`. (La inferencia local corre en equipos de escritorio. En el iPad con Juno se selecciona MLX, donde `mlx` y `mlx-lm` importan; una completación ahí aún no está verificada en un dispositivo. En el playground del navegador solo responde la caché.)
 
 ## Compatibilidad con Pyodide
 
@@ -828,6 +830,7 @@ Todos los cuadernos cumplen estrictamente el contrato con Pyodide y la arquitect
 - **`docs/es/forecast.md`** — Pronóstico macroeconómico penalizado: Elastic Net y Lasso Adaptativo mediante descenso por coordenadas.
 - **`docs/es/reporting.md`** — Exportación para publicaciones (tablas LaTeX, Typst, Markdown, estrellas de significancia).
 - **`docs/es/tablet.md`** — Ejecución en iPad, Juno y WebAssembly, con descarga de cómputo a Google Colab.
+- **`docs/es/local_llm.md`** — Modelos de lenguaje locales (`puremacro.llm`) en iPad, Mac, Windows, Linux y Colab: motores, la escalera de modelos Qwen3, modos y la caché de completados distribuible.
 - **`docs/es/benchmarks.md`** — Rendimiento y pruebas comparativas de velocidad computacional entre motores econométricos.
 - **`docs/es/national_accounts.md`** — Extracción de cuentas nacionales trimestrales de la OCDE, deflactores e identidades contables.
 - **`docs/es/real_time_data.md`** — Añadas de datos en tiempo real, triángulos de revisión y contraste de noticia frente a ruido de Mankiw-Shapiro.

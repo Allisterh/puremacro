@@ -91,6 +91,9 @@ PAGES = [
     "docs/es/dp.md",
     "docs/es/micro_data.md",
     "docs/es/text_analysis.md",
+    # Local language models: the blocks that need no model (cache mode, report) run here.
+    "docs/local_llm.md",
+    "docs/es/local_llm.md",
 ]
 
 _FENCE = re.compile(r"```python\n(.*?)```", re.S)

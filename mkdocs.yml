@@ -125,6 +125,7 @@ nav:
           - Reduced local stability (experimental): trade_stability.md
           - Dynamic MRIO with sector-specific capital: trade_dynamic.md
       - Running Anywhere (iPad / browser): tablet.md
+      - Local language models (iPad, Mac, Windows, Linux, Colab): local_llm.md
       - Performance & Benchmarks: benchmarks.md
       - Reference:
           - Replication gallery: replication.md
@@ -215,6 +216,7 @@ nav:
           - Estabilidad local reducida (experimental): es/trade_stability.md
           - MRIO dinámico con capital específico por sector: es/trade_dynamic.md
       - Ejecución en cualquier entorno (iPad / navegador): es/tablet.md
+      - Modelos de lenguaje locales (iPad, Mac, Windows, Linux, Colab): es/local_llm.md
       - Rendimiento y pruebas comparativas: es/benchmarks.md
       - Referencia:
           - Galería de replicación: es/replication.md

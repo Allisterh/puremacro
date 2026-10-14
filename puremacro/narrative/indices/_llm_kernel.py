@@ -14,8 +14,10 @@ Design priorities, in order:
      when ``llm_prob_kernel(...)`` is actually called.
   2. **Cached**: scores are keyed on
      ``(provider, model, prompt_hash, text_hash)`` in a SQLite store
-     under ``~/.cache/puremacro/llm_scores.sqlite``. Repeat runs are
-     instant and free.
+     under ``~/.cache/puremacro/llm_scores.sqlite``, or the file named by
+     ``PUREMACRO_LLM_SCORES_CACHE``. Repeat runs are instant and free.
+     This is not the completion cache of :mod:`puremacro.llm`, which keeps
+     its own file and reads ``PUREMACRO_LLM_CACHE``.
   3. **Cost-capped**: a per-call budget (max API calls) is enforced
      unless ``PUREMACRO_LLM_BUDGET=spend`` is exported.
   4. **Provider-agnostic**: Anthropic Claude / OpenAI GPT / local
@@ -41,8 +43,15 @@ from ._kernels import _split_paragraphs, _split_sentences
 # Cache layer (SQLite)
 # ---------------------------------------------------------------------------
 def _cache_path() -> Path:
+    """The score cache file: ``$PUREMACRO_LLM_SCORES_CACHE``, else the user cache directory.
+
+    ``PUREMACRO_LLM_CACHE`` is deliberately not read. It names the completion
+    cache of :mod:`puremacro.llm`, and two caches in one file would put this
+    table inside a (possibly read-only, shipped) completion cache and let this
+    kernel's open transaction block that cache's writes.
+    """
     return Path(os.environ.get(
-        "PUREMACRO_LLM_CACHE",
+        "PUREMACRO_LLM_SCORES_CACHE",
         Path.home() / ".cache" / "puremacro" / "llm_scores.sqlite",
     ))
 
@@ -168,32 +177,47 @@ class AnthropicProvider(LLMProvider):
 
 
 class LocalProvider(LLMProvider):
-    """Free local-LLM provider for ``llm_prob_kernel`` (MLX / llama.cpp / HTTP).
+    """Free local-LLM provider for ``llm_prob_kernel``, through :func:`puremacro.llm.complete`.
 
-    No API key. ``name`` is set to the resolved engine so the SQLite score
-    cache partitions per engine. Robustly extracts the first float in the reply.
+    No API key. Every ``score_paragraph`` goes through the facade, which reads the
+    completion cache first and applies the mode (``mode``, else ``PUREMACRO_LLM_MODE``,
+    else ``auto``); no engine is looked for at construction, so in ``cache`` mode a cached
+    corpus is scored with no engine installed. ``name`` is ``"local"`` and ``model`` the
+    canonical alias (:func:`puremacro.llm.canonical`), so the SQLite score cache rows of
+    this kernel are shared by every engine. Robustly extracts the first float in the reply.
+
+    ``engine`` and ``mode`` are checked at construction, which probes nothing: an engine that
+    is neither ``"auto"`` nor a name of :mod:`puremacro.llm.engines`, or a mode outside
+    ``auto``, ``cache`` and ``off`` (``PUREMACRO_LLM_MODE`` included, when ``mode`` is None),
+    raises ``ValueError`` there, as the engine resolution of 4.8.1 did, instead of at the
+    first paragraph.
     """
 
-    def __init__(self, model: str = "qwen2.5-3b-instruct", *,
-                 engine: str = "auto", base_url: str = "http://localhost:11434",
-                 timeout: float = 120.0):
-        from .._local_engines import resolve_engine
-        self._engine = resolve_engine(engine, base_url=base_url, timeout=timeout)
-        self.name = self._engine.name
-        self.model = model
+    name = "local"
+
+    def __init__(self, model: str = "default", *,
+                 engine: str = "auto", base_url: str | None = None,
+                 timeout: float = 120.0, mode: str | None = None):
+        from puremacro.llm import canonical, current_mode, validate_engine_name
+        current_mode(mode)      # the mode given, else PUREMACRO_LLM_MODE: an unknown name raises
+        self.model = canonical(model)
+        self.engine = validate_engine_name(engine)   # "auto" or a known name; nothing is probed
+        self.base_url = base_url
+        self.timeout = timeout
+        self.mode = mode
 
     def score_paragraph(self, text: str, category: str) -> float:
         import re
 
-        from .._local_engines import resolve_model_id
+        from puremacro.llm import complete
         prompt = (
             f"Score how strongly this paragraph expresses '{category}' "
             f"on a scale from 0.0 (not at all) to 1.0 (strongly). "
             f"Reply with ONLY a single decimal number.\n\nParagraph: {text}"
         )
-        model_id = resolve_model_id(self.model, self._engine.name)
-        out = self._engine.complete(model_id, prompt, max_tokens=8,
-                                    temperature=0.0, json_mode=False)
+        out = complete(prompt, model=self.model, engine=self.engine, mode=self.mode,
+                       max_tokens=8, temperature=0.0, json_mode=False,
+                       timeout=self.timeout, base_url=self.base_url)
         m = re.search(r"\d*\.?\d+", out or "")
         if not m:
             return 0.0
@@ -204,23 +228,38 @@ class LocalProvider(LLMProvider):
 
 
 class OllamaProvider(LocalProvider):
-    """Preset: ``LocalProvider(engine="ollama")``."""
+    """Preset: ``LocalProvider(engine="ollama")``.
 
-    def __init__(self, model: str = "qwen2.5:3b", *,
-                 base_url: str = "http://localhost:11434", **kw):
+    The default is the registry alias ``qwen3-4b``, so the completion cache is keyed as for
+    ``LocalProvider("default")``; the server receives its own tag (``qwen3:4b``). An Ollama tag
+    given as ``model`` reaches the server, and keys the cache, unchanged. ``base_url`` is None
+    unless given, so the server is ``PUREMACRO_LLM_BASE_URL``, else Ollama's default
+    ``http://localhost:11434``.
+    """
+
+    def __init__(self, model: str = "qwen3-4b", *,
+                 base_url: str | None = None, **kw):
         super().__init__(model=model, engine="ollama", base_url=base_url, **kw)
 
 
-def get_default_provider(model: str = "qwen2.5-3b-instruct", **kw) -> LLMProvider:
-    """Best available local provider, or ``MockProvider`` if no engine present."""
-    from .._local_engines import LocalLLMUnavailable
-    try:
-        p = LocalProvider(model=model, **kw)
-        print(f"[puremacro] local LLM provider: engine={p.name}")
-        return p
-    except LocalLLMUnavailable as e:
-        print(f"[puremacro] {e}\n[puremacro] using MockProvider.")
-        return MockProvider()
+def get_default_provider(model: str = "default", **kw) -> LLMProvider:
+    """A :class:`LocalProvider`, or :class:`MockProvider` when no engine can serve it.
+
+    In ``cache`` mode the local provider is returned without probing anything (it reads
+    the completion cache). In ``auto`` and ``off`` modes it is returned when
+    :func:`puremacro.llm.engines.available_engines` lists an engine (the one named by
+    ``engine``, if given), else the install hint is printed and ``MockProvider`` is
+    returned. Prints
+    ``[puremacro] local LLM: mode=<mode> engine=<name|cache|mock> model=<alias>``.
+    Keywords go to :class:`LocalProvider`.
+    """
+    from puremacro.llm import current_mode
+    from ..scoring.llm import _local_engine_for, _print_local_choice
+    p = LocalProvider(model=model, **kw)
+    mode = current_mode(p.mode)
+    chosen = _local_engine_for(mode=mode, engine=p.engine, base_url=p.base_url)
+    _print_local_choice(mode=mode, engine=chosen, model=p.model)
+    return p if chosen is not None else MockProvider()
 
 
 # ---------------------------------------------------------------------------

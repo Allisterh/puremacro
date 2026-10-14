@@ -1736,6 +1736,71 @@
     "puremacro.labor_share": [
       "gollin_adjusted_ls"
     ],
+    "puremacro.llm": [
+      "BackendUnavailable",
+      "CacheMiss",
+      "CacheRow",
+      "CacheUnavailable",
+      "CompletionCache",
+      "HTTPEngine",
+      "LlamaCppEngine",
+      "LocalLLMUnavailable",
+      "MLXEngine",
+      "MODELS",
+      "MODES",
+      "ModelSpec",
+      "ModelTooLarge",
+      "available_engines",
+      "cache_key",
+      "canonical",
+      "chat",
+      "check_fits",
+      "complete",
+      "current_mode",
+      "default_cache_path",
+      "device_budget_gb",
+      "get_engine",
+      "pick_model",
+      "report",
+      "resolve_model_id",
+      "strip_thinking",
+      "validate_engine_name"
+    ],
+    "puremacro.llm.cache": [
+      "CACHE_FORMAT",
+      "CacheMiss",
+      "CacheRow",
+      "CacheUnavailable",
+      "CompletionCache",
+      "cache_key",
+      "default_cache_path",
+      "prompt_sha256"
+    ],
+    "puremacro.llm.engines": [
+      "BackendUnavailable",
+      "DEFAULT_SERVERS",
+      "Engine",
+      "HTTPEngine",
+      "INSTALL_HINT",
+      "LlamaCppEngine",
+      "LocalLLMUnavailable",
+      "MLXEngine",
+      "available_engines",
+      "resolve_engine",
+      "strip_thinking",
+      "validate_engine_name"
+    ],
+    "puremacro.llm.models": [
+      "ALIASES",
+      "MODELS",
+      "ModelSpec",
+      "ModelTooLarge",
+      "canonical",
+      "check_fits",
+      "device_budget_gb",
+      "pick_model",
+      "resolve_model_id"
+    ],
     "puremacro.longrun": [
       "CheckpointError",
       "Job",
@@ -2113,6 +2178,17 @@
       "tone",
       "weak_iv_summary",
       "wui"
+    ],
+    "puremacro.narrative._local_engines": [
+      "BackendUnavailable",
+      "HTTPEngine",
+      "LlamaCppEngine",
+      "LocalLLMUnavailable",
+      "MLXEngine",
+      "MODEL_ALIASES",
+      "chat",
+      "resolve_engine",
+      "resolve_model_id"
     ],
     "puremacro.narrative.aggregate": [
       "events_to_quarterly",
@@ -5862,6 +5938,29 @@
       "quarterly",
       "quarterly_observed",
       "stocks"
+    ],
+    "puremacro.llm.cache.CacheRow": [
+      "completion",
+      "engine",
+      "engine_model_id",
+      "json_mode",
+      "key",
+      "max_tokens",
+      "model",
+      "prompt_sha256",
+      "temperature"
+    ],
+    "puremacro.llm.models.ModelSpec": [
+      "alias",
+      "approx_gb",
+      "license",
+      "llamacpp",
+      "min_budget_gb",
+      "mlx",
+      "ollama",
+      "openai",
+      "params_b",
+      "thinking"
     ],
     "puremacro.longrun._job.Progress": [
       "done",

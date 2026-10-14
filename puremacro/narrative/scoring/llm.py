@@ -22,7 +22,6 @@ multilingual extraction).
 from __future__ import annotations
 
 import json
-from puremacro._optional_stdlib import ssl
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -31,6 +30,7 @@ from typing import Iterable
 import pandas as pd
 
 from puremacro import credentials
+from puremacro.llm import CacheMiss, ModelTooLarge
 from .._local_engines import BackendUnavailable
 from ..types import NarrativeEvent, VALID_SIGNS
 
@@ -301,36 +301,60 @@ class OpenAIBackend(_BackendBase):
 
 
 class LocalBackend(_BackendBase):
-    """Free local-LLM backend for ``score_llm`` (MLX / llama.cpp / HTTP).
+    """Free local-LLM backend for ``score_llm``, through :func:`puremacro.llm.complete`.
 
-    No API key. ``engine="auto"`` picks the best installed engine. ``base_url``
-    only matters for the HTTP engine (Ollama / LM Studio / OpenAI-compatible).
+    No API key. Every ``call`` goes through the facade, which reads the completion cache
+    first and applies the mode (``mode``, else ``PUREMACRO_LLM_MODE``, else ``auto``); no
+    engine is looked for at construction, so in ``cache`` mode a cached corpus is scored
+    with no engine installed. ``model`` is a tier (``"default"``, ``"small"``,
+    ``"large"``), an alias of :data:`puremacro.llm.MODELS` or an engine's own id, and is
+    kept as its canonical name (the alias the cache is keyed on). ``engine="auto"`` takes
+    the first available engine; ``base_url`` names one HTTP server (Ollama / LM Studio /
+    OpenAI-compatible), else ``PUREMACRO_LLM_BASE_URL`` or the default local servers.
+    ``json_mode`` is off by default: the prompts ask for a JSON array, which an engine's
+    object-only JSON mode would forbid.
+
+    ``engine`` and ``mode`` are checked at construction, which probes nothing: an engine that
+    is neither ``"auto"`` nor a name of :mod:`puremacro.llm.engines`, or a mode outside
+    ``auto``, ``cache`` and ``off`` (``PUREMACRO_LLM_MODE`` included, when ``mode`` is None),
+    raises ``ValueError`` there, as the engine resolution of 4.8.1 did. Found at the first
+    call instead, the error would be counted by :func:`score_llm` as a malformed event of
+    every record and the corpus would come back empty.
     """
 
-    def __init__(self, model: str = "qwen2.5-3b-instruct", *,
-                 engine: str = "auto", base_url: str = "http://localhost:11434",
-                 timeout: float = 120.0, json_mode: bool = True, **kw):
-        super().__init__(model=model, **kw)
-        from .._local_engines import resolve_engine
-        self.engine = engine
+    def __init__(self, model: str = "default", *,
+                 engine: str = "auto", base_url: str | None = None,
+                 timeout: float = 120.0, json_mode: bool = False,
+                 mode: str | None = None, **kw):
+        from puremacro.llm import canonical, current_mode, validate_engine_name
+        current_mode(mode)      # the mode given, else PUREMACRO_LLM_MODE: an unknown name raises
+        super().__init__(model=canonical(model), **kw)
+        self.engine = validate_engine_name(engine)   # "auto" or a known name; nothing is probed
         self.base_url = base_url
+        self.timeout = timeout
         self.json_mode = json_mode
-        self._engine = resolve_engine(engine, base_url=base_url, timeout=timeout)
+        self.mode = mode
 
     def call(self, prompt: str) -> str:
-        from .._local_engines import resolve_model_id
-        model_id = resolve_model_id(self.model, self._engine.name)
-        return self._engine.complete(
-            model_id, prompt, max_tokens=self.max_tokens,
-            temperature=self.temperature, json_mode=self.json_mode,
-        )
+        from puremacro.llm import complete
+        return complete(prompt, model=self.model, engine=self.engine, mode=self.mode,
+                        max_tokens=self.max_tokens, temperature=self.temperature,
+                        json_mode=self.json_mode, timeout=self.timeout,
+                        base_url=self.base_url)
 
 
 class OllamaBackend(LocalBackend):
-    """Preset: ``LocalBackend(engine="ollama")`` for a running Ollama/LM Studio."""
+    """Preset: ``LocalBackend(engine="ollama")`` for a running Ollama/LM Studio.
 
-    def __init__(self, model: str = "qwen2.5:3b", *,
-                 base_url: str = "http://localhost:11434", **kw):
+    The default is the registry alias ``qwen3-4b``, so the completion cache is keyed as for
+    ``LocalBackend("default")``; the server receives its own tag (``qwen3:4b``). An Ollama tag
+    given as ``model`` reaches the server, and keys the cache, unchanged. ``base_url`` is None
+    unless given, so the server is ``PUREMACRO_LLM_BASE_URL``, else Ollama's default
+    ``http://localhost:11434``.
+    """
+
+    def __init__(self, model: str = "qwen3-4b", *,
+                 base_url: str | None = None, **kw):
         super().__init__(model=model, engine="ollama", base_url=base_url, **kw)
 
 
@@ -345,24 +369,81 @@ class MockBackend(_BackendBase):
         return "[]"
 
 
-def get_default_backend(model: str = "qwen2.5-3b-instruct", **kw) -> _BackendBase:
-    """Best available local backend, or ``MockBackend`` if no engine is present.
-    Prints which engine was selected. Lets demos/notebooks run free by default."""
-    from .._local_engines import LocalLLMUnavailable
-    try:
-        be = LocalBackend(model=model, **kw)
-        print(f"[puremacro] local LLM backend: engine={be._engine.name}")
-        return be
-    except LocalLLMUnavailable as e:
-        print(f"[puremacro] {e}\n[puremacro] using MockBackend (zero events).")
-        return MockBackend()
+def _local_engine_for(*, mode: str, engine: str, base_url: str | None) -> str | None:
+    """The engine a local object would use, ``"cache"`` in cache mode, or None if none is
+    available. Cache mode probes nothing; the other modes ask
+    :func:`puremacro.llm.engines.available_engines`."""
+    if mode == "cache":
+        return "cache"
+    from puremacro.llm import engines as _engines
+    names = _engines.available_engines(base_url=base_url)
+    if engine == "auto":
+        return names[0] if names else None
+    return engine if engine in names else None
+
+
+def _print_local_choice(*, mode: str, engine: str | None, model: str) -> None:
+    if engine is None:
+        from puremacro.llm.engines import INSTALL_HINT
+        print(f"[puremacro] {INSTALL_HINT}")
+    print(f"[puremacro] local LLM: mode={mode} engine={engine or 'mock'} model={model}")
+
+
+def get_default_backend(model: str = "default", **kw) -> _BackendBase:
+    """A :class:`LocalBackend`, or :class:`MockBackend` when no engine can serve it.
+
+    In ``cache`` mode the local backend is returned without probing anything (it reads the
+    completion cache). In ``auto`` and ``off`` modes it is returned when
+    :func:`puremacro.llm.engines.available_engines` lists an engine (the one named by
+    ``engine``, if given), else the install hint is printed and ``MockBackend`` (zero
+    events) is returned, so demos and notebooks always run. Prints
+    ``[puremacro] local LLM: mode=<mode> engine=<name|cache|mock> model=<alias>``.
+    Keywords go to :class:`LocalBackend`.
+    """
+    from puremacro.llm import current_mode
+    be = LocalBackend(model=model, **kw)
+    mode = current_mode(be.mode)
+    chosen = _local_engine_for(mode=mode, engine=be.engine, base_url=be.base_url)
+    _print_local_choice(mode=mode, engine=chosen, model=be.model)
+    return be if chosen is not None else MockBackend()
 
 
 # ---------------------------------------------------------------------------
 # Top-level scoring loop
 # ---------------------------------------------------------------------------
+def _drop_plus_signs(text: str) -> str:
+    """``text`` without the ``+`` that precedes a digit outside JSON strings.
+
+    JSON has no unary plus, yet the prompts write ``"sign": -1 | 0 | +1`` and models copy
+    it (``"sign": +1``). Characters inside double-quoted strings, escapes included, are
+    left as they are.
+    """
+    out: list[str] = []
+    in_string = escaped = False
+    for i, ch in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+        elif ch == "+" and i + 1 < len(text) and text[i + 1].isdigit():
+            continue
+        out.append(ch)
+    return "".join(out)
+
+
 def _parse_response(text: str) -> list[dict]:
-    """Best-effort JSON-array extraction from an LLM response."""
+    """Best-effort JSON-array extraction from an LLM response.
+
+    After a surrounding code fence is removed, a ``+`` before a digit outside strings is
+    dropped (``"sign": +1`` reads as ``1``). A JSON array is returned as it is; a JSON
+    object is accepted when it carries an ``"events"`` list, which is returned. Otherwise
+    the text from the first ``[`` to the last ``]`` is tried. Anything else gives ``[]``.
+    """
     text = text.strip()
     if text.startswith("```"):
         text = text.strip("`")
@@ -370,14 +451,16 @@ def _parse_response(text: str) -> list[dict]:
             text = text[4:]
         text = text.strip()
     try:
-        parsed = json.loads(text)
+        parsed = json.loads(_drop_plus_signs(text))
     except json.JSONDecodeError:
         try:
             i = text.index("[")
             j = text.rindex("]")
-            parsed = json.loads(text[i:j + 1])
+            parsed = json.loads(_drop_plus_signs(text[i:j + 1]))
         except (ValueError, json.JSONDecodeError, Exception):
             return []
+    if isinstance(parsed, dict) and isinstance(parsed.get("events"), list):
+        return parsed["events"]
     if not isinstance(parsed, list):
         return []
     return parsed
@@ -410,7 +493,15 @@ def _profile_from_timing_fields(
     """Build implementation_profile from the LLM's timing fields.
 
     Prefers ``implementation_date`` (ISO string) over ``horizon_quarters``
-    (int 0–16 fallback). Both null or unparseable → empty list.
+    (int 0–16 fallback), which is read only when there is no date. Both null or
+    unparseable → empty list.
+
+    An empty list means "implemented in the announcement quarter, at the
+    announcement date" (``NarrativeEvent.effective_profile``). So a date in the
+    announcement quarter, and a horizon of 0, give the empty list: the start of
+    that quarter would predate the announcement, which ``NarrativeEvent``
+    refuses. A date in a later quarter gives ``[(start of that quarter, 1.0)]``,
+    a horizon ``h`` in 1..16 ``[(start of the h-th quarter after, 1.0)]``.
 
     Refuses to emit a profile that predates the announcement quarter.
     """
@@ -421,7 +512,7 @@ def _profile_from_timing_fields(
         try:
             impl_q = pd.Period(pd.Timestamp(impl_date_str), freq="Q").to_timestamp()
             ann_q = pd.Period(pd.Timestamp(announcement), freq="Q").to_timestamp()
-            if impl_q >= ann_q:
+            if impl_q > ann_q:
                 return [(impl_q, 1.0)]
         except (ValueError, TypeError, Exception):
             pass
@@ -430,12 +521,11 @@ def _profile_from_timing_fields(
     if horizon_q is not None:
         try:
             h = int(horizon_q)
+            if 1 <= h <= 16:
+                ann_q = pd.Period(pd.Timestamp(announcement), freq="Q")
+                return [((ann_q + h).to_timestamp(), 1.0)]
         except (ValueError, TypeError, Exception):
             return []
-        if 0 <= h <= 16:
-            ann_q = pd.Period(pd.Timestamp(announcement), freq="Q")
-            impl_q = (ann_q + h).to_timestamp()
-            return [(impl_q, 1.0)]
     return []
 
 
@@ -460,6 +550,18 @@ def score_llm(
 
     A ``BackendUnavailable`` error (e.g. a local engine/server that is
     unreachable) propagates to the caller rather than being dropped as malformed.
+    So does a :class:`puremacro.llm.CacheMiss` (including ``CacheUnavailable``),
+    which a :class:`LocalBackend` raises in ``cache`` mode for a record the
+    completion cache does not hold: the corpus was not scored ahead of time, and
+    dropping the record would return a silently shorter list of events. A
+    :class:`puremacro.llm.ModelTooLarge` (the model needs more memory than the
+    device offers) propagates too: it would be the same for every record. Any other
+    failure of a record's call (a model that cannot load, a timeout) is counted
+    with the malformed events and the loop goes on.
+
+    A record whose ``date`` is not a date raises ``ValueError`` before its text is
+    sent, as in 4.8.1: the date is the caller's, not the model's, and is never
+    counted as a malformed event.
     """
     if kind not in _PROMPTS:
         raise ValueError(f"kind {kind!r} not in {sorted(_PROMPTS)}")
@@ -482,13 +584,14 @@ def score_llm(
         else:
             date, text, source_url = record
             record_lang = language
+        announced = pd.Timestamp(date)      # the caller's date: a bad one raises, as in 4.8.1
         prompt = _build_prompt(
             kind=kind, language=record_lang, country=country,
             date=str(date), text=text,
         )
         try:
             response = backend.call(prompt)
-        except BackendUnavailable:
+        except (BackendUnavailable, CacheMiss, ModelTooLarge):
             raise
         except (ValueError, ArithmeticError, Exception):
             n_dropped_malformed += 1
@@ -499,23 +602,28 @@ def score_llm(
                 continue
             mag_key = _MAGNITUDE_KEY_BY_KIND[kind]
             magnitude_unit = _MAGNITUDE_UNIT_BY_KIND[kind]
-            profile = _profile_from_timing_fields(ev_dict, announcement=date)
-            out.append(NarrativeEvent(
-                date=pd.Timestamp(date),
-                country=country,
-                magnitude=float(ev_dict[mag_key]),
-                magnitude_unit=magnitude_unit,
-                target=ev_dict["target"],
-                subtarget=ev_dict.get("subtarget"),
-                sign=int(ev_dict["sign"]),
-                confidence=float(ev_dict["confidence"]),
-                source_text=str(ev_dict.get("excerpt", text))[:500],
-                source_url=str(source_url),
-                scoring_method="llm",
-                implementation_profile=profile,
-                kind=kind,
-                language=record_lang,
-            ))
+            profile = _profile_from_timing_fields(ev_dict, announcement=announced)
+            try:
+                event = NarrativeEvent(
+                    date=announced,
+                    country=country,
+                    magnitude=float(ev_dict[mag_key]),
+                    magnitude_unit=magnitude_unit,
+                    target=ev_dict["target"],
+                    subtarget=ev_dict.get("subtarget"),
+                    sign=int(ev_dict["sign"]),
+                    confidence=float(ev_dict["confidence"]),
+                    source_text=str(ev_dict.get("excerpt", text))[:500],
+                    source_url=str(source_url),
+                    scoring_method="llm",
+                    implementation_profile=profile,
+                    kind=kind,
+                    language=record_lang,
+                )
+            except ValueError:      # an event NarrativeEvent refuses is dropped, not raised
+                n_dropped_malformed += 1
+                continue
+            out.append(event)
     if n_dropped_malformed:
         print(f"[score_llm] dropped {n_dropped_malformed} malformed events.")
     return out

@@ -91,6 +91,8 @@ _USER_DOCS = [
     "dp.md",
     "micro_data.md",
     "text_analysis.md",
+    # Local language models (puremacro.llm), added with the package.
+    "local_llm.md",
 ]
 
 
