@@ -95,6 +95,8 @@ Everything here is local and reversible until step 7.
 3. **Bump the version in all five places:** `pyproject.toml`, `puremacro/__init__.py`,
    the CHANGELOG heading, **`CITATION.cff`**, and the wheel pin in
    `playground/jupyter_lite_config.json` (`./wheels/puremacro-X.Y.Z-py3-none-any.whl`).
+   A pre-release is written `X.Y.ZaN`, `X.Y.ZbN` or `X.Y.ZrcN` in all five, and the
+   gate's version check accepts those forms.
 4. **Run the gate:** `python tools/release_check.py`. All five must pass.
 5. **Sanity-build and inspect the artifact**, because this is the last point at which a
    mistake is free. Build from a clean export, not from the live tree: setuptools seeds
@@ -302,7 +304,10 @@ This repo has tags through `v3.3.0` but only one Release (`v1.0.0`), so
 ### 6.5 Refresh the paper's numbers with every release it claims to describe
 
 `paper/paper.md` quotes counts that move under it. Recompute all of them in one pass and
-edit the text; each was last refreshed for 4.4.0 (commit 703c4bce) on 2026-10-02.
+edit the text; the scale and Pyodide figures were last refreshed for 5.0.0a1 on 2026-10-13,
+the rest for 4.6.0 on 2026-10-04. The rendered `paper/paper.html` and `paper/paper.pdf`
+are not tracked since 5.0.0a1: build them at submission (§6.6) from the committed
+`paper.md`, so the repository never carries a render that disagrees with its source.
 
 ```bash
 # modules and lines (the "Scale" paragraph)

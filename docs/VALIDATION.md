@@ -22,23 +22,18 @@ dependencies — so the gallery runs unchanged in the browser playground (notebo
 
 ### Pyodide run
 
-On 3 October 2026 the gallery was executed inside real Pyodide, headless under
-Node.js v26.10.0, with `tools/pyodide_gallery.py`: the wheel installed through micropip
-with every dependency resolved from the Pyodide distribution (nothing from PyPI, as in
-the playground) and the cases ran one at a time. The first run, on the 110-case gallery
-of 4.5.0, passed 110 of 110 on Pyodide 314.0.5 (Python 3.14.2, the version pinned by the
-playground's `jupyterlite-pyodide-kernel` 0.8.4) and 109 of 110 on Pyodide 0.28.3
-(Python 3.13.2, the Gate 6 harness pin): `puremacro.narrative` imported `sqlite3` and `ssl`
-at module level and Pyodide 0.28 ships both as unvendored standard-library modules. Those
-imports now go through `puremacro._optional_stdlib`, and the re-run the same day on the
-114-case gallery of 4.6.0 (four of those cases left with the trade modules in 5.0) passed
-**114 of 114 on both Pyodide
-versions** (35.8 s on 0.28.3, 38.4 s on 314.0.5; about 42 to 44 s with boot, install and
-import) and 114 on the desktop (CPython 3.13, 21.0 s). Every pass flag agrees across the
-three platforms; four `max_margin` values (three L-BFGS-B GARCH fits and one Monte Carlo
-sup-t value) differ between WebAssembly and the desktop by 1e-8 to 5e-4 and pass on all.
-This is Pyodide under Node, not a browser tab, and it measures the gallery, not heavy
-workloads. The commands are documented in `tools/pyodide/README.md`.
+On 13 October 2026 the 110-case gallery of 5.0.0a1 was executed inside real Pyodide,
+headless under Node.js v26.11.1, with `tools/pyodide_gallery.py`: the wheel installed
+through micropip with every dependency resolved from the Pyodide distribution (nothing
+from PyPI, as in the playground) and the cases ran one at a time. It passed **110 of 110
+on both Pyodide versions**: 314.0.5 (Python 3.14.2, the version pinned by the playground's
+`jupyterlite-pyodide-kernel` 0.8.4) and 0.28.3 (Python 3.13.2, the Gate 6 harness pin),
+and 110 of 110 on the desktop (CPython 3.13) from a fresh install of the same wheel.
+An earlier run, on 3 October 2026, had found that `puremacro.narrative` imported
+`sqlite3` and `ssl` at module level, which Pyodide 0.28 ships as unvendored
+standard-library modules; those imports go through `puremacro._optional_stdlib` since
+4.6.0. This is Pyodide under Node, not a browser tab, and it measures the gallery, not
+heavy workloads. The commands are documented in `tools/pyodide/README.md`.
 
 ## How a case is validated
 

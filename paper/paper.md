@@ -33,10 +33,12 @@ bibliography: paper.bib
      package: 110 checks, 15 subsystems, 20 external (13 package + 5 SciPy +
      2 published) / 31 analytical / 59 internal, all passing (4.6.0 had 114 with
      four trade cases; 4.4.0 had 110: 20 / 31 / 59; 3.4.0 had 107: 19 / 29 / 59).
-     Every other count in the text (modules, lines, tests, swept library modules,
-     notebook pairs, commits) was recomputed from the 4.6.0 tree (commit d2634362)
-     on 2026-10-04 and has not been refreshed since; the module and line counts
-     include the trade modules that 5.0 removes. The text was extended on
+     The module, line and test counts of the "Scale" paragraph and the Pyodide
+     sentence were recomputed on the 5.0.0a1 tree on 2026-10-13 (RELEASING 6.5
+     recipe: 777 tracked modules, 254,858 lines, 17,406 collected tests of which
+     the default selection runs 17,180; Pyodide 0.28.3 and 314.0.5 110/110). The
+     swept-library-module, notebook-pair and commit counts still come from the
+     4.6.0 tree (commit d2634362, 2026-10-04). The text was extended on
      2026-10-12 to cover `dp`, the survey microdata and `puremacro.text`
      (unreleased at the time). The krusellsmith1998 and dolo entries in paper.bib
      were not checked against Crossref (no access from the drafting session).
@@ -171,15 +173,14 @@ problems slower than in JIT-compiled toolkits, and derivatives that other librar
 obtain by automatic differentiation must be coded by hand. The browser is a
 best-effort target rather than a supported one: Parquet and Excel files need
 engines that not every Pyodide distribution provides. On
-3 October 2026 a headless Node.js harness ran the whole validation gallery inside Pyodide 0.28.3
-and 314.0.5 (the playground's version): every check passed on both, with four
-margins differing from native arithmetic by at most $5 \times 10^{-4}$.
+13 October 2026 a headless Node.js harness ran the whole validation gallery inside Pyodide 0.28.3
+and 314.0.5 (the playground's version): every check passed on both.
 
 <!-- AUTHOR: re-run `python tools/pyodide_gallery.py` on the submitted commit and
      update the sentence above if the counts or Pyodide versions changed. -->
 
-**Scale.** Version 4.6.0 comprises about 810 modules and 282,000 lines of Python,
-exercised by about 19,100 tests, of which CI runs 18,900 on Linux, macOS and Windows
+**Scale.** Version 5.0.0a1 comprises about 780 modules and 255,000 lines of Python,
+exercised by about 17,400 tests, of which CI runs 17,200 on Linux, macOS and Windows
 under Python 3.11–3.13 on every push and the remaining slow, reference and
 replication tests weekly and on every release tag, where they gate publication.
 Before each release tag, a script checks the suite against a recorded baseline,
@@ -187,8 +188,8 @@ the import invariant and a snapshot of the public API.
 
 ## Verification
 
-The gallery counts below were recomputed on 2026-10-13 on the 5.0 development tree;
-the scale measurements above describe version 4.6.0 (commit `d2634362`).
+The gallery counts below and the scale measurements above were recomputed on
+2026-10-13 on the 5.0.0a1 tree.
 
 The validation gallery, `puremacro.validation.scorecard()`, runs 110 checks across
 15 subsystems in under a minute, with none of the oracle packages installed; all
