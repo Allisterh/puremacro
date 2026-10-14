@@ -633,6 +633,29 @@ def test_a_path_that_runs_through_a_file_means_the_cache_cannot_be_read_not_that
     assert blocker.read_text() == "x"
 
 
+def test_a_path_through_a_file_is_recognised_where_the_os_reports_it_as_missing(tmp_path, monkeypatch):
+    """Windows raises FileNotFoundError, not NotADirectoryError, for ``<a file>/c.sqlite``; the
+    cache then looks at the nearest ancestor that exists. Simulated here on every platform."""
+    import puremacro.llm.cache as cache_module
+    blocker = tmp_path / "not_a_directory"
+    blocker.write_text("x")
+    target = blocker / "deeper" / "c.sqlite"
+    real_stat = os.stat
+
+    def windows_like_stat(p, *args, **kwargs):
+        if os.path.abspath(str(p)) == str(target):
+            raise FileNotFoundError(2, "The system cannot find the path specified", str(p))
+        return real_stat(p, *args, **kwargs)
+
+    monkeypatch.setattr(cache_module.os, "stat", windows_like_stat)
+    c = CompletionCache(target)
+    assert c.writable is False and c.readable is False
+    assert c.get(_k("p")) is None and c.readable is False
+    assert "NotADirectoryError" in c.reason
+    assert cache_module._runs_through_a_file(tmp_path / "missing" / "dir" / "c.sqlite") is False
+    assert blocker.read_text() == "x"
+
+
 def test_a_directory_that_cannot_be_searched_means_the_cache_cannot_be_read(tmp_path):
     locked = tmp_path / "locked"
     locked.mkdir()
