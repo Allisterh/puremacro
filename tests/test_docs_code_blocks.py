@@ -29,22 +29,14 @@ matplotlib.use("Agg")
 REPO = Path(__file__).resolve().parents[1]
 
 PAGES = [
-    "docs/sw07_estimator_experiment.md",
-    "docs/es/sw07_estimator_experiment.md",
-    "docs/distributional_trade_ge.md",
-    "docs/es/distributional_trade_ge.md",
-    "docs/sw07_finite_sample.md",
-    "docs/es/sw07_finite_sample.md",
     "docs/empirical_research.md",
     "docs/es/empirical_research.md",
     "docs/research_workflows.md",
     "docs/research_benchmarks.md",
     "docs/structural_bridge.md",
-    "docs/trade_distributional.md",
     "docs/es/research_workflows.md",
     "docs/es/research_benchmarks.md",
     "docs/es/structural_bridge.md",
-    "docs/es/trade_distributional.md",
     "README.md",
     "docs/quickstart.md",
     "docs/narrative_sign_svar.md",
@@ -67,22 +59,8 @@ PAGES = [
     "docs/es/gvar.md",
     "docs/es/dsge_estimation.md",
     "docs/es/did.md",
-    # MRIO engines and the stacked Newton-Krylov (English and Spanish, identical code).
-    "docs/trade_mrio.md",
-    "docs/trade_condensed.md",
-    "docs/trade_ces_newton.md",
-    "docs/trade_household.md",
-    "docs/trade_continuation.md",
-    "docs/trade_stability.md",
-    "docs/trade_dynamic.md",
+    # The stacked Newton-Krylov (English and Spanish, identical code).
     "docs/dsge_stacked_newton.md",
-    "docs/es/trade_mrio.md",
-    "docs/es/trade_condensed.md",
-    "docs/es/trade_ces_newton.md",
-    "docs/es/trade_household.md",
-    "docs/es/trade_continuation.md",
-    "docs/es/trade_stability.md",
-    "docs/es/trade_dynamic.md",
     "docs/es/dsge_stacked_newton.md",
     # Declarative DP, survey microdata and text as data (English and Spanish, identical code).
     "docs/dp.md",
@@ -91,6 +69,9 @@ PAGES = [
     "docs/es/dp.md",
     "docs/es/micro_data.md",
     "docs/es/text_analysis.md",
+    # The monetary transmission simulator (English and Spanish, the same calls).
+    "docs/monetary_transmission.md",
+    "docs/es/monetary_transmission.md",
     # Local language models: the blocks that need no model (cache mode, report) run here.
     "docs/local_llm.md",
     "docs/es/local_llm.md",

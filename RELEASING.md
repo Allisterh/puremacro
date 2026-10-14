@@ -95,6 +95,8 @@ Everything here is local and reversible until step 7.
 3. **Bump the version in all five places:** `pyproject.toml`, `puremacro/__init__.py`,
    the CHANGELOG heading, **`CITATION.cff`**, and the wheel pin in
    `playground/jupyter_lite_config.json` (`./wheels/puremacro-X.Y.Z-py3-none-any.whl`).
+   A pre-release is written `X.Y.ZaN`, `X.Y.ZbN` or `X.Y.ZrcN` in all five, and the
+   gate's version check accepts those forms.
 4. **Run the gate:** `python tools/release_check.py`. All five must pass.
 5. **Sanity-build and inspect the artifact**, because this is the last point at which a
    mistake is free. Build from a clean export, not from the live tree: setuptools seeds
@@ -282,8 +284,8 @@ key formats came back clean. It is still the wrong trade:
 box where the earlier history went. It no longer argues for eligibility; it is context, and
 the AI-usage disclosure has to cover the private period anyway:
 
-> `puremacro` was developed from 2026-04-28 inside a private monorepo
-> (`uncertainty_examples`), as the `puremacro/` subdirectory, and was extracted into this
+> `puremacro` was developed from 2026-04-28 inside a private monorepo, as its
+> `puremacro/` subdirectory, and was extracted into this
 > standalone public repository on 2026-07-20. The extraction squashed the prior history
 > into the initial commit. The public history since then is more than six months long,
 > and release history is continuous from v0.92.0 through the current release
@@ -302,7 +304,10 @@ This repo has tags through `v3.3.0` but only one Release (`v1.0.0`), so
 ### 6.5 Refresh the paper's numbers with every release it claims to describe
 
 `paper/paper.md` quotes counts that move under it. Recompute all of them in one pass and
-edit the text; each was last refreshed for 4.4.0 (commit 703c4bce) on 2026-10-02.
+edit the text; the scale and Pyodide figures were last refreshed for 5.0.0a1 on 2026-10-13,
+the rest for 4.6.0 on 2026-10-04. The rendered `paper/paper.html` and `paper/paper.pdf`
+are not tracked since 5.0.0a1: build them at submission (§6.6) from the committed
+`paper.md`, so the repository never carries a render that disagrees with its source.
 
 ```bash
 # modules and lines (the "Scale" paragraph)
@@ -360,39 +365,16 @@ and land changes within 4–6.
 What JOSS checks that this repo already satisfies: an OSI licence (MIT, and GitHub's
 licensee detects it), documentation, automated tests, and a functioning CI.
 
-### 6.7 The bundled OECD ICIO data: redistribution is permitted, with conditions
+### 6.7 Bundled third-party data
 
-Reviewers check the licences of bundled data. The wheel ships
-`puremacro/trade/_datafiles/icio_77c_11s.npz`, an aggregation of an OECD ICIO export
-(see that directory's `SOURCES.md`). The OECD Terms and Conditions were read on
-2026-10-02, from an archived copy of
-<https://www.oecd.org/en/about/terms-conditions.html> dated 2026-09-30 (oecd.org returns
-403 to automated clients). The terms are "Last updated on 1 July 2024". OECD **data**
-is governed by their §3 "Data", which is not CC BY 4.0: CC BY 4.0 covers only OECD
-*written content*. Its "Permitted Use" clause reads:
+Reviewers check the licences of bundled data. The OECD input-output fixture that 4.0.0
+to 4.8.1 redistributed left with the trade modules (4.8.1 is the last release that ships
+it), so the wheel no longer carries it. The data files that remain in the package are
+public-statistics extracts (`puremacro/datasets/data/`, `puremacro/dsge/_sw07_data.csv`),
+replication inputs with their published sources, and reference outputs computed by
+puremacro's own tools.
 
-> Except where additional restrictions apply as stated above, you can extract from,
-> download, copy, adapt, print, distribute, share and embed Data for any purpose, even
-> for commercial use. You must give appropriate credit to the OECD by using the citation
-> associated with the relevant Data […]. When sharing or licensing work created using the
-> Data, you agree to include the same acknowledgment requirement in any sub-licenses
-> that you grant, along with the requirement that any further sub-licensees do the same.
-
-Redistributing the fixture in the wheel is therefore allowed. Two of the conditions are
-not yet met in full. These are licensing-text decisions for you; nothing has been changed:
-
-- **Citation.** The ICIO ReadMe (2025 edition) asks for "OECD. (2025) OECD Inter-Country
-  Input-Output Tables, https://oe.cd/icio". `SOURCES.md` credits "the OECD ICIO tables"
-  without that citation (or the one for the edition actually used), and its source link is
-  the retired `oecd.org/sti/ind/...htm` URL.
-- **Pass-through.** `SOURCES.md` does not say that redistributors must carry the same
-  acknowledgment requirement forward. Its "Terms" row also paraphrases the terms instead
-  of naming §3 of the 1 July 2024 Terms and Conditions.
-- **Third-party data.** §3 makes the user responsible for checking third-party
-  ownership. The ICIO ReadMe flags Israel's data as supplied "by and under the
-  responsibility of the relevant Israeli authorities or third party". Nothing restricts
-  redistribution there, but note it.
-- **Corrupted derivative.** The fixture comes from a decimal-point-corrupted export (see
-  `SOURCES.md` and `docs/ADVISORY.md`, 2026-09-22). The terms do not forbid that.
-  `SOURCES.md` already labels it a regression fixture and not OECD estimates; keep that
-  label wherever the data are credited to the OECD.
+Before bundling any third-party table, record its publisher, source page, terms, what was
+changed and the SHA-256 in a `SOURCES.md` next to it, state that the MIT licence covers
+puremacro's code and not the data, and carry any acknowledgment requirement of the
+publisher's terms forward to redistributors.

@@ -17,6 +17,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import matplotlib
 import numpy as np
 import pytest
 from PIL import Image
@@ -169,18 +170,21 @@ def test_nbstyle_presence_and_token_availability(mod_path: Path):
     assert len(nbstyle.styles(2)) == 2
     assert len(nbstyle.styles(9)) == 9
 
-    # Dual-theme card switching
+    # Dual-theme card switching. apply_style() writes matplotlib rcParams
+    # (e.g. axes.titlelocation), so run it inside rc_context(): the global
+    # state is restored on exit and later tests see matplotlib defaults.
     assert "grafito" in nbstyle.TEMAS and "papel" in nbstyle.TEMAS
-    nbstyle.apply_style(theme="grafito")
-    assert nbstyle.FONDO.upper() == "#161616"
-    assert nbstyle.TINTA.upper() == "#EDEDED"
+    with matplotlib.rc_context():
+        nbstyle.apply_style(theme="grafito")
+        assert nbstyle.FONDO.upper() == "#161616"
+        assert nbstyle.TINTA.upper() == "#EDEDED"
 
-    nbstyle.apply_style(theme="papel")
-    assert nbstyle.FONDO.upper() == "#FFFFFF"
-    assert nbstyle.TINTA.upper() == "#141414"
+        nbstyle.apply_style(theme="papel")
+        assert nbstyle.FONDO.upper() == "#FFFFFF"
+        assert nbstyle.TINTA.upper() == "#141414"
 
-    # Reset to default
-    nbstyle.apply_style(theme="grafito")
+        # Reset to default
+        nbstyle.apply_style(theme="grafito")
 
 
 def test_build_tooling_multi_suite_discovery():
@@ -189,7 +193,7 @@ def test_build_tooling_multi_suite_discovery():
 
     showcase_srcs = bn.discover_sources("showcase")
     assert all(p.suffix == ".py" for p in showcase_srcs)
-    assert any("62_flexible_trade_cge.py" in p.name for p in showcase_srcs)
+    assert any("68_third_order_perturbation_trust.py" in p.name for p in showcase_srcs)
     assert any("local_llm_uncertainty.py" in p.name for p in showcase_srcs)
 
     curso_srcs = bn.discover_sources("curso")

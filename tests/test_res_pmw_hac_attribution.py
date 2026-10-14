@@ -4,10 +4,7 @@
 with a Bartlett kernel and a fixed truncation lag ``h + 1`` at horizon ``h``.
 Plagborg-Moller and Wolf (2021, Econometrica 89(2)) prove that LPs and VARs
 estimate the same impulse responses; the paper makes no HAC or bandwidth
-recommendation. The notebooks and the technical report used to credit the
-lag to that paper, and the technical report also said the bandwidth was
-selected automatically and that lag-augmented LPs rest on the PMW theorem
-(they are Montiel Olea and Plagborg-Moller 2021, Econometrica 89(4)).
+recommendation. The notebooks used to credit the lag to that paper.
 
 These tests pin the corrected prose in the files that carried the claim and
 check the prose against the code: the standard error ``lp_hac`` reports is
@@ -31,7 +28,6 @@ NOTEBOOK_STEMS = (
     "notebooks/course/06_lp_narrativa_es",
     "notebooks/course/10_b1_capital_ajuste_es",
 )
-TECHREPORT = ROOT / "techreport" / "puremacro_technical_report.md"
 
 # A sentence credits the lag to PMW when it names the HAC lag h+1 and PMW
 # and says nothing that negates or qualifies the credit.
@@ -82,7 +78,6 @@ def _owned_texts():
     for stem in NOTEBOOK_STEMS:
         yield f"{stem}.py", _py_text(ROOT / f"{stem}.py")
         yield f"{stem}.ipynb", _ipynb_text(ROOT / f"{stem}.ipynb")
-    yield "techreport/puremacro_technical_report.md", TECHREPORT.read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -148,42 +143,6 @@ def test_committed_notebook_matches_its_source(stem):
     errors = [o for c in nb["cells"] if c["cell_type"] == "code"
               for o in c.get("outputs", []) if o.get("output_type") == "error"]
     assert errors == []
-
-
-# ---------------------------------------------------------------------------
-# Technical report, section 3.2
-# ---------------------------------------------------------------------------
-
-def _lp_inference_paragraph() -> str:
-    text = TECHREPORT.read_text(encoding="utf-8")
-    paras = [p for p in text.split("\n") if "(LP-HAC)" in p]
-    assert len(paras) == 1
-    return paras[0]
-
-
-def test_techreport_describes_the_fixed_lag_not_automatic_selection():
-    para = _lp_inference_paragraph()
-    assert not re.search(r"automatic\w*\s+bandwidth", para, re.I)
-    assert "fixed truncation lag of $h+1$" in para
-    assert "no data-driven bandwidth selection" in para
-    assert "rule-of-thumb convention" in para
-    assert "$1 - \\ell/(h+2)$" in para
-
-
-def test_techreport_credits_la_lp_to_montiel_olea_plagborg_moller():
-    para = _lp_inference_paragraph()
-    for s in _sentences(para):
-        if re.search(r"LA-LP|lag-augmented", s, re.I):
-            assert "Wolf" not in s, s
-            assert "Montiel Olea and Plagborg-Møller (2021)" in s, s
-    text = TECHREPORT.read_text(encoding="utf-8")
-    refs = text[text.index("### References"):]
-    assert ("- Montiel Olea, J. L., & Plagborg-Møller, M. (2021). Local Projection Inference "
-            "Is Simpler and More Robust Than You Think. *Econometrica*, 89(4), 1789–1823.") in refs
-    # PMW stays cited, for what the paper proves.
-    assert "Plagborg-Møller, M., & Wolf, C. K. (2021)" in refs
-    assert re.search(r"Plagborg-Møller and Wolf \(2021\)[^.]*estimate the same impulse responses",
-                     para)
 
 
 # ---------------------------------------------------------------------------

@@ -9,8 +9,6 @@ Includes:
 - Bayesian estimation engine (random-walk Metropolis-Hastings) +
   model-agnostic priors framework.
 - Smets-Wouters (2007) reference model + bundled US dataset.
-- Fertility DSGE (Alonso-Ortiz adjustment-costs variant) — solver only;
-  Bayesian estimation queued for 0.55.0.
 - Matrix-free stacked-time Newton-Krylov for perfect-foresight systems
   (``solve_stacked_newton_krylov``; opt-in, separate from
   ``solve_perfect_foresight``).
@@ -29,7 +27,6 @@ from .steady import (
 from ._moments import one_sided_hp_filter
 from ._results import (
     DSGEPosteriorResult, SW07PosteriorResult, NUTSResult, HANKResult,
-    FertilitySolution,
     DynareDR, Dynare2ndDR, TheoreticalMomentsResult,
     StochSimulResult,
     SmootherResult, DSGEForecastResult, ModeCheckResult,
@@ -61,7 +58,6 @@ from .bayesian import BayesianEstimationResult, estimate_dsge_bayesian
 from .sw07_estimate import estimate_sw07
 from .sw07_data import load_sw07_data
 from .sw07_marginal import SW07MarginalLikelihoodResult, sw07_laplace_mdd, sw07_log_posterior
-from .fertility_adj_costs import solve_bgp, solve_fertility
 from .pruning import (
     PrunedDSGESolution,
     PrunedSimulationResult,
@@ -165,7 +161,7 @@ from .markov_switching import (
     MSDSGEResult,
     solve_ms_dsge,
 )
-from . import priors, fertility_adj_costs
+from . import priors
 from . import marginal, mode, observation, smoother, news
 
 
@@ -174,7 +170,7 @@ __all__ = [
     "build", "LinearModel", "ModelError", "SteadyStateError",
     "steady", "StructuralSingularityError", "StructuralSingularityWarning",
     "allow_structural_singularity",
-    "DSGEPosteriorResult", "SW07PosteriorResult", "NUTSResult", "BayesianEstimationResult", "FertilitySolution",
+    "DSGEPosteriorResult", "SW07PosteriorResult", "NUTSResult", "BayesianEstimationResult",
     "ScoreDiagnosticsResult", "nuts_sample",
     "DynareDR", "Dynare2ndDR", "TheoreticalMomentsResult", "StochSimulResult",
     "build_dynare", "parse_mod", "load_mod", "load_dynare_mod", "solve_dynare_2nd_order",
@@ -188,7 +184,6 @@ __all__ = [
     "solve_gertler_karadi", "GertlerKaradiResult", "GK2011_PARAMS", "solve_steady_state", "build_gertler_karadi_model",
     "estimate_dsge", "estimate_dsge_bayesian", "estimate_sw07",
     "load_sw07_data", "sw07_laplace_mdd", "sw07_log_posterior", "SW07MarginalLikelihoodResult",
-    "solve_bgp", "solve_fertility",
     "PrunedDSGESolution", "PrunedSimulationResult", "canonical_growth_2nd_order",
     "FEVDResult", "ShockDecompResult", "compute_fevd", "compute_shock_decomposition",
     "Prior", "BetaPrior", "InvGammaPrior", "NormalPrior", "GammaPrior", "UniformPrior",
@@ -201,7 +196,7 @@ __all__ = [
     "find_mode", "mode_check", "csminwel", "cmaes", "ModeCheckResult",
     "laplace_mdd", "harmonic_mean_mdd", "model_comparison", "HarmonicMeanResult",
     "marginal", "mode", "observation", "smoother",
-    "priors", "fertility_adj_costs",
+    "priors",
     # --- 2.6.0: DSGE Diagnostics & Residuals ------------------------------
     "check", "resid", "model_diagnostics",
     "EigenvalueTable", "ModelDiagnosticsResult", "DiagnosticFinding",

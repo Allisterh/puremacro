@@ -1,8 +1,8 @@
 """Regression gate: every shipped module must parse on the oldest supported Python (3.11).
 
-puremacro 3.3.0 shipped ``puremacro/trade/plot.py`` with a backslash inside an
+puremacro 3.3.0 shipped a since-removed trade module with a backslash inside an
 f-string replacement field, which PEP 701 allows only from Python 3.12. On 3.11
-that was a SyntaxError that made ``puremacro.trade``, ``puremacro.spatial`` and
+that was a SyntaxError that made its package, ``puremacro.spatial`` and
 ``puremacro.did`` unimportable, and nothing in the release gate caught it because
 the heavier CI steps run on 3.12 only.
 

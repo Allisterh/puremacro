@@ -1,7 +1,7 @@
 """Comprehensive 4-Tier Opaque-Box E2E Test Suite for puremacro v2.9.0 (Tier 3: Parity & Surface Area).
 
 This test suite covers all requirements in ORIGINAL_REQUEST.md (§ 2026-09-08T22:47:25Z)
-and docs/specs/2026-09-08-puremacro-dsge-tier3-design.md across 4 Tiers:
+and the Tier 3 design note of 2026-09-08 across 4 Tiers:
 - Tier 1: Feature Coverage (>=5 tests per feature covering happy-path in isolation; 25 tests)
 - Tier 2: Boundary & Corner Cases (>=5 tests per feature covering limits & errors; 24 tests)
 - Tier 3: Cross-Feature Combinations (pairwise subsystem interactions; 8 tests)

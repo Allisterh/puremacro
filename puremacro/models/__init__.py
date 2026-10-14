@@ -6,8 +6,6 @@ Currently:
     discount factor (reaction-function expectation).
   - hank_sequence_space: Sequence-space heterogeneous-agent New Keynesian model
     (Auclert et al. 2021).
-  - trade_policy: Multi-country multi-sector general equilibrium trade policy simulator
-    (Caliendo & Parro 2015).
   - monetary_transmission: Comparative HANK vs RANK monetary and macroprudential
     transmission simulator (Kaplan, Moll & Violante 2018).
 """
@@ -33,10 +31,6 @@ from puremacro.models.monetary_transmission import (
     MonetaryTransmissionResult,
     MonetaryTransmissionSimulator,
 )
-from puremacro.models.trade_policy import (
-    TradePolicySimulationResult,
-    TradePolicySimulator,
-)
 
 __all__ = [
     "DMPParameters",
@@ -53,8 +47,6 @@ __all__ = [
     "fake_news_algorithm",
     "simulate_targeted_transfer",
     "solve_nonlinear_transition",
-    "TradePolicySimulator",
-    "TradePolicySimulationResult",
     "MonetaryTransmissionSimulator",
     "MonetaryTransmissionResult",
 ]

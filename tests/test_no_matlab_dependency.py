@@ -8,8 +8,9 @@ Before 4.0.0 three separate things tied the project to MATLAB:
 * ``puremacro.dsge`` read Dynare's ``*_results.mat`` through ``scipy.io``;
 * a ``matlab/`` companion toolbox shipped a second, unaudited implementation.
 
-All three are gone. These tests fail if any of them comes back, because the
-failure mode is quiet: a module grows a ``scipy.io`` import, or a loader
+All three are gone, and the trade model has since left the package. These
+tests fail if either of the other two comes back, because the failure mode is
+quiet: a module grows a ``scipy.io`` import, or a loader
 reaches outside the distribution, and nobody notices until a stranger tries to
 reproduce a published number.
 """
@@ -21,10 +22,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-import numpy as np
 import pytest
-
-import puremacro
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -71,11 +69,6 @@ def test_no_matlab_sources_are_distributed():
     # Keep an exact allowlist: a new runtime dependency must still fail here.
     development_references = {
         "tools/reference_validation/export_dynare.m",
-        # Driver of the 2026-10-03 MATLAB run that produced the clean-table trade
-        # references; the model code it calls is not in the repository.
-        "tools/reference_validation/trade_clean_table/run_scenarios_clean.m",
-        "tools/reference_validation/trade_clean_table/solve_scenario_fsolve.m",
-        "tools/reference_validation/trade_clean_table/polish_rate.m",
         "curso/notebooks/modelos/rbc_mexico_dual/Output/rbc_mexico_dual_results.mat",
     }
     offenders = [
@@ -86,52 +79,6 @@ def test_no_matlab_sources_are_distributed():
     assert not offenders, (
         "MATLAB files are tracked again: " + ", ".join(sorted(offenders)[:10])
     )
-
-
-def test_trade_calibration_data_ships_with_the_package():
-    """The ICIO matrix loads from the installation, not from a sibling directory."""
-    from puremacro.trade.data import bundled_icio_path, load_icio_data
-
-    path = bundled_icio_path()
-    assert path.is_file(), f"bundled ICIO dataset missing at {path}"
-    assert path.suffix == ".npz"
-    # It must live inside the installed package, not beside the checkout.
-    assert Path(puremacro.__file__).resolve().parent in path.parents
-
-    matrix = load_icio_data(source="legacy")
-    assert matrix.shape == (850, 1078)
-    assert matrix.dtype == np.float64
-
-
-def test_reference_solutions_ship_and_stay_external_evidence():
-    """The MATLAB-derived reference solutions are bundled and still verbatim."""
-    from puremacro.trade.data import (
-        available_reference_scenarios,
-        load_reference_solution,
-    )
-
-    scenarios = available_reference_scenarios()
-    assert "base" in scenarios and "t10" in scenarios
-
-    base = load_reference_solution("base")
-    # Shapes are MATLAB's, because these are unmodified copies: turning them
-    # into puremacro's own output would make the parity suites tautological.
-    assert base["xx_sol"].shape == (2001, 1)
-    assert base["xx_sol"].dtype == np.float64
-
-    # t10_54's source is a dataless placeholder that could not be read. It must
-    # stay absent rather than be fabricated or regenerated from puremacro.
-    assert "t10_54" not in scenarios
-    with pytest.raises(KeyError, match="t10_54"):
-        load_reference_solution("t10_54")
-
-
-def test_mat_input_is_refused_with_a_migration_message():
-    """A ``.mat`` path raises and names what to do instead."""
-    from puremacro.trade.data import load_icio_data
-
-    with pytest.raises(ValueError, match=r"(?i)no longer supported|savez_compressed"):
-        load_icio_data(path="anything.mat")
 
 
 def test_dynare_helpers_take_a_mapping_not_a_path():

@@ -4,13 +4,13 @@ This test suite covers all four frontier macroeconomic engines in puremacro 3.3.
 1. Continuous Transition Dynamics & MIT Shocks (puremacro.vfi.continuous_transition)
 2. Exact Analytic Gradients via the Implicit Function Theorem (puremacro.vfi.analytic_gradients)
 3. Deep Macro Physics-Informed Neural Networks (PINNs) (puremacro.vfi.deep_macro)
-4. Quantitative Spatial & Gravity General Equilibrium (puremacro.trade.caliendo_parro & puremacro.spatial.allen_arkolakis)
+4. Quantitative Spatial & Gravity General Equilibrium (puremacro.spatial.allen_arkolakis)
 
 Four-Tier Architecture:
 - Tier 1: Feature Coverage (happy path for each engine in isolation)
 - Tier 2: Boundary & Corner Cases (zero shock, extreme trade costs, high dimension D=10, kinked domains, near-zero elasticities)
-- Tier 3: Cross-Feature Combinations (MIT shocks with IFT sensitivities; spatial distance feeding trade GE; Deep PINN vs Chebyshev collocation)
-- Tier 4: Real-World Policy Scenarios (100 bps rate hike MIT shock, US-China tariff war, transport corridor investment, 10-sector capital convergence)
+- Tier 3: Cross-Feature Combinations (MIT shocks with IFT sensitivities; Deep PINN vs Chebyshev collocation)
+- Tier 4: Real-World Policy Scenarios (100 bps rate hike MIT shock, transport corridor investment, 10-sector capital convergence)
 
 Opaque-Box Testing Principles:
 - Strictly tests public APIs, mathematical invariants, conservation laws, and economic properties.
@@ -103,29 +103,6 @@ def _require_deep_macro():
     pytest.skip("Milestone 3: deep_macro pending implementation in puremacro.vfi.deep_macro")
 
 
-def _require_caliendo_parro():
-    """Resolve Caliendo-Parro trade GE engine or skip progressively."""
-    try:
-        from puremacro.trade import caliendo_parro as cp_mod
-        if hasattr(cp_mod, "CaliendoParroModel"):
-            return cp_mod
-    except (ImportError, AttributeError):
-        pass
-    try:
-        from puremacro import trade
-        if hasattr(trade, "CaliendoParroModel"):
-            return trade
-    except (ImportError, AttributeError):
-        pass
-    try:
-        from puremacro import spatial
-        if hasattr(spatial, "CaliendoParroModel"):
-            return spatial
-    except (ImportError, AttributeError):
-        pass
-    pytest.skip("Milestone 4: CaliendoParroModel pending implementation in puremacro.trade.caliendo_parro")
-
-
 def _require_allen_arkolakis():
     """Resolve Allen-Arkolakis spatial GE engine or skip progressively."""
     try:
@@ -140,135 +117,12 @@ def _require_allen_arkolakis():
             return spatial
     except (ImportError, AttributeError):
         pass
-    try:
-        from puremacro import trade
-        if hasattr(trade, "AllenArkolakisModel"):
-            return trade
-    except (ImportError, AttributeError):
-        pass
     pytest.skip("Milestone 4: AllenArkolakisModel pending implementation in puremacro.spatial.allen_arkolakis")
 
 
 # ===========================================================================
 # Test Fixtures & Canonical Economic Model Generators
 # ===========================================================================
-
-@pytest.fixture
-def canonical_caliendo_parro_data() -> dict[str, Any]:
-    """Canonical 3-country, 2-sector Caliendo & Parro (2015) dataset.
-
-    Countries: USA, CHN, ROW (N=3)
-    Sectors: Manufacturing (tradable), Services (less tradable) (J=2)
-    Satisfies all general equilibrium identities:
-    - Sum of bilateral trade shares along origin dimension equals 1.0.
-    - Value-added share + sum of intermediate shares equals 1.0.
-    - Consumption shares sum to 1.0.
-    - Trade deficits sum to 0.0.
-    """
-    N = 3
-    J = 2
-    country_codes = ("USA", "CHN", "ROW")
-    sector_codes = ("manuf", "serv")
-
-    # Bilateral trade shares: pi[j, n, i] = share of importer n spent on exporter i
-    trade_shares = np.array([
-        # Sector 0: Manufacturing (high trade openness)
-        [
-            [0.55, 0.25, 0.20],  # USA imports
-            [0.15, 0.70, 0.15],  # CHN imports
-            [0.25, 0.25, 0.50],  # ROW imports
-        ],
-        # Sector 1: Services (primarily domestic)
-        [
-            [0.85, 0.08, 0.07],  # USA imports
-            [0.05, 0.90, 0.05],  # CHN imports
-            [0.10, 0.10, 0.80],  # ROW imports
-        ],
-    ], dtype=float)
-
-    # Cost shares: value added gamma_va[n, j] and input-output gamma_io[n, j, k]
-    gamma_va = np.array([
-        [0.40, 0.60],  # USA (manuf, serv)
-        [0.35, 0.65],  # CHN
-        [0.45, 0.55],  # ROW
-    ], dtype=float)
-
-    gamma_io = np.array([
-        # USA
-        [[0.35, 0.25],   # manuf uses 35% manuf, 25% serv (sum = 0.60, va = 0.40)
-         [0.15, 0.25]],  # serv uses 15% manuf, 25% serv (sum = 0.40, va = 0.60)
-        # CHN
-        [[0.40, 0.25],   # manuf uses 40% manuf, 25% serv (sum = 0.65, va = 0.35)
-         [0.10, 0.25]],  # serv uses 10% manuf, 25% serv (sum = 0.35, va = 0.65)
-        # ROW
-        [[0.30, 0.25],   # manuf uses 30% manuf, 25% serv (sum = 0.55, va = 0.45)
-         [0.20, 0.25]],  # serv uses 20% manuf, 25% serv (sum = 0.45, va = 0.55)
-    ], dtype=float)
-
-    # Final consumption expenditure shares alpha[n, j]
-    alpha = np.array([
-        [0.30, 0.70],  # USA
-        [0.45, 0.55],  # CHN
-        [0.35, 0.65],  # ROW
-    ], dtype=float)
-
-    # Sectoral trade elasticities theta_j
-    theta = np.array([5.0, 8.0], dtype=float)
-
-    # Baseline labor income (value added) w_n L_n
-    labor_income = np.array([120.0, 90.0, 100.0], dtype=float)
-
-    # Trade deficits D_n (summing to zero)
-    deficits = np.array([10.0, -10.0, 0.0], dtype=float)
-
-    # Baseline gross tariffs (tau = 1.0 implies no baseline tariffs)
-    tariffs = np.ones((J, N, N), dtype=float)
-
-    return {
-        "trade_shares": trade_shares,
-        "gamma_va": gamma_va,
-        "gamma_io": gamma_io,
-        "alpha": alpha,
-        "theta": theta,
-        "labor_income": labor_income,
-        "deficits": deficits,
-        "tariffs": tariffs,
-        "country_codes": country_codes,
-        "sector_codes": sector_codes,
-    }
-
-
-@pytest.fixture
-def symmetric_caliendo_parro_model() -> Any:
-    """A symmetric 3-country, 2-sector Caliendo-Parro economy in exact baseline equilibrium."""
-    cp = _require_caliendo_parro()
-    N, J = 3, 2
-    trade_shares = np.zeros((J, N, N))
-    trade_shares[0] = np.array([
-        [0.60, 0.20, 0.20],
-        [0.20, 0.60, 0.20],
-        [0.20, 0.20, 0.60],
-    ])
-    trade_shares[1] = np.eye(N)
-
-    gamma_va = np.full((N, J), 0.50)
-    gamma_io = np.full((N, J, J), 0.25)
-    alpha = np.full((N, J), 0.50)
-    theta = np.array([5.0, 4.0])
-    labor_income = np.array([100.0, 100.0, 100.0])
-
-    return cp.CaliendoParroModel(
-        trade_shares=trade_shares,
-        gamma_va=gamma_va,
-        gamma_io=gamma_io,
-        alpha=alpha,
-        theta=theta,
-        labor_income=labor_income,
-        nontradables=[1],
-        country_codes=["USA", "CHN", "ROW"],
-        sector_codes=["Manufactures", "Services"],
-    )
-
 
 @pytest.fixture
 def canonical_allen_arkolakis_data() -> dict[str, Any]:
@@ -656,76 +510,7 @@ class TestTier1DeepMacroPINNs:
 
 
 class TestTier1QuantitativeSpatialGE:
-    """Tier 1: Feature coverage for Caliendo-Parro and Allen-Arkolakis Quantitative Spatial GE."""
-
-    def test_caliendo_parro_exact_hat_algebra_happy_path(self, canonical_caliendo_parro_data):
-        """Verify Caliendo-Parro Exact Hat Algebra solve under tariff counterfactual."""
-        cp = _require_caliendo_parro()
-        data = canonical_caliendo_parro_data
-
-        model = cp.CaliendoParroModel(
-            trade_shares=data["trade_shares"],
-            gamma_va=data["gamma_va"],
-            gamma_io=data["gamma_io"],
-            alpha=data["alpha"],
-            theta=data["theta"],
-            labor_income=data["labor_income"],
-            deficits=data["deficits"],
-            tariffs=data["tariffs"],
-            country_codes=data["country_codes"],
-            sector_codes=data["sector_codes"],
-        )
-
-        # Counterfactual: 10% tariff imposed by USA on Chinese manufacturing
-        res = model.simulate_tariff_shock(importer="USA", exporter="CHN", sector="manuf", tariff_rate=0.10)
-
-        assert isinstance(res, cp.CaliendoParroResult)
-        assert res.converged, "Equilibrium wage tatonnement must converge"
-        assert res.w_hat.shape == (3,)
-        assert res.P_hat.shape == (3, 2)
-        assert res.pi_prime.shape == (2, 3, 3)
-
-        # Invariant 1: Bilateral trade shares sum to 1.0 along origin dimension for all n, j
-        for j in range(2):
-            for n in range(3):
-                share_sum = np.sum(res.pi_prime[j, n, :])
-                assert np.isclose(share_sum, 1.0, atol=1e-12), f"Trade shares do not sum to 1: {share_sum}"
-
-        # Invariant 2: Labor market clearing residual < 1e-5
-        assert res.market_clearing_residual < 1e-5, f"Market clearing error {res.market_clearing_residual} >= 1e-5"
-
-    def test_caliendo_parro_presentation_contract(self, canonical_caliendo_parro_data):
-        """Verify CaliendoParroResult presentation interface."""
-        cp = _require_caliendo_parro()
-        data = canonical_caliendo_parro_data
-
-        model = cp.CaliendoParroModel(
-            trade_shares=data["trade_shares"],
-            gamma_va=data["gamma_va"],
-            gamma_io=data["gamma_io"],
-            alpha=data["alpha"],
-            theta=data["theta"],
-            labor_income=data["labor_income"],
-            country_codes=data["country_codes"],
-            sector_codes=data["sector_codes"],
-        )
-
-        res = model.solve_counterfactual()
-
-        sm = res.summary()
-        assert isinstance(sm, pd.DataFrame)
-        assert "Welfare (%)" in sm.columns or "welfare_pct" in sm.columns
-
-        sec_sm = res.sector_summary()
-        assert isinstance(sec_sm, pd.DataFrame)
-
-        assert isinstance(res.to_markdown(), str)
-        assert "\\begin" in res.to_latex()
-        assert "#table" in res.to_typst()
-
-        fig = res.plot(kind="welfare")
-        assert isinstance(fig, plt.Figure)
-        plt.close(fig)
+    """Tier 1: Feature coverage for Allen-Arkolakis Quantitative Spatial GE."""
 
     def test_allen_arkolakis_spatial_ge_happy_path(self, canonical_allen_arkolakis_data):
         """Verify Allen-Arkolakis continuous geographic spatial equilibrium."""
@@ -949,36 +734,6 @@ class TestTier2BoundaryCornerCases:
         assert np.all(controls > 0.0), "Consumption must be strictly positive everywhere"
         assert np.all(controls <= coh + 1e-12), "Consumption cannot exceed cash on hand"
 
-    def test_caliendo_parro_zero_shock_identity(self, symmetric_caliendo_parro_model):
-        """Zero shock identity: tau_hat = 1.0 and d_hat = 1.0 yields exact baseline w_hat = 1.0, P_hat = 1.0."""
-        res = symmetric_caliendo_parro_model.solve_counterfactual(tau_hat=None, d_hat=None)
-
-        assert res.converged
-        assert np.allclose(res.w_hat, 1.0, atol=1e-6), "Zero shock must yield w_hat = 1.0"
-        assert np.allclose(res.P_hat, 1.0, atol=1e-6), "Zero shock must yield P_hat = 1.0"
-        assert np.allclose(res.welfare_pct, 0.0, atol=1e-6), "Zero shock must yield 0% welfare change"
-
-    def test_caliendo_parro_extreme_trade_elasticity(self, canonical_caliendo_parro_data):
-        """Verify Hat Algebra stability across near-unitary (theta=1.2) and high (theta=12.0) trade elasticities."""
-        cp = _require_caliendo_parro()
-        data = canonical_caliendo_parro_data
-
-        for theta_val in [np.array([1.2, 1.5]), np.array([10.0, 12.0])]:
-            model = cp.CaliendoParroModel(
-                trade_shares=data["trade_shares"],
-                gamma_va=data["gamma_va"],
-                gamma_io=data["gamma_io"],
-                alpha=data["alpha"],
-                theta=theta_val,
-                labor_income=data["labor_income"],
-                country_codes=data["country_codes"],
-                sector_codes=data["sector_codes"],
-            )
-
-            res = model.simulate_tariff_shock(importer="USA", exporter="CHN", sector="manuf", tariff_rate=0.05)
-            assert res.converged, f"Failed to converge at theta={theta_val}"
-            assert np.all(np.isfinite(res.welfare_pct)), "Welfare must be finite"
-
     def test_allen_arkolakis_autarky_limit(self, canonical_allen_arkolakis_data):
         """Autarky limit: prohibitive trade costs tau_ij -> inf drive bilateral trade shares to zero."""
         aa = _require_allen_arkolakis()
@@ -1067,48 +822,6 @@ class TestTier3CrossFeatureCombinations:
         # IFT gradient must indicate positive capital response to productivity/capital share
         assert ift_res.grad_coefficients[0, 0] != 0.0
 
-    def test_spatial_distance_matrix_feeding_caliendo_parro(self, canonical_caliendo_parro_data):
-        """Cross-Feature: Spatial distance matrix from puremacro.spatial.weights feeding Caliendo-Parro IO trade GE.
-
-        Demonstrates seamless integration between continuous geographic coordinates and multi-sector trade hat algebra.
-        """
-        cp = _require_caliendo_parro()
-        data = canonical_caliendo_parro_data
-
-        # Geographic coordinates for USA, CHN, ROW
-        coords = np.array([
-            [38.9, -77.0],  # Washington D.C.
-            [39.9, 116.4],  # Beijing
-            [50.8, 4.3],    # Brussels (ROW proxy)
-        ])
-
-        # Compute bilateral distances
-        dist = pairwise_distances(coords, metric="haversine")
-
-        # Build trade cost changes based on an infrastructure upgrade between USA and ROW:
-        # 15% reduction in transportation friction
-        d_hat = np.ones_like(data["trade_shares"])
-        d_hat[:, 0, 2] = 0.85  # USA -> ROW cost reduction
-        d_hat[:, 2, 0] = 0.85  # ROW -> USA cost reduction
-
-        model = cp.CaliendoParroModel(
-            trade_shares=data["trade_shares"],
-            gamma_va=data["gamma_va"],
-            gamma_io=data["gamma_io"],
-            alpha=data["alpha"],
-            theta=data["theta"],
-            labor_income=data["labor_income"],
-            country_codes=data["country_codes"],
-            sector_codes=data["sector_codes"],
-        )
-
-        res = model.solve_counterfactual(d_hat=d_hat)
-
-        assert res.converged
-        # USA and ROW should both experience positive welfare gains from bilateral transport improvement
-        assert res.welfare_pct[0] > 0.0, "USA welfare must increase from bilateral transport cost reduction"
-        assert res.welfare_pct[2] > 0.0, "ROW welfare must increase from bilateral transport cost reduction"
-
     def test_deep_macro_vs_continuous_collocation_benchmark(self):
         """Cross-Feature: Benchmark 1D continuous Deep Macro PINN against Chebyshev Collocation.
 
@@ -1137,43 +850,13 @@ class TestTier3CrossFeatureCombinations:
         assert np.all(np.diff(c_colloc.ravel()) > 0.0), "Collocation policy must be strictly monotonic"
         assert np.all(np.diff(c_deep.ravel()) > 0.0), "Deep Macro policy must be strictly monotonic"
 
-    def test_allen_arkolakis_climate_shock_with_caliendo_parro_counterfactual(self, canonical_allen_arkolakis_data, canonical_caliendo_parro_data):
-        """Cross-Feature: Localized regional climate shock in Allen-Arkolakis mapped into national trade counterfactual."""
-        aa = _require_allen_arkolakis()
-        cp = _require_caliendo_parro()
-
-        # 1. Run climate shock in Southern region (10% productivity loss -> 0.90 factor)
-        aa_model = aa.AllenArkolakisModel(
-            trade_costs=canonical_allen_arkolakis_data["trade_costs"],
-            fundamental_productivity=canonical_allen_arkolakis_data["fundamental_productivity"],
-            fundamental_amenity=canonical_allen_arkolakis_data["fundamental_amenity"],
-            region_names=canonical_allen_arkolakis_data["region_names"],
-        )
-        aa_res = aa_model.simulate_climate_shock(productivity_shocks={"South": 0.90})
-
-        assert aa_res.converged
-        assert aa_res.welfare_pct < 0.0, "Aggregate spatial welfare must fall under climate productivity loss"
-
-        # 2. Map aggregate domestic wage contraction into Caliendo-Parro trade GE
-        cp_model = cp.CaliendoParroModel(
-            trade_shares=canonical_caliendo_parro_data["trade_shares"],
-            gamma_va=canonical_caliendo_parro_data["gamma_va"],
-            gamma_io=canonical_caliendo_parro_data["gamma_io"],
-            alpha=canonical_caliendo_parro_data["alpha"],
-            theta=canonical_caliendo_parro_data["theta"],
-            labor_income=canonical_caliendo_parro_data["labor_income"],
-        )
-
-        cp_res = cp_model.solve_counterfactual()
-        assert cp_res.converged
-
 
 # ===========================================================================
 # TIER 4: REAL-WORLD POLICY & EMPIRICAL SCENARIOS
 # ===========================================================================
 
 class TestTier4RealWorldScenarios:
-    """Tier 4: Realistic macroeconomic policy counterfactuals, shock transitions, and trade wars."""
+    """Tier 4: Realistic macroeconomic policy counterfactuals and shock transitions."""
 
     def test_scenario_100bps_monetary_rate_hike_mit_shock(self, canonical_continuous_equilibrium):
         """Scenario 1: 100 bps unexpected monetary policy rate hike decaying with persistence rho=0.70.
@@ -1221,52 +904,6 @@ class TestTier4RealWorldScenarios:
         trough = int(np.argmax(np.abs(dev)))
         assert 0 < trough < T - 1
         assert abs(dev[-1]) < 0.5 * abs(dev[trough]), "Rate path must recover toward the steady state"
-
-    def test_scenario_us_china_bilateral_tariff_war_and_diversion(self, canonical_caliendo_parro_data):
-        """Scenario 2: US-China 25% Bilateral Tariff War and Trade Diversion in Caliendo-Parro.
-
-        Economic properties:
-        - Bilateral trade shares between USA and CHN contract substantially.
-        - Trade diversion: imports from third party (ROW) increase in both USA and CHN.
-        - Both participating countries suffer net welfare losses due to deadweight loss and intermediate cost markups.
-        - Market clearing residuals < 1e-5.
-        """
-        cp = _require_caliendo_parro()
-        data = canonical_caliendo_parro_data
-
-        model = cp.CaliendoParroModel(
-            trade_shares=data["trade_shares"],
-            gamma_va=data["gamma_va"],
-            gamma_io=data["gamma_io"],
-            alpha=data["alpha"],
-            theta=data["theta"],
-            labor_income=data["labor_income"],
-            deficits=data["deficits"],
-            country_codes=data["country_codes"],
-            sector_codes=data["sector_codes"],
-        )
-
-        # 25% bilateral tariff war between USA and CHN
-        res = model.simulate_trade_war(coalition_a=["USA"], coalition_b=["CHN"], tariff_rate=0.25)
-
-        assert res.converged
-        assert res.market_clearing_residual < 1e-5
-
-        # Economic property 1: Trade destruction between USA and CHN
-        # USA import share on CHN manufacturing (sector 0, importer 0, exporter 1)
-        pi_usa_chn_initial = data["trade_shares"][0, 0, 1]
-        pi_usa_chn_prime = res.pi_prime[0, 0, 1]
-        assert pi_usa_chn_prime < pi_usa_chn_initial, "US-China trade share must fall under bilateral tariffs"
-
-        # Economic property 2: Trade diversion to ROW
-        # USA import share on ROW manufacturing (sector 0, importer 0, exporter 2)
-        pi_usa_row_initial = data["trade_shares"][0, 0, 2]
-        pi_usa_row_prime = res.pi_prime[0, 0, 2]
-        assert pi_usa_row_prime > pi_usa_row_initial, "Trade diversion must increase USA import share from ROW"
-
-        # Economic property 3: Net welfare contraction for both war participants
-        assert res.welfare_pct[0] < 0.0, "USA must suffer net welfare loss in tariff war"
-        assert res.welfare_pct[1] < 0.0, "China must suffer net welfare loss in tariff war"
 
     def test_scenario_regional_transport_corridor_investment(self, canonical_allen_arkolakis_data):
         """Scenario 3: High-Speed Rail Regional Transport Corridor Investment in Allen-Arkolakis.

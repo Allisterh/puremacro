@@ -13,7 +13,7 @@
 
 ## ¿Qué es puremacro?
 
-Flujos de investigación: [evidencia independiente, estimación estructural e incidencia comercial por hogar](research_workflows.md).
+Flujos de investigación: [evidencia independiente y estimación estructural](research_workflows.md).
 
 `puremacro` reúne estimadores econométricos y modelos macroeconómicos cuantitativos
 sobre NumPy, SciPy, pandas y Matplotlib, sin extensiones compiladas propias.
@@ -67,7 +67,6 @@ para conocer el alcance de la evidencia.
    - **OccBin Multirrestricción**: $M \ge 2$ restricciones ocasionalmente activas simultáneas, con máscara de bits de régimen (el bit $k$ se activa cuando la restricción $k$ está activa) y no convergencia reportada como `converged=False` más una advertencia que nombra cada motivo ([Guía](dsge_build.md)).
    - **Inferencia con Instrumentos Débiles de Montiel Olea-Pflueger**: Valores críticos del estadístico $F$ efectivo a partir de la forma cerrada $\chi^2_{K,\,1-\alpha}(K/\tau)/K$, y conjuntos de Anderson-Rubin multiinstrumentales invertidos de forma exacta y no sobre una malla ([Guía](lp.md)).
    - **Conectores en Tiempo Real de América Latina**: Banco de México, INEGI, Banco Central do Brasil y Banco Central de Chile. Estas cuatro fuentes publican únicamente la edición vigente, así que su fecha de añada es la fecha de *captura* local y el historial de revisiones sólo se acumula con capturas repetidas en días distintos.
-   - **Solvers Comerciales en GPU / Apple Silicon**: Rutas Torch y MLX para el equilibrio de Caliendo-Parro, importadas de forma perezosa y con los mismos aranceles por defecto que el solver de NumPy.
 
 7. **Generación de Informes y Publicación**:
    - Exportación de tablas con calidad de imprenta directamente a **LaTeX** (`.to_latex()`), **Typst** (`.to_typst()`) y **Markdown** (`.to_markdown()`), con errores estándar y estrellas de significancia ([Guía](reporting.md)).

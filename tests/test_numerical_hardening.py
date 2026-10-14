@@ -10,13 +10,6 @@ import pytest
 from puremacro.dsge import load_mod
 from puremacro.dsge.parity import verify_dynare_parity
 from puremacro.dsge.pruning import canonical_growth_2nd_order
-from puremacro.trade import solve_trade_equilibrium
-from puremacro.trade.data import generate_synthetic_mrio, package_mrio_to_calibration_result
-
-
-@pytest.fixture(scope="module")
-def calibration():
-    return package_mrio_to_calibration_result(generate_synthetic_mrio("wiod", custom_c=2, custom_s=2))
 
 
 @pytest.mark.parametrize("rho", [.5, .8])
@@ -97,82 +90,6 @@ def test_collocation_value_uses_model_productivity(productivity):
     assert abs(sol.value(k) - np.log(c) / (1-beta)) < 1e-5
 
 
-@pytest.mark.parametrize("sigma", [0., 1., 2.])
-def test_reported_trade_flows_satisfy_demand_equations(calibration, sigma):
-    from puremacro.trade.equilibrium import _get_ces_weights
-    c = calibration
-    tau = np.ones((4, 2, 2)); tau[2:, :, 0] = 1.2
-    sol = solve_trade_equilibrium(c, tau=tau, sigma=sigma, tol=1e-9, max_iter=100)
-    assert sol.converged
-    _, omega = _get_ces_weights(c)
-    p = sol.p_sol.flatten(order="F")[:, None, None] * tau
-    P = np.exp(np.sum(omega * np.log(p), axis=0)) if sigma == 1 else np.sum(omega*p**(1-sigma), axis=0)**(1/(1-sigma))
-    expected = c.a * sol.y_sol * (P[None] / p)**sigma
-    np.testing.assert_allclose(sol.intermediate_flows, expected.reshape((2, 2, 2, 2), order="F"), atol=1e-7)
-
-
-def test_pac_preserves_final_demand_tariff(calibration):
-    kwargs = dict(tau_fd=np.array([.2, 0.]), tol=1e-9)
-    newton = solve_trade_equilibrium(calibration, **kwargs)
-    pac = solve_trade_equilibrium(calibration, method="keller_pac", max_steps=2, **kwargs)
-    assert newton.converged and pac.converged
-    np.testing.assert_allclose(pac.tariffs, newton.tariffs, atol=1e-7)
-    np.testing.assert_allclose(pac.x_sol, newton.x_sol, atol=1e-7)
-
-
-@pytest.mark.parametrize("name", ["load_figaro", "load_exiobase", "load_wiod", "load_eora", "load_oecd_icio_granular"])
-def test_mrio_requires_explicit_synthetic_opt_in(name):
-    from puremacro.trade import data
-    loader = getattr(data, name)
-    with pytest.raises(FileNotFoundError):
-        loader(file_path="/definitely/missing.csv")
-    with pytest.raises(ValueError, match="synthetic"):
-        loader(custom_c=2, custom_s=2)
-    c = loader(custom_c=2, custom_s=2, fallback_to_synthetic=True)
-    assert c.metadata["is_synthetic"] is True
-    assert c.metadata["source"].startswith("Synthetic_")
-    assert c.metadata["seed"] == 42
-    assert "adjustments" in c.metadata
-
-
-def test_periodic_network_has_correct_spectral_radius():
-    from puremacro.trade.regularize import compute_spectral_radius
-    rho, lo, hi = compute_spectral_radius(np.array([[0., 2.], [.2, 0.]]), max_iter=60, tol=1e-6)
-    assert abs(rho - np.sqrt(.4)) < 1e-6
-    assert lo <= np.sqrt(.4) <= hi
-    assert hi < 1
-
-
-@pytest.mark.parametrize("function", ["verify_theorems_1_to_4", "decompose_hicksian_ev_3way"])
-def test_unsupported_welfare_certificates_are_explicitly_unavailable(calibration, function):
-    from puremacro.trade import policy_analytics
-    kwargs = {"eq_result": None} if function.startswith("decompose") else {}
-    with pytest.raises(NotImplementedError, match="unavailable"):
-        getattr(policy_analytics, function)(calibration, **kwargs)
-
-
-def test_cp_offsetting_costs_preserve_tariff_revenue():
-    from puremacro.trade.caliendo_parro import CaliendoParroModel
-    cp = CaliendoParroModel(trade_shares=np.array([[[.8,.2],[.2,.8]]]),
-        gamma_va=np.full((2,1),.5), gamma_io=np.full((2,1,1),.5), alpha=np.ones((2,1)),
-        theta=np.array([4.]), labor_income=np.array([100.,100.]))
-    tariffs = np.array([[[1.,1.2],[1.2,1.]]])
-    result = cp.solve_counterfactual(tariffs_new=tariffs, d_hat=1/tariffs)
-    assert result.converged and result.iterations > 0
-    _, _, expected = cp._solve_expenditures(result.w_hat, result.pi_prime, tariffs, np.zeros(2))
-    np.testing.assert_allclose(result.tariff_revenue_prime, expected, rtol=1e-8)
-    assert np.all(result.tariff_revenue_prime > 0)
-
-
-def test_tiny_relaxation_does_not_certify_nash(calibration):
-    from puremacro.trade.optimal_tariffs import solve_multilateral_nash_tariffs
-    result = solve_multilateral_nash_tariffs(calibration, player_countries=calibration.country_codes,
-        metric="equivalent_variation", relaxation=1e-8, max_iter=2, tol=1e-4)
-    assert not result.converged
-    assert result.metadata["max_regret"] > 1
-    assert result.outer_error > 1e-4
-
-
 def test_failed_markov_switching_has_no_equilibrium_moments():
     from puremacro.dsge.markov_switching import solve_ms_dsge
     result = solve_ms_dsge(A=[np.array([[1.]])], B=[np.array([[-3.]])],
@@ -225,68 +142,11 @@ def test_training_step_gradient_uses_current_state(monkeypatch):
     assert checked == [True]
 
 
-@pytest.mark.parametrize("closure", ["lump_sum", "deficit_reduction"])
-def test_reported_tariff_revenue_reconciles_fiscal_budget(calibration, closure):
-    c = calibration
-    tau = np.ones((4,2,2)); tau[2:, :, 0] = [[1.05, 1.15], [1.2, 1.3]]
-    result = solve_trade_equilibrium(c, tau=tau, fiscal_closure=closure, tariff_revenue_mode="schedule", sigma=2, tol=1e-8, max_iter=150)
-    assert result.converged
-    # The calibration's generated final-demand tax is zero.
-    taxes = np.sum(c.tax * result.y_sol, axis=1).ravel()
-    np.testing.assert_allclose(result.T_sol.ravel(), taxes + result.tariffs, atol=1e-7)
-
-
 def test_parity_aligns_state_and_shock_columns():
     dr = canonical_growth_2nd_order().decision_rules()
     shuffled = replace(dr, **{name: getattr(dr, name).iloc[::-1, ::-1]
                               for name in ("ghx", "ghu", "ghxx", "ghxu", "ghuu")})
     assert verify_dynare_parity(dr, shuffled, order=2).passed
-
-
-def _figaro_fixture_with_codes(tmp_path, codes=("P3_S14", "P3_S15", "P3_S13", "P51G", "P5M")):
-    """The hand-authored FIGARO fixture with its neutral F1..F5 suffixes replaced by FIGARO codes."""
-    from pathlib import Path
-    import pandas as pd
-    frame = pd.read_csv(Path(__file__).parent / "fixtures/trade/figaro_harmonized_small.csv", index_col=0)
-    frame.columns = [c if not c.split("_", 1)[1].startswith("F") else f"{c.split('_', 1)[0]}_{codes[int(c[-1]) - 1]}"
-                     for c in frame.columns]
-    path = tmp_path / "figaro_labelled.csv"
-    frame.to_csv(path)
-    return path
-
-
-def test_labeled_mrio_file_units_provenance_and_accounting(tmp_path):
-    import hashlib
-    from puremacro.trade.data import load_figaro
-    # Since the post-4.3.0 audit load_figaro reads final uses by COUNTRY_CODE label, so the fixture's
-    # neutral F1..F5 suffixes are relabelled with FIGARO codes first.
-    path = _figaro_fixture_with_codes(tmp_path)
-    result = load_figaro(file_path=path, eur_to_usd=2., regularize=False)
-    assert tuple(result.country_codes) == ("AAA", "BBB")
-    np.testing.assert_allclose(result.ytot, 14.)
-    assert result.metadata["is_synthetic"] is False
-    assert result.metadata["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
-    assert result.metadata["exchange_rate_usd_per_eur"] == 2.
-    assert all(v["changed_entries"] == 0 for v in result.metadata["adjustments"].values())
-
-
-def test_labeled_mrio_file_rejects_unlabelled_final_uses():
-    from pathlib import Path
-    from puremacro.trade.data import load_figaro
-    path = Path(__file__).parent / "fixtures/trade/figaro_harmonized_small.csv"
-    with pytest.raises(ValueError, match="Unknown FIGARO final-use code"):
-        load_figaro(file_path=path, regularize=False)
-
-
-def test_labeled_mrio_file_rejects_reordered_rows(tmp_path):
-    from pathlib import Path
-    import pandas as pd
-    from puremacro.trade.data import load_figaro
-    frame = pd.read_csv(Path(__file__).parent / "fixtures/trade/figaro_harmonized_small.csv", index_col=0)
-    path = tmp_path / "misordered.csv"
-    frame.iloc[[1,0,2,3,4,5]].to_csv(path)
-    with pytest.raises(ValueError, match="country-major"):
-        load_figaro(file_path=path)
 
 
 def test_dynare_state_column_order_uses_parameter_specific_dr_indices():
@@ -302,23 +162,6 @@ def test_dynare_state_column_order_uses_parameter_specific_dr_indices():
     assert dr.state_variables == ("z", "x")
     np.testing.assert_array_equal(dr.ghx.loc["x"], [21., 22.])
     assert dr.ys.loc["x"] == 100.
-
-
-def test_policy_search_rejects_failed_inner_equilibrium(monkeypatch, calibration):
-    from puremacro.trade import optimal_tariffs
-    result = solve_trade_equilibrium(calibration, method="condensed")
-    failed = replace(result, converged=False)
-    monkeypatch.setattr(optimal_tariffs, "solve_trade_equilibrium", lambda *a, **k: failed)
-    with pytest.raises(RuntimeError, match="did not converge"):
-        optimal_tariffs.compute_unilateral_optimal_tariff(calibration, country_idx=0)
-
-
-def test_unilateral_policy_uses_schedule_accounting(calibration):
-    from puremacro.trade.optimal_tariffs import compute_unilateral_optimal_tariff
-    result = compute_unilateral_optimal_tariff(calibration, country_idx=0,
-        metric="consumption", tariff_max=.2, num_grid=3, method="grid")
-    assert result.equilibrium.metadata["tariff_revenue_mode"] == "schedule"
-    assert result.equilibrium.max_residual <= result.metadata["ge_tol"]
 
 
 def test_malformed_dynare_risk_vector_is_not_resized_into_a_match():

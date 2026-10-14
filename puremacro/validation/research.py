@@ -215,7 +215,7 @@ def _run(case):
 
 
 def run_research_benchmarks(cases: Sequence[ResearchBenchmark] | None = None) -> ResearchBenchmarkReport:
-    """Run all eight bundled benchmarks, or an explicit nonempty case selection.
+    """Run all five bundled benchmarks, or an explicit nonempty case selection.
 
     Computation failures become failed records, never successful skips. An empty
     selection or duplicate IDs raises ``ValueError``. No network calls occur.
@@ -270,80 +270,6 @@ def _linear_reference():
     return {"parameters": theta,
             "parameter_covariance": np.linalg.solve(information, np.eye(2)),
             "objective": residual@np.linalg.solve(covariance, residual)}
-
-
-def _household_observed():
-    from puremacro.trade.household import calibrate_household, compute_household_welfare
-    pref = calibrate_household(np.array([[3.], [5.], [2.]]), "stone_geary",
-                               expenditure_elasticities=np.array([[.8], [1.04], [1.2]]),
-                               supernumerary_share=.6)
-    p0, p1 = np.array([[1.04], [.95], [1.02]]), np.array([[1.2], [.9], [1.15]])
-    welfare = compute_household_welfare(pref, p1, [10.8], base_prices=p0, base_budget=[10.2])
-    return {"ev": welfare.ev, "cv": welfare.cv,
-            "base_quantities": pref.evaluate(p0, [10.2], validate=True).quantities[:, 0],
-            "new_quantities": pref.evaluate(p1, [10.8], validate=True).quantities[:, 0]}
-
-
-def _household_reference():
-    from scipy.optimize import minimize
-    # Raw utility primitives specified independently of HouseholdPreferences.
-    gamma, beta = np.array([1.56, 1.88, .56]), np.array([.24, .52, .24])
-    p0, p1 = np.array([1.04, .95, 1.02]), np.array([1.2, .9, 1.15])
-    bounds = [(float(g+1e-9), None) for g in gamma]
-
-    def logu(q):
-        return float(beta@np.log(q-gamma))
-
-    def maximize(p, m):
-        start = gamma + (m-p@gamma)/(3*p)
-        fit = minimize(lambda q: -logu(q), start, jac=lambda q: -beta/(q-gamma),
-                       method="SLSQP", bounds=bounds,
-                       constraints={"type": "ineq", "fun": lambda q: m-p@q,
-                                    "jac": lambda q: -p}, options={"ftol": 1e-12, "maxiter": 500})
-        if not fit.success or abs(p@fit.x-m) > 1e-8:
-            raise ValueError("Independent utility maximization failed")
-        return fit.x
-
-    def spend(p, q):
-        target = logu(q)
-        fit = minimize(lambda z: p@z, q, jac=lambda z: p, method="SLSQP", bounds=bounds,
-                       constraints={"type": "ineq", "fun": lambda z: logu(z)-target,
-                                    "jac": lambda z: beta/(z-gamma)},
-                       options={"ftol": 1e-12, "maxiter": 500})
-        if not fit.success or abs(logu(fit.x)-target) > 1e-8:
-            raise ValueError("Independent expenditure minimization failed")
-        return p@fit.x
-
-    q0, q1 = maximize(p0, 10.2), maximize(p1, 10.8)
-    return {"ev": [spend(p0, q1)-spend(p0, q0)],
-            "cv": [spend(p1, q1)-spend(p1, q0)], "base_quantities": q0, "new_quantities": q1}
-
-
-def _distribution_observed():
-    import pandas as pd
-    from puremacro.trade.distributional import prepare_household_groups, compute_distributional_welfare
-    sectors, groups = ["food", "other"], ["low", "high"]
-    household = prepare_household_groups(pd.DataFrame([[60., 40.], [60., 140.]], index=groups, columns=sectors),
-                                         pd.Series([3., 1.], index=groups), monetary_unit="currency",
-                                         period="year", provenance={"source": "synthetic benchmark", "is_synthetic": True})
-    result = compute_distributional_welfare(household, pd.Series([1., 1.], index=sectors),
-                                            pd.Series([1.2, .9], index=sectors), transfer_total=40.,
-                                            rule="cobb_douglas")
-    ev, cv = result.groups["ev"].to_numpy(), result.groups["cv"].to_numpy()
-    return {"ev": ev, "cv": cv, "total_ev": result.aggregate["total_ev"],
-            "budget": result.groups["budget"].to_numpy()}
-
-
-def _distribution_reference():
-    prices = np.array([1.2, .9])
-    budgets = np.array([100., 200.])
-    shares = np.array([[.6, .4], [.3, .7]])
-    # Default transfer weights represent equal currency per expanded household.
-    new_budget = budgets + 40./4.
-    index = np.prod(prices**shares, axis=1)
-    ev = new_budget/index-budgets
-    cv = new_budget-budgets*index
-    return {"ev": ev, "cv": cv, "total_ev": np.array([3., 1.])@ev, "budget": new_budget}
 
 
 _GROWTH_SOURCE = """var c k a; varexo e;
@@ -436,25 +362,6 @@ def _dynare_observed():
     return metrics
 
 
-def _enigh_observed():
-    from puremacro.datasets.enigh import load_enigh2024_deciles
-    frame = load_enigh2024_deciles()
-    consumption = frame[["food", "clothing", "housing", "household_goods", "health",
-                         "transport", "education_recreation", "personal"]].sum(axis=1)
-    return {"households": frame["households"].sum(),
-            "national_food": frame["households"]@frame["food"],
-            "national_monetary_expenditure": frame["households"]@frame["monetary_expenditure"],
-            "expenditure_adding_up": (consumption+frame["outward_transfers"]-frame["monetary_expenditure"]).to_numpy()}
-
-
-def _enigh_reference():
-    # Literal published national table entries, not read from the derived CSV
-    # or recalculated from the same decile observations used above.
-    return {"households": 38830230., "national_food": 698246718791.5,
-            "national_monetary_expenditure": 1851206621945.59,
-            "expenditure_adding_up": np.zeros(10)}
-
-
 _RR2010_METRICS = ("coefficients", "coefficient_covariance", "irf",
                    "irf_covariance", "standard_errors", "t_statistics",
                    "nobs", "df_resid")
@@ -486,8 +393,7 @@ def _rr2010_peak_reference():
 
 
 def research_benchmarks() -> tuple[ResearchBenchmark, ...]:
-    """Return the eight built-in cases without running estimators or reading data."""
-    micro_source = "https://ocw.mit.edu/courses/14-661-labor-economics-i-fall-2024/mit14_661_f24_problem_set_0.pdf"
+    """Return the five built-in cases without running estimators or reading data."""
     rr_sources = ("https://www.aeaweb.org/articles?id=10.1257/aer.100.3.763",
                   "https://eml.berkeley.edu/~dromer/papers/DataSet.zip",
                   "https://emlab.berkeley.edu/~dromer/papers/RomerandRomerAERJune2010.pdf")
@@ -514,26 +420,6 @@ def research_benchmarks() -> tuple[ResearchBenchmark, ...]:
                           "Identity; fit intercept and slope with a correlated four-moment target.",
                           {"parameters": "level", "parameter_covariance": "level squared", "objective": "dimensionless"},
                           "Checks linear optimal weighting and covariance. No empirical model identification or finite-sample coverage claim."),
-        ResearchBenchmark("household_expenditure", "Stone-Geary welfare versus independent primal optimization", "numerical_oracle",
-                          _household_observed, _household_reference, (micro_source,),
-                          {"origin": "synthetic three-good household", "baseline_spending": [3., 5., 2.],
-                           "gamma": [1.56, 1.88, .56], "beta": [.24, .52, .24],
-                           "base_prices": [1.04, .95, 1.02], "prices": [1.2, .9, 1.15],
-                           "base_budget": 10.2, "budget": 10.8},
-                          "No sample or survey weights. One household; two deterministic states.",
-                          "Direct utility maximization and four expenditure minimizations use raw log Stone-Geary utility; no puremacro welfare reference.",
-                          {"ev": "currency per period", "cv": "currency per period",
-                           "base_quantities": "benchmark-priced composite units", "new_quantities": "benchmark-priced composite units"},
-                          "Independent SciPy SLSQP oracle for interior preferences. Not an empirical household calibration.", rtol=2e-6, atol=2e-7),
-        ResearchBenchmark("distributional_incidence", "Household incidence, expansion weights and uniform rebates", "analytical",
-                          _distribution_observed, _distribution_reference, (micro_source,),
-                          {"origin": "synthetic grouped survey", "group_spending": [[60., 40.], [60., 140.]],
-                           "expansion_counts": [3., 1.], "price_ratios": [1.2, .9], "transfer_total": 40.},
-                          "Two representative groups expand to three low-budget and one high-budget household; no sampling inference.",
-                          "Cobb-Douglas exact cost indices, equal transfer per expanded household, and weighted EV totals.",
-                          {"ev": "currency per household-year", "cv": "currency per household-year",
-                           "total_ev": "currency per year", "budget": "currency per household-year"},
-                          "Conditional static incidence with fixed preferences and exogenous prices; no empirical Mexico or general-equilibrium claim."),
         ResearchBenchmark("growth_analytical", "Full-depreciation log-utility growth solution", "analytical",
                           _growth_observed, _growth_reference,
                           ("https://python.quantecon.org/cass_koopmans_1.html",),
@@ -561,19 +447,6 @@ def research_benchmarks() -> tuple[ResearchBenchmark, ...]:
                            "sample_lag1_covariance": "products of model level units"},
                           "External-software agreement for one small model at order two, conditional on supplied innovations. No live Dynare run, population-moment accuracy or published empirical replication is claimed.",
                           rtol=1e-9, atol=1e-10),
-        ResearchBenchmark("enigh2024_official_totals", "Observed ENIGH decile baskets reproduce official national totals", "official_data",
-                          _enigh_observed, _enigh_reference,
-                          ("https://www.inegi.org.mx/contenidos/programas/enigh/nc/2024/tabulados/enigh2024_ns_basicos_tabulados.xlsx",),
-                          {"origin": "INEGI ENIGH 2024 national household income deciles; Cuadros 3.2 and 4.2",
-                           "source_sha256": "7af7850495255fb1e6a9cb139cf531e5a62c7fd2a9a1de5ba0503f03aa82490b",
-                           "accessed": "2026-10-01", "derived_csv": "puremacro.datasets/data/enigh2024_deciles.csv",
-                           "reference_origin": "literal national published totals, not the derived CSV"},
-                          "Ten national household income deciles; expansion counts include all households. No sampling covariance is available.",
-                          "Published thousands of MXN multiplied by 1000; decile totals divided by all-household counts. Eight consumption categories plus outward transfers equal monetary expenditure. CSV decimal rounding motivates the tolerance.",
-                          {"households": "expanded households", "national_food": "MXN per quarter",
-                           "national_monetary_expenditure": "MXN per quarter", "expenditure_adding_up": "MXN per household-quarter"},
-                          "Validates the extraction, weights, units and selected accounting totals of actual survey aggregates. Does not replicate an empirical causal model, identify tariff responses or validate within-decile heterogeneity.",
-                          rtol=1e-11, atol=1e-5),
         ResearchBenchmark("rr2010_baseline_software", "Romer–Romer baseline versus independent software", "external_software",
                           _rr2010_observed, _rr2010_reference, rr_sources, rr_data,
                           rr_sampling, rr_transform,

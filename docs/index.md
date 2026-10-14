@@ -13,7 +13,7 @@
 
 ## What is puremacro?
 
-Research workflows: [independent evidence, structural estimation and household trade incidence](research_workflows.md).
+Research workflows: [independent evidence and structural estimation](research_workflows.md).
 
 `puremacro` brings econometric estimators and quantitative macroeconomic models
 together using NumPy, SciPy, pandas and Matplotlib, with no compiled extension of
@@ -66,7 +66,6 @@ for the scope of the evidence.
    - **Multi-Constraint OccBin**: $M \ge 2$ simultaneous occasionally binding constraints, with a regime bitmask (bit $k$ set when constraint $k$ binds) and non-convergence reported as `converged=False` plus a warning naming each reason ([Guide](dsge_build.md)).
    - **Montiel Olea-Pflueger Weak-IV Inference**: Effective $F$-statistic critical values from the closed form $\chi^2_{K,\,1-\alpha}(K/\tau)/K$, and multi-instrument Anderson-Rubin sets inverted exactly rather than on a grid ([Guide](lp.md)).
    - **Latin American Real-Time Connectors**: Banco de México, INEGI, Banco Central do Brasil and Banco Central de Chile. These four sources publish only the current edition, so their vintage date is the local *snapshot* date and revision history accumulates only across repeated captures on different days.
-   - **GPU / Apple-Silicon Trade Solvers**: Torch and MLX paths for the Caliendo-Parro equilibrium, imported lazily and matching the NumPy solver's tariff defaults.
 
 7. **Publication-Grade Reporting**:
    - Zero-dependency, camera-ready table export directly to **LaTeX** (`.to_latex()`), **Typst** (`.to_typst()`), and **Markdown** (`.to_markdown()`), complete with standard errors and significance stars ([Guide](reporting.md)).

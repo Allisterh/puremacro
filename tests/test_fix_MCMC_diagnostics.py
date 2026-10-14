@@ -1,6 +1,6 @@
 """Calibration and parity tests for the MCMC diagnostics fix (key MCMC).
 
-Defect (reviews/2026-09-30-notebook-review, key MCMC):
+Defect (the 2026-09-30 notebook review, key MCMC):
 
 * ``geweke_z`` estimated the spectral density at zero with a Bartlett
   window of ``int(4 (m/100)**(2/9))`` lags (5-7 lags for 500-2500 draws),

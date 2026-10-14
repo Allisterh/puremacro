@@ -25,7 +25,7 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 # The MAV research data is a separate project that this repo does not ship.
 # `HERE.parents[3]` was written when this package lived at
-# <MAV>/uncertainty_examples/puremacro/; after the move it resolves to an
+# <MAV>/<monorepo>/puremacro/; after the move it resolves to an
 # unrelated directory, so the path is overridable and the default is only a
 # guess. Point PUREMACRO_MAV_ROOT at the real root to run this example.
 MAV_ROOT = Path(os.environ.get("PUREMACRO_MAV_ROOT", HERE.parents[3]))

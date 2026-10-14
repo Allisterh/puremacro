@@ -19,7 +19,7 @@ MATLAB, Dynare, a reference econometrics package, or network access. In a checko
 dossier and exits nonzero if a case fails. Add `--case growth_analytical` to select
 one case; repeat the option to select several.
 
-The current suite reports **7/8 passing cases and an overall FAIL**. The original
+The current suite reports **4/5 passing cases and an overall FAIL**. The original
 RR2010 data reproduce the GDP response and trough horizon, but their t statistic
 lies just outside the published rounding interval. This known discrepancy is
 retained rather than loosening tolerance; the default command exits nonzero.
@@ -29,18 +29,14 @@ retained rather than loosening tolerance; the default command exits nonzero.
 | Case | Evidence type | Independent reference | Scope |
 |---|---|---|---|
 | `linear_minimum_distance` | Analytical | Closed-form GLS coefficients, covariance and objective | Correlated empirical moment covariance, optimal weighting and parameter uncertainty |
-| `household_expenditure` | Numerical oracle | Direct constrained utility maximization and expenditure minimization with SciPy SLSQP | Three-good Stone-Geary quantities, exact EV and CV between two nonbenchmark states |
-| `distributional_incidence` | Analytical | Direct Cobb-Douglas price-index and expanded-household accounting formulas | Unequal group weights, uniform revenue rebates, group welfare and aggregate monetary totals |
 | `growth_analytical` | Analytical | Exact log-utility, full-depreciation growth policy | Steady state and derivatives with respect to lagged capital and technology innovations |
 | `dynare_rbc_order2` | External software | Previously exported live Dynare 7.0 decision rules and simulation moments | One RBC model, second-order tensors and a common-innovation simulation |
-| `enigh2024_official_totals` | Official data | Literal national totals in INEGI ENIGH 2024 Cuadros 3.2 and 4.2 | Observed decile baskets, expansion counts, currency conversion and accounting totals |
 | `rr2010_baseline_software` | External software | Frozen independent OLS run on the authors' original data | Full coefficient and cumulative-response covariance, estimates, SEs, t statistics and sample sizes |
 | `rr2010_published_peak` | Published empirical | Literal Romer–Romer (2010) page 781 values | Figure 4 baseline trough at quarter ten: response -3.08, t statistic -3.53 |
 
-The first four cases are synthetic numerical exercises. The Dynare model also
-uses simulated innovations. The ENIGH case uses actual survey aggregates but
-tests data reconstruction, not a causal model. The last two comparisons use
-the original Romer–Romer empirical data. Software parity and published rounded
+The first two cases are synthetic numerical exercises. The Dynare model also
+uses simulated innovations. The last two comparisons use the original
+Romer–Romer empirical data. Software parity and published rounded
 evidence are separate cases with separate tolerances.
 
 These cases complement the broader [validation gallery](VALIDATION.md) and
@@ -83,17 +79,7 @@ evaluates GLS normal equations. The input covariance is the covariance of the
 **estimated moment vector**, so the oracle does not multiply or divide it by a
 sample size. Both the fitted coefficients and their full covariance are tested.
 
-### Expenditure and household incidence
-
-The Stone-Geary oracle starts from explicit subsistence quantities and marginal
-budget shares. It solves primal utility maximization at both states and four
-expenditure minimizations without calling puremacro's expenditure or welfare
-methods. EV and CV are positive for gains. The separate distributional case
-checks the [group-incidence application](trade_distributional.md): mean spending
-per household is expanded using household counts, and a total rebate is divided
-over the same represented population.
-
-### External and observed-data provenance
+### External-software provenance
 
 The Dynare case authenticates the `.mod`, innovation CSV and reference NPZ against
 the shipped manifest and pins the reference export checksum and run identifier.
@@ -103,16 +89,6 @@ The original execution used Dynare 7.0 with MATLAB R2026a on 2026-09-20. It used
 `N-2`. Variable, state and shock labels are aligned before comparison. The
 offline run does not execute Dynare or regenerate the reference. See the
 package's `puremacro.dsge/_references/DYNARE_FIXTURES.md` for regeneration details.
-
-The ENIGH oracle stores the published national totals directly, independently
-of the derived decile CSV. It checks 38,830,230 expanded households, food and total
-monetary expenditure, and the identity relating eight consumption categories
-plus outward transfers to total spending. Published thousands of MXN are
-converted to MXN per quarter. The source workbook SHA-256 is retained in the
-dossier; the loader verifies the bundled CSV checksum. Small national-level
-rounding differences arise from the decimal representation of group means;
-the case uses `rtol=1e-11, atol=1e-5`. Survey sampling covariance, import shares
-and tariff pass-through are not supplied by these tables.
 
 ### Original-data published replication
 
@@ -183,7 +159,5 @@ an empirical replication.
 ## Sources
 
 - [Hansen, *Econometrics*](https://users.ssc.wisc.edu/~bhansen/econometrics/): minimum-distance and GLS framework. The particular linear benchmark is constructed here.
-- [MIT Labor Economics I, Problem Set 0](https://ocw.mit.edu/courses/14-661-labor-economics-i-fall-2024/mit14_661_f24_problem_set_0.pdf): Stone-Geary utility and consumer duality. The optimizer reference uses the explicit primitives in the dossier.
 - [QuantEcon, Cass-Koopmans Model](https://python.quantecon.org/cass_koopmans_1.html): growth-model setting. Our benchmark specializes to log utility and full depreciation and states its exact policy in the dossier.
 - [Dynare stochastic solution and simulation](https://www.dynare.org/manual/the-model-file.html#stochastic-solution-and-simulation): perturbation and simulation conventions; the frozen evidence records the actual version used.
-- [INEGI ENIGH 2024 basic tables](https://www.inegi.org.mx/contenidos/programas/enigh/nc/2024/tabulados/enigh2024_ns_basicos_tabulados.xlsx): official household expansion and monetary-expenditure totals.

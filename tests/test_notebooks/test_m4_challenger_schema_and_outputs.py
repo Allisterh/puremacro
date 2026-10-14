@@ -39,12 +39,11 @@ TARGET_15_NOTEBOOKS = [
     "37_central_bank_narrative_sentiment_es.ipynb",
     "43_dsge_nuts_and_analytic_gradients.ipynb",
     "43_dsge_nuts_and_analytic_gradients_es.ipynb",
-    "62_flexible_trade_cge.ipynb",
-    "62_flexible_trade_cge_es.ipynb",
 ]
 
 # Embedded ``image/png`` outputs per target notebook. The total is derived from this
-# table (37 on the 2026-09-20 notebook batch) instead of being hard-coded, so an
+# table (37 on the 2026-09-20 notebook batch; 29 once notebook 62 and its Spanish
+# twin left the repository) instead of being hard-coded, so an
 # edited notebook fails with its own name. 34_penalized_macro_forecasting went from
 # 2 to 3 figures when the held-out forecast-evaluation panel was added (the 2026-09-20
 # notebook review); every other target is unchanged since 4.2.0.
@@ -62,8 +61,6 @@ EXPECTED_FIGURES_PER_TARGET = {
     "37_central_bank_narrative_sentiment_es.ipynb": 1,
     "43_dsge_nuts_and_analytic_gradients.ipynb": 1,
     "43_dsge_nuts_and_analytic_gradients_es.ipynb": 1,
-    "62_flexible_trade_cge.ipynb": 4,
-    "62_flexible_trade_cge_es.ipynb": 4,
 }
 EXPECTED_TOTAL_FIGURES = sum(EXPECTED_FIGURES_PER_TARGET.values())
 
@@ -214,7 +211,6 @@ def test_bilingual_target_pairs_parity():
         ("00_whats_new_in_puremacro_3_0.ipynb", "00_whats_new_in_puremacro_3_0_es.ipynb"),
         ("37_central_bank_narrative_sentiment.ipynb", "37_central_bank_narrative_sentiment_es.ipynb"),
         ("43_dsge_nuts_and_analytic_gradients.ipynb", "43_dsge_nuts_and_analytic_gradients_es.ipynb"),
-        ("62_flexible_trade_cge.ipynb", "62_flexible_trade_cge_es.ipynb"),
     ]
 
     for en_name, es_name in pairs:

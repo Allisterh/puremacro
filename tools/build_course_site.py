@@ -63,14 +63,14 @@ from xml.etree import ElementTree as ET
 # --------------------------------------------------------------------------- #
 # Layout
 # --------------------------------------------------------------------------- #
-PROJ_ROOT = Path(__file__).resolve().parent.parent          # .../MAV/uncertainty_examples/puremacro
+PROJ_ROOT = Path(__file__).resolve().parent.parent          # the repository root
 NB_DIR = PROJ_ROOT / "notebooks"
 COURSE_DIR = NB_DIR / "course"
 KERNEL_NAME = "python3"
 
 
 #: Local working copy of the course when the repo is checked out *outside* MAV
-#: (today: ``~/Documents/RESEARCH/puremacro`` vs ``~/Documents/TEACHING/MAV``),
+#: (the repository and ``~/Documents/TEACHING/MAV`` sit under different parents),
 #: so no ancestor of the repo can lead to the decks. Tried before the Drive copy.
 LOCAL_MAV = Path.home() / "Documents" / "TEACHING" / "MAV"
 
@@ -103,9 +103,9 @@ def _find_slides_root(proj: Path) -> Path:
       * *flat*: the decks sitting **directly** in ``<MAV>/`` with no ``slides/``
         subfolder — this is the current ``~/Documents/TEACHING/MAV``.
 
-    The repo used to live *inside* MAV (``MAV/uncertainty_examples/puremacro``);
-    it is now checked out at ``~/Documents/RESEARCH/puremacro``, so no ancestor
-    of the repo leads to the course at all. Looking only for ``<ancestor>/slides``
+    The repo used to live *inside* MAV (as a subdirectory of a monorepo); it is
+    now checked out elsewhere, so no ancestor of the repo leads to the course at
+    all. Looking only for ``<ancestor>/slides``
     (the pre-2026-08 behaviour) therefore fell through to the Drive snapshot and
     silently rebuilt the site *there* instead of in the live ``MAV/curso_web``.
 

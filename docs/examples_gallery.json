@@ -183,13 +183,6 @@
       "figures": [],
       "last_run": "2026-09-02T16:10:41Z"
     },
-    "dsge_fertility_demo": {
-      "status": "PASS",
-      "reason": null,
-      "runtime_s": 1.597,
-      "figures": [],
-      "last_run": "2026-09-02T16:10:42Z"
-    },
     "dsge_nk_sketchpad": {
       "status": "PASS",
       "reason": null,

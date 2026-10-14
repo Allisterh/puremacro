@@ -3,11 +3,10 @@
 Verifies:
 1. Backward compatibility of HJBSolution (dict subscripting, methods, iteration edge cases).
 2. Backward compatibility of VFISolution (positional args, endo_shape, optional grids, unravelling).
-3. Presentation quintet parity across Trade results, VAR results, DSGE results, and VFI solutions.
-4. Deprecation warning targets: puremacro.lp.garch_utils and puremacro.sigma.sigma_numpy name 5.0.0
+3. Deprecation warning targets: puremacro.lp.garch_utils and puremacro.sigma.sigma_numpy name 5.0.0
    (both retargeted after 4.0.0 shipped keeping the shims).
-5. Pyodide four-package contract compliance via static AST inspection.
-6. Execution of continuous-time HJB showcase notebook.
+4. Pyodide four-package contract compliance via static AST inspection.
+5. Execution of continuous-time HJB showcase notebook.
 """
 from __future__ import annotations
 
@@ -28,19 +27,6 @@ import pandas as pd
 import pytest
 
 from puremacro.dsge._gradients import ScoreDiagnosticsResult
-from puremacro.trade._results import (
-    CapacityBottleneckResult,
-    GearyKhamisResult,
-    JCurveDynamicResult,
-    NashTariffResult,
-    OptimalTariffResult,
-    RetaliationGameResult,
-    RevenueRecyclingResult,
-    ScenarioBatchResult,
-    TradeCalibrationResult,
-    TradeEquilibriumResult,
-    WelfarePayoffMatrixResult,
-)
 from puremacro.var.bvar_sv import BVAR_SVForecast
 from puremacro.vfi import HJBSolution, VFIProblem, VFISolution, solve_hjb_achdou
 
@@ -313,154 +299,7 @@ def test_sigma_numpy_future_warning_names_a_future_release():
 
 
 # ===========================================================================
-# 4. Typst Parity Across All 11 Trade Results + VAR + DSGE
-# ===========================================================================
-
-def _make_dummy_eq():
-    return TradeEquilibriumResult(
-        x_sol=np.zeros(19),
-        p_sol=np.ones((1, 2, 2)),
-        y_sol=np.ones((1, 2, 2)) * 50.0,
-        r_sol=np.ones((1, 1, 2)),
-        w_sol=np.ones((1, 1, 2)),
-        T_sol=np.ones((1, 1, 2)) * 5.0,
-        XN_sol=np.array([1.0]),
-        c_sol=np.ones((1, 3, 2)) * 20.0,
-        pfd_sol=np.ones((1, 3, 2)),
-        terms_of_trade=np.array([1.02, 0.98]),
-        country_codes=("CAN", "USA"),
-        sector_codes=("S01", "S02"),
-    )
-
-
-def test_all_trade_results_have_callable_to_typst():
-    """Adversarial loop over all 11 trade result classes verifying .to_typst() returns valid Typst table markup."""
-    eq = _make_dummy_eq()
-    gk = GearyKhamisResult(
-        pi=np.ones(3),
-        ppp=np.ones(2),
-        real_gdp=np.array([100.0, 200.0]),
-        nominal_gdp=np.array([100.0, 200.0]),
-        gdp_growth=np.array([0.0, 0.0]),
-        country_codes=("CAN", "USA"),
-    )
-
-    instances = [
-        TradeCalibrationResult(
-            a=np.zeros((4, 2, 2)),
-            afd=np.zeros((4, 3, 2)),
-            alpha=np.full((1, 2, 2), 1 / 3),
-            beta=np.ones((1, 2, 2)),
-            k_endow=np.ones((1, 2)),
-            l_endow=np.ones((1, 2)),
-            invforT=np.zeros((1, 2)),
-            tax=np.zeros((1, 2, 2)),
-            ytot=np.ones((1, 2, 2)),
-            n_countries=2,
-            n_sectors=2,
-            country_codes=("CAN", "USA"),
-            sector_codes=("S01", "S02"),
-        ),
-        eq,
-        gk,
-        ScenarioBatchResult(
-            scenarios={"base": eq},
-            geary_khamis={"base": gk},
-            baseline_scenario="base",
-            country_codes=("CAN", "USA"),
-            sector_codes=("S01", "S02"),
-        ),
-        RetaliationGameResult(
-            scenario_name="retal",
-            equilibrium=eq,
-            initial_scenario=None,
-            tau_final=np.ones((2, 2, 2, 2)),
-            tau_fd_final=np.ones((2, 2, 3, 2)),
-            strategic_players=("CAN", "USA"),
-            partner_tariffs={"CAN": {"S01": 0.1}},
-            partner_duties_collected={"CAN": 50.0},
-            us_duties_collected={"CAN": 45.0},
-            outer_iterations=3,
-            converged=True,
-            outer_error=1e-5,
-        ),
-        JCurveDynamicResult(
-            scenario_name="jc",
-            quarters=(0.0, 1.0),
-            sigma_path=(1.0, 2.0),
-            t_star=1.5,
-            half_life=4.6,
-            trade_balance_path=np.array([-10.0, -15.0]),
-            us_exports_path=np.array([100.0, 105.0]),
-            us_imports_path=np.array([110.0, 120.0]),
-            us_gdp_path=np.array([1000.0, 995.0]),
-            us_cpi_path=np.array([1.0, 1.02]),
-            equilibria=(eq, eq),
-        ),
-        RevenueRecyclingResult(
-            scenario_name="rec",
-            closure="lump_sum",
-            equilibrium=eq,
-            tariff_revenue=100.0,
-            household_transfer=100.0,
-            factor_tax_cut=0.0,
-            subsidy_rate=0.0,
-            welfare_decomposition={"net_welfare_change": 7.0},
-        ),
-        CapacityBottleneckResult(
-            scenario_name="bot",
-            equilibrium=eq,
-            capacity_margins={"S01": 0.05},
-            capacity_limits={"S01": 105.0},
-            output_levels={"S01": 102.0},
-            capacity_utilization={"S01": 0.97},
-            price_escalation={"S01": 3.5},
-            penalty_multipliers={"S01": 0.02},
-        ),
-        OptimalTariffResult(
-            country_code="USA",
-            optimal_tariff_rate=0.15,
-            welfare_gain_pct=1.2,
-            baseline_welfare=100.0,
-            optimal_welfare=101.2,
-            welfare_metric="geary_khamis",
-            terms_of_trade_initial=1.0,
-            terms_of_trade_optimal=1.04,
-            tariff_grid=np.linspace(0.0, 0.3, 5),
-            welfare_curve=np.linspace(100.0, 101.2, 5),
-            equilibrium=eq,
-        ),
-        NashTariffResult(
-            strategic_players=("USA", "CHN"),
-            nash_tariffs={"USA": 0.18, "CHN": 0.12},
-            welfare_changes_pct={"USA": -0.5, "CHN": -0.8},
-            terms_of_trade_changes_pct={"USA": 1.2, "CHN": -0.3},
-            world_welfare_change_pct=-0.6,
-            outer_iterations=4,
-            converged=True,
-            outer_error=1e-5,
-            equilibrium=eq,
-            tau_nash=np.ones((2, 2, 2, 2)),
-            tau_fd_nash=np.ones((2, 2, 3, 2)),
-        ),
-        WelfarePayoffMatrixResult(
-            players=("USA", "CHN"),
-            strategies=("C", "D"),
-            payoff_matrix=np.zeros((2, 2, 2)),
-            scenarios={"CC": eq},
-            summary_df=pd.DataFrame({"Player": ["USA"], "C": [0.0]}),
-        ),
-    ]
-
-    for inst in instances:
-        assert hasattr(inst, "to_typst"), f"{type(inst).__name__} missing .to_typst()"
-        out = inst.to_typst()
-        assert isinstance(out, str), f"{type(inst).__name__}.to_typst() did not return str"
-        assert "#table(" in out, f"{type(inst).__name__}.to_typst() missing #table("
-
-
-# ===========================================================================
-# 5. Static AST Pyodide 4-Package Purity Scan
+# 4. Static AST Pyodide 4-Package Purity Scan
 # ===========================================================================
 
 def test_modified_files_pyodide_ast_purity():
@@ -471,7 +310,6 @@ def test_modified_files_pyodide_ast_purity():
     target_files = [
         root / "puremacro/vfi/hjb_achdou.py",
         root / "puremacro/vfi/problem.py",
-        root / "puremacro/trade/_results.py",
         root / "puremacro/var/bvar_sv.py",
         root / "puremacro/dsge/_gradients.py",
         root / "puremacro/lp/garch_utils.py",
@@ -497,7 +335,7 @@ def test_modified_files_pyodide_ast_purity():
 
 
 # ===========================================================================
-# 6. Showcase Notebook Execution
+# 5. Showcase Notebook Execution
 # ===========================================================================
 
 def test_notebook_22_execution():

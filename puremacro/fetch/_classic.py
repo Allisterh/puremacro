@@ -39,11 +39,12 @@ def _safe_urlopen(url: str, timeout: float = 30.0) -> bytes:
     Uses a non-Mozilla UA because FRED CSV's WAF rate-limits Mozilla-like
     UAs (silent timeout). Honest UA gets 0.1s response.
     """
+    from .. import __version__
     from .._http import safe_get_bytes
     return safe_get_bytes(
         url,
         timeout=timeout,
-        user_agent="puremacro/0.9 (FRED CSV reader; +https://github.com/jalonso1979/uncertainty_examples)",
+        user_agent=f"puremacro/{__version__} (FRED CSV reader; +https://github.com/jalonso1979/puremacro)",
     )
 
 

@@ -28,24 +28,16 @@ import warnings
 from pathlib import Path
 
 import pytest
+from packaging.version import Version
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# The trade pages of both lists left puremacro with the trade engine; the names are kept.
 NEW_TRADE_DOCS = [
-    "trade_accounting.md",
-    "trade_welfare.md",
-    "trade_policy.md",
     "STRUCTURAL_VALIDATION_STATUS.md",
 ]
-# Pages added after 4.3.0 (MRIO engines and stacked Newton-Krylov): same bilingual contract.
+# Pages added after 4.3.0 (the stacked Newton-Krylov): same bilingual contract.
 NEW_MODULE_DOCS = [
-    "trade_mrio.md",
-    "trade_condensed.md",
-    "trade_ces_newton.md",
-    "trade_household.md",
-    "trade_continuation.md",
-    "trade_stability.md",
-    "trade_dynamic.md",
     "dsge_stacked_newton.md",
 ]
 BILINGUAL_PAGES = NEW_TRADE_DOCS + NEW_MODULE_DOCS
@@ -77,11 +69,16 @@ def _module_constant(path: Path, name: str):
     return ast.literal_eval(_module_assignment(path, name))
 
 
-def _version_tuple(text: str) -> tuple[int, ...]:
-    """Leading numeric release components of a version string ('4.3.0', '4.4.0rc1' -> (4, 4, 0))."""
-    m = re.match(r"(\d+)\.(\d+)\.(\d+)", text)
-    assert m, f"unparseable version {text!r}"
-    return tuple(int(x) for x in m.groups())
+def _named_removal_release(message: str) -> Version:
+    """The removal release a deprecation ``message`` names in parentheses, as a PEP 440 version.
+
+    Compared as ``Version`` objects, not numeric tuples: a pre-release orders before its
+    final (``Version("5.0.0a1") < Version("5.0.0")``), so a shim scheduled for removal in
+    5.0.0 is still in the future while the package is 5.0.0a1.
+    """
+    m = _RELEASE_IN_PARENS.search(message)
+    assert m, f"the warning must name the removal release in parentheses: {message!r}"
+    return Version(".".join(m.groups()))
 
 
 # ---------------------------------------------------------------------------
@@ -101,15 +98,13 @@ def test_garch_utils_deprecation_names_a_future_major_release():
         if issubclass(w.category, FutureWarning) and "puremacro.lp.garch_utils" in str(w.message)
     ]
     assert messages, "importing puremacro.lp.garch_utils must emit its FutureWarning"
-    m = _RELEASE_IN_PARENS.search(messages[0])
-    assert m, f"the warning must name the removal release in parentheses: {messages[0]!r}"
-    target = tuple(int(x) for x in m.groups())
-    current = _version_tuple(puremacro.__version__)
+    target = _named_removal_release(messages[0])
+    current = Version(puremacro.__version__)
     assert target > current, (
         f"garch_utils FutureWarning names removal in {target} but puremacro is already "
         f"{current}; retarget the shim (this drifted at 2.0.0 and again at 4.0.0)"
     )
-    assert target[1:] == (0, 0), f"removal must be scheduled for a major release, got {target}"
+    assert (target.minor, target.micro) == (0, 0), f"removal must be scheduled for a major release, got {target}"
 
 
 def test_sigma_numpy_deprecation_names_a_future_major_release():
@@ -123,10 +118,8 @@ def test_sigma_numpy_deprecation_names_a_future_major_release():
     messages = [str(w.message) for w in record
                 if issubclass(w.category, FutureWarning) and "SigmaObject is deprecated" in str(w.message)]
     assert messages, "SigmaObject must emit its FutureWarning"
-    m = _RELEASE_IN_PARENS.search(messages[0])
-    assert m, f"the warning must name the removal release in parentheses: {messages[0]!r}"
-    target = tuple(int(x) for x in m.groups())
-    assert target > _version_tuple(puremacro.__version__) and target[1:] == (0, 0), target
+    target = _named_removal_release(messages[0])
+    assert target > Version(puremacro.__version__) and (target.minor, target.micro) == (0, 0), target
 
 
 # ---------------------------------------------------------------------------
@@ -166,10 +159,19 @@ def test_readme_notebook_range_matches_the_catalogue(readme: str):
 
 @pytest.mark.parametrize("readme", ["README.md", "README.es.md"])
 def test_readme_showcase_list_reaches_the_newest_notebooks(readme: str):
-    """The curated showcase bullets stopped at (`58`) while notebooks 59-65 shipped."""
+    """The curated showcase bullets stopped at (`58`) while notebooks 59-65 shipped.
+
+    Every showcase notebook from 59 on that ships in ``notebooks/`` must have its bullet;
+    numbers with no notebook in the repository are not required.
+    """
     txt = (ROOT / readme).read_text(encoding="utf-8")
+    shipped = {
+        int(p.name[:2])
+        for p in (ROOT / "notebooks").glob("[0-9][0-9]_*.py")
+        if not p.stem.endswith("_es")
+    }
     highest = _highest_showcase_notebook()
-    missing = [n for n in range(59, highest + 1) if f"(`{n:02d}`)" not in txt]
+    missing = [n for n in range(59, highest + 1) if n in shipped and f"(`{n:02d}`)" not in txt]
     assert not missing, f"{readme} showcase list omits notebooks {missing}"
 
 
@@ -236,4 +238,4 @@ def test_m4_figure_table_matches_target_list():
     total = _module_assignment(m4, "EXPECTED_TOTAL_FIGURES")
     assert ast.unparse(total) == "sum(EXPECTED_FIGURES_PER_TARGET.values())", ast.unparse(total)
     assert table["34_penalized_macro_forecasting.ipynb"] == 3
-    assert sum(table.values()) == 37
+    assert sum(table.values()) == 29

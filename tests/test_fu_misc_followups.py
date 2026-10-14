@@ -9,8 +9,6 @@
    non-convergence explicitly and no longer hides its warning.
 4. synthetic_did(n_boot=0) records no variance estimator.
 5. proxy_svar: shock_target_idx selects the residual of the first-stage F only.
-6. The legacy (non-Hicksian) Nash tariff search records
-   metadata["boundary_bands_overlap"] like the Hicksian searches.
 7. docs/vfi_continuous_transition.md (+es) describe the multiplicative
    discount-factor shock and the permanent-rate-wedge limitation.
 9. SpatialLPResult._metadata lists each attribute once.
@@ -165,34 +163,6 @@ def test_proxy_first_stage_f_uses_the_target_residual():
     assert r1.first_stage_F > r0.first_stage_F
     doc = inspect.getdoc(proxy_svar)
     assert "resid[:, shock_target_idx]" in doc
-
-
-# ---------------------------------------------------------------------------
-# 6. Legacy Nash search records boundary_bands_overlap
-# ---------------------------------------------------------------------------
-
-def _teaching_calibration():
-    from puremacro.trade import calibrate_trade_model
-
-    flows = np.array([[10., 12., 24., 8., 6., 4., 20., 16.],
-                      [8., 14., 4.5, 15., 10.5, 35., 18., 15.]])
-    taxes = np.array([4., 6., 1.2, 1., .8, 1.8, 2., 1.2])
-    value_added = flows.sum(1) - flows[:, :2].sum(0) - taxes[:2]
-    data = np.vstack([flows, taxes, np.r_[2 * value_added / 3, np.zeros(6)],
-                      np.r_[value_added / 3, np.zeros(6)]])
-    return calibrate_trade_model(data, ns=1, nc=2, nfd=3, country_codes=["A", "B"])
-
-
-@pytest.mark.parametrize("tariff_max, overlap", [(0.2, False), (5e-5, True)])
-def test_legacy_nash_records_boundary_bands_overlap(tariff_max, overlap):
-    from puremacro.trade import solve_multilateral_nash_tariffs
-
-    nash = solve_multilateral_nash_tariffs(
-        _teaching_calibration(), player_countries=("A", "B"), tariff_max=tariff_max,
-        best_response_grid_size=3, max_iter=1, relaxation=1.0, tol=1e-4)
-    assert nash.welfare_metric != "hicksian_ev"
-    assert nash.metadata["boundary_bands_overlap"] is overlap
-    assert set(nash.metadata["best_response_boundaries"]) == {"A", "B"}
 
 
 # ---------------------------------------------------------------------------

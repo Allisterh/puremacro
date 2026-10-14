@@ -1,14 +1,14 @@
-"""Empirical Challenger Test Suite for Milestone 1 (Showcase Cohort A: 00 through 18).
+"""Empirical Challenger Test Suite for Milestone 1 (Showcase Cohort A: 00 through 18, without 17).
 
 Adversarially validates:
-1. 100% of all 40 committed showcase notebook artifacts in Cohort A (00-18, both EN and ES)
+1. 100% of all 38 committed showcase notebook artifacts in Cohort A (00-18, both EN and ES)
    exist, parse as valid JSON, and pass strict nbformat v4 schema validation.
 2. 100% of code cells have valid integer execution_count (not null/None) with execution_count > 0,
    forming a contiguous strictly increasing sequence [1, 2, ..., N].
 3. Assert zero cell error tracebacks and zero unhandled stream exception tracebacks.
 4. Total outputs >= 3 in every notebook.
 5. All embedded PNG figures have 100% opaque alpha channels (min_alpha == 255) and high contrast (rgb_std > 5.0).
-6. Exact bilingual parity: len(en_code_cells) == len(es_code_cells) and en_figures == es_figures across all 20 pairs.
+6. Exact bilingual parity: len(en_code_cells) == len(es_code_cells) and en_figures == es_figures across all 19 pairs.
 """
 from __future__ import annotations
 
@@ -46,7 +46,6 @@ COHORT_A_STEMS = [
     "14_tax_multiplier_three_ways",
     "15_lp_did",
     "16_regime_girf",
-    "17_identification_spec_curve",
     "18_beveridge_curve",
 ]
 
@@ -55,8 +54,9 @@ COHORT_A_ALL_NOTEBOOKS = [nb for pair in COHORT_A_PAIRS for nb in pair]
 
 
 def test_cohort_a_all_40_notebooks_exist_and_size():
-    """Assert all 40 Cohort A showcase notebooks exist and have substantial file size (> 10KB)."""
-    assert len(COHORT_A_ALL_NOTEBOOKS) == 40
+    """Assert all 38 Cohort A showcase notebooks exist and have substantial file size (> 10KB)."""
+    # The name predates notebook 17 (EN and ES) leaving the showcase in 5.0.
+    assert len(COHORT_A_ALL_NOTEBOOKS) == 38
     for rel_name in COHORT_A_ALL_NOTEBOOKS:
         p = NB_DIR / rel_name
         assert p.exists(), f"Cohort A notebook {rel_name} is missing from notebooks/"

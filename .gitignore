@@ -44,6 +44,10 @@ htmlcov/
 data/raw/sdmx.oecd.org/
 data/processed/
 
+# Local review and study output, kept out of the public repository
+reviews/
+research_output/
+
 # Agent scratch
 .claude/
 .agents/
@@ -56,11 +60,3 @@ TEST_READY.md
 /site/
 output/
 uv.lock
-
-# Reproducible LaTeX intermediates; source, figures and report PDF are retained.
-/techreport/*.aux
-/techreport/*.bbl
-/techreport/*.blg
-/techreport/*.log
-/techreport/*.out
-/techreport/*.toc

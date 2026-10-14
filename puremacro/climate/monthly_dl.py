@@ -1,4 +1,4 @@
-"""Monthly distributed-lag estimator for climate-fertility analysis.
+"""Monthly distributed-lag estimator for climate-shock analysis.
 
 Two modes:
 - Single-region (``region_col=None``): OLS with HC1 SE.
@@ -129,8 +129,8 @@ def monthly_dl(
     """Estimate the distributed-lag model.
 
     Returns dict with per-shock coefficient arrays + SEs, R², n_obs,
-    and a ``biological_benchmark`` field (sum of first shock's betas)
-    for backward compatibility with the climate_fertility source.
+    and a ``biological_benchmark`` field (sum of first shock's betas),
+    kept for backward compatibility.
     """
     # 1. Build lags WITHIN regions if panel; else globally.
     sort_by = [region_col, year_col, month_col] if region_col else [year_col, month_col]

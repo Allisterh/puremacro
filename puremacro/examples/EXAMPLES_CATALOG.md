@@ -194,7 +194,6 @@ Scripts that ship but have no entry above yet:
 - `climate_dice_simulation`
 - `climate_sovereign_debt_risk`
 - `dsge_ar1_demo`
-- `dsge_fertility_demo`
 - `dsge_nk_sketchpad`
 - `dsge_nuts_estimation`
 - `dsge_optimal_discretion`

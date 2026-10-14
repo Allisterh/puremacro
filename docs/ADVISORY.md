@@ -14,132 +14,6 @@ without re-running it), and what to do.
 
 ---
 
-## 2026-10-03 — the legacy 77x11 aggregation misplaced rest-of-world final demand, all versions; a clean table ships in 4.6.0
-
-**Not a solver defect; a second defect of the legacy data fixture, found while
-replacing it. Fixed in 4.6.0 by a new bundled table; the legacy table is kept
-unchanged for its MATLAB parity suites.**
-
-While porting the MATLAB aggregation `Agregar_11s.m` to Python
-(`tools/build_icio_77c_11s.py`, verified against the bundled
-`icio_77c_11s.npz` cell by cell: 99.92% bit-equal, maximum difference 7.6e-5 on
-values of order 1e9), two indexing defects of that script surfaced in addition
-to the decimal corruption recorded on 2026-09-22. In the block that reassembles
-the table around the rest-of-world country (ROW), the loop meant to fill ROW's
-final-demand sales to the other 76 countries writes into the intermediate block
-instead (`data7fd` written as `data7`), so those sales sit in the intermediate
-columns of the first countries while the ROW final-demand block is empty; and
-the loop meant to fill the tax and value-added cells of ROW's own final-demand
-columns writes into ROW's flow rows (`data5Tfd` written as `data5fd`). On the
-legacy table this moves 3,203 cells and 4.9e9 (corrupted-export units) between
-blocks; on the clean 2020 release it would move 1.2e5 USD million. Every
-number derived from the legacy table inherits both defects.
-
-The 4.6.0 replacement is `icio_77c_11s_oecd2020.npz`, built from the clean
-OECD ICIO 2023-edition 2020 file (MD5 `d3e0f4979d85d6c0bb7cf4c43e324287`) with
-the corrected aggregation; `MANIFEST_OECD2020.json` records the array digest,
-the recipe and the native world totals it conserves (value added 7.97e7 USD
-million; output 1.66e8). The author's legacy MATLAB model, run unchanged on the
-clean table, is bundled as `trade_reference_solutions_oecd2020.npz` so the
-parity check survives the data change, and four gallery cases (`Trade`) check
-conservation, column balance, the base equilibrium and that MATLAB parity.
-
-| Surface | Affected condition | Unaffected when | Guidance |
-|---|---|---|---|
-| `load_icio_data()` without `source=`, all versions | Returns the legacy table; from 4.6.0 with a `FutureWarning` (once per process) | `source="oecd2020"` | Pass `source="oecd2020"` for anything empirical; `source="legacy"` keeps the regression fixture explicitly. The default switches to `"oecd2020"` in 5.0. |
-| Notebooks 61, 62, 64 and their Spanish twins; the trade documentation snippets | They read the legacy table (now pinned with `source="legacy"` so their numbers are unchanged) | — | Their magnitudes remain illustrations of the solver on a regression fixture, not OECD-based estimates, exactly as the 2026-09-22 entry says. |
-| `trade_reference_solutions.npz`, `trade_results_workbook.npz` | MATLAB solutions of the legacy table | `load_reference_solution(..., source="oecd2020")` | Use the clean-table references for new parity work; `REFERENCE_MANIFEST_OECD2020.json` lists the scenarios available. |
-| `load_oecd_icio_granular`, `puremacro.trade.mrio.read_oecd_native`, `load_raw_45sector_icio` | None: they read the native files by labels | — | Unchanged. |
-
----
-
-## 2026-10-02 — `solve_trade_equilibrium(method="quasi_condensed")` reported `converged=True` with a large residual, versions 4.2.0 to 4.4.0
-
-**Fixed after 4.4.0** (see the Unreleased section of `CHANGELOG.md`). The
-`quasi_condensed` branch of `solve_trade_equilibrium` took its convergence flag
-from the quasi-condensed (flexible) solver but its residual, flows and prices
-from the legacy post-processing, evaluated at the solver's default MATLAB
-pricing convention (`replicate_matlab_precedence=True`), which the
-quasi-condensed solve does not use. The flag and the reported residual
-therefore disagreed. On the notebook-62 2x2 calibration with a 25% tariff and
-`tol=1e-10`, 4.4.0 returned `converged=True` with `max_residual` 0.0487
-(`residual_norm` 0.155); with `sigma_y=0.5`, 0.498. The residual is now the one
-the flag was judged on, the flows are post-processed at the quasi-condensed
-convention and agree with a legacy Newton solve of the same model
-(`replicate_matlab_precedence=False`) to 1e-8, and active flexible settings
-raise `ValueError` because the legacy flow fields of `TradeEquilibriumResult`
-cannot describe them.
-
-| Surface | Affected condition | Unaffected when | Guidance |
-|---|---|---|---|
-| `solve_trade_equilibrium(..., method="quasi_condensed")` | any call | — | `x_sol` was the quasi-condensed solution and the flag was right for that model; the residual fields and the flows were not. Re-run on the fixed version, or use `solve_flexible_trade_equilibrium(..., method="quasi_condensed")`. |
-| same, with `sigma_y > 0` or an active `config` | flows, prices, CPI, terms of trade | — | These describe the legacy model, not the solved one; take the flows from `solve_flexible_trade_equilibrium`'s `metadata`. |
-| same, with `fiscal_closure`/`recycling_params`/`sigma`/`capacity_margins` | the setting was ignored by the solve | the setting was at its default | The returned equilibrium is not a solution of the requested model. |
-
-`solve_flexible_trade_equilibrium` never used this branch; its own
-`converged` and `residual_norm` were consistent.
-
-### Are you affected?
-
-```python
-res = solve_trade_equilibrium(calib, ..., method="quasi_condensed")
-res.converged and res.max_residual > res.metadata["tol"]   # True → the flag and residual disagreed
-```
-
-### What to re-run
-
-- Any table built from the flows, prices, CPI or terms of trade of a
-  `solve_trade_equilibrium(..., method="quasi_condensed")` result.
-
----
-
-## 2026-10-02 — Flow properties of `FlexibleTradeEquilibriumResult` ignored the solved model, versions 4.2.0 to 4.4.0
-
-**Fixed after 4.4.0** (see the Unreleased section of `CHANGELOG.md`). The
-`exports`, `imports`, `cpi`, `terms_of_trade`, `gdp` and `gdp_fc` properties of
-a `solve_flexible_trade_equilibrium` result evaluated the legacy
-Cobb-Douglas/Leontief flow equations at `x_sol` with no tariffs and the MATLAB
-pricing convention, whatever the call. Measured on 4.4.0, notebook-62 2x2
-calibration, 25% tariff on intermediates from country B:
-
-- legacy route (default configuration): exports `[60.73, 68.94]` against
-  `[60.73, 69.19]` from `solve_trade_equilibrium` with the same arguments;
-- quasi-condensed route, default configuration: exports `[55.87, 63.12]`
-  against `[56.73, 64.26]` from a legacy Newton solve of the same model;
-- quasi-condensed route, `sigma_trade=5`: exports `[58.20, 59.86]` against the
-  solved bilateral flows `[62.15, 58.26]`.
-
-`cpi`, `terms_of_trade` and `gdp`/`gdp_fc` matched on the two default-
-configuration cases (they depend on the state, not on the tariff-dependent
-quantities); for an active configuration the legacy CPI and terms of trade
-describe a different model, and with `variable_markups=True` `gdp` omitted
-markup profits. The properties now describe the solved model;
-`cpi`/`terms_of_trade` raise `NotImplementedError` for an active configuration.
-4.4.0 documented the quasi-condensed half of this as a known issue; the
-legacy-route half was not known.
-
-| Surface | Affected condition | Unaffected when | Guidance |
-|---|---|---|---|
-| `exports`, `imports` | any `tau`, `tau_fd`, `tauf`, `tauf_fd`; any active configuration on the quasi-condensed route | no tariffs and the default configuration on the legacy route | Re-run, or take row/column sums of `metadata["bilateral_trade"]` (quasi-condensed route). |
-| `cpi`, `terms_of_trade` | active flexible configuration | default configuration | No replacement index exists for the flexible model; use the metadata flows. |
-| `gdp` | `variable_markups=True` | no markups | Add `metadata["markup_profits"]`, or use `metadata["household_income"]`. |
-| `welfare_decomposition` | — | always: it keeps its historical proxy and values | Unchanged. |
-
-### Are you affected?
-
-```python
-res = solve_flexible_trade_equilibrium(calib, ...)
-tariffs = any(v is not None for v in res.metadata["tariff_inputs"].values())
-tariffs or bool(res.metadata["active_flexible_settings"])   # True → re-run
-```
-
-### What to re-run
-
-- Trade volumes, trade balances and terms-of-trade effects read from these
-  properties for tariff scenarios or active flexible settings.
-
----
-
 ## 2026-10-02 — `minnesota_gibbs` Σ posterior degrees of freedom, versions 0.92.0 to 4.4.0
 
 **Fixed after 4.4.0** (see the Unreleased section of `CHANGELOG.md`).
@@ -1138,35 +1012,6 @@ much of the shift is risk and how much curvature.
 
 ---
 
-## 2026-09-30 — trade solver diagnostics and the Hicksian policy closure, versions 4.2.0 and 4.3.0
-
-**Fixed after 4.3.0.** Diagnostics that described a different object from the
-one returned, and a closure that the policy searches could not reach.
-
-| Surface | Affected condition | Unaffected when | Guidance |
-|---|---|---|---|
-| `trade.solver.solve_cyprus_manifold_step` (alias `solve_cyprus_manifold`, 4.3.0) | `max(abs(dw)) > max_disp`, so the step is clamped: `(residual, converged)` described the unclamped step. Notebook 64 printed 4.4e-16 and `converged=True` for a step whose residual is 3.208, the whole right-hand side. The default `idx_cyp=15` is Colombia, not Cyprus (17) | Unclamped steps, with `idx_cyp` passed explicitly | The fixed release reports the returned step's residual; `return_info=True` gives the unclamped values. Without `eval_cyp_fn` the step is an exact linear solve, uniformly rescaled: a bounded step, not a stabilised solution. |
-| `solve_keller_pac` docstrings and `metadata["fold_points"]` (4.3.0) | The docstrings claimed a fold at σ_fold ≈ 0.1238 where Newton diverges; PAC records no fold there and Newton converges in 8 iterations. `fold_points` listed every step with `tau_lambda <= 0`, one entry per remaining step for one factor-price stall | — | Do not cite PAC as traversing a CGE fold. Read the merged events and their `kind`: `factor_price_boundary` is a corner where a factor price goes to zero, not a fold. |
-| Hicksian `compute_unilateral_optimal_tariff`, `solve_multilateral_nash_tariffs`, `compute_welfare_payoff_matrix` (4.3.0) | Nonzero baseline foreign balances: only the numeraire closure was reachable, so payoffs depended on which country was listed first (A's EV from a 10% tariff on notebook 63's table: 2.6308% or 2.4952%) | Zero foreign balances | Pass `foreign_saving_units="world_income"` and a baseline solved with it: 2.5404% in either order. |
-| Boundary labels (`metadata["boundary"]`, `["best_response_boundaries"]`, 4.3.0) | `tariff_max <= tol`: replies at the ceiling were labelled `"lower"` | Ceilings above `2*tol` | Fixed: the nearer bound is used. |
-| `compute_stone_geary_final_demand` (4.2.0 and 4.3.0) | Subsistence spending above the budget: the bundle `c_bar` overspent silently (169% at μ = 0.9 and 5% of benchmark income on a 2x2 table) | Σ_s μ_s θ_s0 below tanh(3)/3 ≈ 0.332 | A `RuntimeWarning` is now emitted; check the budget. |
-
-### Are you affected?
-
-For the Cyprus step: `max(abs(dw)) == max_disp` on a returned step means it was
-clamped and its reported residual was not its own. For the Hicksian searches:
-re-run with the countries listed in the other order; if a payoff changes, the
-closure was order-dependent.
-
-### What to re-run
-
-- **Any clamped Cyprus step reported as converged**, and any fold claim based
-  on `fold_points`.
-- **Hicksian tariff searches** on tables with nonzero foreign balances.
-- **In this repository:** notebooks 63 and 64 (English and Spanish).
-
----
-
 ## 2026-09-23 — third-order theoretical moments, versions 2.8.0 to 4.3.0
 
 **Fixed after 4.3.0** (see the Unreleased section of `CHANGELOG.md`).
@@ -1211,65 +1056,6 @@ agree with puremacro (see `docs/dsge_higher_order.md` §2.3).
 
 ---
 
-## 2026-09-23 — flexible trade equilibrium, versions 4.2.0 and 4.3.0
-
-**Fixed after 4.3.0** (see the Unreleased section of `CHANGELOG.md`).
-`solve_flexible_trade_equilibrium` returned the legacy Cobb-Douglas/Leontief
-equilibrium, labelled as the flexible result, for every nested-CES,
-Stone-Geary (LES), variable-markup and capacity setting. The settings were
-stored in `metadata["config"]` but never entered the equilibrium equations:
-the default (Newton) dispatch passed them through without reading them, and
-only `method="sparse_lu"` or the legacy `"condensed"` path used them, to shape
-the Jacobian sparsity pattern. The solve converged, emitted no warning and
-reported the requested configuration.
-
-On a 3-country, 3-sector synthetic calibration with a 25% tariff, the v4.2.0
-and v4.3.0 releases return a solution vector bit-identical to the default
-configuration (maximum absolute difference 0.0, same iterations and residual)
-for `rho_va=0.7, sigma_y=0.5`, `subsistence_ratio=0.2`, `variable_markups=True`
-and `capacity_margins={(0, 0): 0.3}`. The executed notebook 62 shipped with
-those releases reports its homothetic, Stone-Geary and full-flexible (CES,
-subsistence and oligopoly markups) solves on the bundled 77x11 table with the
-same final residual norm (2.7575e-02); its welfare and markup tables differ only
-through post-processing of one and the same equilibrium.
-
-| Surface | Affected condition | Unaffected when | Guidance |
-|---|---|---|---|
-| `solve_flexible_trade_equilibrium` (4.2.0, 4.3.0), default `method` | Any non-default technology setting (`rho_va`, `sigma_va`, `sigma_y`, `sigma_inter`, `capacity_margins`), Stone-Geary subsistence (`subsistence_shares`, `subsistence_ratio`, `mu_s`) or `variable_markups=True` | Every flexible setting is at its default: the flexible model then coincides with the legacy model and the result is correct | Re-run with the fixed release and check `result.metadata["flexible_settings_applied"]`. |
-| The same function with an explicit `method="quasi_condensed"` (4.2.0, 4.3.0) | The same settings | As above | That path evaluated some technology, capacity and markup settings but ignored Stone-Geary subsistence (`subsistence_ratio=0.2` returned the identical solution); treat its results as affected and re-run with the fixed release. |
-| Welfare, EV and markup figures computed from these results | Any affected run | As above | They were derived from the legacy equilibrium; re-run. |
-
-Runs with the default flexible configuration are unaffected, with one
-exception: `solve_trade_equilibrium(method="quasi_condensed")` with
-`sigma_y > 0` or a flexible `config` now solves the corrected flexible model,
-and its results change. The fixed release also changes the default final-demand
-sourcing of the flexible solver to fixed coefficients (Armington sourcing
-requires an explicit `sigma_trade`).
-
-In the fixed release, models with at most 100 country-sector cells solve the
-flexible equations on the quasi-condensed Newton path. Above that size
-(including the bundled 77x11 table), or with an explicit `method=` other than
-`"quasi_condensed"`, a call with active flexible settings raises `ValueError`
-instead of ignoring them. Pass `method="quasi_condensed"` to solve the flexible
-equations with a dense Jacobian, or `allow_legacy_fallback=True` to obtain the
-legacy equilibrium with a `RuntimeWarning` and
-`metadata["flexible_settings_applied"] = False`.
-
-### What to re-run
-
-- **Any counterfactual, welfare or markup number** published from
-  `solve_flexible_trade_equilibrium` on 4.2.0 or 4.3.0 with a non-default setting.
-- **Notebook 62 as executed in 4.2.0 and 4.3.0**: the `rho_va` sweep, the
-  homothetic versus Stone-Geary comparison and the competitive versus
-  oligopoly comparison all show the legacy equilibrium.
-- **This repository's notebook 62 has been rewritten and re-executed** (English
-  and Spanish): it evaluates the flexible cost, demand and pricing blocks at
-  given prices and solves one small benchmark with the audited
-  consistent-accounting solver; it no longer reports flexible equilibria on the
-  bundled table.
-
----
-
 ## 2026-09-23 — collocation curvature ignored or mixed, versions 3.3.0 to 4.3.0
 
 **Fixed after 4.3.0** (see the Unreleased section of `CHANGELOG.md`).
@@ -1295,96 +1081,12 @@ to 4.3.0.
 
 ---
 
-## 2026-09-23 — trade inputs read as a different schedule or layout, version 4.3.0
-
-**Fixed after 4.3.0** (see the Unreleased section of `CHANGELOG.md`). Four
-trade functions that first shipped in 4.3.0 computed their result for an input
-other than the one passed, with no exception and no warning: a continuation
-target, a viability schedule, the labels of a FIGARO file's final uses, and
-the value-added floor of the MRIO regularization.
-
-| Surface | Affected condition | Unaffected when | Guidance |
-|---|---|---|---|
-| `solve_keller_pac` (4.3.0) | `tau_target` passed as a NumPy scalar other than `np.float64` (`np.int64`, for example from `np.arange`; `np.float32`; `np.bool_`) or as a 0-d array: only intermediate imports were tariffed, while a Python number also tariffs final-demand imports | `tau_target` is a Python `int`, `float` or `bool`, an `np.float64`, or an array schedule with at least one dimension | Re-run with the fixed release, or pass `float(tau_target)`. |
-| `check_hawkins_simon_viability` (4.3.0) | `tau` passed as a Python list (evaluated as the zero-tariff baseline, whatever its values), as a 0-d array (a multiplier of the whole cost matrix), or as an array of shape `(M, M)`, `(M, ns, nc)` or `(ns, nc, ns, nc)` whose diagonal (same country and sector) entries are not 1, which a heuristic could read as rates where `solve_trade_equilibrium` reads multipliers (`np.ones((M, ns, nc)) * 1.10` became a multiplier of 2.10) | `tau` is `None`, a Python or NumPy scalar number, a NumPy `(nc,)` rate vector, or a multiplier array whose diagonal entries are 1 | Re-run the check with the fixed release; a "viable" verdict for such an input may be wrong. |
-| `load_figaro` on a harmonized file (4.3.0) | The file lists each country's final uses in an order other than `P3_S14, P3_S15, P3_S13, P51G, P5M`, for example the Eurostat order `P3_S13, P3_S14, P3_S15, P51G, P5M`: final-use columns were labelled by position, so government and household consumption swapped labels | The file follows puremacro's order, or the data are synthetic (`fallback_to_synthetic=True`) | Re-load with the fixed release, which reads final uses by label. |
-| `regularize_mrio_table`, and `package_mrio_to_calibration_result` with the loaders that call it (`load_figaro`, `load_exiobase`, `load_wiod`, `load_eora`, `load_oecd_icio_granular`) with `regularize=True` (4.3.0) | A node whose value added is floored has output below 2 in the table's units (2 M USD for the loaders): the floor `max(1e-3 Y, 1)` set its value added to 1, above output when output is below 1, and debited the difference from its taxes less subsidies | Every floored node has output of at least 2, or `regularize=False` | Re-run the calibration with the fixed release, whose floor is `max(1e-3 Y, min(1, 0.5 Y))` and which records every floored node. |
-
-Measured on the 4.3.0 release tag and on the fixed release:
-
-- `solve_keller_pac` on a 2-country, 2-sector test table: `tau_target=np.int64(1)`
-  returned `x_sol[:4]` = [0.0965, -0.0050, 0.1579, 0.1302] with
-  `converged=True`; `tau_target=1.0` returns [0.2008, 0.0809, 0.3446, 0.3215],
-  which the fixed release also returns for `np.int64(1)`.
-- `check_hawkins_simon_viability` on the same table: `[0.5, 0.5]` returned
-  rho 0.3379685 (the baseline) instead of 0.3762996; `np.array(0.1)` returned
-  0.0337969 instead of 0.3456204; `np.ones((M, ns, nc)) * 1.10` returned
-  0.7097339, the radius for a multiplier of 2.10, instead of 0.3717654.
-- `load_figaro` on a 2-country, 2-sector file in the Eurostat order: the
-  final-use shares (`theta`) differed from those of the same data in
-  puremacro's order by up to 0.23, and a 10% tariff equilibrium by up to
-  9.7e-4 (largest unknown 12.8). The fixed release gives identical
-  calibrations for both orders.
-- `load_oecd_icio_granular` on the OECD ICIO 2019 file (`2019_SML.csv`):
-  4.3.0 raised 41 value-added entries by 9.84 M USD in total and left 10
-  nodes with value added above output (taxes less subsidies down to -467% of
-  output); the fixed release raises 36 entries by 2.74 M USD, none above
-  output.
-
-### What to re-run
-
-- **Continuation paths** from `solve_keller_pac` whose target came from a
-  NumPy array or loop variable (for example `for rate in np.arange(1, 4)`).
-- **Viability screens** of list schedules, 0-d arrays or multiplier arrays
-  with non-unit diagonal entries.
-- **Calibrations of harmonized FIGARO files** whose final-use columns were not
-  in puremacro's order, including any category-level result.
-- **Calibrations of real tables with small nodes** built by the 4.3.0 loaders,
-  and every counterfactual solved on them.
-
----
-
-## 2026-09-22 — provenance of the bundled 77x11 OECD table, all versions
-
-**Not a code defect; a data-provenance finding. Documented and guarded after
-4.3.0.**
-
-`puremacro/trade/_datafiles/icio_77c_11s.npz` is a bit-exact copy of the MATLAB
-array `data_77c_11s.mat` that the original sectoral-misallocation pipeline built
-from a `data_2020_SML.csv` export of the OECD ICIO tables. That export is damaged:
-tokens with three or four decimals lost their decimal point and tokens below
-0.001 became zero (its MD5 `d1b887aaafa54ab3f28fde78fcd21cdf` is registered as
-corrupted by the research workspace that produced the paper's revised results).
-
-Measured against the clean OECD 2020 release (MD5 `d3e0f4979d85d6c0bb7cf4c43e324287`):
-
-| Quantity | Bundled table / corrupted export | Clean OECD 2020 release |
-|---|---:|---:|
-| World value added, 77x11 aggregation (USD million) | 7.05e11 | 7.97e7 |
-| Largest intermediate cell, 77x11 aggregation (USD million) | 5.83e10 | 6.79e6 |
-| Intermediate cells of the 77x11 aggregation that are equal | 35.5% | reference |
-| Value-added cells of the 77x11 aggregation that are equal | 1 of 847 | reference |
-| Positive native 45-sector intermediate cells set to zero in the export (every one below 0.001) | 2.10 million of 7.82 million | none |
-| Positive native intermediate cells multiplied by 1e3 or 1e4 in the export | 0.70 million | none |
-
-| Surface | Affected condition | Guidance |
-|---|---|---|
-| `load_icio_data(source="legacy")`, the bundled 77x11 calibration, notebooks 61-65, `trade_reference_solutions.npz`, `trade_results_workbook.npz` | Any economic magnitude, share or elasticity computed from the bundled table | Treat these as software regression fixtures: the parity suites compare puremacro with MATLAB solutions of the **same** table and remain internally consistent. Do not report their outputs as OECD-based estimates. |
-| `load_raw_45sector_icio()` without a `path` (4.3.0 and earlier) | The default search list started with `computation/7_TIO_77c_vf/data_2020_SML.csv`, the corrupted export, and read it without a checksum | The fixed release searches the clean `ICIOextended/2020_SML.csv` and `2019_SML.csv` first, checks the MD5 of the resolved file, refuses the corrupted export with `MRIOIntegrityError` (a `ValueError`) naming the clean-release checksums, and warns on unknown digests. Pass the clean `2019_SML.csv` (MD5 `28cba31491177955445051d459053744`) or `2020_SML.csv` explicitly. |
-| Native readers (`load_oecd_icio_granular`, `puremacro.trade.mrio.read_oecd_native`) | None: they read the OECD 2023 regular CSV by labels | Use these for new empirical work; they record the source checksum in metadata. |
-
-The bundled table is retained unchanged so that the historical MATLAB parity
-contract stays external. Replacing it with a clean aggregation would silently
-change every fixture and is a decision for the author, not for a release. See
-[native MRIO tables](trade_mrio.md) for the measurements.
-
----
-
 ## 2026-09-20 — structural models, affected APIs in 4.2.0 and earlier
 
 **Fixed or explicitly restricted in 4.3.0.** The review found incorrect numerical
-outputs and success flags in VFI, DSGE/Dynare and trade. Earlier introduction
-versions differ by API; the findings were reproduced on the 4.2.0 tree.
+outputs and success flags in VFI, DSGE/Dynare and trade (the trade findings left
+puremacro with the trade engine). Earlier introduction versions differ by API; the
+findings were reproduced on the 4.2.0 tree.
 
 | Surface | Affected condition | Rerun guidance |
 |---|---|---|
@@ -1393,19 +1095,9 @@ versions differ by API; the findings were reproduced on the 4.2.0 tree.
 | VFI projections and auxiliary values | Optimizer termination at a nonzero Euler residual; auxiliary value recovery with non-unit productivity or non-log utility | Require the final residual to meet the requested tolerance and regenerate affected values. Convergence at fitting nodes still does not certify off-grid accuracy. |
 | Deep Macro gradients | A second network evaluation overwrote the current-state activation cache before the detached-target weight update | Re-run training and validate held-out residuals; a small historical training loss is insufficient. |
 | Markov-switching DSGE | Failed coupled solves returned finite impacts, stability or moments | Re-solve and require convergence before interpreting these diagnostics; failed states now report unavailable outputs. |
-| Trade flows and fiscal accounts | CES solutions postprocessed with Leontief flows, incomplete fiscal schedules or inconsistent producer/purchaser valuation | Re-run affected counterfactuals. Select `accounting="consistent"` for the derived producer/purchaser model; the legacy default remains for compatibility. |
 
-Tariff policy now selects expenditure-function consumption welfare explicitly
-with `metric="hicksian_ev"`. Historical `ev`/`equivalent_variation`/`consumption`
-policy aliases remain utility proxies. The new metric uses a fixed comparison
-baseline and audited solver recovery; it does not certify a global Nash theorem.
-The draft TOT/Alloc/TariffRec and theorem endpoints are unavailable rather than
-publishing unsupported conclusions.
-
-See [supported scope and reference evidence](STRUCTURAL_VALIDATION_STATUS.md),
-[trade accounting](trade_accounting.md), [consumption welfare](trade_welfare.md)
-and [tariff policy](trade_policy.md). Full-size native GE, flexible/GPU welfare
-and general higher-order Dynare parity remain outside the validated scope.
+See [supported scope and reference evidence](STRUCTURAL_VALIDATION_STATUS.md).
+General higher-order Dynare parity remains outside the validated scope.
 
 ---
 
@@ -1455,7 +1147,6 @@ each reproduced against a known truth before being touched.
 | `var.irf.gfevd` → `connectedness.spillover_index` | Divided by an absolute `1e-12` floor, breaking a scale invariance the estimand has by construction | No residual variance falls near the floor — i.e. the units happen to be large enough | Total connectedness moved **13.43 → 39.48** on one fixed VAR when a single variable was rescaled |
 | `dsge.gensys` | `Impact` dropped the `Pi N` term: solved as though expectation errors did not respond to shocks | `Pi N = 0` — no forward-looking behaviour left | On `y_t = a E_t y_{t+1} + eps_t` (truth `y_t = eps_t`) it returned **`[0, -2]`**: the variable did not respond to its own shock |
 | `dsge.gensys` | Raised on any model with **no unstable roots** (`Z2` a zero-column slice); uniqueness test was vacuous | The model has at least one unstable root | `x_t = rho x_{t-1} + eps` could not be solved at all |
-| `dsge.fertility_adj_costs` `irf`/`fevd` | Advanced the state before applying `F`, but controls read the *lagged* state | Horizon 0 only | Every control IRF **one period early**: reported `y(h)` was the correct `y(h+1)` |
 | `did.sun_abraham` | Event-study `lo`/`hi` averaged the per-cohort interval edges instead of using the aggregated `se` | One cohort per event time | Bands **`sqrt(K)` too wide** — measured 1.73 at K=3, 1.37 at K=2 — and inconsistent with the `se` in the same row |
 | `inference.weak_iv.kleibergen_paap_f` | HC0 sandwich divided by `n` twice while the bread inverted the raw `Z'Z`, which already carries both factors | Never — every call was affected | Returned **exactly `n^2` times** the correct statistic: 235,470 against a truth of 5.89 at n=200. Stock-Yogo thresholds are near 10, so it reported "overwhelmingly strong" for every dataset and **could never diagnose a weak instrument** |
 | `inference.weak_iv.kleibergen_paap_f` | Influence function used `kron(Z_t, V_t)` where the column-major `vec` and the bread both require `kron(V_t, Z_t)` | `k = 1` (one endogenous regressor) — then the two coincide | Wrong robust variance for two or more endogenous regressors |
@@ -1463,6 +1154,8 @@ each reproduced against a known truth before being touched.
 | `lp.panel_lp_dk` (via `_focal_dk_se`) | Bartlett bandwidth derived from the panel row count `N*T`, but the kernel runs on the length-`T` cross-sectional sum | `N = 1` | Bandwidth inflated by `N^(2/9)`: **7 -> 10 -> 13** at fixed T=100 as N went 10 -> 50 -> 200. Adding countries changed the assumed autocorrelation |
 | `lp.mean_group_panel_lp` | Did not sort its input, while `lp_hac` builds lags with positional `.shift()` | The caller already passed a sorted frame | On a panel whose true h=1 response is 0.8: **0.765 sorted, 0.055 with the same rows shuffled**. Silent, and attenuated toward zero |
 | 25 p-value sites across 16 modules | `1 - cdf` instead of the survival function | The p-value is above ~1e-16 | Returned **exactly 0.0** in the tail. Two-sided normal at \|z\| = 9 is 2.3e-19; chi-square 200 on 5 df is 2.8e-41 |
+
+One further finding, in a model that has since been removed from puremacro, is no longer listed.
 
 ### What to re-run
 
@@ -1473,9 +1166,6 @@ each reproduced against a known truth before being touched.
   units you used.
 - **Any `gensys` IRF.** The impact matrix was wrong for every model with
   forward-looking behaviour, which is every model gensys is for.
-- **Any fertility-DSGE IRF or FEVD**, including the figures under
-  `docs/research/fertility_bk_diagnosis/`. Shift the control paths back one
-  period, or re-run.
 - **Any Sun–Abraham event-study band** at an event time with more than one
   contributing cohort. The point estimates and `se` stand; the intervals were
   too wide. **Correction (2026-09-30):** the `se` did not stand; it treated
@@ -1490,10 +1180,7 @@ three tests in `tests/test_dsge_gensys_coverage.py`, and the validation case
 `dsge.gensys_shock_impact_identity`, whose own citation stated the model
 **without** its `Pi eta_t` term — correct algebra from a truncated premise. The
 `sun_abraham` band contradicted the standard error printed beside it in the same
-row, so that one needed no external reference at all. And
-`FertilitySolution`'s docstring described `F` as acting on the current state
-while the solver builds it against the lagged one; the IRF loop was written
-against the docstring.
+row, so that one needed no external reference at all.
 
 ---
 
@@ -1567,8 +1254,7 @@ Stated here rather than left for a user to discover:
   produced before 2026-09-02 is wrong.** The code remains in git history at
   tag `v3.4.0` if you need to consult it.
 - **This repository's own notebooks have been re-executed.**
-  `notebooks/14_tax_multiplier_three_ways`,
-  `notebooks/17_identification_spec_curve`, their `_es` twins,
+  `notebooks/14_tax_multiplier_three_ways`, its `_es` twin,
   `notebooks/course/06_lp_narrativa_es` and the `playground/` build all
   display post-fix numbers as of 1.9.0. `notebooks/08_garch_volatility`
   needed no change: it calls `dcc_fit(panel)`, and the default

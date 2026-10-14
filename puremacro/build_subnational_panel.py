@@ -254,7 +254,7 @@ def _attach_births_data(
     #   1968-2000: NCHS via NBER (full pre-1989; 100K+ post-1988).
     #   2001-2009, 2011-2019, 2021-2025: Census PEP (all counties).
     #   2010 / 2020: gaps (Census vintage transitions).
-    # See `src/fetch/cdc_births_county.py::_write_combined_artifact`.
+    # See `puremacro/fetch/cdc_births_county.py::_write_combined_artifact`.
     # Forward-filled across the four quarters of each year.
     if births_df is not None and not births_df.empty:
         b = births_df[["county_fips", "year", "births"]].copy()
@@ -502,16 +502,18 @@ def _fetch_state_births():
 def _fetch_county_births(refresh: bool):
     # County × year births: combined NCHS (1968-2000) + Census PEP
     # (2001-2025 minus vintage-base years). Read from the combined
-    # canonical CSV at Fertility/data/PROCESSED/county_year_births.csv,
-    # which is (re)built when cdc_births_county.fetch() runs.
+    # canonical CSV, <root>/PROCESSED/county_year_births.csv, where <root>
+    # is the directory named by PUREMACRO_FERTILITY_ROOT; the file is
+    # (re)built when cdc_births_county.fetch() runs. When the variable is
+    # unset, fetch() raises inside the try and the panel is built without births.
     try:
         # Inside the try: on a build without `requests` this import used to raise
         # straight out of build_all rather than degrading like the fetch it guards.
         from .fetch import cdc_births_county
         cdc_births_county.fetch(refresh=refresh)  # rebuilds canonical artifact
-        from .fetch.cdc_births_county import _COMBINED_ARTIFACT
-        if _COMBINED_ARTIFACT.exists():
-            combined = pd.read_csv(_COMBINED_ARTIFACT, dtype={"county_fips": str})
+        combined_path = cdc_births_county.combined_artifact_path()
+        if combined_path.exists():
+            combined = pd.read_csv(combined_path, dtype={"county_fips": str})
             births_df = combined.rename(columns={
                 "births": "births",
             })[["county_fips", "year", "births"]]

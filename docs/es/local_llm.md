@@ -333,7 +333,7 @@ puremacro.llm
   budget  : 28.08 GB for a model
   engines : mlx, llamacpp (servers not probed)
   model   : qwen3-4b (about 3.5 GB)
-  cache   : /Users/you/.cache/puremacro/llm_cache.sqlite (1,204 rows, 2,457,600 bytes)
+  cache   : ~/.cache/puremacro/llm_cache.sqlite (1,204 rows, 2,457,600 bytes)
   mode    : auto (the cache, then a local model, whose answer is stored)
 ```
 

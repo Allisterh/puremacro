@@ -146,7 +146,7 @@ print(f"peak tightness: {peak_theta['theta']:.2f} vacancies per unemployed "
 assert us["theta"].max() > 1.5, "the 2022 tightness peak should exceed 1.5"
 
 # %% [markdown]
-# **Reading the loop.** The 2008-2019 era traces one full counter-clockwise
+# **Read the output.** The 2008-2019 era traces one full counter-clockwise
 # circuit: the crash slides down-right along a stable curve, the recovery
 # climbs back on a visibly *outer* path (the 2010-13 shift that launched a
 # mismatch literature), then re-tightens. COVID is the vertical spike —
@@ -212,73 +212,6 @@ print("countries plotted:", top6)
 # and institutions. The 2020+ points sit above and left of each country's
 # own pre-2020 cloud in most panels: the post-COVID tightening was a
 # continent-wide phenomenon, not a US peculiarity.
-
-# %% [markdown]
-# ## State dependence: does uncertainty bite harder in tight or slack labor markets?
-#
-# If vacancy-filling is slow when the market is tight, firms might postpone
-# hiring more cautiously under uncertainty — or the reverse: maybe slack
-# markets, where demand is weak, are where an EPU shock tips firms into
-# freezing payrolls.
-#
-# We test this with **state-dependent local projections** (`puremacro.lp.state_dep`),
-# interacting the EPU shock with labor-market tightness $\theta_t$:
-#
-# $$ y_{t+h} - y_{t-1} = F(\theta_{t-1}) \cdot \left[ \alpha_h^H + \beta_h^H \, \text{EPU}_t \right] + (1 - F(\theta_{t-1})) \cdot \left[ \alpha_h^L + \beta_h^L \, \text{EPU}_t \right] + \Gamma_h' W_t + \varepsilon_{t+h} $$
-#
-# where $F(\theta)$ is a logistic transition function that smooths between
-# tight ($H$) and slack ($L$) regimes.
-
-# %%
-from puremacro.lp import lp_state_dep
-
-spec = load_csv("speccurve17_panel")
-spec["date"] = pd.to_datetime(spec["date"])
-m = spec.merge(us[["date", "urate", "theta"]], on="date", how="inner").dropna().sort_values("date")
-m["log_theta"] = np.log(m["theta"])
-print(f"merged monthly sample: {len(m)} months "
-      f"{m['date'].min().date()}..{m['date'].max().date()}")
-
-fig, axes = _nbstyle.figura(1, 2, figsize=(9.8, 4.0))
-for ax, yvar, lab in ((axes[0], "ip", "industrial production, %"),
-                      (axes[1], "urate", "unemployment rate, pp")):
-    r = lp_state_dep(m, y=yvar, x="epu", state="log_theta",
-                     horizons=range(0, 25), n_lags=6)
-    ax.axhline(0, color=_nbstyle.SPINE, lw=0.8)
-    ax.fill_between(r["h"], r["lo_H"], r["hi_H"], color=_nbstyle.S2["color"],
-                    alpha=0.20)
-    ax.plot(r["h"], r["beta_H"], **_nbstyle.S2,
-            label="tight (high θ)")
-    ax.fill_between(r["h"], r["lo_L"], r["hi_L"], color=_nbstyle.S1["color"],
-                    alpha=0.20)
-    ax.plot(r["h"], r["beta_L"], **_nbstyle.S1,
-            label="slack (low θ)")
-    ax.set_xlabel("months after EPU shock", fontsize=9, color=_nbstyle.TEXTO)
-    ax.set_title(lab, fontsize=10)
-axes[0].set_ylabel("response per +1σ EPU", fontsize=9, color=_nbstyle.TEXTO)
-axes[0].legend(fontsize=8, frameon=True, facecolor=_nbstyle.FONDO, edgecolor=_nbstyle.SPINE)
-fig.suptitle("State-dependent LP: uncertainty shocks by labor-market tightness (90% bands)", fontsize=11)
-
-r_ip = lp_state_dep(m, y="ip", x="epu", state="log_theta",
-                    horizons=[12], n_lags=6)
-print(f"IP at h=12: slack {r_ip['beta_L'].iloc[0]:+.2f} "
-      f"[{r_ip['lo_L'].iloc[0]:+.2f},{r_ip['hi_L'].iloc[0]:+.2f}] vs "
-      f"tight {r_ip['beta_H'].iloc[0]:+.2f} "
-      f"[{r_ip['lo_H'].iloc[0]:+.2f},{r_ip['hi_H'].iloc[0]:+.2f}]")
-
-# %% [markdown]
-# **Read the output.** On this sample the answer is a null — and worth
-# teaching as one. No horizon in either regime is significant at 90%,
-# and the point estimates lean the *opposite* way from the
-# "uncertainty bites harder in slack markets" prior: tight-regime IP
-# responses are mildly negative, slack-regime ones hover around zero.
-# With one aggregate series, 25 years, an unidentified proxy shock and
-# logistic weights that make the two regimes share most observations,
-# that is the expected resolution — the state-dependence findings in
-# the literature lean on longer samples, identified shocks, or panel
-# variation (which is exactly where the Main Street district panel and
-# `puremacro.lp.panel` pick up). Notebook 07's inference caveats are
-# not decoration; this figure is what they look like in the wild.
 
 # %% [markdown]
 # ## Your turn — pick a country, split an era

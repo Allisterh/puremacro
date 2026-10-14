@@ -2,20 +2,15 @@
 
 Fixtures are analytic: the Ramsey model of ``tests/test_dynare_perfect_foresight.py``
 and a 20-sector Cobb-Douglas growth transition (the assessment prototype; no such
-fixture existed under ``tests/`` before this file). Parity tests against the IO
-research engine on ``/Volumes/BIGDATA/Research/IO`` skip when the volume is absent.
-Tolerances are stated at every assertion.
+fixture existed under ``tests/`` before this file). Tolerances are stated at every
+assertion.
 """
 from __future__ import annotations
 
 import copy
-import importlib
 import inspect
 import json
-import os
-import pathlib
 import pickle
-import sys
 
 import numpy as np
 import pandas as pd
@@ -37,31 +32,6 @@ from puremacro.dsge.stacked_newton import (
     preconditioned_lgmres,
     solve_stacked_newton_krylov,
 )
-
-# The IO research workspace; parity tests skip when it is absent. Override with PUREMACRO_IO_ROOT.
-IO_ROOT = pathlib.Path(os.environ.get("PUREMACRO_IO_ROOT", "/Volumes/BIGDATA/Research/IO"))
-
-
-def _io_module(subpath, name):
-    """Import an IO module from the research volume without writing bytecode there.
-
-    The IO ``dynamic_model`` package sets BLAS thread variables with
-    ``os.environ.setdefault`` on import; variables it adds are removed again so the
-    pytest process environment is unchanged.
-    """
-    if not (IO_ROOT / subpath).exists():
-        pytest.skip("IO research volume not mounted")
-    sys.path.insert(0, str(IO_ROOT / subpath))
-    old = sys.dont_write_bytecode
-    sys.dont_write_bytecode = True
-    env_before = set(os.environ)
-    try:
-        return importlib.import_module(name)
-    finally:
-        for key in set(os.environ) - env_before:
-            os.environ.pop(key, None)
-        sys.dont_write_bytecode = old
-        sys.path.pop(0)
 
 
 # ---------------------------------------------------------------------------
@@ -218,7 +188,7 @@ def test_block_inverse_matches_dense_solve(method, per_date):
 @pytest.mark.parametrize("H", [1, 3, 7])
 @pytest.mark.parametrize("per_date", [False, True])
 def test_time_block_jacobi_matches_masked_dense_solve(method, H, per_date):
-    """labels = repeat(arange(T)//H, n): links across blocks are dropped (IO block Jacobi)."""
+    """labels = repeat(arange(T)//H, n): links across blocks are dropped (block Jacobi in time)."""
     T, n = 7, 5
     A, B, C = _random_blocks(T, n, seed=3, per_date=per_date)
     masked = _dense_stacked(A, B, C, T, mask_block=H)
@@ -514,7 +484,7 @@ def test_complex_jvp_requires_complex_safe_equations():
 @pytest.mark.parametrize("side", ["right", "left"])
 def test_exact_inverse_identity_one_outer_iteration(ramsey, method, side):
     """A preconditioner built from the CURRENT date blocks makes the Krylov solve converge
-    to rtol 1e-12 in a single inner cycle (IO test_finite_block_inverts_original_jacobian analogue)."""
+    to rtol 1e-12 in a single inner cycle."""
     eq, y_ss = ramsey["equations_fn"], ramsey["y_ss"]
     y_init = np.array([ramsey["c_ss"], 0.5 * ramsey["k_ss"]])
     T = 40
@@ -541,7 +511,7 @@ def test_exact_inverse_identity_one_outer_iteration(ramsey, method, side):
 
 @pytest.mark.parametrize("side", ["left", "right"])
 def test_true_residual_of_returned_direction_when_cap_exhausted(side):
-    """Port of IO test_final_linear_log_uses_returned_original_direction_when_cap_exhausted."""
+    """At an exhausted cap the recorded residual is that of the returned direction, not the last callback's."""
     matrix = np.array([[4., .5, 0., .2], [-.3, 2., .4, 0.], [.2, 0., 1., .3], [0., .1, -.4, 3.]])
     weights = np.array([.2, .4, 1.3, .6])
     operator = spla.LinearOperator(matrix.shape, matvec=lambda x: matrix @ x, dtype=float)
@@ -893,11 +863,11 @@ def test_converged_start_takes_zero_steps(ramsey):
     assert res.linear_history[0]["convergence_check"] is True and res.linear_history[0]["step"] == 0.0
     assert res.metadata["converged_by"] == "residual_and_step"
     np.testing.assert_allclose(res.to_numpy(), np.tile(y_ss, (10, 1)), rtol=0.0, atol=1e-12)
-    # step_tol=None (or inf) is the IO residual-only rule: accepted without any linear solve
+    # step_tol=None (or inf) is the residual-only rule: accepted without any linear solve
     for residual_only in (None, float("inf")):
-        io_rule = solve_stacked_newton_krylov(prob, np.tile(y_ss, (10, 1)), tol=1e-8, step_tol=residual_only)
-        assert io_rule.converged and io_rule.iterations == 0 and io_rule.linear_history == ()
-        assert io_rule.metadata["converged_by"] == "residual" and io_rule.metadata["step_tol"] is None
+        residual_rule = solve_stacked_newton_krylov(prob, np.tile(y_ss, (10, 1)), tol=1e-8, step_tol=residual_only)
+        assert residual_rule.converged and residual_rule.iterations == 0 and residual_rule.linear_history == ()
+        assert residual_rule.metadata["converged_by"] == "residual" and residual_rule.metadata["step_tol"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -925,7 +895,7 @@ def test_failure_contract_when_krylov_cap_is_exhausted(growth20):
 
 def test_krylov_cap_is_recorded_not_fatal(ramsey):
     """An exhausted Krylov cap is recorded (krylov_status > 0, true residual above the requested
-    tolerance) and the inexact direction is line-searched, as in the IO engine; acceptance rests
+    tolerance) and the inexact direction is line-searched like any other; acceptance rests
     on the recomputed residual, and the path matches solve_perfect_foresight to 1e-8 (observed 6e-11)."""
     eq, y_ss = ramsey["equations_fn"], ramsey["y_ss"]
     y_init = np.array([ramsey["c_ss"], 0.5 * ramsey["k_ss"]])
@@ -1033,7 +1003,7 @@ def test_step_test_failure_on_a_noisy_residual_floor(options):
 
 
 def test_line_search_failure_raises_with_state():
-    """Every trial point raises inside equations_fn (the IO line search treats it as rejected)."""
+    """Every trial point raises inside equations_fn (the line search treats it as rejected)."""
     def eq(yp, yc, yl, eps):
         if abs(yc[0] - 0.3) > 1e-12:
             raise ValueError("outside the installation domain")
@@ -1050,7 +1020,7 @@ def test_line_search_failure_raises_with_state():
     assert res.linear_history[-1]["backtracks"] == 5
     assert res.metadata["converged_by"] == "line_search_failure"
     np.testing.assert_array_equal(res.to_numpy(), np.full((3, 1), 0.3))
-    # default: 24 trial evaluations (23 halvings), the IO native_solver._newton range(24) rule
+    # default: 24 trial evaluations (23 halvings)
     trials = []
 
     def counting(yp, yc, yl, eps):
@@ -1318,139 +1288,8 @@ def test_preconditioner_ranking_regression(growth20, growth20_reference):
 
 
 # ---------------------------------------------------------------------------
-# Parity with the IO research engine (skipped when the volume is absent)
+# A residual with a noise floor (used by test_step_test_failure_on_a_noisy_residual_floor)
 # ---------------------------------------------------------------------------
-def _analytic_native_data(native_data):
-    """Copy of dynamic_model/tests/test_native_dynamics.py::analytic_native_data (no IO test import)."""
-    from scipy.sparse import csr_matrix
-
-    z = np.array([[7, 3, 1, 2], [2, 9, 2, 1], [1, 2, 8, 3], [2, 1, 3, 7]], dtype=float)
-    consumption = np.array([[22, 3], [20, 4], [3, 22], [4, 20]], dtype=float)
-    investment = np.array([[12, 2], [10, 3], [3, 11], [2, 10]], dtype=float)
-    tourism = np.array([[0, .5], [0, .3], [.4, 0], [.2, 0]])
-    inventory = np.array([[.4, 0], [.2, 0], [0, .3], [0, .2]])
-    valuables = np.array([[.1, 0], [0, .1], [0, .1], [.1, 0]])
-    output = z.sum(axis=1) + (consumption + investment + tourism + inventory + valuables).sum(axis=1)
-    product_tax = np.array([.3, .5, .4, .2])
-    production_tax = np.array([.4, .3, .2, .5])
-    va = output - z.sum(axis=0) - product_tax
-    factor_va = va - production_tax
-    alpha = np.array([.35, .48, .30, .52])
-    return native_data.NativeData(
-        dataset="analytic_test_fixture", countries=("AAA", "BBB"), sectors=("S1", "S2"),
-        Z=csr_matrix(z), final_consumption=consumption, final_investment=investment,
-        purchases_abroad=tourism, inventory_changes=inventory, valuables=valuables,
-        VA=va, TLS=product_tax, production_taxes=production_tax,
-        labor_compensation=(1 - alpha) * factor_va, operating_surplus=alpha * factor_va,
-        output=output, TFD=np.array([[1.3, .8, .1, .02, .03], [1.1, .7, .08, .01, .02]]),
-        merchandise_mask=np.array([True, False]),
-        metadata={"source_kind": "analytic software fixture; not an empirical database"})
-
-
-def _io_model(phi=2.0):
-    native_data = _io_module(".", "dynamic_model.native_data")
-    native_economy = _io_module(".", "dynamic_model.native_economy")
-    calibration = native_economy.calibrate_native(_analytic_native_data(native_data))
-    return native_economy, native_economy.NativeEconomy(calibration, adjustment_cost=phi)
-
-
-def _io_problem(model, policies, *, jvp=True):
-    """StackedProblem over NativeEconomy.equations(..., policy_t, policy_next).
-
-    Each exogenous row packs (id of policy_t, id of policy_{t+1}), the last row
-    repeating the terminal policy (the IO PathProblem convention). An id is the
-    first 48 bits of the policy fingerprint (exact in float64), so the same policy
-    gets the same id in every problem: two horizons of one announced schedule have
-    equal rows on the shared dates and the held terminal row afterwards, which is
-    what compare_horizons' held-exogenous rule checks.
-    """
-    T = len(policies)
-    table = {int(policy.fingerprint[:12], 16): policy for policy in policies}
-    ids = [int(policy.fingerprint[:12], 16) for policy in policies]
-    exo = np.array([[ids[t], ids[min(t + 1, T - 1)]] for t in range(T)], dtype=float)
-
-    def eq(yp, yc, yl, eps):
-        return model.equations(yp, yc, yl, table[int(eps[0])], table[int(eps[1])])
-
-    def jvp_fn(yp, yc, yl, eps, vp, vc, vl):
-        return model.equations_jvp(yp, yc, yl, vp, vc, vl, table[int(eps[0])], table[int(eps[1])])
-
-    return StackedProblem(eq, model.baseline, model.baseline, exo, jvp_fn=jvp_fn if jvp else None)
-
-
-@pytest.mark.parametrize("phi", [0.0, 2.0])
-@pytest.mark.parametrize("horizon", [1, 2, 5, 10, 13])
-def test_io_parity_stacked_problem_and_exact_block_inverse(phi, horizon):
-    """StackedProblem reproduces PathProblem (residual and analytic JVP identical) and the
-    steady block-tridiagonal inverse reproduces FiniteBlockCapitalPreconditioner(block_size=T)
-    to 5e-11 (IO tolerance; observed <= 2e-13); T=13 also checks block_size=5 block Jacobi."""
-    native_numerics = _io_module(".", "dynamic_model.native_numerics")
-    native_block = _io_module(".", "dynamic_model.native_block_preconditioner")
-    _, model = _io_model(phi)
-    policy = model.zero_policy()
-    prob = _io_problem(model, [policy] * horizon)
-    path_problem = native_numerics.PathProblem(model, [policy] * horizon, model.baseline, model.baseline)
-    rng = np.random.default_rng(horizon + 29)
-    Y = 0.002 * rng.normal(size=horizon * model.n_vars)
-    v = rng.normal(size=horizon * model.n_vars)
-    np.testing.assert_allclose(prob.residual(Y), path_problem.evaluate(Y), rtol=0.0, atol=1e-13)
-    np.testing.assert_allclose(prob.jvp(Y)(v), path_problem.linearize(Y)(v), rtol=0.0, atol=1e-12)
-    central = _io_problem(model, [policy] * horizon, jvp=False)
-    np.testing.assert_allclose(central.jvp(Y)(v), path_problem.linearize(Y)(v), rtol=0.0, atol=1e-6)
-    A, B, C = prob.steady_blocks()
-    rhs = path_problem.linearize(np.zeros(horizon * model.n_vars))(v)
-    ours = BlockTridiagonalPreconditioner(A, B, C, horizon)
-    theirs = native_block.FiniteBlockCapitalPreconditioner(model, block_size=horizon).operator(horizon)
-    np.testing.assert_allclose(ours.apply(rhs), theirs @ rhs, rtol=5e-11, atol=5e-11)
-    np.testing.assert_allclose(ours.apply(rhs), v, rtol=5e-11, atol=5e-11)
-    if horizon == 13:
-        ours5 = BlockTridiagonalPreconditioner(A, B, C, horizon, time_block=5)
-        theirs5 = native_block.FiniteBlockCapitalPreconditioner(model, block_size=5).operator(horizon)
-        np.testing.assert_allclose(ours5.apply(rhs), theirs5 @ rhs, rtol=5e-11, atol=5e-11)
-
-
-def test_io_parity_newton_harness_and_transition():
-    """With side='left' and jacobian_scale=1 the harness reproduces IO native_solver._newton to
-    1e-13 (observed 0.0 on the development machine) on a 40-date announced-tariff transition (same
-    residual, JVP and preconditioner; |z|_inf = 0.0065 there, so the path-scaled step bound equals
-    the IO absolute bound), and the path agrees with IO solve_transition (capital preconditioner)
-    to 1e-9 (observed 3e-14)."""
-    native_solver = _io_module(".", "dynamic_model.native_solver")
-    native_economy, model = _io_model(2.0)
-    calibration = model.p
-    rates = np.zeros((calibration.n_cells, calibration.n_countries))
-    rates[calibration.country == 0, 1] = .06
-    rates[calibration.country == 1, 0] = .08
-    tariff = native_economy.NativePolicy(rates, "analytic tariff", consumption_rates=rates * .7,
-                                         investment_rates=rates * 1.3)
-    zero = model.zero_policy()
-    T = 40
-    policies = [tariff if 2 <= t < 7 else zero for t in range(T)]
-    prob = _io_problem(model, policies)
-    reference = native_solver.solve_transition(model, policies, initial=model.baseline,
-                                               terminal=model.baseline, tol=1e-10)
-    ours = solve_stacked_newton_krylov(prob, np.zeros((T, model.n_vars)), tol=1e-10, jacobian_scale=1.0, side="left")
-    assert ours.converged
-    np.testing.assert_allclose(ours.to_numpy(), reference.z, rtol=0.0, atol=1e-9)
-    A, B, C = prob.steady_blocks()
-    operator = BlockTridiagonalPreconditioner(A, B, C, T).as_linear_operator()
-    z, error, iterations, history = native_solver._newton(
-        prob.residual, np.zeros(T * model.n_vars), tol=1e-10, max_iter=40,
-        jvp_factory=lambda x, f: prob.jvp(x), preconditioner_factory=lambda x: operator)
-    np.testing.assert_allclose(ours.to_numpy().ravel(), z, rtol=0.0, atol=1e-13)
-    assert ours.iterations == iterations
-    io_outer = [h["krylov_outer_iterations"] for h in history if "krylov_outer_iterations" in h]
-    assert list(ours.krylov_outer_iterations()[:len(io_outer)]) == io_outer
-    assert error <= 1e-10 and ours.residual_norm <= 1e-10
-    # step_tol=None is the IO residual-only acceptance: no final convergence-check solve,
-    # so the whole Krylov history matches, not only its shared prefix
-    io_rule = solve_stacked_newton_krylov(prob, np.zeros((T, model.n_vars)), tol=1e-10, jacobian_scale=1.0,
-                                          side="left", step_tol=None)
-    np.testing.assert_allclose(io_rule.to_numpy().ravel(), z, rtol=0.0, atol=1e-13)
-    assert list(io_rule.krylov_outer_iterations()) == io_outer and io_rule.iterations == iterations
-    assert io_rule.metadata["converged_by"] == "residual"
-
-
 def _noisy_floor_problem(T):
     """Linear transition 1e-3 (y_t - .5 y_{t-1} - .4 y_{t+1} - .1) plus deterministic 1e-12 noise.
 
@@ -1468,64 +1307,3 @@ def _noisy_floor_problem(T):
         return 1e-3 * (vc - 0.5 * vl - 0.4 * vp)
 
     return StackedProblem(eq, np.array([0.5]), np.array([1.0]), n_periods=T, jvp_fn=jvp)
-
-
-def test_io_parity_residual_only_acceptance_on_a_noise_floor():
-    """On a residual with a 1e-12 noise floor (300 unknowns, above the IO MINPACK threshold),
-    IO native_solver._newton accepts; step_tol=None with jacobian_scale=1 and side='left'
-    reproduces its path to 1e-13 (observed 0.0) with the same Krylov counts, while the default
-    step test raises step_test_failure at a residual that already meets the tolerance."""
-    native_solver = _io_module(".", "dynamic_model.native_solver")
-    T = 300
-    prob = _noisy_floor_problem(T)
-    A, B, C = prob.steady_blocks()
-    operator = BlockTridiagonalPreconditioner(A, B, C, T).as_linear_operator()
-    z, error, iterations, history = native_solver._newton(
-        prob.residual, prob.linear_initial_path().ravel(), tol=1e-8, max_iter=30,
-        jvp_factory=lambda x, f: prob.jvp(x), preconditioner_factory=lambda x: operator)
-    ours = solve_stacked_newton_krylov(prob, tol=1e-8, max_iter=30, jacobian_scale=1.0, side="left", step_tol=None)
-    np.testing.assert_allclose(ours.to_numpy().ravel(), z, rtol=0.0, atol=1e-13)
-    assert ours.iterations == iterations and error <= 1e-8
-    assert list(ours.krylov_outer_iterations()) == [h["krylov_outer_iterations"] for h in history]
-    with pytest.raises(StackedNewtonError, match="noise floor") as excinfo:
-        solve_stacked_newton_krylov(prob, tol=1e-8, max_iter=30, jacobian_scale=1.0, side="left")
-    assert excinfo.value.result.metadata["converged_by"] == "step_test_failure"
-    assert excinfo.value.result.residual_norm <= 1e-8
-
-
-def test_io_parity_compare_horizons():
-    """Announced 6%/8% bilateral tariff on dates 2..6: compare_horizons on the port's own
-    StackedNewtonResult objects (boundary and held-exogenous rules active) returns the IO
-    native_solver.compare_horizons statistic on IO solve_transition solutions to 1e-12
-    (observed about 2e-15) with the same verdict, for 20 versus 40 and 40 versus 80 dates."""
-    native_solver = _io_module(".", "dynamic_model.native_solver")
-    native_economy, model = _io_model(2.0)
-    calibration = model.p
-    rates = np.zeros((calibration.n_cells, calibration.n_countries))
-    rates[calibration.country == 0, 1] = .06
-    rates[calibration.country == 1, 0] = .08
-    tariff = native_economy.NativePolicy(rates, "analytic tariff", consumption_rates=rates * .7,
-                                         investment_rates=rates * 1.3)
-    zero = model.zero_policy()
-    ours, theirs = {}, {}
-    for T in (20, 40, 80):
-        policies = [tariff if 2 <= t < 7 else zero for t in range(T)]
-        ours[T] = solve_stacked_newton_krylov(_io_problem(model, policies), np.zeros((T, model.n_vars)), tol=1e-10)
-        theirs[T] = native_solver.solve_transition(model, policies, initial=model.baseline,
-                                                   terminal=model.baseline, tol=1e-10)
-    statistics = []
-    for short, long in ((20, 40), (40, 80)):
-        port = compare_horizons(ours[short], ours[long], periods=20, tolerance=1e-5)
-        io = native_solver.compare_horizons(theirs[short], theirs[long], periods=20, tolerance=1e-5)
-        assert port.max_abs_difference == pytest.approx(io["max_log_difference"], rel=0.0, abs=1e-12)
-        assert port.passed == io["passed"]
-        assert (port.short_horizon, port.long_horizon) == (io["short_horizon"], io["long_horizon"])
-        statistics.append(port.max_abs_difference)
-    # the comparison is nontrivial: the statistic falls from about 1e-3 to about 4e-5 and both fail 1e-5
-    assert 1e-4 < statistics[0] < 1e-2 and 1e-5 < statistics[1] < 1e-4
-    # the held-exogenous rule is active on these results: a schedule that differs beyond the
-    # short horizon is rejected
-    changed = [tariff if 2 <= t < 7 or t == 30 else zero for t in range(40)]
-    other = solve_stacked_newton_krylov(_io_problem(model, changed), np.zeros((40, model.n_vars)), tol=1e-10)
-    with pytest.raises(ValueError, match="exogenous path"):
-        compare_horizons(ours[20], other, periods=20)

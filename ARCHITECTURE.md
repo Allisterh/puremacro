@@ -10,7 +10,7 @@ The package was significantly extended in **Phase 5** (April–early-May 2026, c
 
 ## Module map
 
-### Empirical-to-structural and distributional research
+### Empirical-to-structural estimation and replication
 
 - `structural/bridge.py`: `MomentTargets` owns labeled full estimator covariance,
   unit transformations and metadata; `fit_structural` solves bounded minimum
@@ -22,68 +22,21 @@ The package was significantly extended in **Phase 5** (April–early-May 2026, c
   and joint Bartlett HAC covariance. Depends on `inference/_ols_helpers`,
   `_linalg`, and the target container. No automatic unit guessing or missing-time
   compression. A dense independent kernel checks the covariance construction.
-- `structural/empirical_sw07.py`: authenticated revised-FRED observations,
-  joint HAC covariance of empirical covariance moments, and stationary model
-  covariances from the existing SW07 state-space system and a Lyapunov solve.
-  The conditional two-parameter study exports multistart/profile/calibration
-  diagnostics and withholds ordinary parameter inference by default. The
-  model calibration and observed vintage are not a posterior replication.
-- `structural/sw07_sampling.py`: stationary Gaussian simulation and exact
-  finite-sample first/second moments of the covariance estimator, including
-  full-sample mean estimation and the common lag window. Independent dense
-  quadratic-form tests verify the Gaussian fourth-moment calculation. No
-  measurement ridge, arbitrary burn-in or normal-estimator assumption.
-- `structural/sw07_finite_sample.py`: conditional Monte Carlo diagnosis using
-  the original moment/HAC/multistart fitting stages; all failures, boundaries,
-  seeds and complete moment covariance matrices remain inspectable. Fixed and
-  plug-in calibration scenarios are distinguished. Tail fractions and binomial
-  simulation intervals are diagnostics, not composite-null or boundary inference.
-  `examples/sw07_finite_sample.py` exports replayable dossiers and figures.
-- `structural/sw07_expectations.py`: exact expectation-only calculations using
-  autocovariance prefix sums, independently checked against the dense oracle.
-  `structural/sw07_estimator_experiment.py` pairs population/finite expectations
-  with per-draw HAC/fixed true-DGP covariance controls and independent calibration
-  and validation samples. Oracle weights do not provide feasible inference.
-  `examples/sw07_estimator_experiment.py` authenticates exported phase references.
-- `examples/distributional_trade_ge.py`: observed ENIGH baskets attached to an
-  explicitly synthetic GE tariff scenario, with reconciled factor-income and
-  tariff-revenue mappings. Alternative household compensation rules remain
-  conditional incidence calculations without household feedback into GE.
 - `replication/romer_romer_2010.py`: original-vintage quarterly inputs and the
   authors' baseline distributed-lag OLS specification, with full covariance
   cumulation. Frozen independent-software evidence and literal published
   rounded targets are compared separately. Source conversion/reference
   software is confined to development tools; runtime is offline.
-- `trade/distributional.py`: labeled group means and expansion weights, explicit
-  income/transfer assumptions, exact household-engine EV/CV, and audited GE
-  purchaser-price bridging. Depends on `trade/household`, result types and reports.
-  Conditional household incidence only; it does not alter GE household demand.
-- `datasets/enigh.py`: offline observed ENIGH 2024 decile baskets and cash wages;
-  checked CSV and JSON provenance ship in the wheel. Workbook conversion stays in
-  `tools/build_enigh_distributional_data.py`, where openpyxl is build-only.
 - `validation/research.py`: independent evidence records and offline reports,
   supplementing existing validation/replication galleries. Model/estimator imports
   occur inside cases. Analytical, numerical-oracle, external-software and official
   data evidence are distinguished from published empirical model replication.
 
-The two `examples/{structural_irf_matching,distributional_trade_enigh}.py`
-applications export complete input/assumption/result manifests and figures.
-They are respectively synthetic parameter recovery and observed-data incidence
-under explicit illustrative policy assumptions. See `docs/research_workflows.md`.
-`examples/empirical_sw07_matching.py` and
-`examples/romer_romer_2010_replication.py` add the observed-moment structural
-study and the original-data published replication, respectively. Their source
-vintages, inference limits and distinct evidence claims are documented in
-`docs/empirical_research.md`.
-
-The application `examples/cross_country_forecasting.py`, included in 4.8.1,
-uses frozen WDI GDP levels for USA/MEX/BRA, validates the complete annual
-grid, and evaluates fixed zero-growth, historical-mean and AR(1) forecasts on
-2000–2024. It depends on the public `var.fit_var`, `reports` and `pocket` APIs.
-Inputs and outputs run offline from the wheel; source replay and independent
-data checks live in `tools/build_cross_country_forecasting_data.py`. Its evidence
-is descriptive latest-vintage forecast accuracy, not historical real-time
-performance or causal identification. See `docs/cross_country_forecasting.md`.
+`examples/structural_irf_matching.py` exports complete input/assumption/result
+manifests and figures for a synthetic parameter-recovery exercise; see
+`docs/research_workflows.md`. `examples/romer_romer_2010_replication.py` is the
+original-data published replication; its source vintage, inference limits and
+evidence claim are documented in `docs/empirical_research.md`.
 
 Portable frames written by `runtime.store` use schema v2, which retains a
 tagged allowlist of metadata types in `DataFrame.attrs` without pickle. V1
@@ -221,32 +174,6 @@ puremacro/
 │   ├── _hjb.py            ← continuous-time models via vfi.solve_hjb_achdou
 │   ├── _ks.py             ← Krusell-Smith forecast-rule loop (VFI or EGM households)
 │   └── _results.py        ← DPSolution (policy(expr), mean(expr), summary)
-├── trade/                 ← Quantitative international trade general equilibrium
-│   ├── caliendo_parro.py  ← Caliendo-Parro (2015) exact hat algebra
-│   ├── equilibrium.py / solver.py / optimal_tariffs.py / calibration.py
-│   ├── policy_analytics.py / scenarios.py / tables.py / plot.py
-│   ├── data.py / _oecd_icio.py / regularize.py
-│   │                      ← harmonized loaders, strict native OECD 2023 reader,
-│   │                        MRIO regularization, RAS/GRAS and Collatz-Wielandt bounds
-│   ├── _accounting.py / welfare.py / policy_solver.py / _hicksian_policy.py
-│   │                      ← opt-in consistent accounting, Hicksian EV/CV, audited
-│   │                        policy recovery and fixed-baseline tariff searches (4.3.0)
-│   ├── flexible.py        ← nested CES / Stone-Geary / markups / capacity; active
-│   │                        settings solve on the quasi-condensed route
-│   ├── mrio.py            ← native MRIO tables with provenance, regularization,
-│   │                        concordances, coarse tariff rules, calibration bridges
-│   ├── condensed/         ← one-factor Leontief tariff model, exact 2N elimination,
-│   │                        ten-block raw-flow certificate, numeraire-free measures
-│   ├── ces_newton.py      ← exact nested-CES block Newton on consistent accounting
-│   ├── household.py       ← household demand systems, Slutsky matrices, exact EV/CV
-│   ├── continuation.py    ← audited parameter continuation and exact-target multistart
-│   ├── stability.py       ← reduced local-stability diagnostic (experimental)
-│   ├── dynamic/           ← perfect-foresight dynamic MRIO with sector capital
-│   │                        (experimental)
-│   └── gpu/               ← optional torch / MLX accelerators (3.4.0):
-│                            backend.py / batched_jacobian.py / homotopy.py /
-│                            mlx_solver.py / solver_gpu.py. Outside the
-│                            four-package contract; falls back to NumPy.
 ├── spatial/               ← Quantitative spatial economics & spatial econometrics
 │   ├── allen_arkolakis.py ← Allen-Arkolakis (2014) spatial gravity GE
 │   └── weights.py / models.py / hac.py / panel.py / lp.py / diagnostics.py
@@ -390,13 +317,6 @@ These are the load-bearing imports. If you change one of these arrows, double-ch
 | `narrative/replication/__init__.py` re-exports both `load_*` and `*_csv_to_events` | Examples import the public CSV-to-events helpers from `puremacro.narrative`; do not reach into `replication.<dataset>` directly. |
 | `fetch/*` ← `build_panel`, `build_subnational_panel` | All quarterly/monthly panel construction goes through the fetcher layer; no direct HTTP at the build_panel level. |
 | `_codes.drop_aggregates` ← `build_panel`, downstream notebooks | Single source of truth for the EA20/EU27/OECD/WLD aggregate filter. |
-| `trade/gpu/*` → `trade/solver._resolve_tariffs`, `trade/postprocessing`, `trade/_results` | The accelerated solvers reuse the NumPy solver's tariff resolution, post-processing and result objects, so a GPU solve returns the same `TradeEquilibriumResult`. The arrow never reverses: nothing in `trade/` outside `trade/gpu/` touches torch or mlx, and `trade/gpu/` itself imports them only on first use. |
-| `trade/household` → `trade/welfare._checked_state`, `trade/solver._resolve_tariffs`, `trade/equilibrium.unpack_equilibrium_vector` | Consistent results are re-audited exactly as `compute_hicksian_welfare` does, tariff schedules are resolved with the solver's conventions, and legacy results are valued at the state prices in `x_sol` (the prices from which the legacy evaluator built `p_fd`). All three imports are lazy, inside the bridges; renaming any of these helpers breaks the bridges (covered by `tests/test_trade_household.py`). |
-| `trade/continuation` → `trade/policy_solver`, `trade/welfare._checked_state`, `trade/solver._resolve_tariffs`, `trade/solver.build_initial_guess` | The stage audit reuses the policy solver's own audit (`_checked_state` at field tolerance `1e-8`), tariff resolution and state layout, so an accepted stage is exactly what `solve_policy_equilibrium` would accept. A change to `_checked_state`, to the `policy_solver_attempts`/`policy_solver_fallback_used` metadata or to the warm-start seeding of `solve_policy_equilibrium` changes the continuation's acceptance rule; rerun `tests/test_trade_continuation.py`. |
-| `trade/ces_newton` → `trade/_accounting._parameters`/`postprocess`, `trade/solver._resolve_tariffs`/`build_initial_guess`, `trade/_results` | The block Newton evaluates exactly the consistent-accounting equations and wraps its state in the same `TradeEquilibriumResult`, so `compute_hicksian_welfare` accepts it at flat technology. A change to the `_accounting` parameter layout or to the solver's tariff resolution changes its residual; rerun `tests/test_trade_ces_newton.py`. |
-| `trade/stability` → `trade/_accounting.evaluate`, `trade/equilibrium.evaluate_equilibrium_residuals`, `trade/solver._resolve_tariffs` | The reduced Jacobian is built from the model's own residual evaluators (imported lazily inside functions); a change to either evaluator changes the classification. |
-| `trade/condensed/calibration` → `trade/regularize.compute_spectral_radius`; `trade/mrio`, `trade/condensed/table` → `trade/dynamic/accounts._calibration_cx_category` | The condensed existence gate reuses the regularizer's Collatz-Wielandt bounds. The three `from_trade_calibration` bridges share one lazily imported rule for the meaning of the calibration's Cx column (X only for the bundled layout and the OECD `DPABR` mapping). |
-| `trade/data.load_raw_45sector_icio` → `trade/mrio.{OECD_KNOWN_CORRUPTED_MD5, OECD_ICIO_MD5, MRIOIntegrityError}` | The legacy 45-sector loader refuses the corrupted OECD export with the same registry as the native readers (lazy import with a local fallback copy). |
 | `fetch/realtime/{banxico,inegi,bcb,bcch}` → `credentials`, `_cache_db`, `realtime/{_base,_snapshot,canary,catalog}` | One direction only: a connector resolves credentials, validates the payload with the canary, normalises through `_base`, and stores or reads snapshots through `_snapshot` on the shared SQLite connection. `_register_all()` imports each connector and calls its `_register()` to add its catalogue entries; a provider that fails to register warns instead of breaking the registry. |
 | `reports.{df_to_markdown, df_to_latex, df_to_typst, latex_escape, typst_escape}` ← every result object's exporters | The single escaping/formatting layer for LaTeX and Typst output — never hand-roll a table. `puremacro.reports` imports only numpy, pandas and scipy, so result modules may import it at top level (`trade/_results`, `vfi/problem`, `vfi/hjb_achdou`, `var/bvar_sv`) or inside the exporter (`causal/dml`). |
 
@@ -412,7 +332,7 @@ These are the load-bearing imports. If you change one of these arrows, double-ch
 | `garch/fit` (GARCH(1,1)) | **Mature** | scipy-only; bounded L-BFGS-B with variance floor at 1e-10. |
 | `dsge/klein` | **Mature** | QZ-based; BK condition enforced. `F` and the shock loadings `N`/`L` were corrected at 1.2.0 (see CHANGELOG) and are now pinned against closed-form solutions in `tests/test_dsge/test_klein_analytic.py`. |
 | `dsge/build` | **Stable** | Model DSL + complex-step Jacobians -> `klein_solve`. Validated against the closed-form neoclassical growth model (full depreciation, log utility) to 1e-9 on every matrix. Complex-step needs an analytic residual function; the build cross-checks against finite differences and raises when it is not. |
-| `dsge/stacked_newton` | **Stable** | Matrix-free stacked-time Newton-Krylov for perfect-foresight systems (`StackedProblem`, `solve_stacked_newton_krylov`, `preconditioned_lgmres` with true-residual reporting, exact block-Thomas/SuperLU inverse of the steady-state stacked Jacobian with optional time-block Jacobi and a SuperLU fallback on singular or ill-conditioned block pivots, structured-preconditioner protocol, horizon-doubling comparison). Port of the IO dynamic-MRIO numerical core; validated against `solve_perfect_foresight` (1e-8, observed <= 7e-11) and, with `side="left"` and `jacobian_scale=1.0`, against IO `native_solver._newton` to 1e-13 (observed 0.0) on the IO analytic fixture. Pure numpy/scipy/pandas; `dsge/stacked_newton -> reports` only. `solve_perfect_foresight`, `extended_path` and `trade/dynamic` do not use it yet. |
+| `dsge/stacked_newton` | **Stable** | Matrix-free stacked-time Newton-Krylov for perfect-foresight systems (`StackedProblem`, `solve_stacked_newton_krylov`, `preconditioned_lgmres` with true-residual reporting, exact block-Thomas/SuperLU inverse of the steady-state stacked Jacobian with optional time-block Jacobi and a SuperLU fallback on singular or ill-conditioned block pivots, structured-preconditioner protocol, horizon-doubling comparison). Ported from an earlier implementation; validated against `solve_perfect_foresight` (1e-8, observed <= 7e-11). Pure numpy/scipy/pandas; `dsge/stacked_newton -> reports` only. `solve_perfect_foresight` and `extended_path` do not use it yet. |
 | `runtime/*` | **Stable** | Detection is heuristic by necessity (no API reports "you are in Juno") and every field is overridable by environment variable. `budget` is opt-in: it changes no estimator default. |
 | `pocket/*` | **Stable** | Format is versioned (`FORMAT_VERSION`) and self-describing. A transport format, not a trust boundary — checksums catch corruption, not tampering. |
 | `longrun/*` | **Stable** | The invariance property (chunking and resumption do not change results) is the contract; `tests/test_longrun.py` pins it. |
@@ -472,18 +392,6 @@ These are the load-bearing imports. If you change one of these arrows, double-ch
 | `causal/dml` | **Stable** | Double / Debiased Machine Learning (Chernozhukov et al. 2018) for partially linear regression: the class `DoubleMLPLR`, the one-call `dml_plr`, and `DMLResult`. $K$-fold cross-fitting with pure-NumPy regularized learners — `LassoCoordinateDescent` (`'lasso'`) and `RidgeGCV` (`'ridge'`) only, plus any object with `fit` / `predict`. No elastic net. |
 | `fetch/registry`, `fetch/micro` | **Experimental** | Registry metadata is hand-audited; microdata providers are offline-tested against synthetic payloads, and live checks (`pytest -m network`: SCF 2022 published median and mean net worth, ENIGH 2022 published mean household income) are opt-in. |
 | `fetch/realtime/{banxico, inegi, bcb, bcch}` | **Best-effort** | Latin America real-time central bank and statistical agency data connectors with offline `.pmz` cartridges and schema canaries. Network-dependent, so the same tier as the rest of `fetch/*` (and outside the 1.0 promise, per `docs/1.0_path.md`). Their vintages are local snapshot dates, not publication dates. |
-| `trade/gpu/{backend, batched_jacobian, homotopy, mlx_solver, solver_gpu}` | **Experimental** | Optional torch / MLX accelerators for the Caliendo-Parro solve (`pip install "puremacro[gpu]"`). **Outside the four-package Pyodide contract**: torch and mlx are never imported at module import time and never required — without them the solve runs on the NumPy evaluator. Auto-selected float32 devices fall back to the float64 host evaluator for Jacobians. |
-| `trade/caliendo_parro` | **Stable** | Multi-country, multi-sector trade general equilibrium with input-output linkages, intermediate goods, and tariffs solved via exact hat algebra (`CaliendoParroModel`). |
-| `trade/data`, `trade/_oecd_icio`, `trade/regularize` | **Stable** | Harmonized FIGARO/EXIOBASE/WIOD/Eora/OECD loaders condensed to C/I/Cx (the provider's final-use mapping and its meaning are recorded in metadata; only OECD's Cx is residents' purchases abroad), the strict label-driven OECD 2023 regular-CSV reader, and MRIO regularization with RAS/GRAS balancing and Collatz-Wielandt productivity bounds. Native archives beyond the OECD 2019/2020 releases are unverified. |
-| `trade/_accounting`, `trade/welfare`, `trade/policy_solver`, `trade/_hicksian_policy` | **Stable (4.3.0, opt-in)** | `accounting="consistent"` producer/purchaser ledgers with a fixed foreign-balance closure, Hicksian consumption EV/CV with endpoint attribution, audited Newton -> hybrid -> Keller policy recovery with a Hawkins-Simon pre-screen, and fixed-baseline Hicksian tariff searches. Requires nonnegative final-use coefficients: the bundled 77x11 table is rejected. |
-| `trade/flexible` | **Experimental** | Nested CES technology, Stone-Geary demand, Armington sourcing, Atkeson-Burstein markups and capacity margins. Active settings solve on the quasi-condensed route (up to 100 cells, or any size with `method="quasi_condensed"`); 4.2.0 and 4.3.0 silently ignored them (see `docs/ADVISORY.md`). Legacy accounting only; welfare is a historical proxy. |
-| `trade/mrio` | **Stable** | Native MRIO ingestion with provenance: `MRIOTable` (country-major cells, C/G/X/V/VAL final uses, dense or CSR `Z`), SHA-256/MD5/CRC `SourceRecord`s with the OECD accepted and known-corrupted digest registries and the registered FIGARO/EXIOBASE 2019 digests, label-driven readers for OECD ICIO 2023, Eurostat FIGARO 2026 and EXIOBASE 3.8.2 (extracted directories authenticated against their archive), the IO balanced-table contract (`regularize_table` with a gate report that names offending cells; failed gates never yield a table marked regularized), exact `P M P^T` sector/region aggregation with the Agregar and ISIC-section 45-to-11 concordances, the `11o`/`11b` coarse tariff rules, and bridges to and from the legacy `calibrate_trade_model` matrix. Pure numpy/scipy/pandas; no GTAP reader. Agrees with the IO implementation on the 2019 files to floating-point summation order (0 on every OECD and EXIOBASE array, at most 9.3e-10 on FIGARO output). |
-| `trade/condensed/{table, calibration, tariffs, model, solve, certify, measures, errors, _results}` | **Stable** | Condensed one-factor Leontief tariff model (Cobb-Douglas C/G/X baskets, exogenous inventories, DEK world-factor-income closure) with exact 2N elimination of prices and outputs, damped Newton / continuation / pseudo-arclength / multistart solvers at `1e-12`, a fail-closed Collatz-Wielandt existence gate (reuses `trade/regularize.compute_spectral_radius`), an independent ten-block raw-flow certificate at `1e-10`, baseline-duty separation and numeraire-free measures (EV split, Fisher ToT, real GDP, PE bound). Pure numpy/scipy/pandas; ported from the IO `corrected` engine with subprocess parity tests. Not the two-factor `solve_trade_equilibrium` model. |
-| `trade/ces_newton` | **Stable** | Exact block Newton for nested CES technology on `accounting="consistent"`: `CESBlockJacobian` (two dense `M x M` LU factorizations plus a `(3N+1)` macro Schur complement, `solve`/`apply`/`LinearOperator` views), damped `solve_ces_block_newton` whose loop applies the same level audit as postprocessing and accepts only after an independent flow certificate, and `continue_tariff_homotopy` with a certified stage ledger whose aborts carry the stages and the last accepted result. Imports only numpy/scipy (pandas inside the frames); reuses `trade/_accounting.postprocess`, `trade/solver._resolve_tariffs` and `trade/_results`, so the wrapped `TradeEquilibriumResult` feeds `compute_hicksian_welfare` unchanged at flat technology. The dense operator is guarded by `max_cells` (a solve peaks near `22 M^2` doubles). |
-| `trade/household` | **Stable** | Solver-independent household demand systems (fixed baskets, Cobb-Douglas, Stone-Geary LES, CES) with an exact benchmark-normalized expenditure function, Hicksian demand, analytic Slutsky matrices, complex-step-safe kernels, LES calibration from Engel targets with adding-up repair, WLS projection of the supernumerary share, and exact EV/CV; bridges to `TradeCalibrationResult` and consistent/legacy `TradeEquilibriumResult` states. Ported from the IO `preferences_2026-09-22/household.py`; bit-identical parity test against it. Imports only numpy, pandas, `puremacro.reports` and `trade._results` at module level; the result bridges lazily reuse `trade/welfare._checked_state`, `trade/solver._resolve_tariffs` and `trade/equilibrium.unpack_equilibrium_vector`. |
-| `trade/continuation` | **Experimental** | Audited parameter continuation (`continue_parameter`, `sigma_path`) and exact-target multistart (`try_starts`) on top of `trade/policy_solver`. Adaptive natural-parameter steps following the IO `continue_origin` helper; trials are warm-started Newton solves unless `allow_fallback=True`; every accepted stage is re-audited by the consistent-accounting evaluator and must carry the requested schedules and `sigma`. A path tool with recorded stages and failures, not a uniqueness, branch or existence result. NumPy/pandas only; matplotlib lazily in `plot()`. |
-| `trade/stability` | **Experimental** | Reduced local-stability diagnostic (`reduced_stability`, `StabilityResult`): closure-explicit Schur-complement Jacobian of a relative-factor-price tatonnement on a converged trade equilibrium (consistent or legacy accounting), central finite differences of the residual evaluators, degenerate-partition detection, homogeneity/Walras/re-solve checks and the IO qualification text. Evidence about one adjustment process, never a uniqueness certificate; finite-difference Jacobians limit it to the 77x11 scale. |
-| `trade/dynamic/{accounts, calibration, economy, stationary, transition, welfare, stability, _results}` | **Experimental** | Perfect-foresight dynamic MRIO with sector-specific capital and adjustment costs: stationary recalibration with an adjustment ledger, exact per-date elimination with analytic JVPs and a 17-entry certificate, `2C` condensed steady state, matrix-free stacked Newton-Krylov transitions with horizon acceptance, CRRA consumption-equivalent welfare and a Blanchard-Kahn determinacy diagnostic. Pure numpy/scipy/pandas; bit-identical with the IO engine on the analytic fixture and (slow test) on the bundled table. Only the package-level names are public; `stationary` and the `transition` numerics are internal. The bundled 77x11 closure is locally indeterminate (846/847), so transitions are gated by `require_determinacy`. |
 | `spatial/allen_arkolakis` | **Stable** | Continuous geographic general equilibrium with bilateral iceberg trade costs, labor mobility, agglomeration, and congestion (`AllenArkolakisModel`). |
 | `regress/*` | **Soft-legacy** | `regress/lp.py` is an independent pure-numpy LP implementation (not a thin re-export of `lp.panel` — different signature). 3 callers in `tools/run_*.py`; its own follow-up release. |
 | `teaching/*` | **Out of Pyodide scope** | Excluded from the Pyodide test sweep. Statsmodels / linearmodels / arch are hard runtime deps here by design. |
@@ -528,12 +436,12 @@ Both were base dependencies until 3.3.0: `openpyxl` because a bare install once 
 
 The in-process guarantee is separate: the two sweeps in `tests/test_pyodide_compat.py` check the import contract, and the subprocess sweep also blocks `pyarrow` and `openpyxl`, so every shippable module must import without the `io` extra.
 
-Anything else is **dev-only or extra-only** (pytest, statsmodels, linearmodels, arch, pypdf, beautifulsoup4, pdfplumber, torch, mlx, cupy, and the `io` engines pyarrow and openpyxl). These are declared in `[project.optional-dependencies]`:
+Anything else is **dev-only or extra-only** (pytest, statsmodels, linearmodels, arch, pypdf, beautifulsoup4, pdfplumber, numba, mlx, cupy, and the `io` engines pyarrow and openpyxl). These are declared in `[project.optional-dependencies]`:
 
 - `io = ["pyarrow", "openpyxl"]` — file-format engines (see above); also part of `data` and `dev`.
 - `dev = ["pytest", "statsmodels", "linearmodels", "arch", ...]` — parity tests, plus the `io` engines so the suite runs with them.
 - `narrative = ["pypdf", "beautifulsoup4", "pdfplumber"]` — body-extraction backend for `narrative/sources/_extractors.py`; HTML parsing for connectors (Beige Book, EUR-Lex, EU Parliament, SOTU); PDF text extraction for connectors (ERP, CBO, WARN).
-- `gpu = ["torch>=2.1", "mlx>=0.9; sys_platform == 'darwin'"]` and `cuda = ["cupy-cuda12x>=13"]` — **hardware accelerators, never required.** `gpu` powers `puremacro.trade.gpu`; `cuda` serves only the xp-generic dispatch in `puremacro/_backend.py`. Every estimator has a NumPy path and takes it when the accelerator is absent: `puremacro.trade.gpu` probes torch and mlx with `importlib.util.find_spec` (`has_torch()` / `has_mlx()`), imports them only on first use, and runs the NumPy evaluator when neither is installed, so `import puremacro.trade` leaves `torch` and `mlx` out of `sys.modules` and the Pyodide import contract is unchanged. Nothing in the package assumes a GPU exists, and no result depends on one being present.
+- `accel = ["numba>=0.59", "mlx>=0.9; sys_platform == 'darwin'"]` (also published as `backend`) and `cuda = ["cupy-cuda12x>=13"]` — **hardware accelerators, never required.** They serve only the xp-generic dispatch in `puremacro/_backend.py`, which probes them with `importlib.util.find_spec` and imports them on first use. Every estimator has a NumPy path and takes it when the accelerator is absent, so the Pyodide import contract is unchanged. Nothing in the package assumes a GPU exists, and no result depends on one being present.
 
 Dev / extra deps **must not** be imported at runtime by code that ships in the wheel without going through a lazy-import guard. The one architecturally-sanctioned exception is `puremacro.narrative.sources.*`, which is the HTTP/scraping side-channel — modules under that path may import `beautifulsoup4` / `pdfplumber` at top level since the Pyodide-compat walker (see "Excluded from the Pyodide sweep" below) explicitly skips them.
 
@@ -874,9 +782,9 @@ are supported in the infinite-horizon `VFIProblem` (flat C-order product).
 Deferred (each its own spec): Case-2 / GE multi-asset, low-memory / refinement
 accelerators, and exotic asset/type variants (riskyasset / experienceasset).
 
-### Continuous Dynamic Programming, Spatial & Trade Architecture (3.3.0)
+### Continuous Dynamic Programming and Spatial Architecture (3.3.0)
 
-Milestone 3.3.0 introduces nine high-performance engines spanning continuous state-space dynamic programming, deep macro physics-informed machine learning, and quantitative spatial/trade general equilibrium, all implemented under the strict Pyodide 4-package contract (pure NumPy/SciPy/Pandas/Matplotlib):
+Milestone 3.3.0 introduces eight high-performance engines spanning continuous state-space dynamic programming, deep macro physics-informed machine learning, and quantitative spatial general equilibrium, all implemented under the strict Pyodide 4-package contract (pure NumPy/SciPy/Pandas/Matplotlib):
 
 #### 1. Continuous Projection Engines: Chebyshev Collocation & Finite Element Galerkin (`vfi/collocation.py`, `vfi/fem.py`)
 - **Chebyshev Polynomial Collocation** (`CollocationProblem`): Approximates continuous value functions $V(k)$ or policy rules $c(k)$ via orthogonal Chebyshev polynomials of the first kind $T_n(x) = \cos(n \arccos x)$ defined on the canonical domain $[-1, 1]$. Linearly maps asset domains $[k_{\min}, k_{\max}] \leftrightarrow [-1, 1]$. Collocation nodes are chosen at Gauss-Chebyshev roots $x_k = \cos\left(\frac{2k-1}{2n}\pi\right)$ or Gauss-Chebyshev-Lobatto extrema $x_k = \cos\left(\frac{k\pi}{n}\right)$. Evaluates multidimensional tensor products with fast DCT-based projections. Solves Euler residual conditions $\mathcal{R}(k; \theta) = u'(c(k)) - \beta \mathbb{E}[u'(c(k'))(f'(k') + 1 - \delta)] = 0$ via Powell or Newton-Krylov root-finding.
@@ -933,16 +841,7 @@ Milestone 3.3.0 introduces nine high-performance engines spanning continuous sta
 - **Detached-target Euler time iteration**: Network updates minimize squared consumption-share deviations from a target constructed from the previous policy evaluation. The target is held fixed during backpropagation; this is not differentiation of the full Euler-residual objective. Held-out Euler errors determine the reported convergence flag, and training can fail.
 - **Ergodic Trajectory Sampling**: Avoids the exponential curse of grid-based discretization by sampling training points $\mathbf{s}_b$ along simulated ergodic paths of the economic system (Maliar, Maliar & Winant 2021), enabling accurate solutions for models with 10+ continuous state variables (e.g. multi-country neoclassical growth).
 
-#### 8. Quantitative Trade General Equilibrium: Caliendo-Parro (2015) (`trade/caliendo_parro.py`)
-- **Exact Hat Algebra**: Solves multi-country ($N$), multi-sector ($J$) trade general equilibrium models with input-output linkages, intermediate goods, and tariffs without requiring estimation of unobserved technology levels or bilateral trade costs.
-- **Governing Equations in Changes**:
-  1. *Sectoral Prices*: $\hat{P}_{n,j} = \left[ \sum_{i=1}^N \pi_{n,i,j} \left( \hat{c}_{i,j} \hat{\tau}_{n,i,j} \right)^{-\theta_j} \right]^{-1/\theta_j}$
-  2. *Unit Costs*: $\hat{c}_{i,j} = \hat{w}_i^{\beta_{i,j}} \prod_{k=1}^J \hat{P}_{i,k}^{\gamma_{i,k,j}}$
-  3. *Expenditure Shares*: $\hat{\pi}_{n,i,j} = \left( \frac{\hat{c}_{i,j} \hat{\tau}_{n,i,j}}{\hat{P}_{n,j}} \right)^{-\theta_j}$
-  4. *Goods Market Clearing & Trade Balances*: Incorporates tariff revenue, deficit adjustments, and cross-sector demand linkages.
-- **Numerical Solver**: Employs a damped fixed-point iteration on wages $\hat{\mathbf{w}}$ and prices $\hat{\mathbf{P}}$ with adaptive acceleration, with convergence assessed numerically; uniqueness and global convergence are not guaranteed.
-
-#### 9. Quantitative Spatial Economics: Allen-Arkolakis (2014) (`spatial/allen_arkolakis.py`)
+#### 8. Quantitative Spatial Economics: Allen-Arkolakis (2014) (`spatial/allen_arkolakis.py`)
 - **Economic Geography Gravity GE**: Formulates general equilibrium across discrete spatial locations $i \in \{1, \dots, N\}$ on a continuous geographic plane with bilateral iceberg transport costs $\tau_{i,j} \ge 1$, labor mobility, Marshallian agglomeration spillovers ($\alpha$), and amenity congestion ($\beta$).
 - **Equilibrium System**:
   1. *Gravity Trade Flows*: $X_{i,j} = \frac{(w_i \tau_{i,j})^{-\theta}}{\sum_k (w_k \tau_{k,j})^{-\theta}} E_j$

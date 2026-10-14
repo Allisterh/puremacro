@@ -1,6 +1,6 @@
 """Generalised Schur decomposition with a reordering that survives LAPACK.
 
-Every QZ-based solver here (``gensys``, ``klein``, the fertility model) needs
+Every QZ-based solver here (``gensys``, ``klein``) needs
 the same thing: ``scipy.linalg.ordqz`` with the stable generalised eigenvalues
 moved to the top-left. On some LAPACK builds that reordering fails on pencils
 that are not remotely ill-conditioned:

@@ -278,6 +278,7 @@ Se ejecutaron cinco modelos en Dynare 7.0, a órdenes dos y tres. Las
 comparan todos los tensores desplegados, correcciones de riesgo, covarianzas
 de innovaciones, trayectorias simuladas y momentos muestrales con resultados
 externos conservados. Esta prueba separada no amplía `verify_dynare_parity`
-más allá de los órdenes uno y dos. Consulte los
-[resultados y la salvedad del entorno MATLAB](https://github.com/jalonso1979/puremacro/blob/v4.3.0/reviews/2026-09-20-independent-validation/REPORT.md);
-la evidencia se limita a los modelos y configuraciones ensayados.
+más allá de los órdenes uno y dos. Las diez exportaciones terminaron antes
+de que MATLAB fallara al cerrar el proceso: las comparaciones numéricas pasan,
+pero el proceso de MATLAB no terminó limpiamente. La evidencia se limita a los
+modelos y configuraciones ensayados.

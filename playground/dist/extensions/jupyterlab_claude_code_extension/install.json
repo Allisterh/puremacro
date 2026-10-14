@@ -1,5 +1,0 @@
-{
-  "packageManager": "python",
-  "packageName": "jupyterlab_claude_code_extension",
-  "uninstallInstructions": "Use your Python package manager (pip, conda, etc.) to uninstall the package jupyterlab_claude_code_extension"
-}

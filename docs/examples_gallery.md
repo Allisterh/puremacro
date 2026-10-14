@@ -6,11 +6,11 @@ Generated: 2026-09-02T16:18:09Z
 
 | Status | Count |
 |---|---|
-| PASS | 76 |
+| PASS | 75 |
 | SKIP | 7 |
 | FAIL | 0 |
 
-## PASS (76)
+## PASS (75)
 
 ### anderson_rubin_weak_iv_demo
 
@@ -117,13 +117,6 @@ Generated: 2026-09-02T16:18:09Z
 - **Status:** PASS
 - **Runtime:** 56.542 s
 - **Last run:** 2026-09-02T16:10:41Z
-- **Figures:** none
-
-### dsge_fertility_demo
-
-- **Status:** PASS
-- **Runtime:** 1.597 s
-- **Last run:** 2026-09-02T16:10:42Z
 - **Figures:** none
 
 ### dsge_nk_sketchpad

@@ -346,7 +346,7 @@ def test_all_notebooks_residual_styling_and_syntax():
     import warnings
 
     py_files = _get_all_showcase_notebooks(".py")
-    assert len(py_files) >= 130
+    assert len(py_files) >= 128          # 130 before two showcase notebooks left the public tree
     assert {p.stem for p in py_files} == {
         p.stem for p in _get_all_showcase_notebooks(".ipynb")
     }, "Every showcase must have both source and rendered notebook"

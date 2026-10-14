@@ -9,14 +9,10 @@ ROOT = Path(__file__).resolve().parents[1]  # package root (README.md, docs/, no
 
 # User-facing docs that get a docs/es/<same-name> Spanish version (exact case).
 _USER_DOCS = [
-    "sw07_estimator_experiment.md",
-    "distributional_trade_ge.md",
     "empirical_research.md",
-    "sw07_finite_sample.md",
     "research_workflows.md",
     "research_benchmarks.md",
     "structural_bridge.md",
-    "trade_distributional.md",
     "index.md",
     "quickstart.md",
     "dsge_build.md",
@@ -71,26 +67,16 @@ _USER_DOCS = [
     "causal_dml.md",
     "vfi_hjb_continuous.md",
     "real_time_latam.md",
-    "trade_gpu.md",
-    "policy_simulators.md",
-    # 4.3.0 trade guides and the validation status page (Spanish mirrors added 2026-09-22).
-    "trade_accounting.md",
-    "trade_welfare.md",
-    "trade_policy.md",
+    # The validation status page (Spanish mirror added 2026-09-22).
     "STRUCTURAL_VALIDATION_STATUS.md",
-    # MRIO engines ported from the IO research workspace and the stacked Newton-Krylov.
-    "trade_mrio.md",
-    "trade_condensed.md",
-    "trade_ces_newton.md",
-    "trade_household.md",
-    "trade_continuation.md",
-    "trade_stability.md",
-    "trade_dynamic.md",
+    # The stacked Newton-Krylov.
     "dsge_stacked_newton.md",
     # Guides added 2026-10-12: declarative DP, survey microdata and the registry, text as data.
     "dp.md",
     "micro_data.md",
     "text_analysis.md",
+    # The monetary transmission simulator (HANK vs. RANK) and its browser lab.
+    "monetary_transmission.md",
     # Local language models (puremacro.llm), added with the package.
     "local_llm.md",
 ]

@@ -6,13 +6,10 @@ This module solves the same two-point boundary problem as
     F_t(Y) = f(y_{t+1}, y_t, y_{t-1}, eps_t) = 0,      t = 1, ..., T,
     y_0 = y_init (fixed),   y_{T+1} = y_end (fixed terminal state),
 
-without ever assembling the stacked Jacobian. It is a model-agnostic port of
-the numerical core of the IO research engine ``dynamic_model/native_numerics.py``
-(``PathProblem``), ``native_solver.py`` (``_newton``, ``compare_horizons``),
-``native_block_preconditioner.py`` (the exact finite time-block inverse) and
-``native_krylov_probe.py`` (the right-preconditioned LGMRES adapter). Nothing in
-those files could be copied verbatim: every IO preconditioner is written against
-the internals of one dynamic MRIO model. What is ported is the structure.
+without ever assembling the stacked Jacobian. It is a model-agnostic port of an
+earlier implementation: the stacked path problem, the inexact Newton loop and its
+horizon comparison, the exact finite time-block inverse and a right-preconditioned
+LGMRES adapter. What is ported is the structure, written here for any model.
 
 Mathematics
 -----------
@@ -34,28 +31,26 @@ by LGMRES (SciPy, ``inner_m`` = 40, ``outer_k`` = 6, at most ``krylov_maxiter`` 
 outer iterations) or, when ``krylov_method="gmres"`` is requested explicitly, by
 restarted GMRES (there is no automatic GMRES fallback). A direction returned at the
 Krylov cap is recorded (``krylov_status > 0`` with its true linear residual) and
-still line-searched, as in the IO engine. ``s`` is the residual scale
-(``jacobian_scale``, by default the largest entry of the steady-state blocks,
-floored at one) that also enters the convergence test below; the IO engine uses
-s = 1. The step is bounded in path units,
+still line-searched. ``s`` is the residual scale (``jacobian_scale``, by default
+the largest entry of the steady-state blocks, floored at one) that also enters the
+convergence test below. The step is bounded in path units,
 ``step = min(1, max_log_move * max(1, |Y|_inf) / |d|_inf)`` with ``max_log_move`` = 0.75
-(the IO engine bounds the absolute move of its log variables by 0.75; the two rules
-coincide whenever |Y|_inf <= 1, which holds on the IO fixture, and the relative form
-keeps a model written in levels of order 1e3 or 1e4 converging in the same number of
-Newton steps; ``None`` disables the bound), and accepted by an Armijo test on the
-squared residual, ``|F(Y + step d)|_2^2 <= |F(Y)|_2^2 (1 - 1e-4 step)``, halving the
-step at most ``max_backtracks`` = 23 times (24 trial evaluations, the IO ``range(24)``
-rule). SciPy's LGMRES fires its callback before each
-outer residual check, so a direction returned after the iteration cap was never
-seen by the callback: the true linear residual ``|J d + F|_2`` of the RETURNED
-direction is always recomputed in original coordinates and recorded.
+(an absolute bound of 0.75 whenever |Y|_inf <= 1; the relative form keeps a model
+written in levels of order 1e3 or 1e4 converging in the same number of Newton steps;
+``None`` disables the bound), and accepted by an Armijo test on the squared residual,
+``|F(Y + step d)|_2^2 <= |F(Y)|_2^2 (1 - 1e-4 step)``, halving the step at most
+``max_backtracks`` = 23 times (24 trial evaluations). SciPy's LGMRES fires its
+callback before each outer residual check, so a direction returned after the
+iteration cap was never seen by the callback: the true linear residual
+``|J d + F|_2`` of the RETURNED direction is always recomputed in original
+coordinates and recorded.
 
 Convergence. A solve is converged when ``|F|_inf <= tol * s`` and the next Newton
 direction satisfies ``|d|_inf <= step_tol * max(1, |Y|_inf)``, the scale-aware
 rule of :func:`solve_perfect_foresight` (a rescaled system must return the same
 path and the untouched initial guess is never returned). ``step_tol=None`` drops
-the step test and accepts on the residual alone; together with
-``jacobian_scale=1.0`` this is the acceptance rule of the IO ``native_solver._newton``.
+the step test and accepts on the residual alone (with ``jacobian_scale=1.0``, as
+soon as ``|F|_inf <= tol``).
 When the residual meets ``tol * s`` but the step test cannot be met (a residual at
 its noise floor, for instance behind an inner iterative solve), the solve raises
 with ``converged_by="step_test_failure"``. Anything else that fails raises
@@ -74,7 +69,7 @@ upper shift, in O(T n^3) setup and O(T n^2) memory and apply. It is the
 Laffargue-Boucekkine-Juillard relaxation written in matrix form. With
 ``time_block = H`` the same recursion is factored once for H dates and applied to
 every block independently (block Jacobi in time; the links between blocks stay
-in the outer Jacobian), exactly as the IO ``FiniteBlockCapitalPreconditioner``.
+in the outer Jacobian).
 ``method="splu"`` factors the same sparse matrix with SuperLU instead. The
 block-Thomas recursion needs every leading pivot D_t nonsingular, which a
 nonsingular stacked matrix does not guarantee (a rank-deficient B is enough to
@@ -87,25 +82,21 @@ SuperLU, record the fallback in the preconditioner name, and raise
 :class:`StackedNewtonError` only when the stacked matrix itself cannot be factored.
 :class:`StructuredBlockTridiagonalPreconditioner` is the protocol a model-specific
 elimination can implement (per-date diagonal solves and off-diagonal actions, or a
-global structured solve). The IO capital and national-Schur eliminations have the
-structure of its second form; they are not ported, and no puremacro module plugs
-a preconditioner into this protocol in this release.
+global structured solve). No puremacro module plugs a preconditioner into this
+protocol in this release.
 
 Horizon acceptance. ``compare_horizons`` reports max_{t <= periods} |y^T_t - y^2T_t|
-against a tolerance (default 1e-5), the IO ``state_gap`` criterion.
+against a tolerance (default 1e-5).
 
-Limitations quoted from the IO documentation
---------------------------------------------
-NATIVE_NUMERICS.md: "Preconditioner speed and memory must be established by
-executions; block structure alone does not establish native-scale performance."
-and "These linear identities do not guarantee numerical accuracy or nonlinear
-convergence." README.md: "No GTAP horizon is accepted yet." No native-scale MRIO
-transition is solved by this module; the exact block-tridiagonal inverse costs
-O(T n^2) memory, which is trivial for DSGE sizes (n up to a few hundred, T in
-the hundreds) and infeasible for native MRIO systems with n of 7,000 to 9,500
-unknowns per date, where a structured elimination is mandatory. The seven IO
-preconditioner variants beyond the exact time-block inverse (capital, Schur,
-periodic, swept, Galerkin, deflated, Jacobi-deflated) are not ported.
+Limitations
+-----------
+No large-scale transition is solved or validated by this module. The exact
+block-tridiagonal inverse costs O(T n^2) memory, which is trivial for DSGE sizes
+(n up to a few hundred, T in the hundreds) and infeasible for systems with
+thousands of unknowns per date, where a structured elimination is mandatory and
+none ships. Block structure alone does not establish speed or memory at scale,
+and the linear identities above do not by themselves guarantee numerical
+accuracy or nonlinear convergence.
 """
 from __future__ import annotations
 
@@ -140,7 +131,7 @@ __all__ = [
 
 # Relative tolerance on the Newton STEP (same constant as perfect_foresight.py).
 _STEP_TOL = 1e-10
-# Armijo sufficient-decrease constant (IO native_solver._newton).
+# Armijo sufficient-decrease constant.
 _ARMIJO_C = 1e-4
 # Complex-step size (exact to machine precision, no cancellation).
 _COMPLEX_STEP = 1e-20
@@ -269,7 +260,7 @@ class StackedProblem:
         Relative central-difference step.
     steady_exogenous : array_like, optional
         Exogenous values used by :meth:`steady_blocks`; default the last row of
-        the exogenous path (the terminal policy is held, as in the IO engine).
+        the exogenous path (the terminal policy is held).
 
     Notes
     -----
@@ -278,9 +269,8 @@ class StackedProblem:
     ``y_init`` and y_next at t = T-1 is ``y_end``, so the product uses
     v_prev = 0 at the first date and v_next = 0 at the last date.
 
-    A model whose date-t residual also needs next date's exogenous values (the IO
-    ``NativeEconomy.equations(..., policy_t, policy_next)`` pattern) packs both into
-    each row, ``exogenous_path[t] = (eps_t, eps_{t+1})`` with the last row repeating
+    A model whose date-t residual also needs next date's exogenous values packs both
+    into each row, ``exogenous_path[t] = (eps_t, eps_{t+1})`` with the last row repeating
     ``eps_T``. Packing the values themselves, rather than a date index, keeps the
     held-exogenous rule of :func:`compare_horizons` meaningful.
     """
@@ -454,7 +444,7 @@ class StackedProblem:
         """Stacked residual F(Y), shape ``(T * n_vars,)``.
 
         Raises :class:`StackedNewtonError` when the residual is not finite, so a
-        line search can reject the trial point (the IO ``_evaluate`` contract).
+        line search can reject the trial point.
         """
         Y = self.reshape(np.asarray(Y_flat, dtype=float))
         flat = Y.ravel()
@@ -802,7 +792,7 @@ class BlockTridiagonalPreconditioner:
     ``method="splu"`` uses SuperLU on the sparse assembly. ``time_block=H`` drops
     the links between consecutive H-date blocks (block Jacobi in time): every
     full block reuses one factorization and a shorter remainder block gets its
-    own, as in the IO ``FiniteBlockCapitalPreconditioner``. With ``H = T`` (the
+    own. With ``H = T`` (the
     default) the operator is the exact inverse of ``J0``. The blocks are copied
     (read-only), so later changes to the caller's arrays do not reach the operator.
 
@@ -1018,22 +1008,15 @@ class StructuredBlockTridiagonalPreconditioner:
        ``"jacobi"`` (``x_t = D_t^{-1} r_t``), ``"forward"`` (block Gauss-Seidel,
        ``x = (D + L)^{-1} r``), ``"backward"`` (``x = (D + U)^{-1} r``) and
        ``"symmetric"`` (``x = (D + U)^{-1} D (D + L)^{-1} r``, the classical block SGS
-       formula that the IO swept block driver uses with exact finite time blocks).
-    2. Subclass and override :meth:`apply` with a global structured elimination.
-       The IO ``CapitalPreconditioner`` (N scalar time-tridiagonal solves for the
-       capital stocks followed by static national labor and budget LU solves) and
-       ``SchurCapitalPreconditioner`` (national Schur complement kept block
-       tridiagonal in time) have the structure of this second form, so a
-       model-specific transition solver could supply such an elimination through
-       it. Neither is ported here, and in this release no puremacro module uses the
-       protocol: ``puremacro.trade.dynamic`` ships its own capital preconditioner
-       and Newton loop.
+       formula).
+    2. Subclass and override :meth:`apply` with a global structured elimination, so
+       that a model-specific transition solver can supply its own elimination. In
+       this release no puremacro module uses the protocol.
 
     Either way, :meth:`as_linear_operator` returns the object SciPy's Krylov
     solvers accept, and :meth:`apply` raises :class:`StackedNewtonError` on a
-    nonfinite action, as the IO Schur preconditioner does (inside
-    :func:`solve_stacked_newton_krylov` that error ends the solve with the last
-    state attached).
+    nonfinite action (inside :func:`solve_stacked_newton_krylov` that error ends
+    the solve with the last state attached).
     """
 
     def __init__(self, n_periods: int, n_vars: int, *, diag_solve: Callable | None = None,
@@ -1173,9 +1156,8 @@ def preconditioned_lgmres(operator: Any, rhs: Any, M: Any = None, *, side: str =
     is ``|operator @ direction - rhs|_2`` recomputed in original coordinates for
     the direction actually returned. SciPy's callbacks fire before each outer
     residual check, so when the cap is exhausted the last callback never saw the
-    returned direction (the IO finding behind ``native_krylov_probe.make_lgmres``
-    and its recorded drivers); the recomputed value is therefore the only
-    trustworthy record of the linear error.
+    returned direction; the recomputed value is therefore the only trustworthy
+    record of the linear error.
 
     ``side="right"`` solves ``(A M) y = rhs`` and returns ``d = M y`` (the Krylov
     residual is then the true residual; the callback receives ``y``);
@@ -1256,7 +1238,7 @@ class StackedNewtonResult:
         ``max |y_T - y_end|``, as in :class:`PerfectForesightResult`.
     linear_history : tuple of read-only dicts
         One record per linear solve (``dict(record)`` gives a mutable copy): ``newton_iteration``, ``residual_before``,
-        ``krylov_outer_iterations`` (LGMRES outer iterations entered, IO convention),
+        ``krylov_outer_iterations`` (LGMRES outer iterations entered),
         ``krylov_status``, ``true_linear_residual`` (2-norm of ``J d + F`` for the
         returned direction), ``requested_tolerance`` (``eta |F|_2``),
         ``rhs_norm`` (``|F|_2``), ``direction_norm``, ``step``, ``backtracks``,
@@ -1326,7 +1308,7 @@ class StackedNewtonResult:
         return pd.DataFrame([dict(h) for h in self.linear_history])
 
     def krylov_outer_iterations(self) -> tuple[int, ...]:
-        """LGMRES outer iterations entered at each Newton step (IO convention)."""
+        """LGMRES outer iterations entered at each Newton step."""
         return tuple(int(h.get("krylov_outer_iterations", 0)) for h in self.linear_history
                      if "krylov_outer_iterations" in h)
 
@@ -1526,7 +1508,7 @@ def _step_test_message(res: float, res_bound: float, step_norm: float, step_boun
     return (f"Newton step test failed: the residual {res:.3g} meets tol * s = {res_bound:.3g}, but the "
             f"Newton step {step_norm:.3g} exceeds step_tol * max(1, |Y|_inf) = {step_bound:.3g} and {reason}. "
             "The residual may be at its noise floor (an inner iterative solve or finite-difference noise); "
-            "pass step_tol=None for the residual-only acceptance rule of the IO engine, or a larger step_tol.")
+            "pass step_tol=None to accept on the residual alone, or a larger step_tol.")
 
 
 def solve_stacked_newton_krylov(
@@ -1571,7 +1553,7 @@ def solve_stacked_newton_krylov(
         cycle at O(3 n) equation calls per date), ``"none"`` or ``None``; or a
         ready operator (anything with ``as_linear_operator()`` or accepted by
         ``scipy.sparse.linalg.aslinearoperator``); or a factory ``f(Y_flat) ->
-        operator`` evaluated at every Newton iterate (the IO ``preconditioner_factory``).
+        operator`` evaluated at every Newton iterate.
     tol : float
         Residual tolerance; convergence requires ``|F|_inf <= tol * jacobian_scale``
         and, unless ``step_tol=None``, a Newton step below ``step_tol * max(1, |Y|_inf)``.
@@ -1584,25 +1566,23 @@ def solve_stacked_newton_krylov(
         not an automatic fallback.
     inner_m, outer_k, krylov_maxiter : int
         LGMRES inner dimension, augmentation vectors and outer iteration cap
-        (IO defaults 40, 6, 35); for GMRES ``inner_m`` is the restart length. A
+        (defaults 40, 6, 35); for GMRES ``inner_m`` is the restart length. A
         direction returned at the cap is not an error: its status and true linear
-        residual are recorded and it is line-searched like any other direction (the
-        IO rule); the solve fails only if that ends in a failed line search or the
-        iteration limit.
+        residual are recorded and it is line-searched like any other direction; the
+        solve fails only if that ends in a failed line search or the iteration limit.
     side : {"right", "left"}
     max_log_move : float or None
         Bound on the move per step in path units,
-        ``step = min(1, max_log_move * max(1, |Y|_inf) / |d|_inf)``. The IO engine
-        bounds the absolute move of its log variables by 0.75; the relative form is
-        identical whenever ``|Y|_inf <= 1`` and keeps a model written in levels of
-        order 1e3 or 1e4 converging in the same number of Newton steps. ``None``
-        disables the bound.
+        ``step = min(1, max_log_move * max(1, |Y|_inf) / |d|_inf)``. Whenever
+        ``|Y|_inf <= 1`` this bounds the absolute move; the relative form keeps a
+        model written in levels of order 1e3 or 1e4 converging in the same number of
+        Newton steps. ``None`` disables the bound.
     line_search : bool
         Armijo backtracking on ``|F|_2^2`` (``False`` takes the bounded full step
         as long as the residual is finite).
     max_backtracks : int
         Halvings of the step in the line search (default 23, i.e. 24 trial
-        evaluations, the IO ``range(24)`` rule).
+        evaluations).
     step_tol : float or None
         Relative Newton-step tolerance of the convergence test (default 1e-10, the
         :func:`solve_perfect_foresight` constant). ``None`` (or ``inf``) drops the
@@ -1611,13 +1591,13 @@ def solve_stacked_newton_krylov(
         meets the tolerance.
     jacobian_scale : float, optional
         Residual scale ``s``; default ``max(1, max |steady blocks|)``. Pass ``1.0``
-        for the IO absolute residual criterion or to skip the steady-block
-        evaluation; ``jacobian_scale=1.0`` together with ``step_tol=None`` is the
-        acceptance rule of the IO ``native_solver._newton``.
+        for an absolute residual criterion or to skip the steady-block evaluation;
+        together with ``step_tol=None`` the solve then accepts as soon as
+        ``|F|_inf <= tol``.
     direct_below : int
         Try MINPACK ``hybr`` first when the stacked system has at most this many
-        unknowns and keep it when it lowers the residual (the IO engine uses 240;
-        the puremacro default 0 keeps every solve on the Krylov path).
+        unknowns and keep it when it lowers the residual (the default 0 keeps every
+        solve on the Krylov path).
     time_block : int, optional
         Block length for the named block-Jacobi preconditioners.
     progress : callable, optional
@@ -1650,7 +1630,7 @@ def solve_stacked_newton_krylov(
     tol = _check_positive_float(tol, "tol")
     if step_tol is None or (isinstance(step_tol, (int, float, np.floating)) and not isinstance(step_tol, bool)
                             and float(step_tol) == float("inf")):
-        step_tol = None      # residual-only acceptance (IO native_solver._newton)
+        step_tol = None      # residual-only acceptance
     else:
         step_tol = _check_positive_float(step_tol, "step_tol")
     max_iter = _check_positive_int(max_iter, "max_iter")
@@ -1734,7 +1714,7 @@ def solve_stacked_newton_krylov(
             f"Preconditioner {preconditioner!r} failed before the first Newton iteration: {exc}",
             build_result(x, f, False, 0, "preconditioner_failure")) from exc
 
-    # Optional MINPACK direct solve for tiny stacked systems (IO native_solver._newton).
+    # Optional MINPACK direct solve for tiny stacked systems.
     if direct_below and N <= direct_below and res > tol * jac_scale:
         fs = None
         try:
@@ -1827,7 +1807,7 @@ def solve_stacked_newton_krylov(
         if it == max_iter:
             history.append(record)
             break
-        # Bound the move in path units (the IO rule scaled by max(1, |Y|_inf)); never clip the path.
+        # Bound the move in path units (scaled by max(1, |Y|_inf)); never clip the path.
         if max_log_move is None:
             step = 1.0
         else:
@@ -1838,7 +1818,7 @@ def solve_stacked_newton_krylov(
         backtracks = 0
         for backtracks in range(max_backtracks + 1):
             if backtracks:
-                step *= 0.5          # halve only when another trial follows (IO range(24) sequence)
+                step *= 0.5          # halve only when another trial follows
             candidate = x + step * d
             try:
                 fc = problem.residual(candidate)
@@ -1929,13 +1909,13 @@ def compare_horizons(short: Any, long: Any, *, periods: int = 20, tolerance: flo
     :class:`PerfectForesightResult` objects, DataFrames or ``(T, n_vars)`` arrays.
     The long trajectory must be strictly longer, both must have the same number
     of variables, and results that carry a ``converged`` flag must be converged
-    (the IO rule "Cannot compare unaccepted trajectories" raises
-    :class:`StackedNewtonError`). When both results record their boundaries and
-    exogenous paths, the boundaries must agree to 1e-9 and the long exogenous path
-    must equal the short one on the shared dates and hold its last row afterwards
-    (the IO "same announced policy, held beyond the short horizon" rule).
+    (an unaccepted trajectory raises :class:`StackedNewtonError`). When both
+    results record their boundaries and exogenous paths, the boundaries must agree
+    to 1e-9 and the long exogenous path must equal the short one on the shared
+    dates and hold its last row afterwards (the same announced policy, held
+    beyond the short horizon).
 
-    The statistic is ``max_{t <= periods} |y^short_t - y^long_t|`` (the IO
+    The statistic is ``max_{t <= periods} |y^short_t - y^long_t|`` (recorded as the
     ``state_gap`` criterion, default tolerance 1e-5). Passing it at one horizon
     pair is evidence of horizon stability of the retained variables over the
     window only; it is not a certificate for the infinite-horizon problem.

@@ -179,8 +179,8 @@ $34.7 to $60.3 (+74%) and the peak warming from 4.13 °C to 5.91 °C.
 
 ## The rest of `puremacro.climate`
 
-The subpackage also holds four empirical modules, added in 0.52.0 for
-climate-and-fertility work, that have nothing to do with DICE. **They are not
+The subpackage also holds four empirical modules, added in 0.52.0, that have
+nothing to do with DICE. **They are not
 re-exported** — `puremacro.climate.__all__` is `["DICEResult",
 "simulate_dice_model"]` only, so `from puremacro.climate import
 compute_annual_cdd_hdd` raises `ImportError`. Import from the submodule:

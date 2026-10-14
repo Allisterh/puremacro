@@ -45,7 +45,7 @@ key = creds.require("anthropic")
 # MissingCredentialError: LLM-scored narrative kernels (...) needs an
 # API key. Checked env vars (in order): ANTHROPIC_API_KEY,
 # PUREMACRO_ANTHROPIC_API_KEY. Checked config file:
-# /Users/you/.puremacro/credentials.toml (not found). Get a free key
+# ~/.puremacro/credentials.toml (not found). Get a free key
 # at: https://console.anthropic.com/settings/keys
 ```
 

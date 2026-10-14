@@ -311,6 +311,7 @@ Five source models were executed in Dynare 7.0 at orders two and three. The
 [reproduction tools](https://github.com/jalonso1979/puremacro/blob/v4.3.0/tools/reference_validation/README.md) compare every
 unfolded tensor, risk correction, innovation covariance, simulated path and
 sample moments against frozen external outputs. This separate benchmark does
-not extend `verify_dynare_parity` beyond orders one and two. Read the
-[results and runtime caveat](https://github.com/jalonso1979/puremacro/blob/v4.3.0/reviews/2026-09-20-independent-validation/REPORT.md)
-before interpreting it as evidence for other models or runtimes.
+not extend `verify_dynare_parity` beyond orders one and two. All ten exports
+completed before MATLAB crashed during process shutdown: the numerical
+comparisons pass, but the MATLAB process did not exit cleanly. The benchmark
+is not evidence for other models or runtimes.

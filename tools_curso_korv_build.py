@@ -43,7 +43,7 @@ import pandas as pd
 from puremacro.klems import load_klems_panel
 from puremacro.korv_gmm import fit_korv_pooled, fit_sigma_su_pooled
 
-ROOT = Path(__file__).resolve().parent            # .../uncertainty_examples/puremacro
+ROOT = Path(__file__).resolve().parent            # the repository root
 KLEMS_CACHE = ROOT.parent / "data" / "raw" / "euklems"
 PANEL_Q = ROOT.parent / "data" / "processed" / "panel_Q.parquet"
 OUT_CSV = ROOT / "notebooks" / "course" / "data" / "korv_panel_klems.csv"
