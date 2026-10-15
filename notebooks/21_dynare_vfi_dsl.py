@@ -13,23 +13,23 @@
 # %% [markdown]
 # # Dynare-like Automated VFI — Declarative Structural Dynamic Programming
 #
-# **Can we write structural dynamic programming models in declarative syntax without low-level grid loops?** In macroeconomics, Dynare transformed DSGE modeling by replacing manual matrix derivations with a clean declarative language. `puremacro` brings the same automated paradigm to **heterogeneous-agent Value Function Iteration (VFI)** via `puremacro.vfi.Model`. Instead of manually managing grid dimensions, Tauchen transition matrices, Bellman loops, and Howard acceleration steps, you declare parameters, state variables, shock processes, utility functions, and budget constraints in a concise specification. This notebook builds an incomplete-markets precautionary savings model using `puremacro.vfi.Model`, computes policy functions and stationary wealth distributions, and verifies numerical equilibrium bounds.
+# **Can we write structural dynamic programming models in declarative syntax without low-level grid loops?** In macroeconomics, Dynare transformed DSGE modeling by replacing manual matrix derivations with a clean declarative language. `puremacro.dp` brings the same idea to **heterogeneous-agent dynamic programming**: you declare parameters, a state grid, a shock process, the budget and the reward as equations in Dynare expression syntax, and `Model.solve()` writes the solver call. There are no grid loops, return-function closures or Tauchen matrices to manage. This notebook builds an incomplete-markets precautionary savings model, solves it by value function iteration, reads the policy and value functions, and measures wealth inequality exactly from the stationary distribution and by simulating a panel of households.
 
 # %% [markdown]
-# ## The method in math — Automated Bellman Operator
+# ## The method in math — the Bellman equation
 #
-# The single-agent income fluctuation problem on state $(a, z)$ solves:
-# $$ V(a, z) = \max_{a' \ge \underline{a}} \left\{ u(c) + \beta \sum_{z'} P(z, z') V(a', z') \right\} $$
+# The single-agent problem on state $(a, z)$ solves:
+# $$ V(a, z) = \max_{a' \in \mathcal{A}} \left\{ u(c) + \beta \sum_{z'} P(z, z') V(a', z') \right\} $$
 # subject to the budget constraint:
-# $$ c + a' = (1+r)a + w \cdot z $$
-# where $u(c) = \frac{c^{1-\sigma}}{1-\sigma}$, $z$ follows an AR(1) process $\ln z_t = \rho \ln z_{t-1} + \varepsilon_t$, and $P(z, z')$ is the discretized Markov transition matrix computed via Tauchen's method.
+# $$ c + a' = e^{z} a^{\alpha} + (1-\delta) a, \qquad c > 0, $$
+# where $u(c) = \frac{c^{1-\gamma}}{1-\gamma}$, $z$ follows an AR(1) process $z_t = \rho z_{t-1} + \varepsilon_t$, and $P(z, z')$ is the Markov transition matrix of its Tauchen discretization.
 #
-# **Intuition.** The `puremacro.vfi.Model` DSL abstracts the technical machinery of grid discretization ($\mathcal{A} \times \mathcal{Z}$), vectorized return matrix evaluation $R_{ij,k} = u((1+r)a_i + w z_j - a_k)$, Howard policy iteration, and panel simulation of stationary distributions. You specify structural economics; `puremacro` computes the solution.
+# **Intuition.** Each line of the declaration below is one piece of this problem. `puremacro.dp` parses the equations, discretizes the shock, evaluates the reward on the grid $\mathcal{A} \times \mathcal{Z}$ and calls the `puremacro.vfi` engine. Discrete VFI keeps $a'$ on the grid nodes. The budget $e^z a^\alpha$ is not of the form $R a + y(z)$, so the endogenous grid method does not apply and we solve with `method="vfi"`.
 
 # %% [markdown]
 # ## Setup — declarative model specification
 #
-# We instantiate `Model()`, set parameters ($\beta=0.96, \gamma=2.0, \alpha=0.36, \delta=0.10$), define an asset state grid $a \in [0.1, 15.0]$, and set an AR(1) shock process for productivity $z$.
+# We create `dp.Model()`, set the parameters ($\beta=0.96, \gamma=2.0, \alpha=0.36, \delta=0.10$), define an asset grid of 60 points on $a \in [0.1, 15.0]$, and declare an AR(1) productivity shock $z$ with 5 Tauchen states.
 
 # %%
 import sys
@@ -43,54 +43,52 @@ sys.path.insert(0, str(_cwd if (_cwd / "_nbstyle.py").exists() else _cwd / "note
 import _nbstyle
 _nbstyle.apply_style()
 
-from puremacro.vfi import Model
+from puremacro import dp
 
-# Declare structural model
-model = Model(name="Precautionary Savings Model")
+# Declare the structural model
+model = dp.Model("Precautionary Savings Model")
+model.parameters(beta=0.96, gamma=2.0, alpha=0.36, delta=0.10)
 
-# Set structural parameters
-model.set_param("beta", 0.96)
-model.set_param("gamma", 2.0)
-model.set_param("alpha", 0.36)
-model.set_param("delta", 0.10)
+# Shock process and state grid
+model.exogenous("z", dp.AR1(rho=0.90, sigma=0.15, n=5))
+model.state("a", np.linspace(0.1, 15.0, 60))
 
-# Set state grids
-model.add_state(name="a", min_val=0.1, max_val=15.0, n_points=60)
-model.add_shock(name="z", rho=0.90, sigma=0.15, n_points=5)
-
-# Define utility function and budget constraint
-model.set_utility(lambda c, p: (c ** (1.0 - p["gamma"])) / (1.0 - p["gamma"]))
-model.set_budget(lambda a, ap, z, p: np.exp(z) * (a ** p["alpha"]) + (1.0 - p["delta"]) * a - ap)
+# Budget constraint and utility, as equations
+model.local("c = exp(z)*a^alpha + (1 - delta)*a - a(+1)")
+model.reward("c^(1 - gamma)/(1 - gamma)")
+model.subject_to("c > 0")
 
 # %% [markdown]
-# ## Solving the model and simulating the stationary distribution
+# ## Solving the model and measuring wealth inequality
 #
-# We run `model.solve()` which executes vectorized Bellman updates with Howard acceleration, and recovers the stationary wealth distribution and Gini inequality coefficient.
+# `model.solve(method="vfi")` iterates on the Bellman equation until the value function changes by less than `tol`, then computes the stationary distribution of households over the $(a, z)$ grid. `sol.mean("a")` and `sol.gini("a")` are computed exactly from that distribution, with no simulation. The Gini is the standard weighted Gini of assets, $1 - \sum_i w_i (L_i + L_{i-1})$ on the Lorenz curve of the grid values $a_i$ weighted by their stationary mass $w_i$.
 
 # %%
-results = model.solve(howard_steps=15, tol=1e-6)
+sol = model.solve(method="vfi", tol=1e-6)
 
-V = results["V"]
-policy_a = results["policy_a"]
-a_grid = results["a_grid"]
-z_grid = results["z_grid"]
-gini_coef = results["gini"]
-mean_assets = results["mean_assets"]
+V = sol.V
+a_grid = sol.grids["a"]
+policy_a = sol.policy("a(+1)")
+mean_assets = sol.mean("a")
+gini_coef = sol.gini("a")
+top_mass = sol.distribution[-1].sum()
 
-print(f"Model: {results['model_name']}")
-print(f"VFI Converged in {results['n_iter']} iterations ({results['elapsed']:.3f} s)")
+print(f"Model: {sol.model_name} (method: {sol.method})")
 print(f"Stationary Mean Assets: {mean_assets:.4f}")
 print(f"Wealth Gini Coefficient: {gini_coef:.4f}")
+print(f"Mass at the top grid point a = 15: {top_mass:.4f}")
 
 # Headline assertions
-assert results["n_iter"] > 0, "VFI failed to iterate"
-assert 0.5 < mean_assets < 10.0, f"Mean assets out of expected range: {mean_assets}"
-assert 0.05 < gini_coef < 0.60, f"Gini coefficient out of expected range: {gini_coef}"
+assert abs(mean_assets - 6.5733) < 1e-3, f"Mean assets moved: {mean_assets}"
+assert abs(gini_coef - 0.3494) < 1e-3, f"Gini coefficient moved: {gini_coef}"
 
 # %% [markdown]
-# ## Visualizing policy functions and wealth distribution
+# Mean assets are 6.5733 and the Gini is 0.3494. Earlier versions of this notebook printed 6.6767 and 0.3924. Those came from a 2000-household, 100-period simulation, and that Gini was computed after subtracting the minimum asset holding, so it was not the standard Gini. About 8% of the mass sits at the top grid point, so the upper end of the grid binds: widen it before reading the top of the distribution.
+
+# %% [markdown]
+# ## Visualizing policy functions and value functions
 #
-# The hero figure shows the policy rules $a'(a, z)$ for high vs low productivity states.
+# The hero figure shows the policy rules $a'(a, z)$ for the lowest and highest productivity states, and the value functions.
 
 # %%
 fig, (ax1, ax2) = _nbstyle.figura(1, 2, figsize=(10.5, 4.2))
@@ -113,7 +111,30 @@ ax2.set_title("Value Functions V(a, z)")
 ax2.legend(loc="lower right", frameon=True, facecolor=_nbstyle.FONDO, edgecolor=_nbstyle.SPINE)
 
 # %% [markdown]
-# **Reading the output.** Low-productivity agents ($z_{\min}$) decumulate assets when wealth is high, while high-productivity agents ($z_{\max}$) save aggressively. Precautionary motives prevent wealth from collapsing to zero.
+# **Reading the output.** Low-productivity agents ($z_{\min}$) decumulate assets when wealth is high, while high-productivity agents ($z_{\max}$) save. Precautionary motives prevent wealth from collapsing to the bottom of the grid.
+
+# %% [markdown]
+# ## Simulating a panel of households
+#
+# `sol.simulate(n_agents, periods)` draws individual histories under the solved policy and returns a `dp.Panel`. Here every household starts at the bottom of the grid, $a = 0.1$, with its shock drawn from the stationary distribution of $z$. The cross-sectional Gini of the panel, `panel.gini("a", by="t")`, is 0.0000 at t = 0, when every household holds the same assets. It then overshoots: lucky households accumulate faster than the rest catch up, and by t = 10 it is 0.4449, above the exact stationary 0.3494. After that it falls back and converges to the exact value, 0.3496 at t = 199. The same seed gives the same panel.
+
+# %%
+panel = sol.simulate(n_agents=5000, periods=200, seed=0, init={"a": 0.1})
+gini_t = panel.gini("a", by="t")
+
+print(panel)
+print(f"Panel Gini at t = 0, 10, 199: {gini_t.iloc[0]:.4f}, {gini_t.iloc[10]:.4f}, {gini_t.iloc[-1]:.4f}")
+print(f"Exact stationary Gini:        {gini_coef:.4f}")
+
+assert abs(gini_t.iloc[-1] - gini_coef) < 0.02, "The panel Gini should settle near the exact value"
+
+fig, ax = _nbstyle.figura(1, 1, figsize=(8.0, 3.6))
+ax.plot(gini_t.index, gini_t.to_numpy(), color=_nbstyle.palette(2)[0], lw=2, label="Panel Gini of a, by period")
+ax.axhline(gini_coef, linestyle="--", color=_nbstyle.palette(2)[1], lw=1.5, label=f"Exact stationary Gini ({gini_coef:.4f})")
+ax.set_xlabel("Period t", color=_nbstyle.TEXTO)
+ax.set_ylabel("Gini of assets", color=_nbstyle.TEXTO)
+ax.set_title("A simulated panel converges to the stationary distribution")
+ax.legend(loc="lower right", frameon=True, facecolor=_nbstyle.FONDO, edgecolor=_nbstyle.SPINE)
 
 # %% [markdown]
 # ## Your turn — precautionary savings under higher risk aversion
@@ -121,26 +142,29 @@ ax2.legend(loc="lower right", frameon=True, facecolor=_nbstyle.FONDO, edgecolor=
 # **Prompts.**
 # 1. *Basic*: Increase risk aversion from $\gamma = 2.0$ to $\gamma = 3.5$ (`# ← change this ...`). Does mean stationary wealth increase due to stronger precautionary motives?
 # 2. *Intermediate*: Lower the discount factor to $\beta = 0.94$. Verify that impatient households hold less capital.
-# 3. *Stretch*: Increase shock variance $\sigma_z = 0.25$ and observe the expansion in the Gini coefficient.
+# 3. *Stretch*: Increase the shock's standard deviation to $\sigma_z = 0.25$ and compare `sol_yt.gini("a")` with the baseline.
 
 # %%
 # Your turn code block
 gamma_new = 3.0  # ← change this: try 3.0 or 3.5
 
-m_yt = Model("High Risk Aversion")
-m_yt.set_param("beta", 0.96).set_param("gamma", gamma_new).set_param("alpha", 0.36).set_param("delta", 0.10)
-m_yt.add_state("a", 0.1, 15.0, 60).add_shock("z", 0.90, 0.15, 5)
-m_yt.set_utility(lambda c, p: (c ** (1.0 - p["gamma"])) / (1.0 - p["gamma"]))
-m_yt.set_budget(lambda a, ap, z, p: np.exp(z) * (a ** p["alpha"]) + (1.0 - p["delta"]) * a - ap)
+m_yt = dp.Model("High Risk Aversion")
+m_yt.parameters(beta=0.96, gamma=gamma_new, alpha=0.36, delta=0.10)
+m_yt.exogenous("z", dp.AR1(rho=0.90, sigma=0.15, n=5))
+m_yt.state("a", np.linspace(0.1, 15.0, 60))
+m_yt.local("c = exp(z)*a^alpha + (1 - delta)*a - a(+1)")
+m_yt.reward("c^(1 - gamma)/(1 - gamma)")
+m_yt.subject_to("c > 0")
 
-res_yt = m_yt.solve()
+sol_yt = m_yt.solve(method="vfi")
 print(f"New Risk Aversion gamma = {gamma_new:.1f}")
-print(f"New Stationary Mean Assets: {res_yt['mean_assets']:.4f}")
+print(f"New Stationary Mean Assets: {sol_yt.mean('a'):.4f}")
+print(f"New Wealth Gini: {sol_yt.gini('a'):.4f}")
 
 # Assertion holding for default
-assert res_yt["mean_assets"] > 0.0, "Mean assets must be positive"
+assert sol_yt.mean("a") > 0.0, "Mean assets must be positive"
 
 # %% [markdown]
 # ## How comprehensive is this?
 #
-# `puremacro.vfi.Model` provides a high-level Dynare-like entry point to the low-level value function solver `puremacro.vfi.solve_vfi`. You can inspect raw policy arrays, change acceleration parameters, or connect low-level backend solvers (`Numba`, `MLX`, `CuPy`) through the same API.
+# `puremacro.dp` compiles the declaration to the `puremacro.vfi` engines; `sol.raw` holds the engine's result. The same declaration style covers life cycles, discrete choices with taste shocks, the endogenous grid method, continuous time and market-clearing prices (see `docs/dp.md`). `sol.top_share`, `sol.quantile` and `sol.lorenz` give the rest of the exact wealth distribution. This notebook used `puremacro.vfi.Model` before; that class is deprecated and will be removed in 6.0.

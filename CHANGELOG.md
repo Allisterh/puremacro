@@ -2,6 +2,28 @@
 
 This file records user-visible changes per release. Internal refactors that don't change behaviour are listed under "Internal" so a returning user can see what shifted under the hood without surprise.
 
+## Unreleased
+
+### Added
+
+- `DPSolution.simulate(n_agents, periods, seed=..., init=..., burn_in=..., record=...)` simulates individual histories from a `puremacro.dp` solution (discrete VFI and EGM, infinite horizon and life cycle, with or without a discrete choice and taste shocks) and returns a `dp.Panel`. One seeded PCG64 generator draws, each period, the discrete-choice uniforms, then the shock uniforms, then the survival uniforms, so the same seed gives a bit-identical panel. Infinite-horizon panels start in the stationary distribution by default; life-cycle panels start with newborns and apply the declared survival (`panel.alive`). `n_agents * periods` above 5e8 raises `ValueError` with the memory it would need. Continuous-time (HJB) and Krusell-Smith solutions raise `NotImplementedError`.
+- `dp.Panel`, a container for simulated histories: `to_frame`, `to_microframe`, `cross_section`, `path`, and `mean`, `quantile`, `gini`, `top_share` and `summary` pooled over periods or grouped `by="t"` or `by="age"`. Dead agents keep their rows and are left out of every statistic.
+- Exact statistics on the solved distribution: `DPSolution.gini`, `top_share`, `quantile` and `lorenz`. The Gini is the standard weighted Gini on the Lorenz curve, `1 - sum_i w_i (L_i + L_{i-1})`, the same function as `MicroFrame.gini` (negative values allowed, NaN when the total is not positive). In a life cycle, `age=j` uses one cohort and `age="all"` returns one value per age. Krusell-Smith solutions raise `ValueError` (they have no stationary distribution).
+- `DPSolution.population_shares()` gives each age's population share in a life cycle with survival applied. `sol.distribution` still gives every cohort mass 1; the pooled statistics weight cohorts by these shares.
+- `docs/dp.md` (EN/ES) has two new sections, "Panels and inequality" and "Porting from vfi.Model". `dp` moves from Experimental to Stable in `ARCHITECTURE.md`.
+
+### Fixed
+
+- `vfi.simulate_panel` raises `TypeError` for a policy that is not an integer array of grid indices. It used to cast a float policy (for example a continuous EGM policy in asset levels) with `astype(np.intp)`, which silently truncated it to wrong indices. Use `DPSolution.simulate` for such solutions.
+
+### Deprecated
+
+- `vfi.Model` issues a `DeprecationWarning` when constructed and will be removed in 6.0. Declare the model with `puremacro.dp`; `docs/dp.md`, "Porting from vfi.Model", shows the translation, and the `dp` version of notebook 21's model picks the same policy on every grid node.
+
+### Changed
+
+- Notebook 21 (EN/ES) declares its precautionary-savings model with `puremacro.dp` instead of `vfi.Model`. It now prints mean assets 6.5733 and a wealth Gini of 0.3494, the exact values of the stationary distribution. It used to print 6.6767 and 0.3924, which came from a 2000-household, 100-period simulation; that Gini was computed after subtracting the minimum asset holding, so it was not the standard Gini. The notebook adds a simulated panel whose cross-sectional Gini converges to the exact value, and its text no longer claims vectorised Bellman updates or pluggable Numba/MLX/CuPy backends.
+
 ## 5.0.0a2 (2026-10-14)
 
 Second 5.0 pre-release: the last defects from the September notebook review, the Stock-Yogo tables in full, and a test suite whose timing and network checks no longer depend on the CI runner.

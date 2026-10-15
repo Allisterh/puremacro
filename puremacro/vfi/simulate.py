@@ -29,8 +29,18 @@ def simulate_panel(policy_aprime, P_z, *, n_agents: int, n_periods: int,
     ``z0_index`` (default: drawn from the z-stationary distribution). ``burn_in``
     periods are simulated and discarded before recording. Returns
     (a_path, z_path), each (n_agents, n_periods) int arrays of grid indices.
+
+    ``policy_aprime`` must have an integer dtype; a float policy (e.g. a
+    continuous EGM policy in asset levels) raises ``TypeError`` rather than
+    being silently truncated to indices. Simulate such solutions with
+    ``puremacro.dp``'s ``DPSolution.simulate``.
     """
     pol = np.asarray(policy_aprime)
+    if not np.issubdtype(pol.dtype, np.integer):
+        raise TypeError(
+            "simulate_panel needs an integer policy of grid indices; got dtype "
+            f"{pol.dtype}. Casting would truncate it. To simulate a continuous "
+            "(float) policy use puremacro.dp: sol.simulate(...) on a DPSolution.")
     n_a, n_z = pol.shape
     P = np.asarray(P_z, dtype=float)
     if int(burn_in) < 0:

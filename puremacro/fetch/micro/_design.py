@@ -68,6 +68,11 @@ from typing import Callable, Sequence
 import numpy as np
 import pandas as pd
 
+from puremacro._wstats import lorenz as _lorenz  # noqa: F401  (kept under the old names)
+from puremacro._wstats import w_gini as _w_gini
+from puremacro._wstats import w_quantile as _w_quantile
+from puremacro._wstats import w_top_share as _w_top_share
+
 METHODS = ("sdr", "jk1", "brr", "fay", "bootstrap", "other", "taylor", "none")
 _Z = 1.959963984540054   # standard normal 97.5% quantile (Woodruff interval)
 
@@ -153,7 +158,8 @@ class SurveyDesign:
 
 # ---------------------------------------------------------------------------
 # Weighted statistics, vectorised over [main weight, replicate weights...]
-# Each takes x (n,) and W (n, K) and returns (K,) or (K, J).
+# Each takes x (n,) and W (n, K) and returns (K,) or (K, J). The quantile,
+# Gini and top-share helpers live in puremacro._wstats, shared with dp.
 # ---------------------------------------------------------------------------
 def _w_total(x: np.ndarray, W: np.ndarray) -> np.ndarray:
     return x @ W
@@ -163,60 +169,6 @@ def _w_mean(x: np.ndarray, W: np.ndarray) -> np.ndarray:
     den = W.sum(axis=0)
     with np.errstate(invalid="ignore", divide="ignore"):
         return (x @ W) / den
-
-
-def _w_quantile(x: np.ndarray, W: np.ndarray, q: float) -> np.ndarray:
-    """Inverse of the weighted empirical CDF: the smallest x whose
-    cumulative weight share reaches q (each weight column separately)."""
-    order = np.argsort(x, kind="stable")
-    xs = x[order]
-    cw = np.cumsum(W[order], axis=0)
-    tot = cw[-1]
-    out = np.full(W.shape[1], np.nan)
-    ok = tot > 0
-    if not ok.any():
-        return out
-    target = q * tot[ok]
-    idx = (cw[:, ok] >= target - 1e-12 * np.abs(target)).argmax(axis=0)
-    out[ok] = xs[idx]
-    return out
-
-
-def _lorenz(x: np.ndarray, W: np.ndarray):
-    """Sorted values, cumulative weights and cumulative weighted values."""
-    order = np.argsort(x, kind="stable")
-    xs, Ws = x[order], W[order]
-    return xs, Ws, np.cumsum(Ws, axis=0), np.cumsum(Ws * xs[:, None], axis=0)
-
-
-def _w_gini(x: np.ndarray, W: np.ndarray) -> np.ndarray:
-    """Gini coefficient, 1 − Σ_i p_i (L_i + L_{i−1}), from the Lorenz curve of
-    the weighted sample (each unit a mass point). Equals the mean absolute
-    difference Σ_ij w_i w_j |x_i − x_j| / (2 N Σ w x). Negative values (net
-    worth) are allowed and can push it above 1; NaN when the total is <= 0."""
-    _, Ws, cw, S = _lorenz(x, W)
-    N, tot = cw[-1], S[-1]
-    S_prev = np.vstack([np.zeros((1, W.shape[1])), S[:-1]])
-    with np.errstate(invalid="ignore", divide="ignore"):
-        g = 1.0 - (Ws * (S + S_prev)).sum(axis=0) / (N * tot)
-    return np.where((N > 0) & (tot > 0), g, np.nan)
-
-
-def _w_top_share(x: np.ndarray, W: np.ndarray, p: float) -> np.ndarray:
-    """Share of the total held by the top ``p`` of units by weight,
-    1 − L(1 − p), splitting the unit that straddles the cut-off."""
-    xs, _, cw, S = _lorenz(x, W)
-    N, tot = cw[-1], S[-1]
-    cut = (1.0 - p) * N
-    i = (cw >= cut - 1e-12 * np.abs(cut)).argmax(axis=0)
-    cols = np.arange(W.shape[1])
-    prev = i > 0
-    cw_prev = np.where(prev, cw[np.maximum(i - 1, 0), cols], 0.0)
-    S_prev = np.where(prev, S[np.maximum(i - 1, 0), cols], 0.0)
-    below = S_prev + (cut - cw_prev) * xs[i]
-    with np.errstate(invalid="ignore", divide="ignore"):
-        share = 1.0 - below / tot
-    return np.where((N > 0) & (tot > 0), share, np.nan)
 
 
 def _w_ratio(X: np.ndarray, W: np.ndarray, q: float | None) -> np.ndarray:
