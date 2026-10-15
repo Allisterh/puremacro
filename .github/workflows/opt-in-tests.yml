@@ -5,7 +5,9 @@ name: Opt-in tests
 # rot unnoticed: the SW07 parity fixture stayed red across the whole 2.5.0
 # line while every CI run was green. This workflow runs those markers on one
 # platform: every Monday, on demand, and -- through release.yml -- on every
-# release tag, where the `opt-in` job gates the PyPI publish.
+# release tag, where the `opt-in` job gates the PyPI publish. The `benchmark`
+# marker (pure wall-clock performance checks) runs here too, at
+# PUREMACRO_TIMING_SCALE=10, rather than in every pull request.
 #
 # Measured on 2026-10-03 (12-core laptop, conda Python 3.13): 115 passed,
 # 9 skipped in 74 min, of which 43 min were
@@ -50,7 +52,7 @@ jobs:
           PUREMACRO_TIMING_SCALE: "10"
           PYTHONPATH: "."
         run: |
-          pytest -m "slow or reference or replication" tests puremacro/tests \
+          pytest -m "slow or reference or replication or benchmark" tests puremacro/tests \
             --deselect tests/test_notebooks/test_notebooks_execute.py::test_all_notebooks_execute \
             --durations=25 -rs
 

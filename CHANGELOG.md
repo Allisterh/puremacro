@@ -2,6 +2,35 @@
 
 This file records user-visible changes per release. Internal refactors that don't change behaviour are listed under "Internal" so a returning user can see what shifted under the hood without surprise.
 
+## Unreleased
+
+### Added
+
+- `inference.stock_yogo_cv` covers 3 to 30 instruments for the TSLS relative-bias test (it covered 3 to 8 and returned None for 9 to 30). A new keyword-only `criterion="size"` returns the TSLS Wald-test size critical values for 1 to 30 instruments at maximal size 10/15/20/25%. Both tables are for one endogenous regressor, from Stock and Yogo (2002, NBER Technical Working Paper 284, Tables 1 and 2). The bias criterion still returns None for one or two instruments.
+- `gali_difference_spec()` in `puremacro.examples.empirical_benchmark_replications` returns the VAR data and the `bq` result for Galí's (1999) difference specification.
+
+### Fixed
+
+- The empirical-benchmark example and showcase notebook 35 (EN/ES) fed hours per capita in levels to `bq`, whose default cumulates every response, so the plotted hours response was a running sum (+12.2 at h=20). Both now use Galí's (1999) difference specification (productivity growth and the first difference of hours, cumulated to levels). On the bundled 1948-2026 data, hours fall 0.83% on impact and settle near -0.40%; productivity rises 0.68% on impact and settles near +0.81%. The notebook prose follows these numbers.
+- Notebook 35 (EN/ES), Mertens-Ravn section: the text now quotes the notebook's own printed responses. GDP is -0.74% on impact with a trough of -1.13% at h=3, where the text claimed -1.5% to -2.5% and a multiplier the notebook does not compute. The federal funds rate rises 0.15 pp on impact, where the text said the Fed lowers it. A note says the first-stage F of 6.79 flags a weak instrument. The `load_gali1999` docstring gives the bundled sample (1948Q2-2026Q1, 312 quarters).
+- `cycles.hamilton_filter` raises `ValueError` when the sample is too short to identify Hamilton's (2018) regression (T < h + 2p + 1: T <= 16 at h=8, p=4; T <= 48 at h=24, p=12). It used to return a cycle that was exactly zero, because the regression fitted exactly. It also raises `ValueError`, not `LinAlgError`, for NaN or inf input and for invalid `h`/`p`, checked after the `horizon`/`lags` aliases are resolved.
+- `dynpanel.ab_gmm` and `dynpanel.bb_gmm` no longer raise `LinAlgError` when a GMM weight matrix is singular, for example with uncollapsed instruments on unbalanced panels with staggered start dates (step 1), or system GMM with year dummies on Stata's abdata (step 2). They use the Moore-Penrose generalized inverse, as xtabond2 does (Roodman 2009), record the rank in `GMMResult.notes` and issue a `RuntimeWarning`. Two-step results with a singular step-2 matrix depend on the generalized inverse and can differ from xtabond2's. Full-rank fits are bit-for-bit unchanged.
+- Notebook 46 (EN/ES): the two-asset HANK section states the adjustment cost the solver implements, chi(d,a) = chi_0/(1+chi_1) |d|^(1+chi_1)/(a+a_bar)^chi_1, and its stored outputs come from the current solver: impact consumption is +0.0031 (the notebook still showed -0.0038 from before 4.4.0).
+- The Mertens-Ravn proxy-SVAR example prints the published one-instrument 10% maximal-size cutoff 16.38 (it printed a hand-typed 16.4). The Stock-Yogo citations say NBER TWP 284 Tables 1 and 2, and the docstring no longer claims that the F > 10 rule corresponds to 3 instruments at 10% bias (that cell is 9.08).
+
+### Changed
+
+- `data.hamilton_filter` is a thin wrapper around `cycles.hamilton_filter`, the single implementation. Its signature and named `cycle`/`trend` return are unchanged.
+- When instrument columns are linearly dependent, `GMMResult.n_instruments` and `hansen_j_df` count the linearly independent instruments (xtabond2's `e(j)`, df = j - k). A singular step-2 matrix does not reduce the degrees of freedom.
+
+### Internal
+
+- Every absolute wall-clock assertion in the tests goes through `budget()`/`budget_ms()` in `tests/_timing.py`, so `PUREMACRO_TIMING_SCALE` widens all of them on CI. Repeated measurements take the best of N after a warm-up instead of the worst. Ratio checks stay unscaled. `tests/test_test_quality.py` fails when a timing measurement is compared with an unscaled number. This removes the SW07 repeated-solve flake and the other unscaled ceilings.
+- A new `benchmark` marker covers pure performance checks (speed-up ratios, sub-millisecond and widget-latency checks, SW07 and Sylvester timing). The default run deselects them; the opt-in workflow runs them weekly and on every release tag.
+- The test suite runs offline and without the developer's API keys by default. An autouse guard refuses non-loopback connections and DNS lookups in any test not marked `network`, `replication` or `local_llm` and lists every refused attempt at the end of the run. Tests get a missing credentials file and no service key variables, which fixes the order-dependent `test_missing_key_raises_before_any_request`. Five tests that reached eur-lex, OECD or GitHub during a default run no longer do.
+- The 16-thread SQLite cache stress test takes the write lock once per writer and sets a busy timeout on every connection, removing the intermittent "database is locked" failure on Windows runners.
+- `tests/test_nb46_staleness.py` checks that notebook 46's stated cost formula and stored two-asset outputs match the library.
+
 ## 5.0.0a1 (2026-10-14)
 
 This pre-release removes material that is not part of the library and prepares the 5.0 line. 4.8.1 remains on PyPI for anyone who needs what was removed.

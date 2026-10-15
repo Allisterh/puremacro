@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
+from _timing import assert_within
 from puremacro.models import (
     SequenceSpaceHANKResult,
     FakeNewsResult,
@@ -39,7 +40,7 @@ def test_solve_nonlinear_transition_large_monetary_shock():
     assert res.converged is True
     max_residual = float(np.max(np.abs(res.residuals)))
     assert max_residual < 1e-6, f"Residual {max_residual:.2e} >= 1e-6"
-    assert elapsed < 5.0, f"Elapsed time {elapsed:.2f}s >= 5.0s"
+    assert_within(elapsed, 5.0, "non-linear HANK transition, monetary shock (hang guard)")
 
     assert len(res.U) == horizon
     assert len(res.linear_path) == horizon
@@ -77,7 +78,7 @@ def test_solve_nonlinear_transition_large_fiscal_shock():
     assert res.converged is True
     max_residual = float(np.max(np.abs(res.residuals)))
     assert max_residual < 1e-6, f"Residual {max_residual:.2e} >= 1e-6"
-    assert elapsed < 5.0, f"Elapsed time {elapsed:.2f}s >= 5.0s"
+    assert_within(elapsed, 5.0, "non-linear HANK transition, fiscal shock (hang guard)")
 
     # Fiscal expansion stimulates output on impact and clears goods market Y = C + G
     assert res.nonlinear_path[0] > 0.0

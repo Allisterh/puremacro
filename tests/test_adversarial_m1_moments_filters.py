@@ -14,6 +14,7 @@ import pandas as pd
 import pytest
 import scipy.integrate
 
+from _timing import assert_within
 from puremacro.dsge import build, one_sided_hp_filter, TheoreticalMomentsResult, StochSimulResult
 from puremacro.dsge._moments import spectral_moments, compute_autocorr_matrices
 
@@ -258,7 +259,11 @@ def test_adversarial_one_sided_hp_sample_size_boundaries():
 
 
 def test_adversarial_one_sided_hp_no_memory_explosion():
-    """Stress-test one-sided HP filter with large series T=50,000 to verify O(T) memory and speed."""
+    """Stress-test one-sided HP filter with large series T=50,000 to verify O(T) memory and speed.
+
+    The time budget is a hang guard (an O(T^2) regression takes minutes), so it
+    stays in the default selection; it is scaled by PUREMACRO_TIMING_SCALE.
+    """
     import time
 
     T = 50000
@@ -269,7 +274,7 @@ def test_adversarial_one_sided_hp_no_memory_explosion():
     c, tr = one_sided_hp_filter(y_large, lamb=1600.0)
     dt = time.perf_counter() - t0
 
-    assert dt < 2.0, f"Execution took {dt:.2f}s, exceeding 2.0s limit"
+    assert_within(dt, 2.0, "one-sided HP filter on T=50,000")
     assert c.shape == (T,)
     assert tr.shape == (T,)
     assert not np.isnan(c).any()

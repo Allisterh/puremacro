@@ -31,6 +31,8 @@ from pathlib import Path
 
 import pytest
 
+from _timing import assert_within
+
 import puremacro
 from puremacro.llm import engines as E
 
@@ -72,7 +74,7 @@ def test_resolve_auto_none_raises(monkeypatch):
 def test_probe_open_port_that_is_not_an_llm_server(llm_stub_404_server):   # every request answered with a 404
     t0 = time.perf_counter()
     assert E.HTTPEngine(api="openai", base_url=llm_stub_404_server).available() is False
-    assert time.perf_counter() - t0 < 3.5
+    assert_within(time.perf_counter() - t0, 3.5, "probe of a non-LLM server (hang guard)")
 
 
 def test_strip_thinking():
@@ -865,7 +867,9 @@ def test_a_server_that_never_answers_costs_one_probe_timeout(llm_stub_server):
     eng = E.HTTPEngine(base_url=llm_stub_server.url, api="ollama", probe_timeout=0.3)
     t0 = time.perf_counter()
     assert eng.available() is False
-    assert time.perf_counter() - t0 < 2.5
+    # hang guard: the stub stalls 30 s, so the scaled budget stays below the
+    # stall for any PUREMACRO_TIMING_SCALE under 12 (CI uses 10)
+    assert_within(time.perf_counter() - t0, 2.5, "probe of a silent server")
 
 
 # ---------------------------------------------------------------- resolve_engine and available_engines

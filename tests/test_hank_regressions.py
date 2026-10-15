@@ -16,6 +16,7 @@ import time
 import numpy as np
 import pytest
 
+from _timing import budget
 from puremacro.models.hank_sequence_space import (
     fake_news_algorithm,
     simulate_targeted_transfer,
@@ -35,14 +36,15 @@ def _rate_shock(bp: float, horizon: int) -> np.ndarray:
 
 @pytest.mark.parametrize("bp", [500.0, -500.0, 200.0])
 def test_large_shocks_converge_at_documented_defaults(ss, bp):
-    """+/-500 bp and +200 bp converge with horizon=300, max_iter=100, tol=1e-6 in < 5 s."""
+    """+/-500 bp and +200 bp converge with horizon=300, max_iter=100, tol=1e-6 in < budget(5) s."""
     t0 = time.perf_counter()
     res = solve_nonlinear_transition(ss, _rate_shock(bp, 300), shock_var="r", horizon=300)
     elapsed = time.perf_counter() - t0
     assert res.converged
     assert res.iterations < 100
     assert float(np.max(np.abs(res.residuals))) < 1e-6
-    assert elapsed < 5.0
+    # hang guard, scaled by PUREMACRO_TIMING_SCALE
+    assert elapsed < budget(5.0), f"{bp:+.0f} bp transition took {elapsed:.2f}s >= {budget(5.0):.2f}s"
     # the path is a sensible fraction of GDP, not the old -200%
     assert float(np.max(np.abs(res.nonlinear_path))) < 0.5
 

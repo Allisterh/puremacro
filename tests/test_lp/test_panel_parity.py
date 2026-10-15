@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from _timing import best_of
 from puremacro.lp.panel import panel_lp
 from puremacro.lp.panel_dk import panel_lp_dk
 from puremacro.lp.panel_iv import panel_lp_iv
@@ -43,6 +44,7 @@ def test_panel_lp_dk_returns_documented_columns():
     assert np.all(np.isfinite(out["se"]))
 
 
+@pytest.mark.benchmark
 def test_panel_lp_dk_engine_does_not_redo_demeaning():
     """Regression guard for the 0.2.0 panel-LP refactor.
 
@@ -51,27 +53,15 @@ def test_panel_lp_dk_engine_does_not_redo_demeaning():
     design returned by ``two_way_fe_within`` instead of redoing the
     iterative demeaning a second time. If a future change reintroduces
     the duplicate work, the DK runtime will balloon — this test caps
-    the ratio.
+    the ratio. A ratio of two timings from the same process is not scaled by
+    PUREMACRO_TIMING_SCALE; each side is the best of 3 after a warm-up.
     """
-    import time
-
     rng = np.random.default_rng(31)
     df = _balanced_panel(rng, N=12, T=120, beta=0.5)
     horizons = list(range(0, 21))
 
-    # Warm import / numpy state.
-    panel_lp(df, y="y", x="x", horizons=horizons, n_lags=2)
-    panel_lp_dk(df, y="y", x="x", horizons=horizons, n_lags=2)
-
-    t0 = time.perf_counter()
-    for _ in range(3):
-        panel_lp(df, y="y", x="x", horizons=horizons, n_lags=2)
-    cluster_dt = (time.perf_counter() - t0) / 3
-
-    t0 = time.perf_counter()
-    for _ in range(3):
-        panel_lp_dk(df, y="y", x="x", horizons=horizons, n_lags=2)
-    dk_dt = (time.perf_counter() - t0) / 3
+    cluster_dt = best_of(lambda: panel_lp(df, y="y", x="x", horizons=horizons, n_lags=2))
+    dk_dt = best_of(lambda: panel_lp_dk(df, y="y", x="x", horizons=horizons, n_lags=2))
 
     # The DK variant has additional per-horizon work (Driscoll-Kraay
     # meat construction) so a small overhead is expected; a 3× factor

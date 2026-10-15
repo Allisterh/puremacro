@@ -12,7 +12,7 @@ import time
 import numpy as np
 import pytest
 
-from _timing import budget
+from _timing import assert_within, best_of
 from puremacro.dsge._sylvester import solve_generalized_sylvester_kronecker
 
 
@@ -149,8 +149,9 @@ def test_schur_sylvester_near_singular_fallback():
     assert g_xx.shape == (2, 1)
 
 
+@pytest.mark.benchmark
 def test_schur_sylvester_sw07_benchmark_timing():
-    """SW07 dimensions (N=40, nx=15) execute in <= 0.030s with max error <= 1e-8."""
+    """SW07 dimensions (N=40, nx=15) execute within budget(0.030) s (best of 3)."""
     rng = np.random.default_rng(42)
     N, n_x = 40, 15
     A_hat = np.eye(N) + 0.05 * rng.standard_normal((N, N))
@@ -158,17 +159,14 @@ def test_schur_sylvester_sw07_benchmark_timing():
     h_x = 0.5 * np.eye(n_x) + 0.02 * rng.standard_normal((n_x, n_x))
     K_xx = rng.standard_normal((N, n_x**2))
 
-    times = []
-    for _ in range(3):
-        t0 = time.perf_counter()
-        g_xx = solve_generalized_sylvester_kronecker(A_hat, A_plus, h_x, K_xx)
-        times.append(time.perf_counter() - t0)
-    elapsed = min(times)
-
+    g_xx = solve_generalized_sylvester_kronecker(A_hat, A_plus, h_x, K_xx)
     assert g_xx.shape == (N, n_x**2)
     assert np.isfinite(g_xx).all()
     assert np.isrealobj(g_xx)
-    assert elapsed <= budget(0.030), f"Sylvester solver took {elapsed:.4f}s > {budget(0.030)}s"
+
+    elapsed = best_of(
+        lambda: solve_generalized_sylvester_kronecker(A_hat, A_plus, h_x, K_xx))
+    assert_within(elapsed, 0.030, "SW07-sized Sylvester solve (best of 3)")
 
     # Fast verification of sample columns residual
     C = np.kron(h_x, h_x)

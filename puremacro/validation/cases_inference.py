@@ -8,9 +8,10 @@ Scope (seven cases across the mechanisms that admit a SOUND, INDEPENDENT check):
             the same Newey-West (1987) sandwich; the reference is the frozen
             golden in ``goldens/inference.json`` and the live statsmodels call
             lives only in the ``reference``-marked drift-guard.
-* PUBLISHED ``stock_yogo_cv`` returns the Stock-Yogo (2005, Table 5.2) 2SLS
-            relative-bias critical values for the single-endogenous-regressor
-            case — asserted EXACTLY against the published constants.
+* PUBLISHED ``stock_yogo_cv`` returns the Stock-Yogo (2002, NBER TWP 284,
+            Table 1) TSLS relative-bias and (Table 2) TSLS size critical
+            values for the single-endogenous-regressor case — asserted
+            EXACTLY against the published constants.
             ``llsw_critical_value`` returns the Kiefer-Vogelsang (2005, Table I)
             Bartlett fixed-b critical values, two-sided alpha -> 1 - alpha/2
             row — asserted EXACTLY against the published constants.
@@ -139,9 +140,13 @@ def _newey_west_se_alias() -> dict:
 def _stock_yogo_published() -> dict:
     from puremacro.inference.over_id import stock_yogo_cv
 
-    # A spread of (n_instruments, max_bias_pct) keys spanning the table.
-    keys = [(3, 5), (3, 10), (3, 20), (3, 30), (4, 10), (5, 10), (6, 10)]
-    return {"cv": np.array([stock_yogo_cv(l, b) for (l, b) in keys], dtype=float)}
+    # A spread of (n_instruments, threshold %) keys spanning both tables.
+    bias_keys = [(3, 5), (3, 10), (3, 20), (3, 30), (4, 10), (5, 10), (6, 10),
+                 (9, 10), (30, 5)]
+    size_keys = [(1, 10), (1, 25), (2, 10), (30, 10)]
+    cv = [stock_yogo_cv(l, b) for (l, b) in bias_keys]
+    cv += [stock_yogo_cv(l, r, criterion="size") for (l, r) in size_keys]
+    return {"cv": np.array(cv, dtype=float)}
 
 
 def _cragg_donald_just_identified() -> dict:
@@ -301,21 +306,29 @@ CASES: list[ValidationCase] = [
     ValidationCase(
         id="inference.stock_yogo_published_cv",
         subsystem="inference",
-        title="Stock-Yogo critical values match the published table",
-        title_es="Los valores críticos de Stock-Yogo coinciden con la tabla publicada",
+        title="Stock-Yogo critical values match the published tables",
+        title_es="Los valores críticos de Stock-Yogo coinciden con las tablas publicadas",
         mechanism=Mechanism.PUBLISHED,
         compute=_stock_yogo_published,
-        # Published constants (Stock & Yogo 2005, Table 5.2; single endogenous
-        # regressor, 2SLS, maximal relative bias). Keys, in order:
-        # (3,5),(3,10),(3,20),(3,30),(4,10),(5,10),(6,10).
+        # Published constants, one endogenous regressor, read from Stock & Yogo
+        # (2002), NBER Technical Working Paper 284,
+        # https://www.nber.org/system/files/working_papers/t0284/t0284.pdf
+        # Table 1 (TSLS bias, printed p. 58), columns "n = 1, b = ...", keys
+        # (K2, b%): (3,5),(3,10),(3,20),(3,30),(4,10),(5,10),(6,10),(9,10),(30,5);
+        # then Table 2 (TSLS size, printed p. 59), columns "n = 1, r = ...",
+        # keys (K2, r%): (1,10),(1,25),(2,10),(30,10).
         reference=lambda: {
-            "cv": np.array([13.91, 9.08, 6.46, 5.39, 10.27, 10.83, 11.12], dtype=float)
+            "cv": np.array([13.91, 9.08, 6.46, 5.39, 10.27, 10.83, 11.12,
+                            11.46, 21.42,
+                            16.38, 5.53, 19.93, 86.17], dtype=float)
         },
         tol=Tol.EXACT,
         citation=(
-            "Stock, J.H. & Yogo, M. (2005), 'Testing for Weak Instruments in "
-            "Linear IV Regression', in Andrews & Stock (eds.), Cambridge UP, "
-            "Table 5.2 (2SLS relative bias, one endogenous regressor)."
+            "Stock, J.H. & Yogo, M. (2002), 'Testing for Weak Instruments in "
+            "Linear IV Regression', NBER Technical Working Paper 284, Table 1 "
+            "(TSLS relative bias) and Table 2 (TSLS size), one endogenous "
+            "regressor; published in Andrews & Stock (eds.) (2005), "
+            "Identification and Inference for Econometric Models, Cambridge UP."
         ),
     ),
     ValidationCase(

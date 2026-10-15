@@ -51,6 +51,159 @@ def _isolated_llm_cache(monkeypatch, tmp_path_factory):
     monkeypatch.delenv("PUREMACRO_LLM_BASE_URL", raising=False)
 
 
+# ---------------------------------------------------------------------------
+# Default network and credentials isolation
+# ---------------------------------------------------------------------------
+import ipaddress
+import socket
+import sys
+
+#: Tests carrying one of these marks may reach the network and see the
+#: developer's real credentials. All other tests get neither.
+_NETWORK_MARKS = ("network", "replication", "local_llm")
+
+#: ``(nodeid, call, host)`` for every attempt the socket guard refused this
+#: session; listed in the terminal summary so a test whose library swallowed
+#: the error still shows up.
+_SOCKET_GUARD_HITS: list[tuple[str, str, str]] = []
+
+_LOCAL_NAMES = {"", "localhost", "localhost.localdomain", "ip6-localhost", "ip6-loopback"}
+
+
+class SocketGuardError(OSError):
+    """A test that is not marked network tried to connect off this machine."""
+
+
+class SocketGuardResolveError(socket.gaierror, SocketGuardError):
+    """A test that is not marked network tried to resolve a public host name."""
+
+
+def _is_local_host(host) -> bool:
+    if host is None:
+        return True
+    if isinstance(host, (bytes, bytearray)):
+        host = bytes(host).decode("ascii", "replace")
+    host = str(host).strip().lower().rstrip(".")
+    if host in _LOCAL_NAMES or host.endswith(".localhost"):
+        return True
+    try:
+        ip = ipaddress.ip_address(host.split("%", 1)[0].strip("[]"))
+    except ValueError:
+        return False
+    return ip.is_loopback or ip.is_unspecified
+
+
+def _guard_message(call: str, host, nodeid: str) -> str:
+    return (f"socket guard: {call}({host!r}) blocked in {nodeid}. Tests run offline "
+            "by default; patch the fetch, or mark the test "
+            "@pytest.mark.network if it really needs the internet.")
+
+
+@pytest.fixture(autouse=True)
+def _default_offline(request, monkeypatch, tmp_path_factory):
+    """Keep every unmarked test off the internet and off the developer's keys.
+
+    Socket guard. ``socket.socket.connect``/``connect_ex`` to an address that is
+    not loopback, and ``socket.getaddrinfo`` of a host that is not local, raise
+    :class:`SocketGuardError` (an ``OSError``; a ``socket.gaierror`` for the
+    lookup) for the length of the test. Loopback (127.0.0.0/8, ::1,
+    ``localhost``) and unix-domain sockets are untouched, so the stub LLM
+    servers and anything else on 127.0.0.1 keep working. Because the error is
+    an ``OSError``, library code that degrades gracefully on a network failure
+    still does so; every refused attempt is also recorded and listed at the end
+    of the run, so a test whose library swallowed the error is still visible.
+
+    Credentials. ``PUREMACRO_CREDENTIALS_FILE`` points at a file that does not
+    exist, the config that ``puremacro.credentials`` caches in ``_CONFIG_CACHE``
+    is dropped (only if the module is already imported; importing it here would
+    change what tests of import side effects see), and every variable in
+    ``credentials.SERVICES`` and ``credentials.PASSWORD_ENV_VARS`` is removed.
+    Without this a key in the developer's ``~/.puremacro/credentials.toml`` or
+    shell reaches tests, and a config cached by one test decides what a later
+    test's ``default_config_path`` patch can change.
+
+    Tests marked ``network``, ``replication`` or ``local_llm`` get neither
+    guard: they talk to real services with the developer's real keys.
+    """
+    if any(request.node.get_closest_marker(m) is not None for m in _NETWORK_MARKS):
+        return
+
+    nodeid = request.node.nodeid
+    real_connect = socket.socket.connect
+    real_connect_ex = socket.socket.connect_ex
+    real_getaddrinfo = socket.getaddrinfo
+
+    def _check_address(sock, address, call):
+        if sock.family not in (socket.AF_INET, socket.AF_INET6):
+            return
+        host = address[0] if isinstance(address, tuple) and address else address
+        if not _is_local_host(host):
+            _SOCKET_GUARD_HITS.append((nodeid, call, str(host)))
+            raise SocketGuardError(_guard_message(call, host, nodeid))
+
+    def guarded_connect(self, address):
+        _check_address(self, address, "connect")
+        return real_connect(self, address)
+
+    def guarded_connect_ex(self, address):
+        _check_address(self, address, "connect_ex")
+        return real_connect_ex(self, address)
+
+    def guarded_getaddrinfo(host, *args, **kwargs):
+        if not _is_local_host(host):
+            _SOCKET_GUARD_HITS.append((nodeid, "getaddrinfo", str(host)))
+            raise SocketGuardResolveError(socket.EAI_NONAME,
+                                          _guard_message("getaddrinfo", host, nodeid))
+        return real_getaddrinfo(host, *args, **kwargs)
+
+    monkeypatch.setattr(socket.socket, "connect", guarded_connect)
+    monkeypatch.setattr(socket.socket, "connect_ex", guarded_connect_ex)
+    monkeypatch.setattr(socket, "getaddrinfo", guarded_getaddrinfo)
+
+    # Credentials isolation (see the docstring).
+    base = tmp_path_factory.getbasetemp() / "credentials"
+    monkeypatch.setenv("PUREMACRO_CREDENTIALS_FILE",
+                       str(base / f"{uuid.uuid4().hex}_absent.toml"))
+    names = set(_CREDENTIAL_ENV_VARS)
+    credentials = sys.modules.get("puremacro.credentials")
+    if credentials is not None:
+        monkeypatch.setattr(credentials, "_CONFIG_CACHE", None)
+        names.update(v for spec in credentials.SERVICES.values() for v in spec.env_vars)
+        names.update(v for vs in credentials.PASSWORD_ENV_VARS.values() for v in vs)
+    for name in sorted(names):
+        monkeypatch.delenv(name, raising=False)
+
+
+#: The key variables of ``credentials.SERVICES`` and
+#: ``credentials.PASSWORD_ENV_VARS``, for tests that run before
+#: ``puremacro.credentials`` is first imported (once it is, the fixture reads
+#: the module's own lists as well). tests/test_socket_guard_mechanism.py fails
+#: if this falls out of step with the module.
+_CREDENTIAL_ENV_VARS = (
+    "FRED_API_KEY", "PUREMACRO_FRED_API_KEY",
+    "BEA_API_KEY", "PUREMACRO_BEA_API_KEY",
+    "ANTHROPIC_API_KEY", "PUREMACRO_ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY", "PUREMACRO_OPENAI_API_KEY",
+    "CENSUS_API_KEY", "PUREMACRO_CENSUS_API_KEY",
+    "BANXICO_API_KEY", "BMX_TOKEN", "PUREMACRO_BANXICO_API_KEY",
+    "INEGI_API_KEY", "PUREMACRO_INEGI_API_KEY",
+    "BCCH_API_USER", "PUREMACRO_BCCH_API_USER",
+    "BCCH_API_PASS", "PUREMACRO_BCCH_API_PASS",
+)
+
+
+def pytest_terminal_summary(terminalreporter):
+    if not _SOCKET_GUARD_HITS:
+        return
+    terminalreporter.section("socket guard: network attempts blocked")
+    seen = set()
+    for nodeid, call, host in _SOCKET_GUARD_HITS:
+        if (nodeid, call, host) in seen:
+            continue
+        seen.add((nodeid, call, host))
+        terminalreporter.write_line(f"{nodeid}  {call}  {host}")
+
+
 @pytest.fixture
 def rng():
     return np.random.default_rng(42)

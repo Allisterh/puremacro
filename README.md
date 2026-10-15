@@ -739,6 +739,7 @@ imports perfectly. One call routes the whole existing fetch layer over
 the browser's own networking:
 
 ```python
+# requires: Pyodide
 from puremacro import runtime
 from puremacro.fetch import fetch_xrate_monthly
 

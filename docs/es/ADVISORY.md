@@ -403,6 +403,18 @@ matrix is not positive definite") en todo modelo con dos o más rezagos de la
 variable dependiente o con regresores exógenos rezagados, porque se conservaba
 una columna de instrumentos toda en cero.
 
+Con cualquier valor de `collapse`, una matriz de pesos singular por cualquier
+otro motivo (por ejemplo, una columna de instrumentos que es combinación lineal
+de otras, como producen `collapse=False` en paneles no balanceados y las
+variables dicotómicas de año en el GMM de sistema) se invierte ahora con la inversa generalizada de Moore-Penrose, como hace
+xtabond2, y las `notes` del resultado registran su rango (un `RuntimeWarning`
+lo repite). En ese caso `n_instruments` informa el rango de la matriz de pesos
+de la primera etapa (el `e(j)` de xtabond2) en lugar del número de columnas de
+`Z`. Los resultados en dos etapas con una matriz de la segunda etapa singular
+dependen de la inversa generalizada y pueden diferir de xtabond2; una matriz de
+la segunda etapa singular no reduce `n_instruments` ni los grados de libertad
+de la J de Hansen.
+
 En el ejemplo abdata de Stata ([XT] xtabond, ejemplo 4), quitando a mano la
 columna muerta, los errores estándar antiguos eran entre 1.4% y 68% demasiado
 grandes (`w`: 0.2602 frente a 0.1546), así que ahí la inferencia era demasiado
@@ -418,6 +430,7 @@ ejemplos 1, 2 y 4 de xtabond.
 | Errores estándar, estadísticos z, valores-p e intervalos de `ab_gmm`, `bb_gmm` | `two_step=True` y `windmeijer=True` (los valores por defecto) | `two_step=False`, o `windmeijer=False`; los coeficientes estimados en todos los casos | Volver a correr y sustituir los errores estándar reportados. |
 | `diagnostics.windmeijer_correction` llamado directamente | Sin el nuevo `residuals_step1=` | Con él | Pase los residuos de la primera etapa; la llamada antigua advierte. |
 | `collapse=False` | `lag_dep_var >= 2`, regresores exógenos rezagados o huecos | Otras disposiciones | Lanzaba un error; ahora poda las columnas muertas, como Stata. |
+| Una matriz de pesos singular (cualquier `collapse`) | Columnas de instrumentos linealmente dependientes | Matrices de pesos de rango completo | Inversa generalizada de Moore-Penrose; las `notes` registran el rango y `n_instruments` lo informa. Los resultados en dos etapas con una matriz de la segunda etapa singular pueden diferir de xtabond2. |
 
 ### ¿Le afecta?
 

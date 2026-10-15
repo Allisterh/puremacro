@@ -449,3 +449,199 @@ def test_bvar_uses_relative_cholesky_jitter():
         "bvar.py must not use hardcoded 1e-12 * eye without scaling by matrix magnitude"
     )
 
+
+
+# ---------------------------------------------------------------------------
+# Wall-clock guard: every absolute timing budget must scale.
+# ---------------------------------------------------------------------------
+#
+# Shared CI runners are several times slower and noisier than a developer
+# machine, so ``tests/_timing.py`` widens every absolute budget by
+# ``PUREMACRO_TIMING_SCALE``. A timing measurement compared with a bare number
+# (``elapsed < 0.2``, or a module constant such as ``CEILING_S = 1.0``) skips
+# that scaling and turns into a flake the first time a runner is busy. This
+# scan finds such comparisons by data flow: a name is a *timing* quantity when
+# it is assigned from a clock call (``time.perf_counter()`` and friends), from a
+# ``*latency*`` attribute, or from an expression over other timing names; the
+# ratio of two timing quantities is dimensionless and deliberately not scaled.
+
+_CLOCK_FUNCS = frozenset({"perf_counter", "perf_counter_ns", "monotonic",
+                          "monotonic_ns", "time", "process_time"})
+
+#: Files allowed to compare a timing with a literal, with the reason.
+_UNSCALED_TIMING_ALLOWED: dict[str, str] = {
+    # Opt-in ``slow`` smoke test; the 600 s ceiling is a hang watchdog two
+    # orders of magnitude above the measured run time.
+    "tests/test_dsge/test_sw07_estimate_smoke.py": "slow opt-in hang watchdog",
+}
+
+
+def _is_clock_call(node: ast.AST) -> bool:
+    """A clock read, or ``best_of(...)`` (which returns a duration)."""
+    if not isinstance(node, ast.Call):
+        return False
+    f = node.func
+    if (isinstance(f, ast.Attribute) and f.attr in _CLOCK_FUNCS
+            and isinstance(f.value, ast.Name) and f.value.id == "time"):
+        return True
+    if isinstance(f, ast.Attribute) and f.attr == "best_of":
+        return True
+    return isinstance(f, ast.Name) and f.id in ("perf_counter", "monotonic", "best_of")
+
+
+def _is_timing_expr(node: ast.AST, names: set[str]) -> bool:
+    if _is_clock_call(node):
+        return True
+    if isinstance(node, ast.Name):
+        return node.id in names
+    if isinstance(node, ast.Attribute):
+        return "latency" in node.attr.lower()
+    if isinstance(node, ast.BinOp):
+        left = _is_timing_expr(node.left, names)
+        right = _is_timing_expr(node.right, names)
+        if isinstance(node.op, ast.Div) and left and right:
+            return False                        # a ratio: dimensionless
+        return left or right
+    if isinstance(node, ast.Call):
+        if (isinstance(node.func, ast.Attribute)
+                and _is_timing_expr(node.func.value, names)):
+            return True                         # e.g. latencies.mean()
+        return any(_is_timing_expr(a, names) for a in node.args)
+    if isinstance(node, ast.Subscript):
+        return _is_timing_expr(node.value, names)
+    if isinstance(node, (ast.ListComp, ast.GeneratorExp)):
+        return _is_timing_expr(node.elt, names)
+    return False
+
+
+def _timing_names(scope: ast.AST) -> set[str]:
+    """Names in ``scope`` holding a timing quantity (iterated to a fixed point)."""
+    names: set[str] = set()
+    for _ in range(25):
+        new: set[str] = set()
+        for n in ast.walk(scope):
+            if (isinstance(n, (ast.Assign, ast.AnnAssign, ast.AugAssign))
+                    and n.value is not None and _is_timing_expr(n.value, names)):
+                targets = n.targets if isinstance(n, ast.Assign) else [n.target]
+                for t in targets:
+                    base = t.value if isinstance(t, ast.Subscript) else t
+                    if isinstance(base, ast.Name):
+                        new.add(base.id)
+            elif (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                  and n.func.attr == "append" and isinstance(n.func.value, ast.Name)
+                  and n.args and _is_timing_expr(n.args[0], names)):
+                new.add(n.func.value.id)
+        if new == names:
+            break
+        names = new
+    return names
+
+
+def _is_numeric_literal(node: ast.AST, consts: set[str]) -> bool:
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+        node = node.operand
+    if isinstance(node, ast.Name):
+        return node.id in consts
+    if isinstance(node, ast.Attribute):
+        return node.attr in consts
+    return (isinstance(node, ast.Constant) and isinstance(node.value, (int, float))
+            and not isinstance(node.value, bool))
+
+
+def _module_numeric_constants(tree: ast.Module) -> set[str]:
+    """Module- and class-level names bound to a bare number (``CEILING_S = 1.0``)."""
+    consts: set[str] = set()
+    bodies = [tree.body] + [c.body for c in tree.body if isinstance(c, ast.ClassDef)]
+    for body in bodies:
+        for st in body:
+            if (isinstance(st, (ast.Assign, ast.AnnAssign)) and st.value is not None
+                    and _is_numeric_literal(st.value, set())):
+                for t in (st.targets if isinstance(st, ast.Assign) else [st.target]):
+                    if isinstance(t, ast.Name):
+                        consts.add(t.id)
+    return consts
+
+
+def _unscaled_timing_comparisons(src: str) -> list[int]:
+    """Line numbers where a timing quantity is compared with a bare number."""
+    tree = ast.parse(src)
+    consts = _module_numeric_constants(tree)
+    hits: set[int] = set()
+    for fn in ast.walk(tree):
+        if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        names = _timing_names(fn)
+        for n in ast.walk(fn):
+            if isinstance(n, ast.Compare):
+                operands = [n.left, *n.comparators]
+                if (any(_is_timing_expr(o, names) for o in operands)
+                        and any(_is_numeric_literal(o, consts) for o in operands)):
+                    hits.add(n.lineno)
+    return sorted(hits)
+
+
+def test_wall_clock_budgets_go_through_the_timing_helper():
+    """No test compares a wall-clock measurement with an unscaled number.
+
+    Every absolute budget must go through ``budget()``/``budget_ms()`` from
+    ``tests/_timing.py`` so ``PUREMACRO_TIMING_SCALE`` widens it on CI. The one
+    CI flake that failed 72 runs in a month was a bare ``0.20`` here.
+    """
+    offenders = []
+    for path in sorted(_TESTS.rglob("*.py")):
+        rel = path.relative_to(_ROOT).as_posix()
+        if path.name == Path(__file__).name or rel in _UNSCALED_TIMING_ALLOWED:
+            continue
+        src = path.read_text(encoding="utf-8", errors="replace")
+        try:
+            lines = _unscaled_timing_comparisons(src)
+        except SyntaxError as exc:              # never pass a file unread
+            offenders.append(f"{rel}:{exc.lineno}: could not parse ({exc.msg})")
+            continue
+        offenders += [f"{rel}:{ln}" for ln in lines]
+    assert not offenders, (
+        "wall-clock measurements compared with an unscaled number; wrap the "
+        "budget in budget()/budget_ms() from tests/_timing.py (ratios of two "
+        "timings are exempt):\n  " + "\n  ".join(offenders))
+
+
+@pytest.mark.parametrize("snippet", [
+    "def test_x():\n    t0 = time.perf_counter()\n    f()\n"
+    "    elapsed = time.perf_counter() - t0\n    assert elapsed < 0.5\n",
+    "def test_x():\n    times = []\n    for _ in range(3):\n"
+    "        t0 = time.perf_counter(); f()\n"
+    "        times.append(time.perf_counter() - t0)\n    assert max(times) <= 0.2\n",
+    "def test_x():\n    t0 = time.perf_counter(); f()\n"
+    "    assert time.perf_counter() - t0 < 3.5\n",
+    "CEILING_S = 1.0\ndef test_x():\n    t0 = time.time(); f()\n"
+    "    dt = time.time() - t0\n    assert dt <= CEILING_S\n",
+    "def test_x(res):\n    lat = np.array([res.last_latency_ms for _ in range(3)])\n"
+    "    assert float(lat.mean()) < 15.0\n",
+    "def test_x(res):\n    assert res.last_latency_ms < 15.0\n",
+    "def test_x():\n    assert 1000.0 * best_of(f) < 10.0\n",
+], ids=["delta", "max-of-list", "inline", "module-constant", "latency-mean",
+        "latency-attr", "best-of"])
+@pytest.mark.mechanism_control
+def test_the_timing_guard_bites(snippet):
+    """Negative control: the scan must flag each known unscaled shape."""
+    assert _unscaled_timing_comparisons(snippet), snippet
+
+
+@pytest.mark.parametrize("snippet", [
+    "def test_x():\n    t0 = time.perf_counter(); f()\n"
+    "    elapsed = time.perf_counter() - t0\n    assert elapsed <= budget(0.5)\n",
+    "def test_x():\n    t_a = best_of(f)\n    t_b = best_of(g)\n"
+    "    speedup = t_b / t_a\n    assert speedup >= 5.0\n",
+    "def test_x(res):\n    assert res.iterations < 25\n",
+], ids=["scaled", "ratio", "not-timing"])
+def test_the_timing_guard_passes_scaled_budgets_and_ratios(snippet):
+    assert not _unscaled_timing_comparisons(snippet), snippet
+
+
+@pytest.mark.mechanism_control
+def test_the_timing_guard_bites_on_a_real_file_with_its_budget_removed():
+    """Stripping ``budget(...)`` from a repaired file must make the scan fire."""
+    src = (_TESTS / "test_hank_regressions.py").read_text(encoding="utf-8")
+    assert "budget(" in src and not _unscaled_timing_comparisons(src)
+    stripped = re.sub(r"budget\(([^()]*)\)", r"\1", src)
+    assert _unscaled_timing_comparisons(stripped)

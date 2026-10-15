@@ -24,10 +24,13 @@ endogenous regressors; the included exogenous controls ``W`` (constant
 included) enter both the instrument set and the regressor set and do not
 change the degrees of freedom.
 
-Stock-Yogo critical values are tabulated for the maximal IV bias
-relative to OLS (Stock-Yogo 2005, Tables 5.2 / 5.3). We expose a
-small lookup for the single-endogenous-regressor case at the most
-common "max bias" thresholds.
+Stock-Yogo critical values for the Cragg-Donald first-stage F, single
+endogenous regressor (n = 1), 5% test level:
+
+* TSLS relative bias (Stock and Yogo 2002, NBER TWP 284, Table 1), maximal
+  bias relative to OLS b in {5, 10, 20, 30}%, for K2 = 3..30 instruments;
+* TSLS size (Table 2), maximal rejection rate r in {10, 15, 20, 25}% of a
+  nominal 5% Wald test, for K2 = 1..30 instruments.
 """
 from __future__ import annotations
 
@@ -141,38 +144,160 @@ def hansen_j(
     }
 
 
-# Stock-Yogo (2005) Table 5.2 — single endogenous regressor (k=1),
-# 2SLS critical values for "max bias relative to OLS" thresholds.
-# Keys: (n_instruments, max_bias_pct) -> first-stage F critical value.
-_STOCK_YOGO_BIAS_K1 = {
-    # (l, threshold%) -> CV
-    (3,  5):  13.91, (3,  10):  9.08, (3,  20): 6.46, (3,  30): 5.39,
-    (4,  5):  16.85, (4,  10): 10.27, (4,  20): 6.71, (4,  30): 5.34,
-    (5,  5):  18.37, (5,  10): 10.83, (5,  20): 6.77, (5,  30): 5.25,
-    (6,  5):  19.28, (6,  10): 11.12, (6,  20): 6.76, (6,  30): 5.15,
-    (7,  5):  19.86, (7,  10): 11.29, (7,  20): 6.73, (7,  30): 5.07,
-    (8,  5):  20.25, (8,  10): 11.39, (8,  20): 6.69, (8,  30): 4.99,
+# Stock-Yogo critical values, one endogenous regressor (n = 1), 5% level.
+# Source: Stock, J.H. and Yogo, M. (2002), "Testing for Weak Instruments in
+# Linear IV Regression", NBER Technical Working Paper 284,
+# https://www.nber.org/system/files/working_papers/t0284/t0284.pdf
+# (published in Andrews and Stock, eds., Identification and Inference for
+# Econometric Models, Cambridge University Press, 2005).
+#
+# Table 1 "Critical Values for the Weak Instrument Test Based on TSLS Bias",
+# printed page 58, columns "n = 1, b = 0.05, 0.10, 0.20, 0.30".
+# The bias is defined only for K2 >= n + 2 (section 3.5, printed p. 24),
+# so the n = 1 rows start at K2 = 3.
+# Rows: K2 -> (b = 5%, 10%, 20%, 30%).
+_SY_BIAS_PCTS = (5, 10, 20, 30)
+_SY_BIAS_ROWS_N1 = {
+     3: (13.91, 9.08, 6.46, 5.39),
+     4: (16.85, 10.27, 6.71, 5.34),
+     5: (18.37, 10.83, 6.77, 5.25),
+     6: (19.28, 11.12, 6.76, 5.15),
+     7: (19.86, 11.29, 6.73, 5.07),
+     8: (20.25, 11.39, 6.69, 4.99),
+     9: (20.53, 11.46, 6.65, 4.92),
+    10: (20.74, 11.49, 6.61, 4.86),
+    11: (20.90, 11.51, 6.56, 4.80),
+    12: (21.01, 11.52, 6.53, 4.75),
+    13: (21.10, 11.52, 6.49, 4.71),
+    14: (21.18, 11.52, 6.45, 4.67),
+    15: (21.23, 11.51, 6.42, 4.63),
+    16: (21.28, 11.50, 6.39, 4.59),
+    17: (21.31, 11.49, 6.36, 4.56),
+    18: (21.34, 11.48, 6.33, 4.53),
+    19: (21.36, 11.46, 6.31, 4.51),
+    20: (21.38, 11.45, 6.28, 4.48),
+    21: (21.39, 11.44, 6.26, 4.46),
+    22: (21.40, 11.42, 6.24, 4.43),
+    23: (21.41, 11.41, 6.22, 4.41),
+    24: (21.41, 11.40, 6.20, 4.39),
+    25: (21.42, 11.38, 6.18, 4.37),
+    26: (21.42, 11.37, 6.16, 4.35),
+    27: (21.42, 11.36, 6.14, 4.34),
+    28: (21.42, 11.34, 6.13, 4.32),
+    29: (21.42, 11.33, 6.11, 4.31),
+    30: (21.42, 11.32, 6.09, 4.29),
 }
 
+# Table 2 "Critical Values for the Weak Instrument Test Based on TSLS Size",
+# printed page 59, columns "n = 1, r = 0.10, 0.15, 0.20, 0.25" (maximal
+# rejection rate of a nominal 5% Wald test of beta = beta_0).
+# Rows: K2 -> (r = 10%, 15%, 20%, 25%).
+_SY_SIZE_PCTS = (10, 15, 20, 25)
+_SY_SIZE_ROWS_N1 = {
+     1: (16.38, 8.96, 6.66, 5.53),
+     2: (19.93, 11.59, 8.75, 7.25),
+     3: (22.30, 12.83, 9.54, 7.80),
+     4: (24.58, 13.96, 10.26, 8.31),
+     5: (26.87, 15.09, 10.98, 8.84),
+     6: (29.18, 16.23, 11.72, 9.38),
+     7: (31.50, 17.38, 12.48, 9.93),
+     8: (33.84, 18.54, 13.24, 10.50),
+     9: (36.19, 19.71, 14.01, 11.07),
+    10: (38.54, 20.88, 14.78, 11.65),
+    11: (40.90, 22.06, 15.56, 12.23),
+    12: (43.27, 23.24, 16.35, 12.82),
+    13: (45.64, 24.42, 17.14, 13.41),
+    14: (48.01, 25.61, 17.93, 14.00),
+    15: (50.39, 26.80, 18.72, 14.60),
+    16: (52.77, 27.99, 19.51, 15.19),
+    17: (55.15, 29.19, 20.31, 15.79),
+    18: (57.53, 30.38, 21.10, 16.39),
+    19: (59.92, 31.58, 21.90, 16.99),
+    20: (62.30, 32.77, 22.70, 17.60),
+    21: (64.69, 33.97, 23.50, 18.20),
+    22: (67.07, 35.17, 24.30, 18.80),
+    23: (69.46, 36.37, 25.10, 19.41),
+    24: (71.85, 37.57, 25.90, 20.01),
+    25: (74.24, 38.77, 26.71, 20.61),
+    26: (76.62, 39.97, 27.51, 21.22),
+    27: (79.01, 41.17, 28.31, 21.83),
+    28: (81.40, 42.37, 29.12, 22.43),
+    29: (83.79, 43.57, 29.92, 23.04),
+    30: (86.17, 44.78, 30.72, 23.65),
+}
 
-def stock_yogo_cv(n_instruments: int, max_bias_pct: int = 10) -> float | None:
+# Keys: (n_instruments, threshold %) -> first-stage F critical value.
+_STOCK_YOGO_BIAS_K1 = {
+    (k2, pct): cv
+    for k2, row in _SY_BIAS_ROWS_N1.items()
+    for pct, cv in zip(_SY_BIAS_PCTS, row)
+}
+_STOCK_YOGO_SIZE_K1 = {
+    (k2, pct): cv
+    for k2, row in _SY_SIZE_ROWS_N1.items()
+    for pct, cv in zip(_SY_SIZE_PCTS, row)
+}
+_STOCK_YOGO_TABLES = {"bias": _STOCK_YOGO_BIAS_K1, "size": _STOCK_YOGO_SIZE_K1}
+
+
+def stock_yogo_cv(
+    n_instruments: int,
+    max_bias_pct: int = 10,
+    *,
+    criterion: str = "bias",
+) -> float | None:
     """Look up the Stock-Yogo critical value for first-stage F.
 
-    Compare your first-stage F-stat against this CV; reject "weak
-    instruments" if F exceeds it.
+    Compare the Cragg-Donald first-stage F (with one endogenous regressor,
+    the usual first-stage F) against this value; reject "weak instruments"
+    if F exceeds it. The tables are for one endogenous regressor and a 5%
+    test level.
 
     Parameters
     ----------
-    n_instruments : int   — number of excluded instruments l.
-    max_bias_pct  : int   — maximal IV bias relative to OLS, in % (5/10/20/30).
+    n_instruments : int
+        Number of excluded instruments ``l`` (``K2`` in Stock-Yogo).
+    max_bias_pct : int, default 10
+        The tolerated weakness, in percent. With ``criterion="bias"`` it is
+        the maximal TSLS bias relative to OLS (5, 10, 20 or 30). With
+        ``criterion="size"`` it is the maximal rejection rate of a nominal
+        5% Wald test (10, 15, 20 or 25).
+    criterion : {"bias", "size"}, keyword-only, default "bias"
+        ``"bias"``: Stock-Yogo Table 1 (TSLS relative bias), tabulated for
+        ``l = 3..30``. ``"size"``: Table 2 (TSLS Wald-test size), tabulated
+        for ``l = 1..30``.
 
     Returns
     -------
-    Critical value (float) or None if (l, max_bias_pct) is not tabulated.
-    The classic Staiger-Stock rule of thumb of "F > 10" corresponds to
-    n_instruments=3, max_bias_pct=10 in this table.
+    Critical value (float), or None if ``(l, max_bias_pct)`` is not
+    tabulated. The bias is undefined for fewer than three instruments
+    (Stock-Yogo define it only for ``l >= n + 2``), so
+    ``stock_yogo_cv(1)`` and ``stock_yogo_cv(2)`` return None; use
+    ``criterion="size"`` for one or two instruments.
+
+    Notes
+    -----
+    The Staiger-Stock rule of thumb "F > 10" is close to the 10% bias
+    critical value, which is about 11 for most ``l`` (9.08 at ``l = 3``).
+    By the size criterion it is far less demanding: with one instrument a
+    5% Wald test with at most 10% actual size needs F > 16.38, and the
+    critical value grows with ``l`` (86.17 at ``l = 30``).
+
+    References
+    ----------
+    Stock, J.H. and Yogo, M. (2002). Testing for weak instruments in linear
+        IV regression. NBER Technical Working Paper 284, Tables 1 and 2.
+        Published in Andrews, D.W.K. and Stock, J.H. (eds) (2005),
+        Identification and Inference for Econometric Models, Cambridge
+        University Press.
     """
-    return _STOCK_YOGO_BIAS_K1.get((int(n_instruments), int(max_bias_pct)))
+    try:
+        table = _STOCK_YOGO_TABLES[criterion]
+    except (KeyError, TypeError):
+        raise ValueError(
+            f"stock_yogo_cv: criterion must be 'bias' or 'size', got {criterion!r}"
+        ) from None
+    return table.get((int(n_instruments), int(max_bias_pct)))
 
 
 __all__ = ["hansen_j", "stock_yogo_cv"]

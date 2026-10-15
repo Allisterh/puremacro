@@ -186,7 +186,7 @@ exclude_lines = [
 ]
 
 [tool.pytest.ini_options]
-addopts = ["-m", "not slow and not network and not reference and not replication"]
+addopts = ["-m", "not slow and not network and not reference and not replication and not benchmark"]
 markers = [
     "network: tests requiring live network access (opt-in via `pytest -m network`)",
     "pyodide_smoke: tests safe to run under Pyodide; opt-in via `pytest -m pyodide_smoke`",
@@ -195,4 +195,5 @@ markers = [
     "reference: live cross-checks vs statsmodels/linearmodels/arch that guard the frozen validation goldens; opt-in via `pytest -m reference`",
     "replication: opt-in replication cases that need a live data fetch; skip-on-empty (run via `pytest -m replication`)",
     "mechanism_control: asserts a test file's own mechanism (import hook, network blocker) is actually live; required by tests/test_test_quality.py",
+    "benchmark: pure wall-clock performance checks (speed-up ratios, sub-millisecond and latency SLAs, SW07/Sylvester timing); budgets scale with PUREMACRO_TIMING_SCALE, deselected by default and run by the opt-in workflow; select with `pytest -m benchmark`",
 ]

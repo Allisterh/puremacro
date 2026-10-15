@@ -8,7 +8,7 @@ covariance matrix Sigma_VV by the scalar mean of the residual variances. With
 check that existed passed; for ``l = 3, k = 1`` it returned exactly 3x the
 first-stage F (309.66 vs 103.22) and for ``k = 2, l = 4`` 148.04 against the
 Stock-Yogo definition's 65.14 -- so weak instruments read as strong against
-the Stock-Yogo tables, which only start at l = 3.
+the Stock-Yogo bias table, which only starts at l = 3.
 """
 from __future__ import annotations
 

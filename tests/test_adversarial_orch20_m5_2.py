@@ -82,9 +82,19 @@ class TestSQLiteCacheAdversarial:
     """Stress testing SQLite cache for concurrency, isolation, and injection."""
 
     def test_high_concurrency_multithreaded_writes(self, tmp_path):
-        """Simulate 16 threads writing 100 rows each to SQLite simultaneously."""
+        """Simulate 16 threads writing 100 rows each to SQLite simultaneously.
+
+        Every connection waits for the lock (``timeout`` sets SQLite's busy
+        handler) and each writer takes it once, with ``BEGIN IMMEDIATE``, for
+        its whole batch. In autocommit mode ``executemany`` would commit, and
+        contend for the lock, once per row: 1,600 lock handoffs among 16
+        threads, which on slow-fsync runners starved a writer past its timeout
+        ("database is locked"). ``store_realtime_vintages`` commits the
+        transaction it is handed.
+        """
         db_file = tmp_path / "concurrent_stress.db"
-        conn_init = sqlite3.connect(db_file, isolation_level=None)
+        busy_timeout_s = 60.0
+        conn_init = sqlite3.connect(db_file, timeout=busy_timeout_s, isolation_level=None)
         conn_init.execute("PRAGMA journal_mode=WAL")
         bootstrap_schema(conn_init)
         conn_init.close()
@@ -93,7 +103,8 @@ class TestSQLiteCacheAdversarial:
         rows_per_thread = 100
 
         def worker_write(thread_id: int):
-            conn = sqlite3.connect(db_file, timeout=60.0, isolation_level=None)
+            conn = sqlite3.connect(db_file, timeout=busy_timeout_s, isolation_level=None)
+            conn.execute("BEGIN IMMEDIATE")
             dates = pd.date_range("2020-01-01", periods=rows_per_thread, freq="MS")
             df = pd.DataFrame({
                 "provider": [f"prov_{thread_id % 4}"] * rows_per_thread,
@@ -104,16 +115,18 @@ class TestSQLiteCacheAdversarial:
                 "value": np.arange(rows_per_thread, dtype=float) + thread_id,
             })
             n = store_realtime_vintages(df, conn=conn)
+            committed = not conn.in_transaction
             conn.close()
-            return n
+            return n, committed
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as pool:
             futures = [pool.submit(worker_write, t) for t in range(num_threads)]
             results = [f.result() for f in futures]
 
-        assert sum(results) == num_threads * rows_per_thread
+        assert sum(n for n, _ in results) == num_threads * rows_per_thread
+        assert all(committed for _, committed in results)
 
-        conn_check = sqlite3.connect(db_file)
+        conn_check = sqlite3.connect(db_file, timeout=busy_timeout_s)
         cur = conn_check.cursor()
         cur.execute("SELECT count(*) FROM realtime_vintages")
         total_count = cur.fetchone()[0]

@@ -2,7 +2,9 @@
 
 Demonstrates exact empirical replication using puremacro's built-in datasets:
 1. Galí (1999, *AER*): Long-run Blanchard-Quah (BQ) identification of technology shocks
-   on labor productivity and hours worked.
+   on labor productivity and hours worked. Galí's difference specification: the VAR is
+   in labor productivity growth and the first difference of log hours per capita, and
+   both responses are cumulated back to levels.
 2. Mertens & Ravn (2013, *AER*): External instrument (Proxy SVAR) identification
    of narrative tax multiplier shocks.
 
@@ -21,19 +23,47 @@ from puremacro.var import fit_var, irf
 from puremacro.var.identify import bq, proxy
 
 
+def gali_difference_spec(*, p: int = 4, horizon: int = 20, n_boot: int = 500, seed: int = 0):
+    """Galí (1999) bivariate long-run SVAR in his difference specification.
+
+    The VAR is estimated on ``[dlprod, diff(hours)]``: labor productivity
+    growth and the first difference of log hours per capita (``hours`` in
+    ``load_gali1999`` is a level). Galí (NBER WP 5721, 1996, p. 16) models
+    both series as I(1) "with a stationary VAR representation in first
+    differences". Both columns are differences, so ``bq``'s default
+    ``cumulate=True`` returns the responses of the productivity *level* and
+    the hours *level*. Shock 0 is the technology shock (the only one with a
+    long-run effect on productivity).
+
+    Returns
+    -------
+    (Z, result)
+        The (T, 2) data matrix fed to the VAR and the ``BQSVARResult``.
+    """
+    df_gali = load_gali1999()
+    d = pd.DataFrame({"dlprod": df_gali["dlprod"], "dhours": df_gali["hours"].diff()}).dropna()
+    Z = d[["dlprod", "dhours"]].to_numpy(dtype=float)
+    return Z, bq(Z, p=p, horizon=horizon, n_boot=n_boot, seed=seed)
+
+
 def main():
     print("--- 1. Replicating Galí (1999, AER) Long-Run SVAR ---")
-    df_gali = load_gali1999()
-    # Variables: [dlprod, hours]
-    Z_gali = df_gali[["dlprod", "hours"]].to_numpy(dtype=float)
-    
-    # Estimate VAR(4) with long-run BQ restriction (only technology shock has permanent productivity effect)
-    bq_res = bq(Z_gali, p=4, horizon=20)
+    # VAR(4) in [productivity growth, hours growth] with the long-run BQ
+    # restriction (only the technology shock moves productivity permanently).
+    _, bq_res = gali_difference_spec(p=4, horizon=20)
     print(bq_res.summary())
 
-    # Technology shock is shock 0
-    irf_prod_tech = bq_res.irf_point[:, 0, 0]  # Cumulated labor productivity level
-    irf_hours_tech = bq_res.irf_point[:, 1, 0]  # Hours worked response
+    # Technology shock is shock 0; both rows are cumulated to levels.
+    irf_prod_tech = bq_res.irf_point[:, 0, 0]  # labor productivity level
+    irf_hours_tech = bq_res.irf_point[:, 1, 0]  # hours per capita level
+    print(
+        f"Hours per capita (level) to a technology shock: h=0: {irf_hours_tech[0]:+.3f}"
+        f"  h=20: {irf_hours_tech[-1]:+.3f}"
+    )
+    print(
+        f"Productivity (level) to a technology shock: h=0: {irf_prod_tech[0]:+.3f}"
+        f"  h=20: {irf_prod_tech[-1]:+.3f}"
+    )
 
     print("\n--- 2. Replicating Mertens & Ravn (2013, AER) Proxy SVAR ---")
     df_macro_q = load_macro_quarterly()
@@ -83,9 +113,9 @@ def main():
     # Panel B: Galí (1999) - Hours Worked (Key Contraction Result)
     ax_b = axes[0, 1]
     ax_b.set_facecolor("#ffffff")
-    ax_b.plot(h_gali, irf_hours_tech, color="#d62728", lw=2, label="Hours Worked")
+    ax_b.plot(h_gali, irf_hours_tech, color="#d62728", lw=2, label="Hours Worked (Level)")
     ax_b.axhline(0, color="black", lw=0.8, linestyle="--")
-    ax_b.set_title("(b) Galí (1999): Hours Worked Drop after Positive Tech Shock", fontsize=11, fontweight="bold")
+    ax_b.set_title("(b) Galí (1999): Hours Fall after a Positive Tech Shock", fontsize=11, fontweight="bold")
     ax_b.set_xlabel("Horizon (Quarters)")
     ax_b.set_ylabel("Percentage Points")
     ax_b.legend()

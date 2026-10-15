@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 import scipy.linalg
 
+from _timing import assert_within, best_of
 from puremacro.dsge._parser import parse_mod_to_dag
 from puremacro.dsge._symbolic import (
     compile_derivatives,
@@ -199,31 +200,43 @@ class TestOrder3SylvesterSolvers:
         X1 = solve_order1_sylvester(A_hat, A_plus, h_x, K_x_ss)
         assert X1.shape == (N, 0)
 
-    def test_sw07_dimension_benchmark_performance_and_memory(self):
-        """SW07-sized system (N=14, n_x=7) solves in <= 0.8s with < 5MB memory."""
-        import tracemalloc
-
+    @staticmethod
+    def _sw07_sized_order3_system():
         N = 14
         n_x = 7
-
         np.random.seed(789)
         A_hat = np.eye(N) + np.random.randn(N, N) * 0.02
         A_plus = np.random.randn(N, N) * 0.05
         h_x = np.diag([0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6])
         K_xxx = np.random.randn(N, n_x**3)
+        return A_hat, A_plus, h_x, K_xxx
+
+    def test_sw07_dimension_benchmark_performance_and_memory(self):
+        """SW07-sized system (N=14, n_x=7) solves with < 5MB peak memory.
+
+        The wall-clock half lives in ``test_sw07_dimension_benchmark_solve_time``
+        (timing under tracemalloc measures the tracer, not the solver).
+        """
+        import tracemalloc
+
+        A_hat, A_plus, h_x, K_xxx = self._sw07_sized_order3_system()
 
         tracemalloc.start()
-        t0 = time.perf_counter()
-
         X = solve_order3_sylvester_kronecker(A_hat, A_plus, h_x, K_xxx)
-
-        elapsed = time.perf_counter() - t0
         current, peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()
 
+        assert X.shape == (14, 7**3)
         peak_mb = peak / (1024 * 1024)
-        assert elapsed <= 0.8, f"Solve time {elapsed:.4f}s exceeded 0.8s limit"
         assert peak_mb < 5.0, f"Peak memory {peak_mb:.2f} MB exceeded 5.0 MB limit"
+
+    @pytest.mark.benchmark
+    def test_sw07_dimension_benchmark_solve_time(self):
+        """SW07-sized order-3 Sylvester solve runs in <= budget(0.8) s (best of 3)."""
+        A_hat, A_plus, h_x, K_xxx = self._sw07_sized_order3_system()
+        elapsed = best_of(
+            lambda: solve_order3_sylvester_kronecker(A_hat, A_plus, h_x, K_xxx))
+        assert_within(elapsed, 0.8, "SW07-sized order-3 Sylvester solve (best of 3)")
 
 
 # ============================================================================

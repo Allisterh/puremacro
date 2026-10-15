@@ -20,6 +20,7 @@ from typing import Callable
 import numpy as np
 import pytest
 
+from _timing import budget
 from puremacro.dsge._ast import BinOp, Call, Const, Node, Param, UnaryOp, Var
 from puremacro.dsge._parser import parse_mod_to_dag
 from puremacro.dsge._symbolic import compile_derivatives
@@ -38,7 +39,8 @@ SW07_PATH = Path(__file__).resolve().parents[1] / "puremacro" / "dsge" / "_refer
 #: asserts bounded every single iteration at 0.20 s / 0.05 s and the mean at
 #: 0.05 s, so one GC pause or a busy neighbour failed them. The ceilings below
 #: sit an order of magnitude above the local figures, which still catches a
-#: regression back towards the 4.6 s pre-optimisation baseline.
+#: regression back towards the 4.6 s pre-optimisation baseline. Both are scaled
+#: by PUREMACRO_TIMING_SCALE through ``budget()``.
 ORDER2_MEDIAN_CEILING_S = 2.0
 ORDER1_MEDIAN_CEILING_S = 1.0
 
@@ -47,6 +49,7 @@ ORDER1_MEDIAN_CEILING_S = 1.0
 # 1. SW07 Performance & Speedup Benchmark
 # ===========================================================================
 
+@pytest.mark.benchmark
 class TestSW07BenchmarkPerformance:
     """Benchmark SW07 Order-1 and Order-2 parse and solve times across 10 runs."""
 
@@ -69,8 +72,9 @@ class TestSW07BenchmarkPerformance:
         max_time = float(np.max(times_o2_full))
         speedup = 4.6 / median_time
         print(f"\n[SW07 Order-2 Full] median={median_time:.4f}s, mean={mean_time:.4f}s, max={max_time:.4f}s, speedup={speedup:.1f}x vs 4.6s baseline")
-        assert median_time < ORDER2_MEDIAN_CEILING_S, (
-            f"SW07 Order-2 median {median_time:.4f}s >= {ORDER2_MEDIAN_CEILING_S}s (all runs: {times_o2_full})"
+        limit = budget(ORDER2_MEDIAN_CEILING_S)
+        assert median_time < limit, (
+            f"SW07 Order-2 median {median_time:.4f}s >= scaled budget {limit:.4f}s (all runs: {times_o2_full})"
         )
 
     def test_sw07_order1_benchmark(self):
@@ -87,8 +91,9 @@ class TestSW07BenchmarkPerformance:
 
         median_time = float(np.median(times_o1))
         print(f"\n[SW07 Order-1 Full] median={median_time:.4f}s, min={min(times_o1):.4f}s, max={max(times_o1):.4f}s")
-        assert median_time < ORDER1_MEDIAN_CEILING_S, (
-            f"SW07 Order-1 median {median_time:.4f}s >= {ORDER1_MEDIAN_CEILING_S}s (all runs: {times_o1})"
+        limit = budget(ORDER1_MEDIAN_CEILING_S)
+        assert median_time < limit, (
+            f"SW07 Order-1 median {median_time:.4f}s >= scaled budget {limit:.4f}s (all runs: {times_o1})"
         )
 
 

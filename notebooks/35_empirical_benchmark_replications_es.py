@@ -48,7 +48,7 @@ from puremacro.var.identify import bq, proxy
 # %% [markdown]
 # ## 1. Replicación de Galí (1999, AER): Choques de Tecnología y Horas Trabajadas
 #
-# Consideramos el vector bivariado $X_t = (\Delta x_t, n_t)^\top$, donde $\Delta x_t = \Delta \log(Y_t / N_t)$ es el crecimiento de la productividad del trabajo y $n_t = \log(N_t)$ es el logaritmo de las horas trabajadas. El VAR en forma reducida es $X_t = \sum_{l=1}^p A_l X_{t-l} + u_t$ con matriz de covarianza de residuos $\Sigma_u = \mathbb{E}[u_t u_t^\top]$.
+# Consideramos el vector bivariado $X_t = (\Delta x_t, \Delta n_t)^\top$, donde $\Delta x_t = \Delta \log(Y_t / N_t)$ es el crecimiento de la productividad del trabajo y $\Delta n_t$ es la primera diferencia de $n_t = \log(N_t)$, el logaritmo de las horas trabajadas per cápita. Es la propia *especificación en diferencias* de Galí: trata la productividad y las horas como I(1), con un VAR estacionario en primeras diferencias. El VAR en forma reducida es $X_t = \sum_{l=1}^p A_l X_{t-l} + u_t$ con matriz de covarianza de residuos $\Sigma_u = \mathbb{E}[u_t u_t^\top]$.
 #
 # Invirtiendo el polinomio autorregresivo se obtiene la representación de media móvil de Wold:
 #
@@ -61,23 +61,36 @@ from puremacro.var.identify import bq, proxy
 # $$ \bar{C} = \begin{pmatrix} \bar{C}_{11} & 0 \\ \bar{C}_{21} & \bar{C}_{22} \end{pmatrix} \implies \bar{C} \bar{C}^\top = C(1) \Sigma_u C(1)^\top $$
 #
 # Dado que $\bar{C}_{12} = 0$, los choques no tecnológicos tienen prohibido ejercer cualquier efecto permanente sobre el nivel de productividad laboral. El factor de Cholesky de $C(1) \Sigma_u C(1)^\top$ identifica de forma única la matriz estructural de impacto contemporáneo $B_0$.
+#
+# Ambas variables entran en primeras diferencias, así que las respuestas de los *niveles* $x_t$ y $n_t$ son las sumas acumuladas de las respuestas estimadas de $\Delta x_t$ y $\Delta n_t$. Eso es lo que `bq` devuelve por defecto (`cumulate=True`). Si se introdujera el nivel $n_t$ manteniendo ese valor por defecto, se acumularía un nivel y la respuesta de las horas se convertiría en una suma acumulada espuria.
 
 # %%
 df_gali = load_gali1999()
+df_gali["dhours"] = df_gali["hours"].diff()  # especificación en diferencias de Galí
+gali_vars = df_gali[["dlprod", "dhours"]].dropna()
 print("Vista Previa de los Datos de Galí (1999):")
-print(df_gali[["dlprod", "hours"]].head())
+print(gali_vars.head())
+print(f"Muestra: {gali_vars.index[0]} a {gali_vars.index[-1]} ({len(gali_vars)} trimestres)")
 
-# Estimación del VAR(4) con restricción BQ de largo plazo
-Z_gali = df_gali[["dlprod", "hours"]].to_numpy(dtype=float)
+# Estimación del VAR(4) con restricción BQ de largo plazo; ambas filas se acumulan a niveles
+Z_gali = gali_vars.to_numpy(dtype=float)
 bq_res = bq(Z_gali, p=4, horizon=20)
 print("\n" + bq_res.summary())
+
+prod, hours = bq_res.irf_point[:, 0, 0], bq_res.irf_point[:, 1, 0]
+print(f"Productividad (nivel), choque tecnológico: h=0: {prod[0]:+.3f}  h=20: {prod[20]:+.3f}")
+print(f"Horas per cápita (nivel), choque tecnológico: h=0: {hours[0]:+.3f}  h=20: {hours[20]:+.3f}")
+print(f"Banda del 90% de las horas en h=0: [{bq_res.irf_lower[0, 1, 0]:+.3f}, {bq_res.irf_upper[0, 1, 0]:+.3f}]"
+      f"  h=20: [{bq_res.irf_lower[20, 1, 0]:+.3f}, {bq_res.irf_upper[20, 1, 0]:+.3f}]")
 
 # %% [markdown]
 # ### Respuestas al Impulso ante un Choque Tecnológico Positivo
 #
 # Las funciones de respuesta al impulso con intervalos de confianza bootstrap al 90% revelan:
-# - **Panel Izquierdo (Nivel de Productividad)**: El choque tecnológico incrementa de forma permanente el nivel de productividad laboral ($x_t$), con una ganancia acumulada que se estabiliza alrededor de $+0.8$ puntos porcentuales.
-# - **Panel Derecho (Horas Trabajadas)**: En lugar de expandirse como predicen los modelos de precios flexibles, las horas trabajadas caen $-0.4\%$ en el impacto y permanecen deprimidas durante más de seis trimestres. Esta correlación negativa aporta evidencia empírica contundente en favor de la rigidez de precios nominales.
+# - **Panel Izquierdo (Nivel de Productividad)**: Un choque tecnológico positivo eleva el nivel de la productividad laboral ($x_t$) en torno a $+0.68\%$ en el impacto; el nivel se estabiliza cerca de $+0.81\%$ al cabo de cinco años, con una banda del 90% que se mantiene claramente por encima de cero.
+# - **Panel Derecho (Horas Trabajadas)**: En lugar de expandirse como predicen los modelos RBC de precios flexibles, las horas per cápita caen en torno a $-0.83\%$ en el impacto, y la banda del 90% excluye el cero en el impacto. La estimación puntual es negativa en todos los horizontes y se estabiliza cerca de $-0.40\%$, pero en $h=20$ la banda incluye el cero, de modo que la parte persistente de la caída se estima con poca precisión. El signo en el impacto es el resultado central de Galí: un comovimiento condicional negativo entre horas y productividad, que él interpreta como evidencia de rigideces nominales de precios.
+#
+# Los datos incluidos cubren de 1948 a 2026, mucho más allá de la muestra 1948-1994 de Galí, y usan la versión actual de las series del BLS, así que las magnitudes no son las suyas; el resultado comparable es el signo en el impacto. Si las horas deben entrar en niveles o en diferencias es en sí una elección debatida (Christiano, Eichenbaum y Vigfusson 2003); `puremacro.examples.gali_1999_hours` compara ambas.
 
 # %%
 fig, (ax1, ax2) = _nbstyle.figura(1, 2, figsize=(11.0, 4.5))
@@ -144,12 +157,24 @@ m_instrument = sub_tax["unanticipated"].to_numpy(dtype=float)
 proxy_res = proxy(Z_tax, p=4, horizon=16, instrument_series=m_instrument, shock_target_idx=0)
 print(proxy_res.summary())
 
+gdp_tax = proxy_res.irf_point[:, 0, 0]
+h_trough = int(np.argmin(gdp_tax))
+print(f"PIB real (%), choque impositivo: h=0: {gdp_tax[0]:+.3f}  mínimo: {gdp_tax[h_trough]:+.3f} en h={h_trough}"
+      f"  h=12: {gdp_tax[12]:+.3f}")
+print(f"Extremo superior de la banda del 90% del PIB, máximo en h=0..16: {proxy_res.irf_upper[:, 0, 0].max():+.3f}")
+
+ffr_tax = proxy_res.irf_point[:, 1, 0]
+print(f"Tasa de fondos federales (pp), choque fiscal: h=0: {ffr_tax[0]:+.3f}"
+      f"  banda del 90% [{proxy_res.irf_lower[0, 1, 0]:+.3f}, {proxy_res.irf_upper[0, 1, 0]:+.3f}];"
+      f"  rango en h=1..12: {ffr_tax[1:13].min():+.3f} a {ffr_tax[1:13].max():+.3f};"
+      f"  extremo superior más alto de la banda en h=1..12: {proxy_res.irf_upper[1:13, 1, 0].max():+.3f}")
+
 # %% [markdown]
 # ### Respuestas al Impulso ante un Incremento Impositivo Imprevisto
 #
 # Las respuestas dinámicas estimadas mediante Proxy SVAR demuestran:
-# - **Panel Izquierdo (Contracción del Producto)**: Un alza impositiva imprevista genera una recesión estadísticamente significativa y duradera, con una caída del PIB de entre $-1.5\%$ y $-2.5\%$ a lo largo de 12 trimestres (indicando un multiplicador fiscal impositivo situado entre $-1.5$ y $-2.0$).
-# - **Panel Derecho (Reacción de la Política Monetaria)**: La Reserva Federal reduce la tasa de interés para amortiguar el impacto contractivo, moderando parcialmente la severidad de la desaceleración inducida por la política fiscal.
+# - **Panel Izquierdo (Contracción del Producto)**: Un alza impositiva imprevista va seguida de una caída duradera del producto real: el PIB queda en torno a $-0.74\%$ por debajo de su nivel base en el impacto, alcanza un mínimo de alrededor de $-1.13\%$ en el trimestre 3 y sigue en torno a $-0.96\%$ por debajo tras 12 trimestres, con la banda del 90% por debajo de cero en todos los horizontes. El estadístico F de primera etapa de 6.79 señala un instrumento débil, de modo que estas bandas bootstrap no son robustas a instrumentos débiles y pueden exagerar la precisión. El cuaderno no calcula un multiplicador fiscal.
+# - **Panel Derecho (Reacción de la Política Monetaria)**: La tasa de fondos federales sube unos $+0.15$ pp en el impacto (banda del 90% $[+0.03, +0.29]$) y se vuelve negativa desde el trimestre siguiente, entre $-0.31$ y $-0.04$ pp hasta $h=12$. Después del impacto la banda incluye el cero (su extremo superior llega a $+0.17$), así que los datos no identifican con precisión una relajación; léase solo como indicio.
 
 # %%
 fig, (ax1, ax2) = _nbstyle.figura(1, 2, figsize=(11.0, 4.5))

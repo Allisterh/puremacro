@@ -48,7 +48,7 @@ from puremacro.var.identify import bq, proxy
 # %% [markdown]
 # ## 1. Replicating Galí (1999, AER): Technology Shocks and Hours Worked
 #
-# Consider the bivariate vector $X_t = (\Delta x_t, n_t)^\top$, where $\Delta x_t = \Delta \log(Y_t / N_t)$ is the growth rate of labor productivity and $n_t = \log(N_t)$ is log hours worked. The reduced-form VAR is $X_t = \sum_{l=1}^p A_l X_{t-l} + u_t$ with residual covariance $\Sigma_u = \mathbb{E}[u_t u_t^\top]$.
+# Consider the bivariate vector $X_t = (\Delta x_t, \Delta n_t)^\top$, where $\Delta x_t = \Delta \log(Y_t / N_t)$ is the growth rate of labor productivity and $\Delta n_t$ is the first difference of $n_t = \log(N_t)$, log hours worked per capita. This is Galí's own *difference specification*: he treats both productivity and hours as I(1), with a stationary VAR in first differences. The reduced-form VAR is $X_t = \sum_{l=1}^p A_l X_{t-l} + u_t$ with residual covariance $\Sigma_u = \mathbb{E}[u_t u_t^\top]$.
 #
 # Inverting the autoregressive lag polynomial yields the Wold moving average representation:
 #
@@ -61,23 +61,36 @@ from puremacro.var.identify import bq, proxy
 # $$ \bar{C} = \begin{pmatrix} \bar{C}_{11} & 0 \\ \bar{C}_{21} & \bar{C}_{22} \end{pmatrix} \implies \bar{C} \bar{C}^\top = C(1) \Sigma_u C(1)^\top $$
 #
 # Because $\bar{C}_{12} = 0$, non-technology shocks are strictly excluded from exerting any permanent impact on the level of labor productivity. Solving via the Cholesky factor of $C(1) \Sigma_u C(1)^\top$ uniquely identifies structural impact matrix $B_0$.
+#
+# Both variables enter in first differences, so the responses of the *levels* $x_t$ and $n_t$ are the running sums of the estimated responses of $\Delta x_t$ and $\Delta n_t$. That is what `bq` returns by default (`cumulate=True`). Feeding the level $n_t$ instead and keeping the default would cumulate a level, turning the hours response into a spurious running sum.
 
 # %%
 df_gali = load_gali1999()
+df_gali["dhours"] = df_gali["hours"].diff()  # Galí's difference specification
+gali_vars = df_gali[["dlprod", "dhours"]].dropna()
 print("Galí (1999) Dataset Preview:")
-print(df_gali[["dlprod", "hours"]].head())
+print(gali_vars.head())
+print(f"Sample: {gali_vars.index[0]} to {gali_vars.index[-1]} ({len(gali_vars)} quarters)")
 
-# Estimate VAR(4) with long-run BQ restriction
-Z_gali = df_gali[["dlprod", "hours"]].to_numpy(dtype=float)
+# Estimate VAR(4) with long-run BQ restriction; both rows are cumulated to levels
+Z_gali = gali_vars.to_numpy(dtype=float)
 bq_res = bq(Z_gali, p=4, horizon=20)
 print("\n" + bq_res.summary())
+
+prod, hours = bq_res.irf_point[:, 0, 0], bq_res.irf_point[:, 1, 0]
+print(f"Productivity (level), tech shock: h=0: {prod[0]:+.3f}  h=20: {prod[20]:+.3f}")
+print(f"Hours per capita (level), tech shock: h=0: {hours[0]:+.3f}  h=20: {hours[20]:+.3f}")
+print(f"Hours 90% band at h=0: [{bq_res.irf_lower[0, 1, 0]:+.3f}, {bq_res.irf_upper[0, 1, 0]:+.3f}]"
+      f"  h=20: [{bq_res.irf_lower[20, 1, 0]:+.3f}, {bq_res.irf_upper[20, 1, 0]:+.3f}]")
 
 # %% [markdown]
 # ### Impulse Responses to a Positive Technology Shock
 #
 # The impulse response functions with 90% bootstrap confidence intervals illustrate:
-# - **Left Panel (Productivity Level)**: Technology shocks permanently elevate the level of labor productivity ($x_t$), with cumulative gains stabilizing near $+0.8$ percentage points.
-# - **Right Panel (Hours Worked)**: Rather than expanding employment as classical flexible-price models predict, hours worked plunge by $-0.4\%$ on impact, remaining depressed for over six quarters before returning to trend. This negative correlation provides compelling empirical evidence for nominal price rigidities.
+# - **Left Panel (Productivity Level)**: A positive technology shock raises the level of labor productivity ($x_t$) by about $+0.68\%$ on impact; the level settles near $+0.81\%$ after five years, with a 90% band that stays well above zero.
+# - **Right Panel (Hours Worked)**: Rather than expanding as flexible-price RBC models predict, hours per capita fall by about $-0.83\%$ on impact, and the 90% band excludes zero on impact. The point estimate stays negative at every horizon and settles near $-0.40\%$, but by $h=20$ the band includes zero, so the persistent part of the decline is imprecisely estimated. The sign on impact is Galí's headline: a negative conditional comovement of hours and productivity, which he reads as evidence of nominal price rigidities.
+#
+# The bundled data run from 1948 to 2026, well past Galí's 1948-1994 sample, and use today's vintage of the BLS series, so the magnitudes are not his; the sign on impact is the result to compare. Whether hours should enter in levels or in differences is itself a contested choice (Christiano, Eichenbaum & Vigfusson 2003); `puremacro.examples.gali_1999_hours` compares the two.
 
 # %%
 fig, (ax1, ax2) = _nbstyle.figura(1, 2, figsize=(11.0, 4.5))
@@ -144,12 +157,24 @@ m_instrument = sub_tax["unanticipated"].to_numpy(dtype=float)
 proxy_res = proxy(Z_tax, p=4, horizon=16, instrument_series=m_instrument, shock_target_idx=0)
 print(proxy_res.summary())
 
+gdp_tax = proxy_res.irf_point[:, 0, 0]
+h_trough = int(np.argmin(gdp_tax))
+print(f"Real GDP (%), tax shock: h=0: {gdp_tax[0]:+.3f}  trough: {gdp_tax[h_trough]:+.3f} at h={h_trough}"
+      f"  h=12: {gdp_tax[12]:+.3f}")
+print(f"Upper end of the GDP 90% band, highest over h=0..16: {proxy_res.irf_upper[:, 0, 0].max():+.3f}")
+
+ffr_tax = proxy_res.irf_point[:, 1, 0]
+print(f"Federal funds rate (pp), tax shock: h=0: {ffr_tax[0]:+.3f}"
+      f"  90% band [{proxy_res.irf_lower[0, 1, 0]:+.3f}, {proxy_res.irf_upper[0, 1, 0]:+.3f}];"
+      f"  h=1..12 range: {ffr_tax[1:13].min():+.3f} to {ffr_tax[1:13].max():+.3f};"
+      f"  highest upper band end over h=1..12: {proxy_res.irf_upper[1:13, 1, 0].max():+.3f}")
+
 # %% [markdown]
 # ### Impulse Responses to an Unanticipated Tax Increase
 #
 # The Proxy SVAR dynamic responses demonstrate:
-# - **Left Panel (Output Contraction)**: An unanticipated tax increase causes a statistically significant and prolonged downturn in real output, with GDP falling between $-1.5\%$ and $-2.5\%$ below baseline over a 12-quarter horizon (implying an output tax multiplier between $-1.5$ and $-2.0$).
-# - **Right Panel (Monetary Policy Reaction)**: The Federal Reserve lowers the Federal Funds rate to mitigate the recessionary impulse, partially dampening the contractionary impact of the fiscal shock.
+# - **Left Panel (Output Contraction)**: An unanticipated tax increase is followed by a prolonged fall in real output: GDP is about $-0.74\%$ below baseline on impact, reaches a trough of about $-1.13\%$ in quarter 3, and is still about $-0.96\%$ below baseline after 12 quarters, with the 90% band below zero at every horizon. The first-stage F of 6.79 flags a weak instrument, so these bootstrap bands are not weak-IV robust and may overstate the precision. The notebook does not compute a tax multiplier.
+# - **Right Panel (Monetary Policy Reaction)**: The federal funds rate rises by about $+0.15$ pp on impact (90% band $[+0.03, +0.29]$), then turns negative from the next quarter, between $-0.31$ and $-0.04$ pp through $h=12$. The band includes zero after impact (its upper end reaches $+0.17$), so the data do not pin down an easing response; read it as suggestive only.
 
 # %%
 fig, (ax1, ax2) = _nbstyle.figura(1, 2, figsize=(11.0, 4.5))

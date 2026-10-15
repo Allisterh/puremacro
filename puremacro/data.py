@@ -97,37 +97,24 @@ def hamilton_filter(y, *, h: int = 8, p: int = 4) -> tuple[pd.Series, pd.Series]
     Regress ``y_{t+h}`` on a constant and ``y_t, y_{t-1}, ..., y_{t-(p-1)}``;
     the residual is the cycle, the fitted value is the trend. The first
     ``h + p - 1`` entries of the output are NaN by construction.
+
+    Thin wrapper around :func:`puremacro.cycles.hamilton_filter`, which is
+    the canonical implementation; this version always returns a pair of
+    ``pandas.Series`` named ``"cycle"`` and ``"trend"`` carrying ``y``'s index
+    (or a ``RangeIndex`` for array input). It raises ``ValueError`` when
+    ``y`` is not finite or ``T < h + 2p + 1``.
     """
+    from .cycles import hamilton_filter as _hamilton
+
     if isinstance(y, pd.Series):
         idx = y.index
         y_arr = y.values.astype(float)
     else:
         y_arr = np.asarray(y, dtype=float).ravel()
         idx = pd.RangeIndex(y_arr.size)
-    n = y_arr.size
-    n_obs = n - (h + p - 1)
-    if n_obs <= p + 1:
-        raise ValueError("hamilton_filter: series too short for given h,p")
-    # Build regressor matrix: rows correspond to t = p-1, ..., n-1-h
-    # so that the dependent observation y_{t+h} is index (p-1+h, ..., n-1).
-    rows = []
-    rhs = []
-    for t in range(p - 1, n - h):
-        rows.append([y_arr[t - k] for k in range(p)])  # y_t, y_{t-1}, ..., y_{t-(p-1)}
-        rhs.append(y_arr[t + h])
-    X = np.column_stack([np.ones(len(rows)), np.asarray(rows, dtype=float)])
-    Y = np.asarray(rhs, dtype=float)
-    beta, *_ = np.linalg.lstsq(X, Y, rcond=None)
-    fit = X @ beta
-    resid = Y - fit
-    # Place results at indices (p-1+h, ..., n-1)
-    cycle_arr = np.full(n, np.nan)
-    trend_arr = np.full(n, np.nan)
-    target = np.arange(p - 1 + h, n)
-    cycle_arr[target] = resid
-    trend_arr[target] = fit
-    cycle = pd.Series(cycle_arr, index=idx, name="cycle")
-    trend = pd.Series(trend_arr, index=idx, name="trend")
+    res = _hamilton(y_arr, h=h, p=p)
+    cycle = pd.Series(np.asarray(res.cycle, dtype=float), index=idx, name="cycle")
+    trend = pd.Series(np.asarray(res.trend, dtype=float), index=idx, name="trend")
     return cycle, trend
 
 

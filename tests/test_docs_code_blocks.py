@@ -24,6 +24,8 @@ from pathlib import Path
 import matplotlib
 import pytest
 
+from _timing import budget
+
 matplotlib.use("Agg")
 
 REPO = Path(__file__).resolve().parents[1]
@@ -78,7 +80,8 @@ PAGES = [
 ]
 
 _FENCE = re.compile(r"```python\n(.*?)```", re.S)
-_PER_BLOCK_SECONDS = 120
+#: Hang watchdog per block, scaled by PUREMACRO_TIMING_SCALE (SIGALRM takes whole seconds).
+_PER_BLOCK_SECONDS = max(1, int(budget(120)))
 
 
 def _blocks(page: str) -> list[str]:

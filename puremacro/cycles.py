@@ -129,22 +129,54 @@ def hamilton_filter(
     -------
     CycleResult
         Dataclass unpacking to ``(cycle, trend)`` with ``.cycle``, ``.trend``,
-        ``.summary()``, and ``.plot()``.
+        ``.summary()``, and ``.plot()``. The first ``h + p - 1`` entries of
+        both are NaN by construction.
+
+    Raises
+    ------
+    ValueError
+        If ``h`` or ``p`` is not a positive integer, if ``y`` contains NaN or
+        inf, or if ``T < h + 2p + 1`` (fewer than ``p + 2`` regression rows,
+        in which case the OLS fit is exact and the cycle would be
+        identically zero).
+
+    Notes
+    -----
+    This is the canonical implementation; ``puremacro.data.hamilton_filter``
+    is a thin wrapper around it that returns named ``pandas.Series``.
     """
     if horizon is not None:
         h = horizon
     if lags is not None:
         p = lags
 
+    for name, val in (("h", h), ("p", p)):
+        if isinstance(val, bool) or not isinstance(val, (int, np.integer)) or val < 1:
+            raise ValueError(
+                f"hamilton_filter: {name} must be a positive integer, got {val!r}."
+            )
+    h = int(h)
+    p = int(p)
+
     is_series = isinstance(y, pd.Series)
     idx = y.index if is_series else None
     y_arr = np.asarray(y, dtype=float).reshape(-1)
-    T = y_arr.shape[0]
-    lags_needed = h + p
-    if T < lags_needed + 1:
+    if not np.all(np.isfinite(y_arr)):
         raise ValueError(
-            f"hamilton_filter: sample size {T} is too short for h={h}, p={p} "
-            f"(need at least {lags_needed + 1})."
+            "hamilton_filter: y must be finite (found NaN or inf); drop or "
+            "fill missing observations before filtering."
+        )
+    T = y_arr.shape[0]
+    # The regression has p + 1 coefficients and T - h - p + 1 usable rows.
+    # With p + 1 rows or fewer it fits exactly and the cycle is identically
+    # zero, so at least p + 2 rows (T >= h + 2p + 1) are required.
+    min_T = h + 2 * p + 1
+    if T < min_T:
+        raise ValueError(
+            f"hamilton_filter: sample size {T} is too short for h={h}, p={p}; "
+            f"need T >= h + 2p + 1 = {min_T} so that the regression of "
+            f"y_(t+h) on a constant and p lags has more observations than "
+            f"coefficients."
         )
 
     # Build the design matrix: constant + p lags of y.

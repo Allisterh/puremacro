@@ -49,7 +49,12 @@ def _resolve(filename: str) -> pathlib.Path:
 
 
 def load_gali1999() -> pd.DataFrame:
-    """Load Galí (1999, AER) quarterly US dataset (1948Q1 - 1994Q4).
+    """Load the quarterly US dataset for Galí (1999, AER), 1948Q2 - 2026Q1.
+
+    The bundled sample runs from 1948Q2 to 2026Q1 (312 quarters after the
+    first difference drops 1948Q1) and uses today's vintage of the BLS
+    series (OPHNFB, HOANBS, CNP16OV), so it extends well past Galí's original
+    1948-1994 sample.
 
     Columns:
     - 'dlprod': Growth rate of labor productivity (d log(Y/N))
@@ -59,7 +64,7 @@ def load_gali1999() -> pd.DataFrame:
     Returns
     -------
     pd.DataFrame
-        Indexed by quarterly PeriodIndex ('1948Q2' to '1994Q4').
+        Indexed by quarterly PeriodIndex ('1948Q2' to '2026Q1').
     """
     path = _resolve("gali1999.csv")
     df = pd.read_csv(path)

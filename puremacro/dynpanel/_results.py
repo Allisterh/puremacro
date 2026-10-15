@@ -43,7 +43,8 @@ class GMMResult:
     hansen_j_p : float
         Chi-square p-value for the Hansen J test.
     hansen_j_df : int
-        Degrees of freedom: ``n_instruments - n_regressors``.
+        Degrees of freedom: ``n_instruments - n_regressors`` (xtabond2's
+        ``j - k``). A singular step-2 matrix does not reduce it.
     ar1_p : float
         Arellano-Bond AR(1) test p-value (two-sided normal). Under
         correct specification this is typically small (differencing
@@ -52,7 +53,10 @@ class GMMResult:
         Arellano-Bond AR(2) test p-value (two-sided normal). Under
         correct specification this should NOT reject (large p-value).
     n_instruments : int
-        Number of moment conditions (columns of ``Z``).
+        Number of linearly independent moment conditions: the columns of
+        ``Z``, or the rank of the step-1 weight matrix when some columns are
+        linear combinations of others (xtabond2's ``e(j)``; a note then
+        gives the full column count).
     n_obs : int
         Total observations used in the moment conditions (sum across
         panels of usable post-differencing rows).
@@ -72,7 +76,10 @@ class GMMResult:
         Human-readable notes about the fit, e.g. instrument columns that
         were identically zero on the estimation sample and were dropped
         (they carry no moment condition; ``n_instruments`` and
-        ``hansen_j_df`` count only the columns actually used).
+        ``hansen_j_df`` count only the columns actually used), or a
+        singular step-1 or step-2 weight matrix that was inverted with the
+        Moore-Penrose generalized inverse, with its rank (as xtabond2 does;
+        Roodman 2009, p. 98). A ``RuntimeWarning`` repeats the latter.
 
     References
     ----------
