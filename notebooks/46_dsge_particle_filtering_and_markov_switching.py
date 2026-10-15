@@ -188,12 +188,18 @@ ax.set_title(r"Differentiable OccBin: Smooth ZLB Relaxation ($\tau \to 0$)", fon
 ax.set_xlabel("Quarters")
 ax.set_ylabel("Policy Rate $r_t$ (% dev)")
 ax.grid(True, linestyle=":", alpha=0.6)
-ax.legend()
+_ = ax.legend()
 
 # %% [markdown]
 # ### Two-Asset HANK Sequence-Space Bridge
 #
-# Moving from aggregate constraints to microeconomic heterogeneity, `puremacro` extends the sequence-space bridge to **Two-Asset HANK models** (Kaplan, Moll & Violante 2018). Households allocate wealth between liquid deposits $b$ and illiquid assets $a$ subject to portfolio transaction costs $\chi(d, a) = \chi_0 |d| + \frac{\chi_1}{2} \left(\frac{d}{a}\right)^2 a$.
+# Moving from aggregate constraints to microeconomic heterogeneity, `puremacro` extends the sequence-space bridge to **Two-Asset HANK models** (Kaplan, Moll & Violante 2018). Households allocate wealth between liquid deposits $b$ and illiquid assets $a$ subject to a portfolio adjustment cost on the net deposit $d = a' - (1 + r_a) a$ into the illiquid account:
+#
+# $$\chi(d, a) = \frac{\chi_0}{1+\chi_1} \, \frac{|d|^{1+\chi_1}}{(a + \bar{a})^{\chi_1}},$$
+#
+# which with the reference calibration $\chi_1 = 1$ is the quadratic cost $\tfrac{1}{2} \chi_0 \, d^2 / (a + \bar{a})$. The term $\bar{a} > 0$ keeps the cost of depositing into an empty account finite. Unlike Kaplan, Moll & Violante, there is no linear $|d|$ term, so the household policies are differentiable (the endogenous-grid solver and the Fake-News Jacobians need this).
+#
+# The two-asset solver is **experimental**. Its results are checked against brute-force Jacobians and date-by-date budget identities; they are not a replication of the numbers published by Kaplan, Moll & Violante (2018).
 #
 # We load the reference `hank_two_asset.mod` model and solve its general equilibrium sequence-space transition:
 
@@ -216,6 +222,7 @@ print(f"Impact aggregate consumption (C_0): {c_agg[0]:+.4f}")
 print(f"Peak aggregate consumption       : {np.max(c_agg):+.4f}")
 assert res_two_asset.converged, "Sequence-space HANK equilibrium must converge"
 assert len(c_agg) == 16, "Transition horizon must match 16 quarters"
+assert c_agg[0] > 0, "An expansionary monetary shock must raise consumption on impact"
 
 # %% [markdown]
 # ## 2. Markov-Switching DSGE Perturbation (Foerster et al. 2016)

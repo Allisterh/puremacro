@@ -187,12 +187,18 @@ ax.set_title(r"OccBin Diferenciable: Relajación Suave en ZLB ($\tau \to 0$)", f
 ax.set_xlabel("Trimestres")
 ax.set_ylabel("Tasa de Política $r_t$ (% desv)")
 ax.grid(True, linestyle=":", alpha=0.6)
-ax.legend()
+_ = ax.legend()
 
 # %% [markdown]
 # ### Puente HANK de Dos Activos en Espacio de Secuencias
 #
-# Pasando de restricciones agregadas a la heterogeneidad microeconómica, `puremacro` extiende el puente de espacio de secuencias a **modelos HANK con dos activos** (Kaplan, Moll & Violante 2018). Los hogares asignan riqueza entre depósitos líquidos $b$ y activos ilíquidos $a$ con costos de ajuste de portafolio $\chi(d, a) = \chi_0 |d| + \frac{\chi_1}{2} \left(\frac{d}{a}\right)^2 a$.
+# Pasando de restricciones agregadas a la heterogeneidad microeconómica, `puremacro` extiende el puente de espacio de secuencias a **modelos HANK con dos activos** (Kaplan, Moll & Violante 2018). Los hogares asignan riqueza entre depósitos líquidos $b$ y activos ilíquidos $a$ con un costo de ajuste de portafolio sobre el depósito neto $d = a' - (1 + r_a) a$ en la cuenta ilíquida:
+#
+# $$\chi(d, a) = \frac{\chi_0}{1+\chi_1} \, \frac{|d|^{1+\chi_1}}{(a + \bar{a})^{\chi_1}},$$
+#
+# que con la calibración de referencia $\chi_1 = 1$ es el costo cuadrático $\tfrac{1}{2} \chi_0 \, d^2 / (a + \bar{a})$. El término $\bar{a} > 0$ mantiene finito el costo de depositar en una cuenta vacía. A diferencia de Kaplan, Moll & Violante, no hay término lineal $|d|$, de modo que las políticas de los hogares son diferenciables (lo requieren el método de rejilla endógena y los jacobianos de Fake-News).
+#
+# El solver de dos activos es **experimental**. Sus resultados se verifican con jacobianos de fuerza bruta e identidades presupuestarias período a período; no son una réplica de las cifras publicadas por Kaplan, Moll & Violante (2018).
 #
 # Cargamos la especificación de referencia `hank_two_asset.mod` y calculamos la transición de equilibrio general:
 
@@ -214,6 +220,7 @@ print(f"Consumo agregado en impacto (C_0) : {c_agg[0]:+.4f}")
 print(f"Consumo agregado máximo           : {np.max(c_agg):+.4f}")
 assert res_two_asset.converged, "El equilibrio HANK en espacio de secuencias debe converger"
 assert len(c_agg) == 16, "El horizonte de transición debe ser de 16 trimestres"
+assert c_agg[0] > 0, "Un choque monetario expansivo debe elevar el consumo en el impacto"
 
 # %% [markdown]
 # ## 2. Perturbación DSGE con Cambio de Régimen de Markov (Foerster et al. 2016)
