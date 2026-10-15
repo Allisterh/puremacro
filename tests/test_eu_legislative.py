@@ -81,10 +81,40 @@ class TestEurlexParser:
         assert _CELEX_TYPE_CODES["L"] == "directive"
         assert _CELEX_TYPE_CODES["D"] == "decision"
 
-    def test_iter_eurlex_empty_window(self):
-        from puremacro.narrative.sources.eu_eurlex import iter_eurlex
-        records = list(iter_eurlex(since="1900-01-01", until="1900-12-31"))
+    def test_iter_eurlex_empty_window(self, monkeypatch):
+        """No acts in the window: SPARQL is asked once per act type, the HTML
+        scrape is tried as the fallback, no act is fetched, nothing is yielded.
+        Offline: both endpoints are answered here with empty results."""
+        import urllib.parse
+
+        from puremacro.narrative.sources import eu_eurlex
+
+        requested: list[str] = []
+
+        def fake_get_text(url, **_kw):
+            requested.append(url)
+            if url.startswith(eu_eurlex._SPARQL_ENDPOINT):
+                return '{"head": {"vars": ["celex"]}, "results": {"bindings": []}}'
+            if url.startswith("https://eur-lex.europa.eu/search.html"):
+                return "<html><body>No results</body></html>"
+            raise AssertionError(f"unexpected request {url}")
+
+        def no_act_fetch(*_a, **_kw):
+            raise AssertionError("no act should be fetched for an empty window")
+
+        monkeypatch.setattr(eu_eurlex, "safe_get_text", fake_get_text)
+        monkeypatch.setattr(eu_eurlex, "_fetch_celex_in_language", no_act_fetch)
+
+        records = list(eu_eurlex.iter_eurlex(since="1900-01-01", until="1900-12-31"))
         assert records == []
+
+        sparql = [urllib.parse.unquote_plus(u) for u in requested
+                  if u.startswith(eu_eurlex._SPARQL_ENDPOINT)]
+        scrape = [u for u in requested if "search.html" in u]
+        assert len(sparql) == 3
+        assert all('"1900-01-01"' in q and '"1900-12-31"' in q for q in sparql)
+        assert sorted(u.split("DB_TYPE_OF_ACT=")[1][0] for u in scrape) == ["D", "L", "R"]
+        assert all("DTA=1900" in u for u in scrape)
 
 
 @pytest.mark.network

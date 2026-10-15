@@ -164,7 +164,15 @@ def test_g9_panel_at_least_one_country(g9_long_panel):
     assert g9_long_panel["code"].nunique() >= 1
 
 
-def test_splice_audit_columns():
+def test_splice_audit_columns(monkeypatch):
+    """The audit's columns exist even when STAN has no coverage.
+
+    Offline: every OECD-STAN SDMX request answers with the empty frame the
+    loader documents for "no data", instead of reaching sdmx.oecd.org.
+    """
+    monkeypatch.setattr(
+        lp, "_fetch_stan_csv", lambda *a, **k: pd.DataFrame(columns=["year", "value"])
+    )
     panel = lp.build_g9_long_panel(start=1975, end=2024, write_csv=False)
     audit = lp.splice_audit(panel)
     assert {"code", "overlap_n", "mad_LS_pp", "mad_PK_pp"}.issubset(audit.columns)

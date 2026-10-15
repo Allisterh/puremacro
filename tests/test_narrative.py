@@ -365,6 +365,9 @@ def test_from_canonical_accepts_new_flags_without_crash():
         include_devries=False,
         include_guajardo=False,
         include_mitchell=False,
+        include_adler_2024=False,
+        include_eu_nms_2023=False,
+        include_imf_covid_2022=False,
     )
     assert panel.events == []
     assert panel.metadata["n_raw_events"] == 0
@@ -762,6 +765,7 @@ def test_from_canonical_adler_2024_supersedes_dglp_in_dedup(tmp_path):
         include_devries=False,
         include_guajardo=False,
         include_eu_nms_2023=False,
+        include_imf_covid_2022=False,
         canonical_csv_paths={
             "adler_2024": str(adler_csv),
             "dglp_2011":  str(dglp_csv),
@@ -792,6 +796,7 @@ def test_from_canonical_eu_nms_2023_loads_independently(tmp_path):
         include_devries=False,
         include_guajardo=False,
         include_eu_nms_2023=True,
+        include_imf_covid_2022=False,
         canonical_csv_paths={"eu_nms_2023": str(eu_csv)},
     )
     pol = [e for e in panel.events if e.country == "POL"]

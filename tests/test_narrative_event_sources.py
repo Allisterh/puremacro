@@ -8,6 +8,7 @@ from puremacro.narrative.sources._schema import validate_records
 
 
 # ============================================================ WARN CA
+@pytest.mark.network
 def test_iter_us_warn_ca_yields_validated_5tuples():
     from puremacro.narrative.sources.us_warn import iter_us_warn
     try:

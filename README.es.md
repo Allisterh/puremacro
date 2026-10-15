@@ -552,6 +552,7 @@ La detección es heurística — ninguna API dice «esto es Juno» —, así que
 **Sin sockets.** Bajo Pyodide ni `requests` ni `urllib` pueden abrir una conexión, de modo que toda llamada a `fetch.*` falla aunque el núcleo de estimadores se importe sin problema. Una sola llamada encamina toda la capa de descarga existente por la red del propio navegador:
 
 ```python
+# requires: Pyodide
 from puremacro import runtime
 from puremacro.fetch import fetch_xrate_monthly
 
