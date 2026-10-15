@@ -11,9 +11,16 @@ Agents are advanced with each solution's own policy representation:
 Exogenous shocks move by the solution's Markov matrix ``sol.P``, one uniform
 per agent and period drawn by inverse CDF. One ``numpy.random.Generator``
 (PCG64) draws everything, so the same seed gives bit-identical panels: the
-initial cells first, then in each period the discrete-choice uniforms (none
-yet), the shock uniforms and, in a life cycle with declared survival, the
-survival uniforms.
+initial cells first, then in each period the discrete-choice uniforms (taste
+shocks only), the shock uniforms and, in a life cycle with declared survival,
+the survival uniforms.
+
+A discrete choice is the solver's argmax option, ``policy_d`` at the agent's
+cell (VFI) or at the bracketing node nearer its asset (EGM), and the next
+asset is that option's policy. With taste shocks the option is drawn from the
+logit probabilities ``choice_prob`` interpolated at the agent's asset, and the
+next asset is the drawn option's ``aprime_by_choice``. The choice is recorded
+as the option value.
 
 A life cycle steps age j with ``policy[j]`` and runs for the T ages of the
 horizon. Newborns are drawn from the declared ``newborns`` (normalised) or by
@@ -58,15 +65,48 @@ def _step_vfi(policy_aprime: np.ndarray, a_idx: np.ndarray, z_idx: np.ndarray) -
     return policy_aprime[a_idx, z_idx]
 
 
+def _interp_by_shock(table: np.ndarray, a_grid: np.ndarray, a_val: np.ndarray,
+                     z_idx: np.ndarray) -> np.ndarray:
+    """``table[:, z]`` interpolated linearly at each agent's asset, agents grouped
+    by their shock."""
+    out = np.empty_like(a_val, dtype=float)
+    for z in np.unique(z_idx):
+        sel = z_idx == z
+        out[sel] = np.interp(a_val[sel], a_grid, table[:, z])
+    return out
+
+
 def _step_egm(aprime: np.ndarray, a_grid: np.ndarray, a_val: np.ndarray,
               z_idx: np.ndarray) -> np.ndarray:
     """Next asset value: ``aprime[:, z]`` interpolated linearly in the asset,
     clipped to ``[a_grid[0], a_grid[-1]]``, agents grouped by their shock."""
-    out = np.empty_like(a_val)
-    for z in np.unique(z_idx):
-        sel = z_idx == z
-        out[sel] = np.interp(a_val[sel], a_grid, aprime[:, z])
-    return np.clip(out, a_grid[0], a_grid[-1])
+    return np.clip(_interp_by_shock(aprime, a_grid, a_val, z_idx), a_grid[0], a_grid[-1])
+
+
+def _draw_choice(rng: np.random.Generator, choice_prob: np.ndarray, a_grid: np.ndarray,
+                 a_val: np.ndarray, z_idx: np.ndarray) -> np.ndarray:
+    """Option index of every agent under taste shocks: the probabilities
+    ``choice_prob[k, :, z]`` interpolated linearly at the agent's asset and
+    renormalised, then one uniform per agent by inverse CDF."""
+    n_d = choice_prob.shape[0]
+    p = np.stack([_interp_by_shock(choice_prob[k], a_grid, a_val, z_idx) for k in range(n_d)],
+                 axis=1)
+    p = np.clip(p, 0.0, None)
+    p /= p.sum(axis=1, keepdims=True)
+    cdf = np.cumsum(p, axis=1)
+    cdf[:, -1] = 1.0
+    u = rng.random(a_val.size)
+    return np.minimum((u[:, None] >= cdf).sum(axis=1), n_d - 1)
+
+
+def _step_by_choice(aprime_by_choice: np.ndarray, a_grid: np.ndarray, a_val: np.ndarray,
+                    z_idx: np.ndarray, d_idx: np.ndarray) -> np.ndarray:
+    """Next asset value under each agent's chosen option ``aprime_by_choice[d]``."""
+    out = np.empty_like(a_val, dtype=float)
+    for k in np.unique(d_idx):
+        sel = d_idx == k
+        out[sel] = _step_egm(aprime_by_choice[k], a_grid, a_val[sel], z_idx[sel])
+    return out
 
 
 def _draw_cells(rng: np.random.Generator, mass: np.ndarray, n: int) -> np.ndarray:
@@ -246,6 +286,52 @@ def _compile_record(sol, record) -> list[tuple[str, object]]:
     return out
 
 
+def _stepper(sol, rng: np.random.Generator):
+    """``step(state, z_idx, j) -> (next_state, d_idx)``: one period under the
+    solution's policy at age ``j`` (ignored in an infinite horizon). ``d_idx``
+    is the option index of every agent, or None without a discrete choice.
+
+    - VFI: the next flat state index is ``policy_aprime[a, z]`` (the chosen
+      option's policy); the option is ``policy_d[a, z]``.
+    - EGM without taste shocks: the option is ``policy_d`` at the bracketing
+      node nearer the agent's asset; the next asset interpolates ``aprime``.
+    - EGM with taste shocks: the option is drawn from ``choice_prob``
+      interpolated at the agent's asset (one uniform per agent, drawn here,
+      before the period's shock uniforms); the next asset interpolates that
+      option's ``aprime_by_choice[k]``.
+    """
+    c, raw = sol._c, sol.raw
+    finite = c.finite
+
+    def at(arr, j):
+        return arr[j] if finite else arr
+
+    pol_d = getattr(raw, "policy_d", None)
+    pol_d = None if pol_d is None or c.model._discrete is None else np.asarray(pol_d)
+    if not _is_egm(sol):
+        pol = np.asarray(raw.policy_aprime)
+        if pol_d is None:
+            return lambda s, zz, j: (_step_vfi(at(pol, j), s, zz), None)
+        return lambda s, zz, j: (_step_vfi(at(pol, j), s, zz), at(pol_d, j)[s, zz])
+
+    a_grid = c.state_grids[0]
+    aprime = np.asarray(raw.aprime, dtype=float)
+    prob = getattr(raw, "choice_prob", None)
+    if pol_d is None:
+        return lambda s, zz, j: (_step_egm(at(aprime, j), a_grid, s, zz), None)
+    if prob is None:
+        def step_dc(s, zz, j):
+            return _step_egm(at(aprime, j), a_grid, s, zz), at(pol_d, j)[_nearest(a_grid, s), zz]
+        return step_dc
+    prob = np.asarray(prob, dtype=float)
+    by_choice = np.asarray(raw.aprime_by_choice, dtype=float)
+
+    def step_taste(s, zz, j):
+        d = _draw_choice(rng, at(prob, j), a_grid, s, zz)
+        return _step_by_choice(at(by_choice, j), a_grid, s, zz, d), d
+    return step_taste
+
+
 # ----------------------------------------------------------------------------- driver
 def simulate(sol, n_agents: int, periods: int | None, *, seed, init, burn_in: int,
              record: Sequence[str] | None) -> Panel:
@@ -255,8 +341,6 @@ def simulate(sol, n_agents: int, periods: int | None, *, seed, init, burn_in: in
         raise NotImplementedError(HJB_REFUSAL)
     if sol.method.endswith("+ks"):
         raise NotImplementedError(KS_REFUSAL)
-    if c.model._discrete is not None:
-        raise NotImplementedError("simulating models with a discrete choice is not supported yet")
     J = int(sol.raw.horizon) if c.finite else None
     if periods is None:
         periods = J if c.finite else 200
@@ -286,19 +370,7 @@ def simulate(sol, n_agents: int, periods: int | None, *, seed, init, burn_in: in
     state, z = _initial_state(sol, rng, n_agents, init)
     P = np.asarray(sol.P, dtype=float)
     egm = _is_egm(sol)
-    if egm:
-        aprime, a_grid = np.asarray(sol.raw.aprime, dtype=float), c.state_grids[0]
-        if c.finite:
-            step = lambda s, zz, j: _step_egm(aprime[j], a_grid, s, zz)    # noqa: E731
-        else:
-            step = lambda s, zz, j: _step_egm(aprime, a_grid, s, zz)       # noqa: E731
-    else:
-        pol = np.asarray(sol.raw.policy_aprime)
-        if c.finite:
-            step = lambda s, zz, j: _step_vfi(pol[j], s, zz)               # noqa: E731
-        else:
-            step = lambda s, zz, j: _step_vfi(pol, s, zz)                  # noqa: E731
-
+    step = _stepper(sol, rng)
     survival = c.model._survival if c.finite else None
     alive = None
     if survival is not None:
@@ -307,12 +379,15 @@ def simulate(sol, n_agents: int, periods: int | None, *, seed, init, burn_in: in
 
     S = np.empty((n_agents, periods + 1), dtype=state.dtype)     # state at t, plus t = periods
     Z = np.empty((n_agents, periods), dtype=np.intp)
+    D = np.empty((n_agents, periods), dtype=np.intp) if c.model._discrete is not None else None
     total = burn_in + periods
     for t in range(total):
         k = t - burn_in                                          # period (age in a life cycle)
-        nxt = step(state, z, k)
+        nxt, d = step(state, z, k)
         if k >= 0:
             S[:, k], Z[:, k] = state, z
+            if D is not None:
+                D[:, k] = d
         if t < total - 1:
             z = _draw_markov(rng, P, z)
             if alive is not None:
@@ -333,7 +408,8 @@ def simulate(sol, n_agents: int, periods: int | None, *, seed, init, burn_in: in
         zs = [np.zeros((n_agents, periods))]
     age = np.arange(periods) if c.finite else None
     ages = [np.broadcast_to(age, (n_agents, periods))] if c.finite else []
-    args = nxt + cur + zs + ages + list(sol.params.values())
+    ds = [np.asarray(c.model._discrete[1], dtype=float)[D]] if D is not None else []
+    args = ds + nxt + cur + zs + ages + list(sol.params.values())
     arrays = {}
     for name, fn in compiled:
         val = np.asarray(fn(*args, xp=np), dtype=float)
