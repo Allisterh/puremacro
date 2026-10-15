@@ -19,11 +19,40 @@ def mr_result():
     return run_mertens_ravn_replication(seed=0)
 
 
+# Stock and Yogo (2002), NBER Technical Working Paper 284, Table 2 (TSLS
+# size), printed page 59, row K2 = 1, column "n = 1, r = 0.10": the
+# first-stage F a single instrument needs for a nominal 5% Wald test to
+# reject at most 10% of the time.
+# https://www.nber.org/system/files/working_papers/t0284/t0284.pdf
+_SY_SIZE_10PCT_ONE_INSTRUMENT = 16.38
+
+
 def test_mertens_ravn_strong_instrument(mr_result):
-    """Cragg-Donald F should be well above the Stock-Yogo 10% cutoff
-    (~16.4) on this DGP: the proxy is wired to be strong."""
+    """Cragg-Donald F should be well above the Stock-Yogo 10% maximal-size
+    critical value for one instrument (16.38) on this DGP: the proxy is
+    wired to be strong."""
+    from puremacro.inference.over_id import stock_yogo_cv
+
+    cv = stock_yogo_cv(1, 10, criterion="size")
+    assert cv == pytest.approx(_SY_SIZE_10PCT_ONE_INSTRUMENT, abs=1e-9)
     cd_f = mr_result["cd_f"]
-    assert cd_f > 10.0, f"CD F = {cd_f:.2f} <= 10 (weak instrument)"
+    assert cd_f > cv, f"CD F = {cd_f:.2f} <= {cv} (weak instrument)"
+
+
+def test_mertens_ravn_summary_quotes_published_cutoff(
+    capsys, monkeypatch, tmp_path, mr_result
+):
+    """The printed summary quotes the table's 16.38, not a rounded 16.4."""
+    from puremacro.examples import svariv_mertens_ravn as mod
+
+    monkeypatch.setattr(mod, "run_mertens_ravn_replication", lambda: mr_result)
+    # Point the example's output folder at an empty temp dir so main()
+    # does not rewrite the tracked figure.
+    monkeypatch.setattr(mod, "__file__", str(tmp_path / "svariv_mertens_ravn.py"))
+    mod.main()
+    out = capsys.readouterr().out
+    assert "16.38" in out
+    assert "16.4)" not in out
 
 
 def test_mertens_ravn_peak_within_10pct(mr_result):

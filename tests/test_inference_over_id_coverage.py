@@ -2,14 +2,15 @@
 
 Two public functions:
   - hansen_j     -- Hansen J over-identification test for 2SLS / IV-GMM.
-  - stock_yogo_cv -- Stock-Yogo (2005) first-stage F critical value lookup.
+  - stock_yogo_cv -- Stock-Yogo first-stage F critical value lookup (TSLS
+    relative bias and TSLS Wald-test size, one endogenous regressor).
 
 Approach:
   - Known-value tests: DGPs with analytically determined correct answers
     (just-identified -> J=0; invalid instruments -> large J/small p-value).
   - Property tests: return type, keys, dtypes, df formula, p-value in [0,1],
     J >= 0, p-value NaN when df=0, J grows with sample when instrument invalid.
-  - Stock-Yogo table: all 24 tabulated entries against published values;
+  - Stock-Yogo tables: published cells of both tables typed from the paper;
     ordering (stricter bias threshold -> higher CV); untabulated -> None.
   - Error handling / edge cases: 1D inputs, W without constant (auto-prepend),
     W with constant already present (no double-prepend), multiple endog.
@@ -360,7 +361,13 @@ class TestHansenJControlsW:
 # TestStockYogoCVKnownValues — lookup table correctness
 # ---------------------------------------------------------------------------
 
-# Published Stock-Yogo (2005) Table 5.2 values for k=1 endogenous regressor.
+# Published Stock-Yogo values for n = 1 endogenous regressor, read from
+# Stock, J.H. and Yogo, M. (2002), "Testing for Weak Instruments in Linear IV
+# Regression", NBER Technical Working Paper 284,
+# https://www.nber.org/papers/t0284 (PDF: https://www.nber.org/system/files/working_papers/t0284/t0284.pdf),
+# Table 1 "Critical Values for the Weak Instrument Test Based on TSLS Bias",
+# printed page 58, columns "n = 1, b = 0.05 / 0.10 / 0.20 / 0.30".
+# Keys: (K2 = number of instruments, b in percent).
 _SY_TABLE = {
     (3,  5): 13.91, (3,  10):  9.08, (3,  20): 6.46, (3,  30): 5.39,
     (4,  5): 16.85, (4,  10): 10.27, (4,  20): 6.71, (4,  30): 5.34,
@@ -368,6 +375,25 @@ _SY_TABLE = {
     (6,  5): 19.28, (6,  10): 11.12, (6,  20): 6.76, (6,  30): 5.15,
     (7,  5): 19.86, (7,  10): 11.29, (7,  20): 6.73, (7,  30): 5.07,
     (8,  5): 20.25, (8,  10): 11.39, (8,  20): 6.69, (8,  30): 4.99,
+    # Rows K2 = 9..30 (same table, same page): a spread of cells.
+    (9,  5): 20.53, (9,  10): 11.46, (9,  20): 6.65, (9,  30): 4.92,
+    (10, 5): 20.74, (10, 10): 11.49, (10, 20): 6.61, (10, 30): 4.86,
+    (12, 10): 11.52, (15, 5): 21.23, (17, 30): 4.56, (20, 20): 6.28,
+    (22, 10): 11.42, (25, 5): 21.42, (27, 20): 6.14, (29, 30): 4.31,
+    (30, 5): 21.42, (30, 10): 11.32, (30, 20): 6.09, (30, 30): 4.29,
+}
+
+# Same source, Table 2 "Critical Values for the Weak Instrument Test Based on
+# TSLS Size", printed page 59, columns "n = 1, r = 0.10 / 0.15 / 0.20 / 0.25"
+# (maximal rejection rate of a nominal 5% Wald test). Keys: (K2, r in percent).
+_SY_SIZE_TABLE = {
+    (1, 10): 16.38, (1, 15):  8.96, (1, 20):  6.66, (1, 25):  5.53,
+    (2, 10): 19.93, (2, 15): 11.59, (2, 20):  8.75, (2, 25):  7.25,
+    (3, 10): 22.30, (5, 15): 15.09, (7, 20): 12.48, (8, 25): 10.50,
+    (10, 10): 38.54, (12, 20): 16.35, (14, 25): 14.00, (16, 15): 27.99,
+    (19, 10): 59.92, (21, 25): 18.20, (24, 15): 37.57, (26, 20): 27.51,
+    (28, 10): 81.40, (29, 25): 23.04,
+    (30, 10): 86.17, (30, 15): 44.78, (30, 20): 30.72, (30, 25): 23.65,
 }
 
 
@@ -386,6 +412,26 @@ class TestStockYogoCVKnownValues:
         cv = stock_yogo_cv(99, 10)
         assert cv is None
 
+    @pytest.mark.parametrize("n_inst", [0, 1, 2])
+    def test_bias_undefined_below_n_plus_2_returns_none(self, n_inst):
+        """Table 1 defines the bias critical values only for K2 >= n + 2
+        (section 3.5: "K2 = n + 2, ..., 100"), so l = 1, 2 stay None."""
+        for pct in (5, 10, 20, 30):
+            assert stock_yogo_cv(n_inst, pct) is None
+            assert stock_yogo_cv(n_inst, pct, criterion="bias") is None
+
+    def test_bias_table_covers_every_row_3_to_30(self):
+        for n_inst in range(3, 31):
+            for pct in (5, 10, 20, 30):
+                assert isinstance(stock_yogo_cv(n_inst, pct), float)
+        assert stock_yogo_cv(31, 10) is None
+
+    def test_bias_10pct_is_about_11_for_all_k2(self):
+        """Printed pp. 29-30: the b = .10 critical value "is approximately 11
+        for all values of K2" (9.08 at K2 = 3 is the one low cell)."""
+        for n_inst in range(4, 31):
+            assert 10.0 < stock_yogo_cv(n_inst, 10) < 11.6
+
     def test_untabulated_bias_pct_returns_none(self):
         cv = stock_yogo_cv(3, 15)  # 15% is not in the table
         assert cv is None
@@ -394,11 +440,15 @@ class TestStockYogoCVKnownValues:
         cv = stock_yogo_cv(100, 50)
         assert cv is None
 
-    def test_staiger_stock_rule_of_thumb(self):
-        """The classic Staiger-Stock 'F > 10' rule corresponds to
-        n_instruments=3, max_bias_pct=10.  The docstring says so explicitly."""
+    def test_three_instruments_10pct_bias(self):
+        """The (3, 10) bias cell is 9.08, below the Staiger-Stock 10."""
         cv = stock_yogo_cv(n_instruments=3, max_bias_pct=10)
         assert cv == pytest.approx(9.08, abs=1e-9)
+
+    def test_docstring_does_not_equate_rule_of_thumb_with_3_10(self):
+        doc = stock_yogo_cv.__doc__
+        assert "corresponds to\n    n_instruments=3" not in doc
+        assert "16.38" in doc
 
     def test_returns_float(self):
         cv = stock_yogo_cv(3, 10)
@@ -410,6 +460,48 @@ class TestStockYogoCVKnownValues:
         cv_int = stock_yogo_cv(3, 10)
         cv_via_float_key = stock_yogo_cv(int(3.0), int(10.0))
         assert cv_int == cv_via_float_key
+
+
+class TestStockYogoSizeCV:
+    @pytest.mark.parametrize("n_inst,pct,expected", [
+        (k[0], k[1], v) for k, v in _SY_SIZE_TABLE.items()
+    ])
+    def test_size_values_match_published(self, n_inst, pct, expected):
+        cv = stock_yogo_cv(n_inst, pct, criterion="size")
+        assert cv == pytest.approx(expected, abs=1e-9), (
+            f"stock_yogo_cv({n_inst}, {pct}, criterion='size') = {cv}, "
+            f"expected {expected}"
+        )
+
+    def test_size_default_threshold_is_10pct(self):
+        assert stock_yogo_cv(1, criterion="size") == pytest.approx(16.38, abs=1e-9)
+
+    def test_size_table_covers_every_row_1_to_30(self):
+        for n_inst in range(1, 31):
+            row = [stock_yogo_cv(n_inst, r, criterion="size") for r in (10, 15, 20, 25)]
+            assert all(isinstance(v, float) for v in row)
+            # A looser size bound needs a smaller first-stage F.
+            assert row[0] > row[1] > row[2] > row[3]
+        assert stock_yogo_cv(0, 10, criterion="size") is None
+        assert stock_yogo_cv(31, 10, criterion="size") is None
+
+    def test_size_untabulated_threshold_returns_none(self):
+        assert stock_yogo_cv(1, 5, criterion="size") is None
+        assert stock_yogo_cv(3, 30, criterion="size") is None
+
+    def test_size_cv_increases_with_instruments(self):
+        cvs = [stock_yogo_cv(n, 10, criterion="size") for n in range(1, 31)]
+        assert all(a < b for a, b in zip(cvs, cvs[1:]))
+
+    def test_unknown_criterion_raises(self):
+        with pytest.raises(ValueError, match="criterion"):
+            stock_yogo_cv(3, 10, criterion="liml")
+
+    def test_criterion_is_keyword_only(self):
+        with pytest.raises(TypeError):
+            stock_yogo_cv(3, 10, "size")  # type: ignore[misc]
+        # Passed by keyword it works: Stock-Yogo size table, K2 = 1, r = 10%.
+        assert stock_yogo_cv(1, 10, criterion="size") == 16.38
 
 
 # ---------------------------------------------------------------------------

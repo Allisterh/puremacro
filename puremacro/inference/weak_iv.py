@@ -95,7 +95,9 @@ def cragg_donald_f(
     float
         Cragg-Donald F-statistic. With ``k = 1`` this is exactly the
         first-stage F for the excluded instruments (homoskedastic);
-        compare with :func:`puremacro.inference.over_id.stock_yogo_cv`.
+        compare with :func:`puremacro.inference.over_id.stock_yogo_cv`
+        (``criterion="bias"`` for ``l >= 3``, ``criterion="size"`` for
+        any ``l``).
 
     References
     ----------
@@ -249,7 +251,8 @@ def kleibergen_paap_f(
     # n = 200, and 8,755,485 against 13.68 at n = 800: ratios of 40,000,
     # 160,000 and 640,000, i.e. n^2 to the digit.
     #
-    # The direction is the dangerous one. Stock-Yogo thresholds sit near 10,
+    # The direction is the dangerous one. Stock-Yogo thresholds sit between
+    # about 4 and 86 (near 10 for the 10% bias test),
     # so an F of six or seven figures reads as "instruments overwhelmingly
     # strong" for every dataset, and the weak-instrument diagnostic this
     # function exists to provide could never fire.

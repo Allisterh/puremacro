@@ -17,6 +17,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from ..inference.over_id import stock_yogo_cv
 from ..inference.weak_iv import cragg_donald_f, msw_bands
 from ..var.estimate import estimate_var
 from ..var.identify.proxy import proxy_svar
@@ -180,7 +181,11 @@ def main() -> None:
     """Execute the synthetic replication and print a short summary."""
     result = run_mertens_ravn_replication()
     print("Mertens-Ravn (2013)-style proxy-SVAR on synthetic DGP")
-    print(f"  Cragg-Donald F:    {result['cd_f']:.1f}  (Stock-Yogo 10% cutoff = 16.4)")
+    # One instrument: Stock-Yogo (2002, NBER TWP 284) Table 2, TSLS size,
+    # n = 1, K2 = 1, r = 0.10 -> 16.38.
+    sy_cv = stock_yogo_cv(1, 10, criterion="size")
+    print(f"  Cragg-Donald F:    {result['cd_f']:.1f}  "
+          f"(Stock-Yogo 10% maximal-size cutoff, one instrument = {sy_cv:.2f})")
     print(f"  Population peak:   {result['true_peak']:+.3f} at h={result['true_peak_h']}")
     print(f"  Recovered peak:    {result['recovered_peak']:+.3f} at "
           f"h={result['recovered_peak_h']}")
