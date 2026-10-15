@@ -16,7 +16,10 @@ Roodman, D. (2009). How to do xtabond2: an introduction to difference
 """
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
+from scipy import stats
 
 from .._linalg import safe_cholesky
 from ._results import GMMResult
@@ -35,6 +38,124 @@ def _inv_psd(A: np.ndarray, *, name: str) -> np.ndarray:
     eye = np.eye(L.shape[0])
     L_inv = np.linalg.solve(L, eye)
     return L_inv.T @ L_inv
+
+
+# Relative eigenvalue cut-off, on the unit-diagonal (equilibrated) form of a
+# weight matrix, below which a direction counts as numerically null. It sits
+# just above the 1e-14 condition-number bound at which safe_cholesky already
+# rejects a matrix, so a matrix that only failed the Cholesky check because of
+# column scaling is still inverted at full rank.
+_WEIGHT_RANK_RTOL = 1e-12
+
+
+def _inv_weight(A: np.ndarray, *, name: str) -> tuple[np.ndarray, int]:
+    """Inverse of a GMM weight matrix, with xtabond2's generalized-inverse
+    fallback. Returns ``(W, rank)``.
+
+    A nonsingular matrix goes through :func:`_inv_psd` unchanged (same
+    floating-point result as before the fallback existed) and
+    ``rank = A.shape[0]``. A singular one gets the Moore-Penrose inverse
+    instead of a ``LinAlgError``: Roodman (2009, Stata Journal 9(1),
+    p. 98 and footnote 6) notes that the moment covariance matrix "can
+    become singular, forcing the use of a generalized inverse", which does
+    not compromise consistency, and xtabond2 then warns and carries on
+    (xtabond2.ado, "Using a generalized inverse to calculate optimal
+    weighting matrix"). With a singularity caused by a redundant
+    instrument column, the Moore-Penrose inverse gives exactly the fit with
+    that column removed.
+
+    The rank is counted on the equilibrated matrix ``D^-1/2 A D^-1/2``
+    (``D = diag(A)``) so it does not depend on the units of the
+    instruments; ``W`` is the Moore-Penrose inverse of ``A`` restricted to
+    its ``rank`` leading eigen-directions.
+    """
+    m = A.shape[0]
+    try:
+        return _inv_psd(A, name=name), m
+    except np.linalg.LinAlgError:
+        pass
+    A_sym = 0.5 * (A + A.T)
+    if not np.all(np.isfinite(A_sym)):
+        raise np.linalg.LinAlgError(f"{name}: matrix has non-finite entries.")
+    d = np.sqrt(np.clip(np.diag(A_sym), 0.0, None))
+    d[d == 0.0] = 1.0
+    ev_scaled = np.linalg.eigvalsh(A_sym / np.outer(d, d))
+    top = float(ev_scaled.max()) if ev_scaled.size else 0.0
+    rank = int(np.sum(ev_scaled > _WEIGHT_RANK_RTOL * top)) if top > 0 else 0
+    ev, V = np.linalg.eigh(A_sym)
+    keep = np.argsort(ev)[::-1][:rank]
+    keep = keep[ev[keep] > 0.0]
+    rank = int(keep.size)
+    V_r = V[:, keep]
+    return (V_r / ev[keep]) @ V_r.T, rank
+
+
+def _rank_notes(
+    *, m: int, rank1: int, rank2: int | None, step1_label: str, two_step: bool
+) -> tuple:
+    """Result notes for weight matrices inverted by the generalized inverse."""
+    notes = []
+    if rank1 < m:
+        notes.append(
+            f"step-1 weight matrix {step1_label} has rank {rank1} < {m} "
+            "instrument columns (linearly dependent instruments); a "
+            "Moore-Penrose generalized inverse was used (as xtabond2 does). "
+            f"n_instruments and the Hansen J df count the {rank1} independent "
+            "instruments."
+        )
+    if rank2 is not None and rank2 < rank1:
+        role = (
+            "optimal two-step weight"
+            if two_step
+            else "robust weight for the Hansen test"
+        )
+        notes.append(
+            "step-2 matrix sum_i Z_i'u_i u_i'Z_i has rank "
+            f"{rank2} < {rank1}; a Moore-Penrose generalized inverse was used "
+            f"for the {role} (as xtabond2 does). The Hansen J df is not "
+            "reduced for this (xtabond2 convention) and the test may be weak "
+            "(Roodman 2009, p. 98)."
+        )
+    return tuple(notes)
+
+
+def _warn_rank_notes(notes: tuple, estimator: str) -> None:
+    if notes:
+        warnings.warn(
+            f"{estimator}: singular GMM weight matrix, generalized inverse "
+            "used. " + " ".join(notes),
+            RuntimeWarning,
+            stacklevel=3,
+        )
+
+
+def _hansen_j_rank(
+    Z: np.ndarray,
+    residuals: np.ndarray,
+    W: np.ndarray,
+    *,
+    n_regressors: int,
+    n_independent: int,
+) -> tuple:
+    """Hansen J with xtabond2's degrees of freedom.
+
+    xtabond2 sets ``e(hansen_df) = j - k`` where ``j`` is the number of
+    instruments left after collinear ones are removed (``e(j)``; ``e(j0)``
+    counts them all), and it bases that count on the step-1 matrix even in
+    two-step estimation, so a singular step-2 matrix does not reduce it
+    (xtabond2.ado 3.7.2: ``est scalar hansen_df = `j' - `k'``; version
+    notes 2.2.0 and 3.7.0). Roodman (2009, Stata Journal 9(1), p. 97): the
+    J statistic is chi-square "with degrees of freedom equal to the degree
+    of overidentification, j - k". With full-rank instruments this is
+    :func:`puremacro.dynpanel.diagnostics.hansen_j` unchanged.
+    """
+    J, p, df = hansen_j(Z, residuals, W, n_regressors=n_regressors)
+    if n_independent == Z.shape[1]:
+        return J, p, df
+    df = max(n_independent - n_regressors, 0)
+    if df == 0:
+        return J, float("nan"), 0
+    return J, float(stats.chi2.sf(J, df=df)), df
 
 
 # ---------------------------------------------------------------------
@@ -65,22 +186,24 @@ def _gmm_step(
 # ---------------------------------------------------------------------
 
 
-def _W_step1(Z: np.ndarray, H: np.ndarray) -> np.ndarray:
-    """Step-1 weight ``(Z' H Z)^{-1}``.
+def _W_step1(Z: np.ndarray, H: np.ndarray) -> tuple[np.ndarray, int]:
+    """Step-1 weight ``(Z' H Z)^{-1}`` and its rank.
 
     ``H`` is the block-diagonal first-difference covariance matrix
-    (Arellano-Bond 1991 eq. (8)).
+    (Arellano-Bond 1991 eq. (8)). A singular ``Z'HZ`` gets the
+    Moore-Penrose inverse (see :func:`_inv_weight`).
     """
     M = Z.T @ H @ Z
-    return _inv_psd(M, name="ab_gmm step1 weight Z'HZ")
+    return _inv_weight(M, name="ab_gmm step1 weight Z'HZ")
 
 
 def _W_step2(
     Z: np.ndarray,
     residuals: np.ndarray,
     diff_rows: list,
-) -> np.ndarray:
-    """Step-2 weight ``(Σ_i Z_i' u_i u_i' Z_i)^{-1}`` (panel-cluster).
+) -> tuple[np.ndarray, int]:
+    """Step-2 weight ``(Σ_i Z_i' u_i u_i' Z_i)^{-1}`` (panel-cluster) and
+    its rank; Moore-Penrose inverse when singular (see :func:`_inv_weight`).
     """
     m = Z.shape[1]
     S = np.zeros((m, m))
@@ -93,7 +216,7 @@ def _W_step2(
         u_i = residuals[rows]
         Zu = Z_i.T @ u_i  # (m,)
         S += np.outer(Zu, Zu)
-    return _inv_psd(S, name="ab_gmm step2 weight Σ Z_i' u_i u_i' Z_i")
+    return _inv_weight(S, name="ab_gmm step2 weight Σ Z_i' u_i u_i' Z_i")
 
 
 # ---------------------------------------------------------------------
@@ -217,6 +340,18 @@ def ab_gmm(
     ``two_step=True, windmeijer=True`` are ``... twostep vce(robust)
     noconstant``.
 
+    Singular weight matrices: when ``Z'HZ`` (linearly dependent instrument
+    columns, e.g. uncollapsed instruments on an unbalanced panel with
+    staggered start dates) or ``sum_i Z_i'u_i u_i'Z_i`` (e.g. many
+    instruments relative to panels, or year dummies) is singular, the
+    Moore-Penrose generalized inverse is used instead of raising, as
+    xtabond2 does (Roodman 2009, p. 98). The rank is recorded in
+    ``GMMResult.notes`` and a ``RuntimeWarning`` is issued.
+    ``n_instruments`` and the Hansen J df then count the linearly
+    independent instruments (rank of ``Z'HZ``) and are not reduced for a
+    singular step-2 matrix (xtabond2's convention). A redundant instrument
+    column leaves every estimate unchanged.
+
     References
     ----------
     See module-level docstring.
@@ -254,7 +389,7 @@ def ab_gmm(
         )
 
     # Step 1
-    W1 = _W_step1(Z, H)
+    W1, rank1 = _W_step1(Z, H)
     beta1, _A1_inv = _gmm_step(Z, X, y_d, W1, name="ab_gmm step1")
     resid1 = y_d - X @ beta1
 
@@ -296,7 +431,7 @@ def ab_gmm(
         windmeijer_used = False
     else:
         # Step 2
-        W2 = _W_step2(Z, resid1, diff_rows)
+        W2, rank2 = _W_step2(Z, resid1, diff_rows)
         beta2, _ = _gmm_step(Z, X, y_d, W2, name="ab_gmm step2")
         resid2 = y_d - X @ beta2
         cov_uncorr = _gmm_sandwich_cov(Z, X, W2, name="ab_gmm step2 cov")
@@ -346,12 +481,21 @@ def ab_gmm(
     # weight is suboptimal and J doesn't have its standard distribution
     # — we still report it for completeness)
     if step == 2:
-        J, J_p, J_df = hansen_j(Z, resid, W_for_J, n_regressors=k)
+        J, J_p, J_df = _hansen_j_rank(
+            Z, resid, W_for_J, n_regressors=k, n_independent=rank1
+        )
     else:
         # one-step: rebuild the optimal weight from step-1 residuals
         # and report a Sargan-style J at that weight
-        W2 = _W_step2(Z, resid1, diff_rows)
-        J, J_p, J_df = hansen_j(Z, resid1, W2, n_regressors=k)
+        W2, rank2 = _W_step2(Z, resid1, diff_rows)
+        J, J_p, J_df = _hansen_j_rank(
+            Z, resid1, W2, n_regressors=k, n_independent=rank1
+        )
+    rank_notes = _rank_notes(
+        m=m, rank1=rank1, rank2=rank2, step1_label="Z'HZ", two_step=two_step
+    )
+    _warn_rank_notes(rank_notes, "ab_gmm")
+    notes = notes + rank_notes
 
     # AR tests on the difference residuals
     ar1, ar1_p = ar_test(resid, diff_rows, lag=1)
@@ -379,7 +523,7 @@ def ab_gmm(
         hansen_j_df=int(J_df),
         ar1_p=float(ar1_p),
         ar2_p=float(ar2_p),
-        n_instruments=int(m),
+        n_instruments=int(rank1),
         n_obs=int(n_diff),
         n_panels=int(n_panels),
         step=int(step),

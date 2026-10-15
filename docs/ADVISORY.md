@@ -384,6 +384,17 @@ affected. Separately, `collapse=False`, which is Stata's default layout, raised
 model with two or more lags of the dependent variable or with lagged exogenous
 regressors, because an all-zero instrument column was kept.
 
+Whatever the `collapse` setting, a weight matrix that is singular for any other
+reason (for example an instrument column that is a linear combination of others,
+which `collapse=False` on unbalanced panels and year dummies in system GMM both
+produce) is now inverted with the Moore-Penrose generalized inverse, as xtabond2 does, and
+the result's `notes` record its rank (a `RuntimeWarning` repeats it). In that
+case `n_instruments` reports the rank of the step-1 weight matrix (xtabond2's
+`e(j)`) rather than the number of columns of `Z`. Two-step results with a
+singular step-2 matrix depend on the generalized inverse and may differ from
+xtabond2; a singular step-2 matrix does not reduce `n_instruments` or the
+Hansen J degrees of freedom.
+
 On Stata's abdata example ([XT] xtabond Example 4), with the dead column
 removed by hand, the old standard errors were 1.4% to 68% too large (`w`:
 0.2602 against 0.1546), so inference was too conservative there. On the default
@@ -398,6 +409,7 @@ reproduces every published coefficient and standard error of xtabond Examples
 | `ab_gmm`, `bb_gmm` standard errors, z-statistics, p-values, intervals | `two_step=True` and `windmeijer=True` (the defaults) | `two_step=False`, or `windmeijer=False`; coefficient estimates in every case | Re-run and replace the reported standard errors. |
 | `diagnostics.windmeijer_correction` called directly | Without the new `residuals_step1=` | With it | Pass the one-step residuals; the old call warns. |
 | `collapse=False` | `lag_dep_var >= 2`, lagged exogenous regressors or gaps | Other layouts | It raised; it now prunes the dead columns, as Stata does. |
+| A singular weight matrix (any `collapse`) | Linearly dependent instrument columns | Full-rank weight matrices | Moore-Penrose generalized inverse; `notes` record the rank and `n_instruments` reports it. Two-step results with a singular step-2 matrix may differ from xtabond2. |
 
 ### Are you affected?
 

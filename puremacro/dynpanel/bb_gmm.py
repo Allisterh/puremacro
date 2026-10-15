@@ -29,9 +29,12 @@ from .ab_gmm import (
     _dropped_instrument_notes,
     _gmm_sandwich_cov,
     _gmm_step,
-    _inv_psd,
+    _hansen_j_rank,
+    _inv_weight,
+    _rank_notes,
+    _warn_rank_notes,
 )
-from .diagnostics import ar_test, hansen_j, windmeijer_correction
+from .diagnostics import ar_test, windmeijer_correction
 from .instruments import (
     _build_panel_records,
     _level_at,
@@ -215,9 +218,10 @@ def _W_step2_system(
     Z_full: np.ndarray,
     residuals: np.ndarray,
     rows_full: list,
-) -> np.ndarray:
+) -> tuple[np.ndarray, int]:
     """Step-2 weight for system GMM, panel-clustered across the stacked
-    diff + level equations.
+    diff + level equations, and its rank. A singular matrix gets the
+    Moore-Penrose inverse (see :func:`puremacro.dynpanel.ab_gmm._inv_weight`).
     """
     m = Z_full.shape[1]
     S = np.zeros((m, m))
@@ -229,11 +233,12 @@ def _W_step2_system(
         u_i = residuals[rows]
         Zu = Z_i.T @ u_i
         S += np.outer(Zu, Zu)
-    return _inv_psd(S, name="bb_gmm step2 weight Σ Z_i' u_i u_i' Z_i")
+    return _inv_weight(S, name="bb_gmm step2 weight Σ Z_i' u_i u_i' Z_i")
 
 
-def _W_step1_system(Z_full: np.ndarray, n_diff: int) -> np.ndarray:
-    """Step-1 weight for system GMM.
+def _W_step1_system(Z_full: np.ndarray, n_diff: int) -> tuple[np.ndarray, int]:
+    """Step-1 weight for system GMM and its rank (Moore-Penrose inverse
+    when ``Z'Z`` is singular).
 
     Block structure: difference block uses ``I`` (simplification of the
     AR-banded ``H``), level block uses ``I`` (under iid level errors).
@@ -241,7 +246,7 @@ def _W_step1_system(Z_full: np.ndarray, n_diff: int) -> np.ndarray:
     the one that matters for SEs anyway; step 1 is a starting weight.
     """
     M = Z_full.T @ Z_full  # = Z'I Z
-    return _inv_psd(M, name="bb_gmm step1 weight Z'Z")
+    return _inv_weight(M, name="bb_gmm step1 weight Z'Z")
 
 
 def _build_system(
@@ -404,6 +409,11 @@ def bb_gmm(
     Stata ``xtdpdsys``, so one-step estimates (and hence the two-step
     ones) are not expected to match ``xtdpdsys`` numerically.
 
+    Singular weight matrices (``Z'Z`` or the step-2 moment covariance, the
+    latter common with year dummies) are inverted with the Moore-Penrose
+    generalized inverse, as in :func:`ab_gmm`, with a note and a
+    ``RuntimeWarning``.
+
     See :func:`ab_gmm` parameters for details.
 
     References
@@ -444,7 +454,7 @@ def bb_gmm(
         )
 
     # Step 1
-    W1 = _W_step1_system(Z_full, n_diff)
+    W1, rank1 = _W_step1_system(Z_full, n_diff)
     beta1, _ = _gmm_step(Z_full, X_full, y_full, W1, name="bb_gmm step1")
     resid1 = y_full - X_full @ beta1
 
@@ -470,7 +480,7 @@ def bb_gmm(
         step = 1
         windmeijer_used = False
     else:
-        W2 = _W_step2_system(Z_full, resid1, rows_full)
+        W2, rank2 = _W_step2_system(Z_full, resid1, rows_full)
         beta2, _ = _gmm_step(Z_full, X_full, y_full, W2, name="bb_gmm step2")
         resid2 = y_full - X_full @ beta2
         cov_uncorr = _gmm_sandwich_cov(Z_full, X_full, W2, name="bb_gmm step2 cov")
@@ -518,10 +528,19 @@ def bb_gmm(
 
     # Hansen J on the full system
     if step == 2:
-        J, J_p, J_df = hansen_j(Z_full, resid, W_for_J, n_regressors=k)
+        J, J_p, J_df = _hansen_j_rank(
+            Z_full, resid, W_for_J, n_regressors=k, n_independent=rank1
+        )
     else:
-        W2 = _W_step2_system(Z_full, resid1, rows_full)
-        J, J_p, J_df = hansen_j(Z_full, resid1, W2, n_regressors=k)
+        W2, rank2 = _W_step2_system(Z_full, resid1, rows_full)
+        J, J_p, J_df = _hansen_j_rank(
+            Z_full, resid1, W2, n_regressors=k, n_independent=rank1
+        )
+    rank_notes = _rank_notes(
+        m=m, rank1=rank1, rank2=rank2, step1_label="Z'Z", two_step=two_step
+    )
+    _warn_rank_notes(rank_notes, "bb_gmm")
+    notes = notes + rank_notes
 
     # AR tests on the DIFFERENCE residuals only (BB convention)
     # extract residuals corresponding to diff rows
@@ -550,7 +569,7 @@ def bb_gmm(
         hansen_j_df=int(J_df),
         ar1_p=float(ar1_p),
         ar2_p=float(ar2_p),
-        n_instruments=int(m),
+        n_instruments=int(rank1),
         n_obs=int(n_full),
         n_panels=int(n_panels),
         step=int(step),
