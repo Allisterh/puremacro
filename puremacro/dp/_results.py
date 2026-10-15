@@ -1,6 +1,7 @@
 """Result object for puremacro.dp: one solution type whatever the back end."""
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
@@ -73,6 +74,38 @@ class DPSolution:
         if not self._c.finite:
             return float(np.sum(self.distribution * vals))
         return np.array([float(np.sum(self.distribution[j] * vals[j])) for j in range(vals.shape[0])])
+
+    def simulate(self, n_agents: int = 10_000, periods: int = 200, *, seed: int | None = 0,
+                 init: str | dict = "stationary", burn_in: int = 0,
+                 record: Sequence[str] | None = None):
+        """Simulate individual histories under the solved policy; returns a ``dp.Panel``.
+
+        ``init="stationary"`` draws each agent's (state, shock) cell from
+        ``sol.distribution`` and starts it at that cell's grid node, so the panel
+        is in the ergodic distribution from t = 0. A dict ``{state: value or
+        array}`` fixes the initial states (every state must be given); a value
+        off the grid is snapped to the nearest node under VFI, with one warning,
+        and kept as is (clipped to the grid ends) under EGM. Shocks may be fixed
+        the same way, on their grid; otherwise they are drawn from the ergodic
+        distribution of ``sol.P``.
+
+        ``burn_in`` periods are simulated first and dropped, so the panel holds
+        ``periods`` periods. ``record`` lists model expressions to evaluate along
+        the path, as ``sol.policy`` takes them (``"c"``, ``"a(+1)"``,
+        ``"w*exp(z)"``); by default the states, the shocks and the controls (the
+        ``c`` local, any ``control()`` and the discrete choice). They are checked
+        before anything is drawn. VFI states stay on grid nodes; EGM interpolates
+        the next-asset policy linearly between nodes. Shocks move by ``sol.P``.
+
+        The same ``seed`` gives bit-identical panels (one PCG64 generator).
+        ``n_agents * periods`` above 5e8 raises ``ValueError``. Continuous-time
+        (HJB) and aggregate-risk (Krusell-Smith) solutions raise
+        ``NotImplementedError``.
+        """
+        from puremacro.dp._simulate import simulate
+
+        return simulate(self, n_agents, periods, seed=seed, init=init, burn_in=burn_in,
+                        record=record)
 
     # -- exact-distribution statistics -------------------------------------
     # Life-cycle pooling rule, shared by gini, lorenz, top_share and quantile:
