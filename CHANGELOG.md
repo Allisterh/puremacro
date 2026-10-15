@@ -2,7 +2,9 @@
 
 This file records user-visible changes per release. Internal refactors that don't change behaviour are listed under "Internal" so a returning user can see what shifted under the hood without surprise.
 
-## Unreleased
+## 5.0.0a2 (2026-10-14)
+
+Second 5.0 pre-release: the last defects from the September notebook review, the Stock-Yogo tables in full, and a test suite whose timing and network checks no longer depend on the CI runner.
 
 ### Added
 

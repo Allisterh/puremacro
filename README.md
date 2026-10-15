@@ -1071,7 +1071,7 @@ All notebooks strictly adhere to the Pyodide contract and the 7-section pedagogi
 
 ## Status
 
-Current release: **5.0.0a1**, a pre-release (`pip install --pre puremacro`; a plain `pip install puremacro` still gives 4.8.1). The [stability tiers](ARCHITECTURE.md#stability-tiers)
+Current release: **5.0.0a2**, a pre-release (`pip install --pre puremacro`; a plain `pip install puremacro` still gives 4.8.1). The [stability tiers](ARCHITECTURE.md#stability-tiers)
 identify stable, experimental and best-effort surfaces. Structural calculations
 have additional [validation limits](docs/STRUCTURAL_VALIDATION_STATUS.md).
 
