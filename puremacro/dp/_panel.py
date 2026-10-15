@@ -238,5 +238,7 @@ class Panel:
         res = method(_VALUE, arg, by=by) if arg is not None else method(_VALUE, by=by)
         if by is None:
             return float(res["estimate"].iloc[0])
-        return pd.Series(res["estimate"].to_numpy(), index=pd.Index(res[by], name=by),
-                         name=kind)
+        out = pd.Series(res["estimate"].to_numpy(), index=pd.Index(res[by], name=by), name=kind)
+        # a period or age in which every agent is dead has no rows: report NaN for it
+        keys = self._age if by == "age" else np.arange(self.periods)
+        return out.reindex(pd.Index(keys, name=by))

@@ -75,26 +75,40 @@ class DPSolution:
             return float(np.sum(self.distribution * vals))
         return np.array([float(np.sum(self.distribution[j] * vals[j])) for j in range(vals.shape[0])])
 
-    def simulate(self, n_agents: int = 10_000, periods: int = 200, *, seed: int | None = 0,
-                 init: str | dict = "stationary", burn_in: int = 0,
+    def simulate(self, n_agents: int = 10_000, periods: int | None = None, *,
+                 seed: int | None = 0, init: str | dict | None = None, burn_in: int = 0,
                  record: Sequence[str] | None = None):
         """Simulate individual histories under the solved policy; returns a ``dp.Panel``.
 
-        ``init="stationary"`` draws each agent's (state, shock) cell from
-        ``sol.distribution`` and starts it at that cell's grid node, so the panel
-        is in the ergodic distribution from t = 0. A dict ``{state: value or
-        array}`` fixes the initial states (every state must be given); a value
-        off the grid is snapped to the nearest node under VFI, with one warning,
-        and kept as is (clipped to the grid ends) under EGM. Shocks may be fixed
-        the same way, on their grid; otherwise they are drawn from the ergodic
+        ``periods`` defaults to 200 for an infinite horizon. In a life cycle the
+        panel runs over the T ages of the horizon (``panel.age`` is 0..T-1);
+        a ``periods`` other than T is ignored with a ``UserWarning``.
+
+        ``init`` defaults to ``"stationary"`` for an infinite horizon: each
+        agent's (state, shock) cell is drawn from ``sol.distribution`` and the
+        agent starts at that cell's grid node, so the panel is in the ergodic
+        distribution from t = 0. In a life cycle it defaults to ``"newborn"``:
+        age-0 cells are drawn from the declared ``newborns`` (normalised) or, by
+        the solver's rule, the lowest asset node with the shock drawn from the
+        stationary distribution of ``sol.P``. A dict ``{state: value or array}``
+        fixes the initial states (every state must be given); a value off the
+        grid is snapped to the nearest node under VFI, with one warning, and
+        kept as is (clipped to the grid ends) under EGM. Shocks may be fixed the
+        same way, on their grid; otherwise they are drawn from the ergodic
         distribution of ``sol.P``.
 
-        ``burn_in`` periods are simulated first and dropped, so the panel holds
-        ``periods`` periods. ``record`` lists model expressions to evaluate along
-        the path, as ``sol.policy`` takes them (``"c"``, ``"a(+1)"``,
-        ``"w*exp(z)"``); by default the states, the shocks and the controls (the
-        ``c`` local, any ``control()`` and the discrete choice). They are checked
-        before anything is drawn. VFI states stay on grid nodes; EGM interpolates
+        In a life cycle with declared survival, an agent alive at age j lives to
+        j+1 with probability ``survival[j]``; ``panel.alive`` records it. The dead
+        keep their (finite) paths in the arrays and are left out of every panel
+        statistic, which is NaN at an age nobody reaches.
+
+        ``burn_in`` (infinite horizon only) periods are simulated first and
+        dropped, so the panel holds ``periods`` periods. ``record`` lists model
+        expressions to evaluate along the path, as ``sol.policy`` takes them
+        (``"c"``, ``"a(+1)"``, ``"w*exp(z)"``, and ``age`` or age-varying
+        parameters in a life cycle); by default the states, the shocks and the
+        controls (the ``c`` local, any ``control()`` and the discrete choice).
+        They are checked before anything is drawn. VFI states stay on grid nodes; EGM interpolates
         the next-asset policy linearly between nodes. Shocks move by ``sol.P``.
 
         The same ``seed`` gives bit-identical panels (one PCG64 generator).
