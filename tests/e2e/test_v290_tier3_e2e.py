@@ -35,6 +35,8 @@ import scipy.io
 import scipy.linalg
 import scipy.optimize
 
+from _timing import assert_within
+
 import puremacro
 import puremacro.dsge as dsge
 from puremacro.dsge import (
@@ -1034,7 +1036,7 @@ class TestTier2BoundaryAndCornerCases:
         )
         elapsed = time.perf_counter() - t0
         
-        assert elapsed < 5.0, f"Quadrature integration too slow: {elapsed:.2f}s"
+        assert_within(elapsed, 5.0, "HP-filtered spectral quadrature, n=50 (hang guard)")
         assert not np.any(np.isnan(gamma_0))
         assert np.all(np.diag(gamma_0) > 0.0)
 

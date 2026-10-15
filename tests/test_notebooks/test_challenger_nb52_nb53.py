@@ -18,13 +18,14 @@ Verifies:
 """
 from __future__ import annotations
 
-import time
 from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 import pytest
 from scipy.optimize import minimize
+
+from _timing import best_of
 
 from puremacro.vfi import (
     CollocationProblem,
@@ -325,8 +326,13 @@ class TestNotebook53StressTesting:
         assert param_err < 1e-4, f"Parameter recovery error {param_err:.2e} >= 1e-4 from ({beta_0}, {sigma_0})"
         assert opt_res.fun < 1e-8, f"GMM objective {opt_res.fun:.2e} >= 1e-8"
 
+    @pytest.mark.benchmark
     def test_execution_speedup_ratio_benchmark(self):
-        """Empirically verify that exact IFT gradient evaluation achieves > 30x speedup over CFD."""
+        """Empirically verify that exact IFT gradient evaluation achieves > 30x speedup over CFD.
+
+        A ratio of two timings from the same process is deliberately not scaled
+        by PUREMACRO_TIMING_SCALE.
+        """
         domain = (0.05, 0.50)
         prob = CollocationProblem(
             domain=domain,
@@ -339,18 +345,14 @@ class TestNotebook53StressTesting:
         sol = prob.solve(backend="numpy")
         params_to_diff = ["alpha", "beta", "delta", "sigma"]
 
-        # Measure IFT over 20 runs
-        n_reps = 20
-        t0 = time.perf_counter()
-        for _ in range(n_reps):
-            _ = compute_ift_gradients(sol, prob, params=params_to_diff)
-        t_ift = (time.perf_counter() - t0) / n_reps
+        # Measure IFT: best of 20 runs after a warm-up
+        t_ift = best_of(lambda: compute_ift_gradients(sol, prob, params=params_to_diff), n=20)
 
-        # Measure CFD over 5 runs
+        # Measure CFD the same way (best of 5) so the ratio is not biased;
+        # no warm-up, since one CFD pass already costs 2p solves.
         h_fd = 1e-5
-        t0 = time.perf_counter()
-        n_fd_reps = 5
-        for _ in range(n_fd_reps):
+
+        def central_fd():
             for p in params_to_diff:
                 if p == "beta":
                     _ = replace(prob, beta=prob.beta + h_fd).solve()
@@ -360,7 +362,8 @@ class TestNotebook53StressTesting:
                     p_minus = dict(prob.params); p_minus[p] -= h_fd
                     _ = replace(prob, params=p_plus).solve()
                     _ = replace(prob, params=p_minus).solve()
-        t_fd = (time.perf_counter() - t0) / n_fd_reps
+
+        t_fd = best_of(central_fd, n=5, warmup=0)
 
         speedup = t_fd / max(t_ift, 1e-6)
         print(f"\nEmpirical Speedup Benchmark: IFT = {t_ift*1000:.3f} ms, CFD = {t_fd*1000:.3f} ms, Speedup = {speedup:.1f}x")

@@ -19,7 +19,6 @@ Verifies Milestone 2: Exact Analytic Gradients via the Implicit Function Theorem
 from __future__ import annotations
 
 import dataclasses
-import time
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -27,6 +26,8 @@ import numpy as np
 import pandas as pd
 import pytest
 from scipy.optimize import brentq, root
+
+from _timing import best_of
 
 import puremacro.vfi.analytic_gradients as ag
 from puremacro.vfi.analytic_gradients import (
@@ -265,40 +266,41 @@ class TestAnalyticGradientsParity:
 # 2. Performance & Speedup Benchmark
 # ===========================================================================
 
+@pytest.mark.benchmark
 class TestAnalyticGradientsPerformance:
-    """Verifies that single LU factorization achieves >= 5x speedup over numerical FD."""
+    """Verifies that single LU factorization achieves >= 5x speedup over numerical FD.
+
+    A ratio of two timings taken on the same machine is not scaled by
+    PUREMACRO_TIMING_SCALE: a uniformly slower runner leaves it unchanged.
+    """
 
     def test_ift_speedup_vs_finite_difference(self, neoclassical_collocation):
         """Benchmark execution time of IFT vs full numerical model re-solve finite differences."""
         prob, sol, k_ss = neoclassical_collocation
         params = ["alpha", "beta", "delta", "sigma"]
 
-        # Warm-up run
-        _ = compute_ift_gradients(sol, prob, params=params)
+        # 1. Measure IFT time (single LU solve): best of 5 after a warm-up
+        t_ift = best_of(lambda: compute_ift_gradients(sol, prob, params=params), n=5)
 
-        # 1. Measure IFT time (single LU solve)
-        t_ift_runs = []
-        for _ in range(5):
-            t0 = time.perf_counter()
-            _ = compute_ift_gradients(sol, prob, params=params)
-            t_ift_runs.append(time.perf_counter() - t0)
-        t_ift = float(np.median(t_ift_runs))
-
-        # 2. Measure Numerical Finite Differences time (2p full model re-solves)
+        # 2. Measure Numerical Finite Differences time (2p full model re-solves),
+        # timed the same way as the IFT side (best of n) so the ratio is not
+        # biased; no warm-up, since one FD pass already costs 2p solves.
         h_fd = 5e-5
-        t0 = time.perf_counter()
-        for pname in params:
-            if pname == "beta":
-                p_plus = dataclasses.replace(prob, beta=prob.beta + h_fd)
-                p_minus = dataclasses.replace(prob, beta=prob.beta - h_fd)
-            else:
-                p_p = dict(prob.params); p_p[pname] += h_fd
-                p_m = dict(prob.params); p_m[pname] -= h_fd
-                p_plus = dataclasses.replace(prob, params=p_p)
-                p_minus = dataclasses.replace(prob, params=p_m)
-            _ = p_plus.solve(backend="numpy")
-            _ = p_minus.solve(backend="numpy")
-        t_num = time.perf_counter() - t0
+
+        def numerical_fd():
+            for pname in params:
+                if pname == "beta":
+                    p_plus = dataclasses.replace(prob, beta=prob.beta + h_fd)
+                    p_minus = dataclasses.replace(prob, beta=prob.beta - h_fd)
+                else:
+                    p_p = dict(prob.params); p_p[pname] += h_fd
+                    p_m = dict(prob.params); p_m[pname] -= h_fd
+                    p_plus = dataclasses.replace(prob, params=p_p)
+                    p_minus = dataclasses.replace(prob, params=p_m)
+                _ = p_plus.solve(backend="numpy")
+                _ = p_minus.solve(backend="numpy")
+
+        t_num = best_of(numerical_fd, n=3, warmup=0)
 
         speedup = t_num / max(t_ift, 1e-6)
         print(f"\n[BENCHMARK] IFT time: {t_ift*1000:.2f} ms | Numerical FD time: {t_num*1000:.2f} ms | Speedup: {speedup:.1f}x")

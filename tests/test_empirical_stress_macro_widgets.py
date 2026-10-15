@@ -33,6 +33,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
+from _timing import budget_ms
 from puremacro.dsge import (
     build_dynare,
     load_mod,
@@ -372,8 +373,9 @@ end;
 class TestInteractiveIRFWidgetsStress:
     """Adversarial stress testing of live interactive parameter slider widgets."""
 
+    @pytest.mark.benchmark
     def test_rapid_parameter_slider_latency_50_updates(self):
-        """Measure latency over 50 consecutive parameter adjustments, asserting mean latency < 15ms."""
+        """50 consecutive parameter adjustments: mean latency < budget_ms(15), p95 < budget_ms(30)."""
         model = _build_nk_model()
         res = model.interactive_irf(
             parameters=["phi_pi", "sigma", "kappa"],
@@ -394,13 +396,18 @@ class TestInteractiveIRFWidgetsStress:
         p95_lat = float(np.percentile(lat, 95))
 
         print(f"\n[STRESS TEST] NK 50 updates callback latency: mean={mean_lat:.3f}ms, max={max_lat:.3f}ms, p95={p95_lat:.3f}ms")
-        assert mean_lat < 15.0, f"Mean callback latency {mean_lat:.3f}ms exceeds 15ms SLA threshold"
-        assert max_lat < 30.0, f"Max callback latency {max_lat:.3f}ms exceeds 30ms ceiling"
+        assert mean_lat < budget_ms(15.0), (
+            f"Mean callback latency {mean_lat:.3f}ms exceeds scaled budget {budget_ms(15.0):.3f}ms")
+        # p95 rather than the max: the single worst of 50 callbacks measures
+        # the runner's noisiest moment, not the code.
+        assert p95_lat < budget_ms(30.0), (
+            f"p95 callback latency {p95_lat:.3f}ms exceeds scaled budget {budget_ms(30.0):.3f}ms")
         assert res.n_updates >= 50
         plt.close("all")
 
+    @pytest.mark.benchmark
     def test_smets_wouters_07_50_updates_latency(self):
-        """Verify 50 consecutive updates on large Smets-Wouters (2007) model maintain mean latency < 15ms."""
+        """50 consecutive updates on Smets-Wouters (2007) keep mean latency < budget_ms(15)."""
         mod_path = Path("puremacro/dsge/_references/sw07_pfeifer.mod")
         if not mod_path.is_file():
             pytest.skip("sw07_pfeifer.mod not found")
@@ -425,7 +432,8 @@ class TestInteractiveIRFWidgetsStress:
         p95_lat = float(np.percentile(lat, 95))
 
         print(f"\n[STRESS TEST] SW07 50 updates callback latency: mean={mean_lat:.3f}ms, max={max_lat:.3f}ms, p95={p95_lat:.3f}ms")
-        assert mean_lat < 15.0, f"SW07 mean callback latency {mean_lat:.3f}ms exceeds 15ms SLA threshold"
+        assert mean_lat < budget_ms(15.0), (
+            f"SW07 mean callback latency {mean_lat:.3f}ms exceeds scaled budget {budget_ms(15.0):.3f}ms")
         assert res.n_updates >= 50
         plt.close("all")
 

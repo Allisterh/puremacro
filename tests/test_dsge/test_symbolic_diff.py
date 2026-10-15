@@ -14,6 +14,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from _timing import best_of, budget_ms, timing_scale
 from puremacro.dsge._ast import BinOp, Call, Const, Node, Param, UnaryOp, Var
 from puremacro.dsge._parser import parse_mod_to_dag
 from puremacro.dsge._symbolic import (
@@ -344,19 +345,24 @@ def test_eval_with_dict_and_none_defaults():
 # ===========================================================================
 
 
-def test_sw07_symbolic_compilation_and_sub_millisecond_eval():
-    """SW07 (40 equations, 7 shocks, K=127) compiles and evaluates in < 0.005s."""
+def _sw07_compiled_and_point():
     if not SW07_PATH.exists():
         pytest.skip(f"SW07 model file missing at {SW07_PATH}")
+    compiled = compile_derivatives(parse_mod_to_dag(SW07_PATH.read_text(encoding="utf-8")))
+    N, n_e = compiled.N, compiled.n_e
+    pvec = np.array(
+        [float(compiled.parameter_defaults.get(p, 1.0)) for p in compiled.parameters],
+        dtype=float,
+    )
+    return compiled, (np.zeros(N), np.zeros(N), np.zeros(N), np.zeros(n_e), pvec)
 
-    text = SW07_PATH.read_text(encoding="utf-8")
-    t0 = time.perf_counter()
-    dag = parse_mod_to_dag(text)
-    t_parse = time.perf_counter() - t0
 
-    t0 = time.perf_counter()
-    compiled = compile_derivatives(dag)
-    t_compile = time.perf_counter() - t0
+def test_sw07_symbolic_compilation_and_sub_millisecond_eval():
+    """SW07 (40 equations, 7 shocks, K=127) compiles and evaluates to the right shapes.
+
+    The sub-millisecond speed gate is ``test_sw07_first_order_eval_is_sub_millisecond``.
+    """
+    compiled, point = _sw07_compiled_and_point()
 
     assert compiled.N == 40
     assert compiled.n_e == 7
@@ -364,26 +370,28 @@ def test_sw07_symbolic_compilation_and_sub_millisecond_eval():
     assert compiled.is_linear is True
     assert len(compiled.sparsity_pattern["H_f"]) == 0
 
-    N, n_e = compiled.N, compiled.n_e
-    lead = np.zeros(N)
-    curr = np.zeros(N)
-    lag = np.zeros(N)
-    shocks = np.zeros(n_e)
-    pvec = np.array(
-        [float(compiled.parameter_defaults.get(p, 1.0)) for p in compiled.parameters],
-        dtype=float,
-    )
-
-    # Benchmark first-order evaluation
-    t0 = time.perf_counter()
-    for _ in range(10):
-        A_p, A_0, A_m, B_u = compiled.eval_first_order(lead, curr, lag, shocks, pvec)
-    t_eval = (time.perf_counter() - t0) / 10.0
+    A_p, A_0, A_m, B_u = compiled.eval_first_order(*point)
 
     assert A_p.shape == (40, 40)
     assert A_0.shape == (40, 40)
     assert A_m.shape == (40, 40)
     assert B_u.shape == (40, 7)
 
-    # Sub-millisecond evaluation check (< 0.001s)
-    assert t_eval < 0.001, f"SW07 evaluation took {t_eval*1000:.3f} ms > 1 ms"
+
+@pytest.mark.benchmark
+def test_sw07_first_order_eval_is_sub_millisecond():
+    """Compiled SW07 first-order evaluation: mean over 10 calls within budget_ms(1).
+
+    Timed as the best of 3 batches of 10 calls after a warm-up batch.
+    """
+    compiled, point = _sw07_compiled_and_point()
+
+    def ten_evals():
+        for _ in range(10):
+            compiled.eval_first_order(*point)
+
+    t_eval_ms = 1000.0 * best_of(ten_evals) / 10.0
+    limit = budget_ms(1.0)
+    assert t_eval_ms < limit, (
+        f"SW07 evaluation took {t_eval_ms:.3f} ms > budget {limit:.3f} ms "
+        f"(1 ms x PUREMACRO_TIMING_SCALE={timing_scale():g})")

@@ -46,6 +46,8 @@ import pytest
 import scipy.linalg
 import scipy.stats
 
+from _timing import assert_within, best_of, budget_ms, timing_scale
+
 import puremacro
 import puremacro.dsge as dsge
 from puremacro.dsge import (
@@ -714,8 +716,9 @@ class TestTier1FeatureCoverage:
         assert np.isfinite(res.log_likelihood)
         assert len(res.ess) == 25
 
+    @pytest.mark.benchmark
     def test_t1_f03_pruned_einsum_speed_benchmark(self):
-        """Vectorized einsum propagation of 10,000 particles executes rapidly."""
+        """Vectorized einsum propagation of 10,000 particles runs within budget(3.0) s."""
         particle_filter, _ = _require_particle_filter()
         sol2 = canonical_growth_2nd_order()
         sim = sol2.simulate(periods=10, seed=303)
@@ -730,7 +733,8 @@ class TestTier1FeatureCoverage:
             seed=42,
         )
         elapsed = time.perf_counter() - t0
-        assert elapsed < 3.0  # Vectorized execution target in Pyodide/pure Python
+        # Vectorized execution target in Pyodide/pure Python
+        assert_within(elapsed, 3.0, "pruned particle filter, 10,000 particles")
         assert np.isfinite(res.log_likelihood)
 
     def test_t1_f03_pruned_steady_state_offset_handling(self):
@@ -1359,8 +1363,9 @@ class TestTier1FeatureCoverage:
         assert girf.shape == (21, 5)  # horizons 0 to 20
         assert list(girf.columns) == list(spec["variable_names"])
 
+    @pytest.mark.benchmark
     def test_t1_f10_girf_evaluates_sub_millisecond(self):
-        """Analytical closed-form GIRF evaluates in < 5 milliseconds."""
+        """Analytical closed-form GIRF (horizon 40) evaluates within budget_ms(10) (best of 3)."""
         solve_ms_dsge, _ = _require_ms_dsge()
         spec = _make_3eq_nk_ms_matrices()
 
@@ -1370,10 +1375,12 @@ class TestTier1FeatureCoverage:
             variable_names=spec["variable_names"],
             shock_names=spec["shock_names"],
         )
-        t0 = time.perf_counter()
-        _ = res.girf(initial_regime=0, shock="eps_m", horizon=40)
-        elapsed_ms = (time.perf_counter() - t0) * 1000.0
-        assert elapsed_ms < 10.0
+        elapsed_ms = 1000.0 * best_of(
+            lambda: res.girf(initial_regime=0, shock="eps_m", horizon=40))
+        limit = budget_ms(10.0)
+        assert elapsed_ms < limit, (
+            f"GIRF took {elapsed_ms:.3f} ms > budget {limit:.3f} ms "
+            f"(10 ms x PUREMACRO_TIMING_SCALE={timing_scale():g})")
 
     def test_t1_f10_girf_matches_monte_carlo_regime_switching_average(self):
         """Analytical GIRF matches Monte Carlo averaged trajectory across Markov switching paths."""
@@ -1879,6 +1886,7 @@ def test_pyodide_four_package_purity_phase_d():
         "numpy", "scipy", "pandas", "matplotlib", "puremacro", "pytest",
         "typing", "dataclasses", "copy", "math", "os", "sys", "pathlib",
         "re", "tempfile", "time", "inspect", "__future__",
+        "_timing",  # the suite's own wall-clock budget helper (tests/_timing.py)
     }
 
     import_lines = re.findall(r"^(?:import|from)\s+([a-zA-Z0-9_]+)", tree_code, re.MULTILINE)

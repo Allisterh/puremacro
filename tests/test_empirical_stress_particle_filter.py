@@ -21,6 +21,7 @@ import pandas as pd
 import pytest
 import scipy.linalg
 
+from _timing import assert_within, best_of
 from puremacro.dsge import build_dynare, load_mod
 from puremacro.dsge.observation import make_state_space_from_varobs
 from puremacro.dsge.particle_filter import (
@@ -528,16 +529,15 @@ class TestEmpiricalPerformanceAndLooplessness:
             f"Found forbidden Python loop(s) over particles: {forbidden_loop_targets}"
         )
 
+    @pytest.mark.benchmark
     def test_vectorized_throughput_and_scaling(self, canonical_nk_model, canonical_nk_data):
-        """Empirically measure runtime across particle counts: assert N=10,000 runs in < 0.5s."""
+        """Runtime across particle counts: N=10,000 within budget(0.5) s, N=20,000 within budget(1.0) s."""
         m = canonical_nk_model
         df = canonical_nk_data
         varobs = ["y", "pi", "r"]
 
-        timings = {}
-        for N in [1_000, 5_000, 10_000, 20_000]:
-            t0 = time.perf_counter()
-            res = particle_filter(
+        def run(N):
+            return particle_filter(
                 m,
                 df,
                 varobs,
@@ -545,15 +545,11 @@ class TestEmpiricalPerformanceAndLooplessness:
                 method="bootstrap",
                 seed=42,
             )
-            elapsed = time.perf_counter() - t0
-            timings[N] = elapsed
-            assert np.isfinite(res.log_likelihood)
 
-        # Assertion: N=10,000 over T=20 must execute in < 0.50 seconds
-        assert timings[10_000] < 0.50, (
-            f"N=10,000 execution took {timings[10_000]:.3f}s (exceeds 0.50s threshold)"
-        )
-        # Assertion: N=20,000 over T=20 must execute in < 1.00 second
-        assert timings[20_000] < 1.00, (
-            f"N=20,000 execution took {timings[20_000]:.3f}s (exceeds 1.00s threshold)"
-        )
+        timings = {}
+        for N in [1_000, 5_000, 10_000, 20_000]:
+            assert np.isfinite(run(N).log_likelihood)    # also the warm-up
+            timings[N] = best_of(lambda: run(N), n=2, warmup=0)
+
+        assert_within(timings[10_000], 0.50, "bootstrap particle filter, N=10,000, T=20 (best of 2)")
+        assert_within(timings[20_000], 1.00, "bootstrap particle filter, N=20,000, T=20 (best of 2)")
