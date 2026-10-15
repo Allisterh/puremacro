@@ -258,6 +258,7 @@
       "Markov",
       "Model",
       "ModelSpecError",
+      "Panel",
       "crra"
     ],
     "puremacro.dp.model": [
