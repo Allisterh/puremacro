@@ -215,3 +215,25 @@ def test_stationary_init_needs_a_distribution(method):
         sol.simulate(10, 5)
     panel = sol.simulate(10, 5, init={"a": sol.grids["a"][100]})
     assert panel["a"].shape == (10, 5)
+
+
+def test_init_fixes_a_shock_on_an_unsorted_markov_grid():
+    """A Markov grid may list its values in any order; init must still find them."""
+    m = dp.Model("unsorted markov")
+    m.parameters(beta=0.95, R=1.02)
+    m.exogenous("y", dp.Markov([1.5, 0.5, 1.0], [[0.8, 0.1, 0.1],
+                                                  [0.1, 0.8, 0.1],
+                                                  [0.1, 0.1, 0.8]]))
+    m.state("a", np.linspace(0.0, 10.0, 60))
+    m.local("c = y + R*a - a(+1)")
+    m.reward("log(c)")
+    m.subject_to("c > 0")
+    for method in ("vfi", "egm"):
+        sol = m.solve(method)
+        yg = sol.grids["y"]
+        assert not np.all(np.diff(yg) > 0)
+        for val in (0.5, 1.0, 1.5):
+            p = sol.simulate(20, 3, seed=0, init={"a": sol.grids["a"][5], "y": val})
+            assert np.all(p["y"][:, 0] == val)
+        with pytest.raises(ValueError, match="shock grid"):
+            sol.simulate(20, 3, seed=0, init={"a": sol.grids["a"][5], "y": 0.75})

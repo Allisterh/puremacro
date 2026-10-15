@@ -82,8 +82,16 @@ def _shock_shape(sol) -> tuple[int, ...]:
 
 
 def _nearest(grid: np.ndarray, v: np.ndarray) -> np.ndarray:
-    j = np.clip(np.searchsorted(grid, v), 1, grid.size - 1)
-    return np.where(np.abs(v - grid[j - 1]) <= np.abs(grid[j] - v), j - 1, j)
+    """Index into ``grid`` of the node nearest each value. The grid need not be
+    sorted: a Markov shock grid may list its values in any order."""
+    grid = np.asarray(grid, dtype=float)
+    v = np.asarray(v, dtype=float)
+    if grid.size == 1:
+        return np.zeros(v.shape, dtype=np.intp)
+    order = np.argsort(grid, kind="stable")
+    s = grid[order]
+    j = np.clip(np.searchsorted(s, v), 1, s.size - 1)
+    return order[np.where(np.abs(v - s[j - 1]) <= np.abs(s[j] - v), j - 1, j)]
 
 
 def _initial_state(sol, rng: np.random.Generator, n_agents: int, init):
