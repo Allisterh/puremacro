@@ -14,8 +14,9 @@ See ``puremacro.dp.model`` for an example.
 from __future__ import annotations
 
 from puremacro.dp._expr import ModelSpecError, crra
+from puremacro.dp._panel import Panel
 from puremacro.dp._results import DPSolution
 from puremacro.dp.model import Model
 from puremacro.dp.processes import AR1, Jump, Markov
 
-__all__ = ["AR1", "DPSolution", "Jump", "Markov", "Model", "ModelSpecError", "crra"]
+__all__ = ["AR1", "DPSolution", "Jump", "Markov", "Model", "ModelSpecError", "Panel", "crra"]
