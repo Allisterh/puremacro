@@ -2,7 +2,9 @@
 import pytest
 import numpy as np
 
-from puremacro.vfi.model import Model
+from puremacro import dp
+from puremacro.vfi.discretize import tauchen
+from puremacro.vfi.solve import solve_vfi_howard
 from puremacro.vfi.hjb_achdou import solve_hjb_achdou
 from puremacro.vfi.aiyagari_endogenous import solve_aiyagari_endogenous
 from puremacro.did.callaway_santanna import callaway_santanna
@@ -11,17 +13,29 @@ from puremacro.connectedness.bk2018 import barunik_krehlik
 
 
 def test_dynare_vfi_model():
-    m = Model("Test Model")
-    m.set_param("beta", 0.95).set_param("gamma", 1.5)
-    m.add_state("k", 0.2, 10.0, 25)
-    m.add_shock("z", 0.85, 0.10, 3)
-    m.set_utility(lambda c, p: (c**(1 - p["gamma"])) / (1 - p["gamma"]))
-    m.set_budget(lambda k, kp, z, p: np.exp(z) * (k**0.35) + 0.90 * k - kp)
+    """Notebook 21's precautionary-savings model, declared with dp (vfi.Model's successor)."""
+    m = dp.Model("Precautionary Savings Model")
+    m.parameters(beta=0.96, gamma=2.0, alpha=0.36, delta=0.10)
+    m.exogenous("z", dp.AR1(rho=0.90, sigma=0.15, n=5))
+    m.state("a", np.linspace(0.1, 15.0, 60))
+    m.local("c = exp(z)*a^alpha + (1 - delta)*a - a(+1)")
+    m.reward("c^(1 - gamma)/(1 - gamma)")
+    m.subject_to("c > 0")
+    sol = m.solve(method="vfi", tol=1e-6)
 
-    res = m.solve(howard_steps=10)
-    assert res["V"].shape == (25, 3)
-    assert res["mean_assets"] > 0
-    assert 0 <= res["gini"] <= 1.0
+    assert 0.05 < sol.gini("a") < 0.60
+    assert sol.mean("a") == pytest.approx(6.5733, abs=1e-3)
+
+    # the same problem solved directly by the vfi engine gives the same policy
+    a_grid = np.linspace(0.1, 15.0, 60)
+    z_grid, P = tauchen(5, 0.90, 0.15)
+
+    def ret(a, ap, z):
+        c = np.exp(z) * a ** 0.36 + 0.90 * a - ap
+        return -1e10 if c <= 0 else c ** (1.0 - 2.0) / (1.0 - 2.0)
+
+    direct = solve_vfi_howard(ret, a_grid, z_grid, P, 0.96, howard_steps=15, tol=1e-6)
+    assert np.array_equal(sol.raw.policy_aprime, direct["policy_idx"])
 
 
 def test_hjb_achdou():

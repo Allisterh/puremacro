@@ -102,9 +102,13 @@ assets = life.mean("a")             # activos medios por edad; máximo al jubila
 print(int(assets.argmax()))         # 45
 ```
 
-Cada cohorte tiene masa uno, y los recién nacidos empiezan en el punto más bajo
-de la malla con choques tomados de su distribución estacionaria, salvo que
-`newborns=` indique otra cosa.
+Cada cohorte tiene masa uno en `life.distribution`, y la supervivencia no se
+aplica ahí: solo descuenta el futuro. `life.population_shares()` da la
+proporción de la población en cada edad con la supervivencia aplicada, y las
+estadísticas que agregan edades la usan (véase
+[Paneles y desigualdad](#paneles-y-desigualdad)). Los recién nacidos empiezan
+en el punto más bajo de la malla con choques tomados de su distribución
+estacionaria, salvo que `newborns=` indique otra cosa.
 
 ## Decisiones discretas y choques de preferencia
 
@@ -205,6 +209,70 @@ R² = 1 y pasa la tolerancia. Tanto este bucle como `vfi.krusell_smith` emiten u
 `RuntimeWarning` en ese caso y cuando se detienen en `max_outer` sin converger.
 Revise `rule.converged` y `rule.r_squared` antes de usar la regla de pronóstico.
 
+## Paneles y desigualdad
+
+Las estadísticas de desigualdad se calculan de forma exacta a partir de
+`sol.distribution`, sin simulación: cada nodo de la malla es un punto de masa
+con su masa estacionaria. `sol.gini(expr)` es el Gini ponderado estándar,
+`1 - sum_i w_i (L_i + L_{i-1})` sobre la curva de Lorenz, la misma función que
+`MicroFrame.gini`. Admite valores negativos (el Gini puede entonces superar 1)
+y es NaN cuando el total no es positivo. `sol.top_share(expr, p)`,
+`sol.quantile(expr, q)` y `sol.lorenz(expr)` completan el cuadro.
+
+```python
+print(sol.gini("a"), sol.top_share("a", 0.10))   # alrededor de 0.62 y 0.41
+print(sol.quantile("a", 0.5))                    # riqueza mediana, alrededor de 3.76
+curve = sol.lorenz("a")                          # columnas pop_share, value_share
+```
+
+`sol.simulate(n_agents, periods, seed=...)` genera historias individuales bajo
+la política resuelta y devuelve un `dp.Panel`. En horizonte infinito cada
+agente empieza en una celda (estado, choque) extraída de `sol.distribution`,
+así que el panel está en la distribución estacionaria desde el primer periodo;
+`init={"a": 0.1}` hace que todos empiecen en un estado dado, y `burn_in`
+descarta los primeros periodos. Con VFI los estados se quedan en los nodos de
+la malla; con EGM la política se interpola entre ellos. El panel registra los
+estados, los choques y los controles (`record=` admite cualquier expresión del
+modelo, como `"a(+1)"` o `"w*exp(z)"`). La misma semilla da un panel idéntico
+bit a bit.
+
+```python
+panel = sol.simulate(n_agents=10_000, periods=200, seed=1)
+print(panel)                        # Panel(n_agents=10000, periods=200, columns=['a', 'z', 'c'])
+gini_t = panel.gini("a", by="t")    # un Gini de corte transversal por periodo
+print(gini_t.iloc[-1])              # alrededor de 0.62, el valor exacto salvo ruido muestral
+df = panel.to_frame()               # formato largo: id, t, a, z, c
+```
+
+`panel.mean`, `panel.quantile`, `panel.gini` y `panel.top_share` agregan todos
+los periodos, o agrupan con `by="t"` (o `by="age"` en un ciclo de vida).
+`panel.cross_section(t)` y `panel.path(i)` devuelven un periodo o un agente, y
+`panel.to_microframe()` pasa el panel a los estimadores de microdatos de
+encuestas. Un `n_agents * periods` mayor que 5e8 lanza `ValueError` con la
+memoria que necesitaría.
+
+En un ciclo de vida el panel recorre las edades del horizonte. Los agentes
+empiezan como recién nacidos y, con supervivencia declarada, un agente vivo a la
+edad j llega a j+1 con probabilidad `survival[j]`. `panel.alive` lo registra.
+Los fallecidos conservan sus filas pero quedan fuera de toda estadística. Las
+estadísticas exactas agregan edades con `population_shares()` como pesos, o
+toman una sola cohorte con `age=j`.
+
+```python
+shares = life.population_shares()   # supervivencia 0.99: 0.022 a la edad 0, 0.012 a la 59
+print(life.gini("a"))               # todas las edades agregadas, alrededor de 0.73
+print(life.gini("a", age=30))       # la cohorte de 30 años, alrededor de 0.50
+lp = life.simulate(n_agents=5000, seed=0)
+print(lp.alive[:, -1].mean())       # alrededor de 0.55 llegan a la edad 59
+print(lp.mean("a", by="age")[45])   # alrededor de 7.7; life.mean("a")[45] es 7.68
+```
+
+Las soluciones en tiempo continuo (HJB) no se simulan: `sol.distribution`
+contiene la densidad de Kolmogorov hacia adelante, y las estadísticas exactas
+funcionan sobre ella. Las soluciones de Krusell-Smith no se simulan ni se
+resumen (no tienen distribución estacionaria); `agg.aggregates` contiene la
+trayectoria simulada del capital. Ambos casos lanzan un error que lo indica.
+
 ## Comprobar una especificación
 
 `m.check()` compila el modelo sin resolverlo y lanza `ModelSpecError` con el
@@ -217,10 +285,50 @@ lanzan el mismo error ante una restricción presupuestaria que no tiene la forma
 
 - EGM con más de un activo (use `method="vfi"`, que admite varios estados);
 - más de un precio en tiempo continuo;
-- reglas de pronóstico de Krusell-Smith con más de un momento;
-- simulación de historias individuales en panel y recompensas escritas como
-  funciones de Python; para eso, `vfi.Model` y los solucionadores de `vfi`
-  siguen soportados.
+- reglas de pronóstico de Krusell-Smith con más de un momento.
+
+## Migrar desde vfi.Model
+
+`vfi.Model` está obsoleto y se eliminará en la versión 6.0. Un `vfi.Model`
+recibía funciones de Python para la utilidad y la restricción presupuestaria;
+`dp` recibe expresiones. Cada lambda se convierte en su expresión como cadena,
+la restricción presupuestaria pasa a ser un local para `c`, y `c > 0` sustituye
+a la penalización de `-1e10`. Este es el modelo de ahorro precautorio del
+cuaderno 21, primero tal como se escribía para `vfi.Model`:
+
+```text
+m = vfi.Model("Precautionary Savings Model")
+m.set_param("beta", 0.96).set_param("gamma", 2.0).set_param("alpha", 0.36).set_param("delta", 0.10)
+m.add_state("a", 0.1, 15.0, 60).add_shock("z", 0.90, 0.15, 5)
+m.set_utility(lambda c, p: c**(1 - p["gamma"]) / (1 - p["gamma"]))
+m.set_budget(lambda a, ap, z, p: np.exp(z) * a**p["alpha"] + (1 - p["delta"]) * a - ap)
+res = m.solve(howard_steps=15, tol=1e-6)
+```
+
+y como modelo `dp`:
+
+```python
+pm = dp.Model("Precautionary Savings Model")
+pm.parameters(beta=0.96, gamma=2.0, alpha=0.36, delta=0.10)
+pm.exogenous("z", dp.AR1(rho=0.90, sigma=0.15, n=5))   # Tauchen, como add_shock
+pm.state("a", np.linspace(0.1, 15.0, 60))
+pm.local("c = exp(z)*a^alpha + (1 - delta)*a - a(+1)")
+pm.reward("c^(1 - gamma)/(1 - gamma)")
+pm.subject_to("c > 0")
+
+ps = pm.solve(method="vfi", tol=1e-6)
+print(ps.mean("a"), ps.gini("a"))   # 6.5733 y 0.3494
+```
+
+La restricción presupuestaria no tiene la forma `R*a + y(z)`, así que este
+modelo usa `method="vfi"`. La solución de `dp` elige el mismo nodo de la malla
+para el periodo siguiente que `vfi.Model` en todos los estados, y las funciones
+de valor coinciden a 7e-7. `res["V"]`, `res["policy_a"]` y `res["a_grid"]` pasan
+a ser `ps.V`, `ps.policy("a(+1)")` y `ps.grids["a"]`. `res["mean_assets"]` y
+`res["gini"]` (6.6767 y 0.3924) venían de una simulación de 2000 hogares y 100
+periodos, y ese Gini restaba primero la tenencia mínima de activos.
+`ps.mean("a")` y `ps.gini("a")` son los valores exactos de la distribución
+estacionaria, y `ps.simulate(...)` da el panel.
 
 ## Validación
 

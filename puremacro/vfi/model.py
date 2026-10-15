@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+import warnings
 from typing import Callable, Optional, Dict, Any, List
 import numpy as np
 
@@ -11,6 +12,10 @@ from .solve import solve_vfi_howard, simulate_vfi_panel
 
 class Model:
     """Declarative Dynare-like VFI Model interface.
+
+    .. deprecated:: 5.0
+        Declare the model with :mod:`puremacro.dp` instead (docs/dp.md,
+        "Porting from vfi.Model"); ``vfi.Model`` is removed in 6.0.
 
     Example
     -------
@@ -23,6 +28,9 @@ class Model:
     """
 
     def __init__(self, name: str = "VFI Model"):
+        warnings.warn("vfi.Model is deprecated and will be removed in 6.0; declare the model with "
+                      "puremacro.dp (see docs/dp.md, 'Porting from vfi.Model')",
+                      DeprecationWarning, stacklevel=2)
         self.name = name
         self.params: Dict[str, float] = {}
         self.states: List[Dict[str, Any]] = []
