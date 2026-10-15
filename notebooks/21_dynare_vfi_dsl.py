@@ -116,7 +116,7 @@ ax2.legend(loc="lower right", frameon=True, facecolor=_nbstyle.FONDO, edgecolor=
 # %% [markdown]
 # ## Simulating a panel of households
 #
-# `sol.simulate(n_agents, periods)` draws individual histories under the solved policy and returns a `dp.Panel`. Here every household starts at the bottom of the grid, $a = 0.1$, with its shock drawn from the stationary distribution of $z$. The cross-sectional Gini of the panel, `panel.gini("a", by="t")`, first rises as lucky households accumulate and then settles at the exact stationary value. The same seed gives the same panel.
+# `sol.simulate(n_agents, periods)` draws individual histories under the solved policy and returns a `dp.Panel`. Here every household starts at the bottom of the grid, $a = 0.1$, with its shock drawn from the stationary distribution of $z$. The cross-sectional Gini of the panel, `panel.gini("a", by="t")`, is 0.0000 at t = 0, when every household holds the same assets. It then overshoots: lucky households accumulate faster than the rest catch up, and by t = 10 it is 0.4449, above the exact stationary 0.3494. After that it falls back and converges to the exact value, 0.3496 at t = 199. The same seed gives the same panel.
 
 # %%
 panel = sol.simulate(n_agents=5000, periods=200, seed=0, init={"a": 0.1})

@@ -216,15 +216,19 @@ print(sol.quantile("a", 0.5))                    # median wealth, about 3.76
 curve = sol.lorenz("a")                          # columns pop_share, value_share
 ```
 
-`sol.simulate(n_agents, periods, seed=...)` draws individual histories under
-the solved policy and returns a `dp.Panel`. In an infinite horizon each agent
+`sol.simulate(n_agents=10_000, periods=None, *, seed=0, init=None, burn_in=0,
+record=None)` draws individual histories under the solved policy and returns a
+`dp.Panel`. `periods=None` and `init=None` take per-horizon defaults: 200
+periods and `"stationary"` in an infinite horizon, the J ages of the horizon and
+`"newborn"` in a life cycle. In an infinite horizon each agent
 starts in a (state, shock) cell drawn from `sol.distribution`, so the panel is
 in the stationary distribution from the first period; `init={"a": 0.1}` starts
 everyone at a given state instead, and `burn_in` drops the first periods. VFI
-states stay on grid nodes, EGM interpolates the policy between them. The panel
-records the states, the shocks and the controls (`record=` takes any model
-expression, such as `"a(+1)"` or `"w*exp(z)"`). The same seed gives a
-bit-identical panel.
+states stay on grid nodes, EGM interpolates the policy between them. A discrete
+choice is simulated too: the argmax option without taste shocks, a logit draw
+with them, recorded as the option's value. The panel records the states, the
+shocks and the controls (`record=` takes any model expression, such as
+`"a(+1)"` or `"w*exp(z)"`). The same seed gives a bit-identical panel.
 
 ```python
 panel = sol.simulate(n_agents=10_000, periods=200, seed=1)

@@ -13,7 +13,7 @@ from .solve import solve_vfi_howard, simulate_vfi_panel
 class Model:
     """Declarative Dynare-like VFI Model interface.
 
-    .. deprecated:: 5.0
+    .. deprecated:: 5.1
         Declare the model with :mod:`puremacro.dp` instead (docs/dp.md,
         "Porting from vfi.Model"); ``vfi.Model`` is removed in 6.0.
 

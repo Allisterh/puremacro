@@ -59,7 +59,8 @@ def test_lorenz_curve_is_consistent_with_top_share_and_gini(aiyagari_sol):
     # 1 - L(0.9) is the top-10% share, exactly, since the curve is piecewise linear
     assert 1 - lz.loc[900, "value_share"] == pytest.approx(sol.top_share("a", 0.1), abs=1e-12)
     # the Gini is twice the area between the diagonal and the curve
-    area = np.trapezoid(lz["value_share"], lz["pop_share"])
+    x, y = lz["pop_share"].to_numpy(), lz["value_share"].to_numpy()
+    area = float(np.sum(np.diff(x) * (y[1:] + y[:-1]) / 2))  # trapezoid rule, any NumPy
     assert 1 - 2 * area == pytest.approx(sol.gini("a"), abs=2e-3)
 
 
@@ -72,6 +73,10 @@ def test_quantile_vector_and_bounds(aiyagari_sol):
     assert sol.quantile("a", [0.0, 1.0]).tolist() == [sol.grids["a"][0], sol.grids["a"][-1]]
     with pytest.raises(ValueError, match="q"):
         sol.quantile("a", 1.5)
+    with pytest.raises(ValueError, match="q"):
+        sol.quantile("a", np.nan)
+    with pytest.raises(ValueError, match="q"):
+        sol.quantile("a", [0.5, np.nan])
     with pytest.raises(ValueError, match="p"):
         sol.top_share("a", 0.0)
     with pytest.raises(ValueError, match="age"):

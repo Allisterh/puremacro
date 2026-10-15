@@ -225,14 +225,19 @@ print(sol.quantile("a", 0.5))                    # riqueza mediana, alrededor de
 curve = sol.lorenz("a")                          # columnas pop_share, value_share
 ```
 
-`sol.simulate(n_agents, periods, seed=...)` genera historias individuales bajo
-la política resuelta y devuelve un `dp.Panel`. En horizonte infinito cada
-agente empieza en una celda (estado, choque) extraída de `sol.distribution`,
+`sol.simulate(n_agents=10_000, periods=None, *, seed=0, init=None, burn_in=0,
+record=None)` genera historias individuales bajo la política resuelta y
+devuelve un `dp.Panel`. `periods=None` e `init=None` toman valores por defecto
+según el horizonte: 200 periodos y `"stationary"` en horizonte infinito, las J
+edades del horizonte y `"newborn"` en un ciclo de vida. En horizonte infinito
+cada agente empieza en una celda (estado, choque) extraída de `sol.distribution`,
 así que el panel está en la distribución estacionaria desde el primer periodo;
 `init={"a": 0.1}` hace que todos empiecen en un estado dado, y `burn_in`
 descarta los primeros periodos. Con VFI los estados se quedan en los nodos de
-la malla; con EGM la política se interpola entre ellos. El panel registra los
-estados, los choques y los controles (`record=` admite cualquier expresión del
+la malla; con EGM la política se interpola entre ellos. Una elección discreta
+también se simula: la opción que maximiza sin choques de preferencia, una
+extracción logit con ellos, registrada como el valor de la opción. El panel
+registra los estados, los choques y los controles (`record=` admite cualquier expresión del
 modelo, como `"a(+1)"` o `"w*exp(z)"`). La misma semilla da un panel idéntico
 bit a bit.
 

@@ -105,8 +105,9 @@ class DPSolution:
         ``burn_in`` (infinite horizon only) periods are simulated first and
         dropped, so the panel holds ``periods`` periods. ``record`` lists model
         expressions to evaluate along the path, as ``sol.policy`` takes them
-        (``"c"``, ``"a(+1)"``, ``"w*exp(z)"``, and ``age`` or age-varying
-        parameters in a life cycle); by default the states, the shocks and the
+        (``"c"``, ``"a(+1)"``, ``"w*exp(z)"``; in a life cycle expressions may use
+        ``age`` and age-varying parameters, but ``age`` itself is ``panel.age``
+        and cannot be recorded); by default the states, the shocks and the
         controls (the ``c`` local, any ``control()`` and the discrete choice).
         They are checked before anything is drawn. VFI states stay on grid nodes; EGM interpolates
         the next-asset policy linearly between nodes. Shocks move by ``sol.P``.
@@ -173,6 +174,7 @@ class DPSolution:
     @staticmethod
     def _positive(x: np.ndarray, w: np.ndarray):
         # nodes without mass carry no information (and would be the q=0 quantile)
+        # nodes with w <= 0 are dropped, so these agree with MicroFrame only when no weight is negative
         keep = w > 0
         return x[keep], w[keep][:, None]
 
@@ -220,7 +222,7 @@ class DPSolution:
         from puremacro._wstats import w_quantile
 
         qs = np.asarray(q, dtype=float)
-        if qs.ndim > 1 or np.any((qs < 0) | (qs > 1)):
+        if qs.ndim > 1 or np.any(~((qs >= 0) & (qs <= 1))):  # NaN fails too
             raise ValueError(f"q must lie in [0, 1], got {q}")
 
         def fn(x, W):

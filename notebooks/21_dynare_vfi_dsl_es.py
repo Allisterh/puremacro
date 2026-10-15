@@ -116,7 +116,7 @@ ax2.legend(loc="lower right", frameon=True, facecolor=_nbstyle.FONDO, edgecolor=
 # %% [markdown]
 # ## Simulando un panel de hogares
 #
-# `sol.simulate(n_agents, periods)` genera historias individuales bajo la política resuelta y devuelve un `dp.Panel`. Aquí todos los hogares empiezan en el extremo inferior de la malla, $a = 0.1$, con su choque extraído de la distribución estacionaria de $z$. El Gini de corte transversal del panel, `panel.gini("a", by="t")`, primero sube mientras los hogares con suerte acumulan y después se estabiliza en el valor estacionario exacto. La misma semilla da el mismo panel.
+# `sol.simulate(n_agents, periods)` genera historias individuales bajo la política resuelta y devuelve un `dp.Panel`. Aquí todos los hogares empiezan en el extremo inferior de la malla, $a = 0.1$, con su choque extraído de la distribución estacionaria de $z$. El Gini de corte transversal del panel, `panel.gini("a", by="t")`, vale 0.0000 en t = 0, cuando todos los hogares tienen los mismos activos. Después se pasa de largo: los hogares con suerte acumulan más deprisa de lo que el resto los alcanza, y en t = 10 vale 0.4449, por encima del valor estacionario exacto 0.3494. A partir de ahí baja y converge al valor exacto, 0.3496 en t = 199. La misma semilla da el mismo panel.
 
 # %%
 panel = sol.simulate(n_agents=5000, periods=200, seed=0, init={"a": 0.1})
