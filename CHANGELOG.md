@@ -2,7 +2,9 @@
 
 This file records user-visible changes per release. Internal refactors that don't change behaviour are listed under "Internal" so a returning user can see what shifted under the hood without surprise.
 
-## Unreleased
+## 5.1.0 (2026-10-15)
+
+First 5.x final release. `puremacro.dp` simulates panels of individual histories and reports exact inequality statistics, and it is now the stable way to declare dynamic-programming models; `vfi.Model` is deprecated and will be removed in 6.0. It also carries everything in the 5.0 pre-releases below: the research material is no longer part of the package (4.8.1 is the last release that contains it), `puremacro.llm`, and the review-defect fixes.
 
 ### Added
 
@@ -22,6 +24,7 @@ This file records user-visible changes per release. Internal refactors that don'
 
 ### Changed
 
+- The deprecated `puremacro.lp.garch_utils` module and `puremacro.sigma.sigma_numpy.SigmaObject` announced removal in 5.0.0; they now name 6.0.0, together with `vfi.Model`, so a minor release removes nothing.
 - Notebook 21 (EN/ES) declares its precautionary-savings model with `puremacro.dp` instead of `vfi.Model`. It now prints mean assets 6.5733 and a wealth Gini of 0.3494, the exact values of the stationary distribution. It used to print 6.6767 and 0.3924, which came from a 2000-household, 100-period simulation; that Gini was computed after subtracting the minimum asset holding, so it was not the standard Gini. The notebook adds a simulated panel whose cross-sectional Gini converges to the exact value, and its text no longer claims vectorised Bellman updates or pluggable Numba/MLX/CuPy backends.
 
 ## 5.0.0a2 (2026-10-14)

@@ -790,7 +790,7 @@ Todos los cuadernos cumplen estrictamente el contrato con Pyodide y la arquitect
 
 ## Estado
 
-Versión actual: **5.0.0a2**, una versión preliminar (`pip install --pre puremacro`; un `pip install puremacro` sin más sigue dando 4.8.1). Los [niveles de estabilidad](ARCHITECTURE.md#stability-tiers)
+Versión actual: **5.1.0**. La versión 4.8.1 es la última con los módulos de comercio/MRIO y los estudios de investigación (`pip install "puremacro<5"`). Los [niveles de estabilidad](ARCHITECTURE.md#stability-tiers)
 identifican las superficies estables, experimentales y de soporte limitado.
 Los cálculos estructurales tienen [límites de validación](docs/es/STRUCTURAL_VALIDATION_STATUS.md)
 adicionales.
