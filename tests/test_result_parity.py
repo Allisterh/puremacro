@@ -307,9 +307,10 @@ def test_garch_utils_deprecation_warning():
     assert len(matches) > 0
     msg = str(matches[0].message)
     # 4.0.0 shipped (2026-09-16) keeping the shim; the target was retargeted to 5.0.0 on
-    # 2026-09-22 and tests/test_docs_hygiene_audit_fixes.py guards it against drifting again.
-    assert "a future major release (5.0.0)" in msg
-    assert "2.0.0" not in msg and "4.0.0" not in msg
+    # 2026-09-22 and to 6.0.0 at 5.1.0 (2026-10-15), so a minor release removes nothing;
+    # tests/test_docs_hygiene_audit_fixes.py guards it against drifting again.
+    assert "a future major release (6.0.0)" in msg
+    assert "2.0.0" not in msg and "4.0.0" not in msg and "5.0.0" not in msg
 
 
 def test_sigma_numpy_deprecation_warning():
@@ -320,6 +321,7 @@ def test_sigma_numpy_deprecation_warning():
     matches = [w for w in record if "SigmaObject is deprecated" in str(w.message)]
     assert len(matches) > 0
     msg = str(matches[0].message)
-    # 4.0.0 shipped keeping this shim too; retargeted to 5.0.0 with garch_utils (2026-09-23).
-    assert "a future major release (5.0.0)" in msg
-    assert "2.0.0" not in msg and "4.0.0" not in msg
+    # 4.0.0 shipped keeping this shim too; retargeted to 5.0.0 with garch_utils (2026-09-23)
+    # and to 6.0.0 at 5.1.0.
+    assert "a future major release (6.0.0)" in msg
+    assert "2.0.0" not in msg and "4.0.0" not in msg and "5.0.0" not in msg
