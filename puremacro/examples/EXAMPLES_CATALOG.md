@@ -193,6 +193,7 @@ Scripts that ship but have no entry above yet:
 - `central_bank_narrative_sentiment`
 - `climate_dice_simulation`
 - `climate_sovereign_debt_risk`
+- `distributional_trade_ge`
 - `dsge_ar1_demo`
 - `dsge_nk_sketchpad`
 - `dsge_nuts_estimation`

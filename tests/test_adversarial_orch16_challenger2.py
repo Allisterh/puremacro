@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 
 from puremacro.spatial.allen_arkolakis import AllenArkolakisModel
+from puremacro.trade.caliendo_parro import CaliendoParroModel
 
 
 # =============================================================================
@@ -150,3 +151,259 @@ class TestAllenArkolakisAdversarial:
         assert res.L_hat is not None and res.L_hat[3] < 1.0
         # Aggregate welfare falls
         assert res.welfare_pct is not None and res.welfare_pct < 0.0
+
+
+# --- puremacro.trade ---------------------------------------------------------
+
+
+class TestCaliendoParroAdversarial:
+    """Adversarial challenge tests for Caliendo-Parro (2015) trade GE engine."""
+
+    def test_near_autarky_symmetric(self):
+        """Stress-test near-autarky trade costs (tau -> 100 and 500) in symmetric economy."""
+        N, J = 3, 2
+        trade_shares = np.zeros((J, N, N))
+        trade_shares[0] = np.array([
+            [0.60, 0.20, 0.20],
+            [0.20, 0.60, 0.20],
+            [0.20, 0.20, 0.60],
+        ])
+        trade_shares[1] = np.eye(N)
+
+        gamma_va = np.full((N, J), 0.50)
+        gamma_io = np.full((N, J, J), 0.25)
+        alpha = np.full((N, J), 0.50)
+        theta = np.array([5.0, 4.0])
+        labor_income = np.array([100.0, 100.0, 100.0])
+
+        model = CaliendoParroModel(
+            trade_shares=trade_shares,
+            gamma_va=gamma_va,
+            gamma_io=gamma_io,
+            alpha=alpha,
+            theta=theta,
+            labor_income=labor_income,
+            nontradables=[1],
+            country_codes=["USA", "CHN", "DEU"],
+            sector_codes=["Manufactures", "Services"],
+        )
+
+        for tau_val in [100.0, 500.0]:
+            tariffs_new = np.ones((J, N, N))
+            for n in range(N):
+                for i in range(N):
+                    if n != i:
+                        tariffs_new[0, n, i] = tau_val
+
+            res = model.solve_counterfactual(tariffs_new=tariffs_new)
+            assert res.converged, f"Failed to converge at tau={tau_val}"
+            assert res.market_clearing_residual < 1e-6, f"Market clearing res {res.market_clearing_residual} >= 1e-6"
+            assert res.trade_balance_residual < 1e-6, f"Trade balance res {res.trade_balance_residual} >= 1e-6"
+
+            # Foreign trade shares must collapse toward 0 (< 1e-10)
+            off_diag = res.pi_prime[0] - np.diag(np.diag(res.pi_prime[0]))
+            assert np.max(off_diag) < 1e-10, f"Off-diagonal trade shares {np.max(off_diag)} >= 1e-10"
+            np.testing.assert_allclose(np.diag(res.pi_prime[0]), 1.0, atol=1e-10)
+            # Non-tradable sector trade shares strictly identity
+            np.testing.assert_allclose(res.pi_prime[1], np.eye(N), atol=1e-12)
+
+    def test_near_autarky_asymmetric_zero_deficits(self):
+        """Stress-test near-autarky trade costs in asymmetric economy with zero deficits."""
+        N, J = 3, 2
+        trade_shares = np.zeros((J, N, N))
+        trade_shares[0] = np.array([
+            [0.70, 0.15, 0.15],
+            [0.10, 0.80, 0.10],
+            [0.25, 0.25, 0.50],
+        ])
+        trade_shares[1] = np.eye(N)
+
+        gamma_va = np.array([
+            [0.40, 0.60],
+            [0.35, 0.65],
+            [0.45, 0.55],
+        ])
+        gamma_io = np.zeros((N, J, J))
+        for n in range(N):
+            for j in range(J):
+                rem = 1.0 - gamma_va[n, j]
+                gamma_io[n, j, 0] = rem * 0.6
+                gamma_io[n, j, 1] = rem * 0.4
+
+        alpha = np.array([
+            [0.40, 0.60],
+            [0.50, 0.50],
+            [0.30, 0.70],
+        ])
+        theta = np.array([6.5, 4.5])
+        labor_income = np.array([200.0, 150.0, 100.0])
+        deficits = np.array([10.0, -6.0, -4.0])
+
+        model = CaliendoParroModel(
+            trade_shares=trade_shares,
+            gamma_va=gamma_va,
+            gamma_io=gamma_io,
+            alpha=alpha,
+            theta=theta,
+            labor_income=labor_income,
+            deficits=deficits,
+            nontradables=["Services"],
+            country_codes=["USA", "CHN", "DEU"],
+            sector_codes=["Goods", "Services"],
+        )
+
+        tariffs_new = np.ones((J, N, N))
+        for n in range(N):
+            for i in range(N):
+                if n != i:
+                    tariffs_new[0, n, i] = 100.0
+
+        # Under autarky, deficit_rule="zero" is the economically valid specification
+        res = model.solve_counterfactual(tariffs_new=tariffs_new, deficit_rule="zero")
+        assert res.converged
+        assert res.market_clearing_residual < 1e-6
+        assert res.trade_balance_residual < 1e-6
+        np.testing.assert_allclose(res.w_hat, 1.0, atol=1e-8)
+        np.testing.assert_allclose(res.pi_prime[0], np.eye(N), atol=1e-10)
+
+    @pytest.mark.parametrize("th_val", [1.05, 25.0])
+    def test_extreme_trade_elasticities(self, th_val: float):
+        """Stress-test extreme trade elasticities theta=1.05 (near Cobb-Douglas) and theta=25.0 (homogeneous)."""
+        N, J = 3, 2
+        trade_shares = np.zeros((J, N, N))
+        trade_shares[0] = np.array([
+            [0.70, 0.15, 0.15],
+            [0.10, 0.80, 0.10],
+            [0.25, 0.25, 0.50],
+        ])
+        trade_shares[1] = np.eye(N)
+
+        gamma_va = np.array([[0.40, 0.60], [0.35, 0.65], [0.45, 0.55]])
+        gamma_io = np.zeros((N, J, J))
+        for n in range(N):
+            for j in range(J):
+                rem = 1.0 - gamma_va[n, j]
+                gamma_io[n, j, 0] = rem * 0.6
+                gamma_io[n, j, 1] = rem * 0.4
+
+        alpha = np.array([[0.40, 0.60], [0.50, 0.50], [0.30, 0.70]])
+        labor_income = np.array([200.0, 150.0, 100.0])
+
+        model = CaliendoParroModel(
+            trade_shares=trade_shares,
+            gamma_va=gamma_va,
+            gamma_io=gamma_io,
+            alpha=alpha,
+            theta=np.array([th_val, 4.0]),
+            labor_income=labor_income,
+            nontradables=["Services"],
+            country_codes=["USA", "CHN", "DEU"],
+            sector_codes=["Goods", "Services"],
+        )
+
+        # Unilateral tariff shock
+        res_tariff = model.simulate_tariff_shock("USA", "CHN", tariff_rate=0.20)
+        assert res_tariff.converged, f"Tariff shock failed to converge at theta={th_val}"
+        assert res_tariff.market_clearing_residual < 1e-6
+        assert res_tariff.trade_balance_residual < 1e-6
+
+        # Reciprocal trade war
+        res_war = model.simulate_trade_war(["USA"], ["CHN"], tariff_rate=0.25)
+        assert res_war.converged, f"Trade war failed to converge at theta={th_val}"
+        assert res_war.market_clearing_residual < 1e-6
+        assert res_war.trade_balance_residual < 1e-6
+
+    def test_multi_country_tariff_retaliation_war(self):
+        """Stress-test 5-country, 3-sector complex tariff retaliation war with trade diversion."""
+        N, J = 5, 3
+        rng = np.random.default_rng(123)
+
+        trade_shares = np.zeros((J, N, N))
+        for j in range(2):
+            raw = rng.uniform(0.1, 0.5, size=(N, N))
+            np.fill_diagonal(raw, rng.uniform(2.0, 4.0, size=N))
+            trade_shares[j] = raw / np.sum(raw, axis=1, keepdims=True)
+        trade_shares[2] = np.eye(N)  # Non-tradable sector
+
+        gamma_va = rng.uniform(0.3, 0.6, size=(N, J))
+        gamma_io = np.zeros((N, J, J))
+        for n in range(N):
+            for j in range(J):
+                rem = 1.0 - gamma_va[n, j]
+                io_raw = rng.uniform(0.1, 0.5, size=J)
+                gamma_io[n, j] = rem * (io_raw / np.sum(io_raw))
+
+        alpha_raw = rng.uniform(0.2, 0.8, size=(N, J))
+        alpha = alpha_raw / np.sum(alpha_raw, axis=1, keepdims=True)
+
+        theta = np.array([5.0, 8.0, 4.0])
+        labor_income = np.array([500.0, 400.0, 350.0, 200.0, 150.0])
+        countries = ["USA", "CHN", "EU", "JPN", "GBR"]
+        sectors = ["Mfg", "Agri", "Services"]
+
+        model = CaliendoParroModel(
+            trade_shares=trade_shares,
+            gamma_va=gamma_va,
+            gamma_io=gamma_io,
+            alpha=alpha,
+            theta=theta,
+            labor_income=labor_income,
+            nontradables=[2],
+            country_codes=countries,
+            sector_codes=sectors,
+        )
+
+        for rate in [0.20, 0.40]:
+            res = model.simulate_trade_war(
+                coalition_a=["USA", "GBR"],
+                coalition_b=["CHN", "EU"],
+                tariff_rate=rate,
+            )
+            assert res.converged
+            assert res.market_clearing_residual < 1e-6
+            assert res.trade_balance_residual < 1e-6
+
+            # Non-tradable goods market clearing Y_n^2 == X_n^2
+            np.testing.assert_allclose(res.Y_prime[:, 2], res.X_prime[:, 2], rtol=1e-6)
+            # Non-tradable bilateral shares remain strictly identity
+            np.testing.assert_allclose(res.pi_prime[2], np.eye(N), atol=1e-12)
+            # Neutral JPN benefits from trade diversion
+            assert res.welfare_pct[3] > 0.0
+
+    def test_nontradable_sector_shock_propagation(self):
+        """Verify input-output propagation into non-tradables and exact goods market clearing."""
+        N, J = 3, 2
+        trade_shares = np.array([
+            [[0.6, 0.2, 0.2], [0.2, 0.6, 0.2], [0.2, 0.2, 0.6]],
+            np.eye(3),
+        ])
+        gamma_va = np.full((N, J), 0.5)
+        gamma_io = np.zeros((N, J, J))
+        gamma_io[:, 0, 0] = 0.25
+        gamma_io[:, 0, 1] = 0.25
+        gamma_io[:, 1, 0] = 0.30
+        gamma_io[:, 1, 1] = 0.20
+
+        alpha = np.full((N, J), 0.5)
+        theta = np.array([5.0, 4.0])
+        labor_income = np.array([100.0, 100.0, 100.0])
+
+        model = CaliendoParroModel(
+            trade_shares=trade_shares,
+            gamma_va=gamma_va,
+            gamma_io=gamma_io,
+            alpha=alpha,
+            theta=theta,
+            labor_income=labor_income,
+            nontradables=[1],
+        )
+
+        res = model.simulate_tariff_shock("C0", "C1", sector="S0", tariff_rate=0.50)
+        assert res.converged
+        assert res.market_clearing_residual < 1e-6
+        assert res.trade_balance_residual < 1e-6
+
+        # Non-tradable prices must rise in C0 due to expensive intermediate inputs
+        assert res.P_hat[0, 1] > 1.0
+        # Non-tradable domestic market clearing
+        np.testing.assert_allclose(res.Y_prime[:, 1], res.X_prime[:, 1], atol=1e-8)

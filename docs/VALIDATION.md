@@ -61,7 +61,7 @@ Tolerance tiers: `EXACT` (rtol 1e-10) · `TIGHT` (1e-6) · `NUMERIC` (1e-2) ·
 
 ## Coverage
 
-**110 cases across 15 subsystems — all passing.** By mechanism: internal 59,
+**113 cases across 16 subsystems — all passing.** By mechanism: internal 62,
 analytical 31, package 13, scipy 5, published 2.
 
 | Subsystem | Cases | Reference(s) |
@@ -81,6 +81,7 @@ analytical 31, package 13, scipy 5, published 2.
 | `narrative` | 7 | Known-value lexicon scoring on crafted text; index monotonicity / standardization identities |
 | `cointegration` | 4 | FM-OLS and DOLS recover a planted cointegrating β; the two agree; DOLS mitigates endogeneity bias |
 | `spatial` | 12 | Moran's I / Geary's C with their Cliff-Ord moments vs `esda` (PySAL); Conley HAC at cutoff 0 = HC0 and = an explicit Bartlett double loop; flat-kernel space-time HAC = Driscoll-Kraay; the SAR/SEM concentrated log-likelihood at ρ=0 = the OLS Gaussian log-likelihood; SDM = SAR on the augmented design and SLX = OLS on it; LeSage-Pace impacts = a brute-force dense `(I−ρW)⁻¹(Iβ+Wθ)`; the spatial panel at ρ=0 = two-way FE; the Lee-Yu correction rescales σ² by exactly T/(T−1); `spatial_lp` without a spillover = `panel_lp` |
+| `Trade` | 3 | Bundled OECD ICIO table (OECD ICIO 2023 edition, 2019; G20 countries + rest of the world, ISIC Rev.4 sections; `load_icio_data()`, built by `tools/build_icio_isic.py`): the aggregation conserves the native file's world value added and gross output; every producing industry column balances with positive value added; the calibrated model's zero-tariff equilibrium is the base year (unit prices, wages and rentals) |
 
 Each case carries its full citation in the code (`ValidationCase.citation`), shown
 in the `citation` column of `scorecard()`. Key references include Lütkepohl (2005),

@@ -1,9 +1,9 @@
-"""End-to-End verification suite for Showcase Notebooks 52, 53 and 54.
+"""End-to-End verification suite for Showcase Notebooks 52, 53, 54, and 55.
 
 Verifies:
-- Tier 1: File presence of all 6 files (52, 52_es, 53, 53_es, 54, 54_es) and all 7 required template sections in each file.
+- Tier 1: File presence of all 8 files (52, 52_es, 53, 53_es, 54, 54_es, 55, 55_es) and all 7 required template sections in each file.
 - Tier 2: AST analysis verifying Pyodide compliance (zero forbidden imports: statsmodels, linearmodels, arch, torch, jax, requests, etc.), presence of _nbstyle.apply_style(), deterministic random seeds, and interactive knob downstream assertions.
-- Tier 3: Bilingual parity and code-identity verification (normalize_code(en) == normalize_code(es) for all 3 pairs), translated Spanish headings, and template section ordering.
+- Tier 3: Bilingual parity and code-identity verification (normalize_code(en) == normalize_code(es) for all 4 pairs), translated Spanish headings, and template section ordering.
 - Tier 4: Execution test (dry-run import / execution of notebooks via build_notebooks.py --check and verification of # ← change this interactive markers).
 """
 from __future__ import annotations
@@ -19,11 +19,12 @@ import pytest
 PROJ = Path(__file__).resolve().parents[2]
 NB_DIR = PROJ / "notebooks"
 
-# All 6 showcase notebook files
+# All 8 showcase notebook files
 NOTEBOOK_STEMS = {
     "52": "52_continuous_transition_mit_shocks",
     "53": "53_exact_analytic_ift_gradients",
     "54": "54_deep_macro_pinns_high_dim",
+    "55": "55_quantitative_spatial_and_trade_ge",
 }
 
 NB_PATHS_EN = {stem: NB_DIR / f"{name}.py" for stem, name in NOTEBOOK_STEMS.items()}
@@ -33,6 +34,7 @@ ALL_NOTEBOOK_PATHS = [
     NB_PATHS_EN["52"], NB_PATHS_ES["52"],
     NB_PATHS_EN["53"], NB_PATHS_ES["53"],
     NB_PATHS_EN["54"], NB_PATHS_ES["54"],
+    NB_PATHS_EN["55"], NB_PATHS_ES["55"],
 ]
 
 # Pyodide allowed external dependencies + puremacro + stdlib
@@ -414,6 +416,64 @@ class TestTier1Showcase54Coverage:
         assert has_deep_math, "Notebook 54 must formulate Euler residual loss or network architecture"
 
 
+class TestTier1Showcase55Coverage:
+    """Tier 1 Feature Coverage: Showcase Notebook 55 (Quantitative Spatial & Trade GE)."""
+
+    def test_nb55_en_file_presence(self):
+        """Verify notebooks/55_quantitative_spatial_and_trade_ge.py exists on disk."""
+        p = NB_PATHS_EN["55"]
+        _require_file(p)
+        assert p.is_file(), f"File {p.name} missing"
+
+    def test_nb55_es_twin_file_presence(self):
+        """Verify notebooks/55_quantitative_spatial_and_trade_ge_es.py exists on disk."""
+        p = NB_PATHS_ES["55"]
+        _require_file(p)
+        assert p.is_file(), f"Spanish twin file {p.name} missing"
+
+    def test_nb55_jupytext_percent_header(self):
+        """Verify Notebook 55 starts with valid Jupytext percent frontmatter."""
+        content = _require_file(NB_PATHS_EN["55"])
+        assert "format_name: percent" in content, "Missing 'format_name: percent' in header"
+        assert "kernelspec:" in content, "Missing 'kernelspec:' in header"
+
+    def test_nb55_all_seven_template_sections_present(self):
+        """Verify all 7 required template sections exist in Notebook 55."""
+        content = _require_file(NB_PATHS_EN["55"])
+        for name, pattern in REQUIRED_SECTIONS_EN:
+            assert re.search(pattern, content), f"Section '{name}' missing from Notebook 55"
+        assert len(extract_code_cells(content)) >= 4, "Worked code cells missing in Notebook 55"
+
+    def test_nb55_worked_code_solver_apis(self):
+        """Verify Notebook 55 worked code uses CaliendoParroModel and AllenArkolakisModel."""
+        content = _require_file(NB_PATHS_EN["55"])
+        code_text = "\n".join(extract_code_cells(content))
+        assert "CaliendoParroModel" in code_text, "Worked code must invoke CaliendoParroModel"
+        assert "AllenArkolakisModel" in code_text, "Worked code must invoke AllenArkolakisModel"
+
+    def test_nb55_interactive_knobs_and_asserts(self):
+        """Verify Notebook 55 includes interactive '# ← change this' knobs and asserts."""
+        content = _require_file(NB_PATHS_EN["55"])
+        cells = parse_jupytext_cells(content)
+        found_knob = False
+        knob_cell_has_assert = False
+        for c_type, body in cells:
+            if c_type == "code" and ("# ← change this" in body or "# ← Change this" in body):
+                found_knob = True
+                if "assert " in body:
+                    knob_cell_has_assert = True
+        assert found_knob, "No '# ← change this' knob found in Notebook 55"
+        assert knob_cell_has_assert, "Interactive knob cell must contain downstream assertions"
+
+    def test_nb55_math_latex_formulation(self):
+        """Verify Notebook 55 Section 2 provides LaTeX math for Caliendo-Parro and Allen-Arkolakis."""
+        content = _require_file(NB_PATHS_EN["55"])
+        md_text = "\n".join(extract_markdown_cells(content))
+        assert "$" in md_text, "Math section must contain LaTeX equations"
+        has_spatial_math = ("\\pi" in md_text or "gravity" in md_text.lower() or "Caliendo" in md_text or "Allen" in md_text)
+        assert has_spatial_math, "Notebook 55 must formulate trade or spatial general equilibrium"
+
+
 # ============================================================================
 # Tier 2: Boundary, Corner & AST / Pyodide Analysis (>= 5 Tests)
 # ============================================================================
@@ -495,7 +555,7 @@ class TestTier2BoundaryAndAST:
 class TestTier3BilingualParityAndCrossFeature:
     """Tier 3: Bilingual code-identity, translation parity, and sequence ordering."""
 
-    @pytest.mark.parametrize("stem", ["52", "53", "54"])
+    @pytest.mark.parametrize("stem", ["52", "53", "54", "55"])
     def test_bilingual_code_cell_counts_match(self, stem: str):
         """Verify English and Spanish editions have the exact same number of code cells."""
         en_content = _require_file(NB_PATHS_EN[stem])
@@ -506,7 +566,7 @@ class TestTier3BilingualParityAndCrossFeature:
             f"Code cell count mismatch for showcase {stem}: English has {len(en_cells)}, Spanish has {len(es_cells)}"
         )
 
-    @pytest.mark.parametrize("stem", ["52", "53", "54"])
+    @pytest.mark.parametrize("stem", ["52", "53", "54", "55"])
     def test_bilingual_code_cells_identical_logic(self, stem: str):
         """Verify normalize_code(en) == normalize_code(es) for every code cell across all 3 pairs."""
         en_content = _require_file(NB_PATHS_EN[stem])
@@ -521,7 +581,7 @@ class TestTier3BilingualParityAndCrossFeature:
                 f"--- EN ---\n{norm_en[:200]}\n--- ES ---\n{norm_es[:200]}"
             )
 
-    @pytest.mark.parametrize("stem", ["52", "53", "54"])
+    @pytest.mark.parametrize("stem", ["52", "53", "54", "55"])
     def test_spanish_headings_and_prose_translated(self, stem: str):
         """Verify markdown headings in Spanish twin are properly translated."""
         es_content = _require_file(NB_PATHS_ES[stem])
@@ -537,7 +597,7 @@ class TestTier3BilingualParityAndCrossFeature:
         ])
         assert has_spanish, f"Spanish twin for showcase {stem} appears not to have translated markdown headings"
 
-    @pytest.mark.parametrize("stem", ["52", "53", "54"])
+    @pytest.mark.parametrize("stem", ["52", "53", "54", "55"])
     def test_template_section_monotonic_ordering(self, stem: str):
         """Verify that all 7 sections appear in monotonic sequential order in English notebook."""
         content = _require_file(NB_PATHS_EN[stem])
@@ -573,16 +633,16 @@ class TestTier3BilingualParityAndCrossFeature:
         )
 
     def test_catalog_readme_integration(self):
-        """Verify notebooks/README.md catalog registers showcase notebooks 52, 53 and 54."""
+        """Verify notebooks/README.md catalog registers showcase notebooks 52, 53, 54, and 55."""
         readme = NB_DIR / "README.md"
         if not readme.exists():
             pytest.skip("notebooks/README.md not found")
         content = readme.read_text(encoding="utf-8")
-        missing = [stem for stem in ["52", "53", "54"]
+        missing = [stem for stem in ["52", "53", "54", "55"]
                    if NOTEBOOK_STEMS[stem] not in content and f"`{stem}`" not in content and f"{stem}_" not in content]
         if missing:
             pytest.skip(f"Showcases {', '.join(missing)} pending Milestone 5 catalog registration in notebooks/README.md")
-        for stem in ["52", "53", "54"]:
+        for stem in ["52", "53", "54", "55"]:
             name = NOTEBOOK_STEMS[stem]
             assert name in content or f"`{stem}`" in content or f"{stem}_" in content, (
                 f"notebooks/README.md catalog table must contain entry for showcase {stem}"
@@ -596,7 +656,7 @@ class TestTier3BilingualParityAndCrossFeature:
 class TestTier4RealWorldScenariosAndExecution:
     """Tier 4: End-to-end dry-run execution via tools/build_notebooks.py --check."""
 
-    @pytest.mark.parametrize("stem", ["52", "53", "54"])
+    @pytest.mark.parametrize("stem", ["52", "53", "54", "55"])
     def test_notebook_build_execution_check_en(self, stem: str):
         """Verify tools/build_notebooks.py executes English showcase cleanly without error."""
         nb_path = NB_PATHS_EN[stem]
@@ -609,7 +669,7 @@ class TestTier4RealWorldScenariosAndExecution:
         rc = mod.build_one(nb_path, check=True)
         assert rc == 0, f"Showcase {nb_path.name} execution check failed with exit code {rc}"
 
-    @pytest.mark.parametrize("stem", ["52", "53", "54"])
+    @pytest.mark.parametrize("stem", ["52", "53", "54", "55"])
     def test_notebook_build_execution_check_es(self, stem: str):
         """Verify tools/build_notebooks.py executes Spanish showcase cleanly without error."""
         nb_path = NB_PATHS_ES[stem]
@@ -636,3 +696,7 @@ class TestTier4RealWorldScenariosAndExecution:
         if NB_PATHS_EN["54"].exists():
             c54 = NB_PATHS_EN["54"].read_text(encoding="utf-8").lower()
             assert ("neural" in c54 or "deep" in c54 or "euler" in c54 or "loss" in c54)
+        # NB 55: Quantitative spatial & trade
+        if NB_PATHS_EN["55"].exists():
+            c55 = NB_PATHS_EN["55"].read_text(encoding="utf-8").lower()
+            assert ("tariff" in c55 or "trade" in c55 or "spatial" in c55 or "caliendo" in c55)

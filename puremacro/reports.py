@@ -118,6 +118,12 @@ def _df_to_markdown(df: pd.DataFrame, index: bool | None = None, *,
                     digits: int | None = None) -> str:
     """Self-contained markdown renderer (avoids the ``tabulate`` dependency).
 
+    Supported internal API: result containers across puremacro (for example
+    ``puremacro.trade.caliendo_parro`` and ``puremacro.models.trade_policy``)
+    render their ``to_markdown``/``to_latex``/``to_typst`` tables with
+    :func:`_df_to_markdown`, :func:`_df_to_latex` and :func:`_df_to_typst`;
+    their signatures are kept stable for those callers.
+
     Parameters
     ----------
     index : bool, optional

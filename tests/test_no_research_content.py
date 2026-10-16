@@ -130,7 +130,6 @@ def _scratch_repo(root: Path, files: dict[str, bytes]) -> Path:
 #: than read back from the module so that a dropped entry fails a test instead
 #: of quietly narrowing the guard.
 _SPEC_PREFIXES = (
-    "puremacro/trade/",
     "reviews/",
     "research_output/",
     "techreport/",
@@ -288,6 +287,32 @@ def test_a_malformed_digest_file_is_refused():
     for bad in ("not a digest\n", "A" * 64 + "\n", "a" * 63 + "\n", "a" * 65 + "\n", good + "<<<<<<< HEAD\n"):
         with pytest.raises(ValueError):
             guard._parse_digests(bad)
+
+
+# The trade package may come back under ``puremacro/trade/`` with clean files, so
+# that directory is no longer a forbidden prefix; the research files that lived
+# in it stay banned one exact path at a time, by digest.
+
+#: Two research files of the trade package that must never return, whatever
+#: is allowed back around them. Only generic names are spelled here; the
+#: maintainer's private guard checks the full list.
+_TRADE_RESEARCH_PATHS = (
+    "puremacro/trade/tables.py",
+    "puremacro/trade/extensions.py",
+)
+
+
+@pytest.mark.parametrize("path", _TRADE_RESEARCH_PATHS)
+def test_trade_research_files_stay_banned(path, tmp_path):
+    repo = _scratch_repo(tmp_path / "r", {path: b""})
+    found = scan_entries(git_entries(repo))
+    assert Finding(path, "forbidden path", "moved path") in found
+
+
+def test_clean_trade_path_allowed(tmp_path):
+    repo = _scratch_repo(tmp_path / "r", {"puremacro/trade/__init__.py": b""})
+    assert list(git_entries(repo)) == [("puremacro/trade/__init__.py", b"")]
+    assert scan_entries(git_entries(repo)) == []
 
 
 # ---------------------------------------------------------------------------

@@ -2,14 +2,14 @@
 
 Before 4.0.0 three separate things tied the project to MATLAB:
 
-* the trade model calibrated from ``data_77c_11s.mat`` in a directory *above*
-  the checkout, so every trade parity suite silently skipped for anyone but
-  the author, and CI reported errors rather than skips;
+* the trade model read its calibration data from outside the distribution,
+  so its suites silently skipped on every other machine, and CI reported
+  errors rather than skips;
 * ``puremacro.dsge`` read Dynare's ``*_results.mat`` through ``scipy.io``;
 * a ``matlab/`` companion toolbox shipped a second, unaudited implementation.
 
-All three are gone, and the trade model has since left the package. These
-tests fail if either of the other two comes back, because the failure mode is
+All three are gone; the trade model reads NumPy tables only. These tests
+fail if any of them comes back, because the failure mode is
 quiet: a module grows a ``scipy.io`` import, or a loader
 reaches outside the distribution, and nobody notices until a stranger tries to
 reproduce a published number.
@@ -98,3 +98,11 @@ def test_removed_module_name_is_gone():
     """``puremacro.dsge.load_dynare`` was renamed; the old path must not resolve."""
     with pytest.raises(ModuleNotFoundError):
         importlib.import_module("puremacro.dsge.load_dynare")
+
+
+def test_trade_mat_input_is_refused_with_a_migration_message():
+    """A ``.mat`` path given to the trade loader raises and names what to do instead."""
+    from puremacro.trade.data import load_icio_data
+
+    with pytest.raises(ValueError, match=r"(?i)no longer supported|savez_compressed"):
+        load_icio_data(path="anything.mat")

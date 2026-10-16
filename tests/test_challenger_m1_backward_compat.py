@@ -29,6 +29,15 @@ import pytest
 from puremacro.dsge._gradients import ScoreDiagnosticsResult
 from puremacro.var.bvar_sv import BVAR_SVForecast
 from puremacro.vfi import HJBSolution, VFIProblem, VFISolution, solve_hjb_achdou
+from puremacro.trade._results import (
+    GearyKhamisResult,
+    NashTariffResult,
+    OptimalTariffResult,
+    ScenarioBatchResult,
+    TradeCalibrationResult,
+    TradeEquilibriumResult,
+    WelfarePayoffMatrixResult,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -353,3 +362,129 @@ def test_notebook_22_execution():
     assert res.returncode == 0, f"Notebook execution failed:\nStdout:\n{res.stdout}\nStderr:\n{res.stderr}"
     assert "HJB Solved in" in res.stdout
     assert "Consumption at a=0" in res.stdout
+
+
+# --- puremacro.trade ---------------------------------------------------------
+
+
+def _make_dummy_eq():
+    return TradeEquilibriumResult(
+        x_sol=np.zeros(19),
+        p_sol=np.ones((1, 2, 2)),
+        y_sol=np.ones((1, 2, 2)) * 50.0,
+        r_sol=np.ones((1, 1, 2)),
+        w_sol=np.ones((1, 1, 2)),
+        T_sol=np.ones((1, 1, 2)) * 5.0,
+        XN_sol=np.array([1.0]),
+        c_sol=np.ones((1, 3, 2)) * 20.0,
+        pfd_sol=np.ones((1, 3, 2)),
+        terms_of_trade=np.array([1.02, 0.98]),
+        country_codes=("CAN", "USA"),
+        sector_codes=("S01", "S02"),
+    )
+
+
+def test_all_trade_results_have_callable_to_typst():
+    """Adversarial loop over all seven trade result classes verifying .to_typst() returns valid Typst table markup."""
+    eq = _make_dummy_eq()
+    gk = GearyKhamisResult(
+        pi=np.ones(3),
+        ppp=np.ones(2),
+        real_gdp=np.array([100.0, 200.0]),
+        nominal_gdp=np.array([100.0, 200.0]),
+        gdp_growth=np.array([0.0, 0.0]),
+        country_codes=("CAN", "USA"),
+    )
+
+    instances = [
+        TradeCalibrationResult(
+            a=np.zeros((4, 2, 2)),
+            afd=np.zeros((4, 3, 2)),
+            alpha=np.full((1, 2, 2), 1 / 3),
+            beta=np.ones((1, 2, 2)),
+            k_endow=np.ones((1, 2)),
+            l_endow=np.ones((1, 2)),
+            invforT=np.zeros((1, 2)),
+            tax=np.zeros((1, 2, 2)),
+            ytot=np.ones((1, 2, 2)),
+            n_countries=2,
+            n_sectors=2,
+            country_codes=("CAN", "USA"),
+            sector_codes=("S01", "S02"),
+        ),
+        eq,
+        gk,
+        ScenarioBatchResult(
+            scenarios={"base": eq},
+            geary_khamis={"base": gk},
+            baseline_scenario="base",
+            country_codes=("CAN", "USA"),
+            sector_codes=("S01", "S02"),
+        ),
+        OptimalTariffResult(
+            country_code="USA",
+            optimal_tariff_rate=0.15,
+            welfare_gain_pct=1.2,
+            baseline_welfare=100.0,
+            optimal_welfare=101.2,
+            welfare_metric="geary_khamis",
+            terms_of_trade_initial=1.0,
+            terms_of_trade_optimal=1.04,
+            tariff_grid=np.linspace(0.0, 0.3, 5),
+            welfare_curve=np.linspace(100.0, 101.2, 5),
+            equilibrium=eq,
+        ),
+        NashTariffResult(
+            strategic_players=("USA", "CHN"),
+            nash_tariffs={"USA": 0.18, "CHN": 0.12},
+            welfare_changes_pct={"USA": -0.5, "CHN": -0.8},
+            terms_of_trade_changes_pct={"USA": 1.2, "CHN": -0.3},
+            world_welfare_change_pct=-0.6,
+            outer_iterations=4,
+            converged=True,
+            outer_error=1e-5,
+            equilibrium=eq,
+            tau_nash=np.ones((2, 2, 2, 2)),
+            tau_fd_nash=np.ones((2, 2, 3, 2)),
+        ),
+        WelfarePayoffMatrixResult(
+            players=("USA", "CHN"),
+            strategies=("C", "D"),
+            payoff_matrix=np.zeros((2, 2, 2)),
+            scenarios={"CC": eq},
+            summary_df=pd.DataFrame({"Player": ["USA"], "C": [0.0]}),
+        ),
+    ]
+
+    for inst in instances:
+        assert hasattr(inst, "to_typst"), f"{type(inst).__name__} missing .to_typst()"
+        out = inst.to_typst()
+        assert isinstance(out, str), f"{type(inst).__name__}.to_typst() did not return str"
+        assert "#table(" in out, f"{type(inst).__name__}.to_typst() missing #table("
+
+
+def test_trade_results_pyodide_ast_purity():
+    """Scan all modified M1 files to ensure zero forbidden module-level imports."""
+    forbidden = {"statsmodels", "linearmodels", "arch", "torch", "numba"}
+    root = Path(__file__).resolve().parent.parent
+
+    target_files = [
+        root / "puremacro/trade/_results.py",
+    ]
+
+    for path in target_files:
+        assert path.exists(), f"File {path} must exist"
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in tree.body:  # Module-level only
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    top_pkg = alias.name.split(".")[0]
+                    assert top_pkg not in forbidden, (
+                        f"Forbidden module-level import '{top_pkg}' in {path}"
+                    )
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    top_pkg = node.module.split(".")[0]
+                    assert top_pkg not in forbidden, (
+                        f"Forbidden module-level from-import '{top_pkg}' in {path}"
+                    )

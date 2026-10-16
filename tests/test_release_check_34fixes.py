@@ -198,7 +198,7 @@ def test_gate1_counts_setup_errors_as_red(monkeypatch):
         stderr = ""
         stdout = (
             "FAILED tests/a.py::test_x - AssertionError\n"
-            "ERROR tests/b.py::TestC::test_y - FileNotFoundError: data_77c_11s.mat\n"
+            "ERROR tests/b.py::TestC::test_y - FileNotFoundError: data.mat\n"
             "1 failed, 1 error in 1.0s\n"
         )
 

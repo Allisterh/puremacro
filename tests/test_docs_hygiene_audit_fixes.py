@@ -32,13 +32,22 @@ from packaging.version import Version
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# The trade pages of both lists left puremacro with the trade engine; the names are kept.
 NEW_TRADE_DOCS = [
     "STRUCTURAL_VALIDATION_STATUS.md",
+    "trade_accounting.md",
+    "trade_welfare.md",
+    "trade_policy.md",
 ]
-# Pages added after 4.3.0 (the stacked Newton-Krylov): same bilingual contract.
+# Pages added after 4.3.0 (the stacked Newton-Krylov and the trade modules): same bilingual contract.
 NEW_MODULE_DOCS = [
     "dsge_stacked_newton.md",
+    "trade_continuation.md",
+    "trade_stability.md",
+    "trade_mrio.md",
+    "trade_condensed.md",
+    "trade_ces_newton.md",
+    "trade_household.md",
+    "trade_dynamic.md",
 ]
 BILINGUAL_PAGES = NEW_TRADE_DOCS + NEW_MODULE_DOCS
 
@@ -238,4 +247,11 @@ def test_m4_figure_table_matches_target_list():
     total = _module_assignment(m4, "EXPECTED_TOTAL_FIGURES")
     assert ast.unparse(total) == "sum(EXPECTED_FIGURES_PER_TARGET.values())", ast.unparse(total)
     assert table["34_penalized_macro_forecasting.ipynb"] == 3
-    assert sum(table.values()) == 29
+    assert sum(table.values()) == 37
+
+
+@pytest.mark.parametrize("page", ["docs/policy_simulators.md", "docs/es/policy_simulators.md"])
+def test_policy_simulators_documents_from_icio(page: str):
+    """The simulators page documents the calibrating constructor and its table argument."""
+    text = (ROOT / page).read_text(encoding="utf-8")
+    assert "from_icio(year, *, tables=None)" in text

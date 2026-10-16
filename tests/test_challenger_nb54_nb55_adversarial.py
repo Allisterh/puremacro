@@ -1,4 +1,4 @@
-"""Adversarial stress test suite for Showcase Notebook 54 and the Allen-Arkolakis model.
+"""Adversarial stress test suite for Showcase Notebook 54 and Showcase Notebook 55.
 
 Authored by Challenger 2 (Empirical Challenger):
 1. Notebook 54 (Deep Macro & PINNs):
@@ -9,14 +9,21 @@ Authored by Challenger 2 (Empirical Challenger):
    - Exact analytical steady-state Euler equation residual evaluation.
    - Policy function monotonicity in capital.
 
-2. Allen-Arkolakis (2014) under large transport cost shocks (cost reductions up to 95%, trade friction increases up to 5x):
-   - Contraction mapping convergence.
-   - Exact labor conservation: |sum L_i - L_bar| < 1e-12.
-   - Spatial price and real wage / indirect utility equalization: std(u_i) / mean(u_i) < 1e-7.
-   - Monotone aggregate spatial welfare responses.
+2. Notebook 55 (Quantitative Spatial Economics & Trade GE):
+   - Caliendo-Parro (2015) under prohibitive tariffs (50%, 100%, 200%, 500%):
+     - Convergence of Exact Hat Algebra.
+     - Goods market clearing residual < 1e-6.
+     - Trade balance identities: |Imports - Exports - Deficit| < 1e-6.
+     - Trade diversion economics (monotone collapse of tariffed bilateral imports, expansion of domestic and ROW shares).
+   - Caliendo-Parro input-output supply chain multiplier verification.
+   - Allen-Arkolakis (2014) under large transport cost shocks (cost reductions up to 95%, trade friction increases up to 5x):
+     - Contraction mapping convergence.
+     - Exact labor conservation: |sum L_i - L_bar| < 1e-12.
+     - Spatial price and real wage / indirect utility equalization: std(u_i) / mean(u_i) < 1e-7.
+     - Monotone aggregate spatial welfare responses.
 
 3. Bilingual Parity & Execution Integrity:
-   - 2-notebook execution integrity (54, 54_es).
+   - 4-notebook execution integrity (54, 54_es, 55, 55_es).
    - Pyodide browser-safe dependencies contract.
 """
 from __future__ import annotations
@@ -30,6 +37,7 @@ import numpy as np
 import pytest
 
 from puremacro.vfi.deep_macro import DeepMacroModel, solve_deep_macro
+from puremacro.trade.caliendo_parro import CaliendoParroModel
 from puremacro.spatial.allen_arkolakis import AllenArkolakisModel
 
 
@@ -231,11 +239,46 @@ class TestNotebook54DeepMacroPINN:
 
 
 # ============================================================================
-# TASK 2: ALLEN-ARKOLAKIS EMPIRICAL STRESS SUITE
+# TASK 2: NOTEBOOK 55 (CALIENDO-PARRO & ALLEN-ARKOLAKIS) EMPIRICAL STRESS SUITE
 # ============================================================================
 
 class TestNotebook55QuantitativeSpatialTradeGE:
-    """Adversarial stress-testing of the Allen-Arkolakis general equilibrium model."""
+    """Adversarial stress-testing of Caliendo-Parro and Allen-Arkolakis general equilibrium models."""
+
+    @pytest.fixture(scope="class")
+    def cp_setup(self) -> CaliendoParroModel:
+        """Construct canonical 3-country, 2-sector Caliendo-Parro model from Notebook 55."""
+        N_cp, J_cp = 3, 2
+        country_codes = ["USA", "CHN", "ROW"]
+        sector_codes = ["Manufactures", "Services"]
+        trade_shares = np.array([
+            [[0.55, 0.25, 0.20], [0.15, 0.70, 0.15], [0.25, 0.25, 0.50]],
+            [[1.00, 0.00, 0.00], [0.00, 1.00, 0.00], [0.00, 0.00, 1.00]],
+        ], dtype=float)
+        gamma_va = np.array([[0.40, 0.60], [0.35, 0.65], [0.45, 0.55]])
+        gamma_io = np.zeros((N_cp, J_cp, J_cp))
+        for n in range(N_cp):
+            for j in range(J_cp):
+                rem = 1.0 - gamma_va[n, j]
+                gamma_io[n, j, 0] = rem * 0.60
+                gamma_io[n, j, 1] = rem * 0.40
+        alpha = np.array([[0.30, 0.70], [0.45, 0.55], [0.35, 0.65]])
+        theta_cp = np.array([5.0, 4.0])
+        labor_income = np.array([120.0, 90.0, 100.0])
+        deficits = np.array([10.0, -10.0, 0.0])
+
+        return CaliendoParroModel(
+            trade_shares=trade_shares,
+            gamma_va=gamma_va,
+            gamma_io=gamma_io,
+            alpha=alpha,
+            theta=theta_cp,
+            labor_income=labor_income,
+            deficits=deficits,
+            nontradables=[1],
+            country_codes=country_codes,
+            sector_codes=sector_codes,
+        )
 
     @pytest.fixture(scope="class")
     def aa_setup(self) -> AllenArkolakisModel:
@@ -256,6 +299,105 @@ class TestNotebook55QuantitativeSpatialTradeGE:
             beta=-0.35,
             total_population=100.0,
         )
+
+    @pytest.mark.parametrize("tariff_rate", [0.15, 0.50, 1.00, 2.00, 5.00])
+    def test_caliendo_parro_high_and_prohibitive_tariffs(
+        self, cp_setup: CaliendoParroModel, tariff_rate: float
+    ):
+        """Stress-test Caliendo-Parro under high and prohibitive tariffs up to 500%."""
+        # Test unilateral tariff shock
+        res_uni = cp_setup.simulate_tariff_shock(
+            importer="USA", exporter="CHN", sector="Manufactures", tariff_rate=tariff_rate
+        )
+        assert res_uni.converged, f"Unilateral solve failed to converge at {tariff_rate*100}% tariff"
+        assert res_uni.market_clearing_residual < 1e-6, (
+            f"Unilateral market clearing residual {res_uni.market_clearing_residual:.2e} >= 1e-6"
+        )
+        assert res_uni.trade_balance_residual < 1e-6, (
+            f"Unilateral trade balance residual {res_uni.trade_balance_residual:.2e} >= 1e-6"
+        )
+
+        # Test bilateral trade war
+        res_war = cp_setup.simulate_trade_war(
+            coalition_a=["USA"], coalition_b=["CHN"], tariff_rate=tariff_rate
+        )
+        assert res_war.converged, f"Trade war solve failed to converge at {tariff_rate*100}% tariff"
+        assert res_war.market_clearing_residual < 1e-6, (
+            f"Trade war market clearing residual {res_war.market_clearing_residual:.2e} >= 1e-6"
+        )
+        assert res_war.trade_balance_residual < 1e-6, (
+            f"Trade war trade balance residual {res_war.trade_balance_residual:.2e} >= 1e-6"
+        )
+
+        # Verify trade diversion: US import share from China collapses
+        assert res_war.pi_prime[0, 0, 1] < cp_setup.trade_shares[0, 0, 1], (
+            "US import share from China must fall under bilateral trade war"
+        )
+        # Domestic absorption rises
+        assert res_war.pi_prime[0, 0, 0] > cp_setup.trade_shares[0, 0, 0], (
+            "US domestic expenditure share must rise under trade war"
+        )
+
+    def test_caliendo_parro_trade_balance_identities(self, cp_setup: CaliendoParroModel):
+        """Verify trade balance identity E_n' - M_n' + D_n' = 0 across all countries and tariffs."""
+        for t_rate in [0.25, 0.50, 1.00]:
+            res = cp_setup.simulate_trade_war(
+                coalition_a=["USA"], coalition_b=["CHN"], tariff_rate=t_rate
+            )
+            # Verify built-in trade balance residual < 1e-6
+            assert res.trade_balance_residual < 1e-6, (
+                f"Trade balance residual {res.trade_balance_residual:.2e} >= 1e-6 at tariff={t_rate}"
+            )
+
+            # Explicitly verify with counterfactual tariff matrix tau_prime
+            N, J = cp_setup.N, cp_setup.J
+            tau_prime = cp_setup.tariffs.copy()
+            for j in range(J):
+                if not cp_setup.is_nontradable[j]:
+                    tau_prime[j, 0, 1] = 1.0 + t_rate  # USA on CHN
+                    tau_prime[j, 1, 0] = 1.0 + t_rate  # CHN on USA
+
+            exports = np.zeros(N)
+            imports = np.zeros(N)
+            for n in range(N):
+                for m in range(N):
+                    if m != n:
+                        exports[n] += np.sum((res.pi_prime[:, m, n] / tau_prime[:, m, n]) * res.X_prime[m, :])
+                        imports[n] += np.sum((res.pi_prime[:, n, m] / tau_prime[:, n, m]) * res.X_prime[n, :])
+
+            # Trade balance deficit D_n' = M_n' - E_n'
+            net_deficit = imports - exports
+            discrepancy = float(np.max(np.abs(net_deficit - cp_setup.deficits)))
+            assert discrepancy < 1e-6, f"Explicit trade balance discrepancy {discrepancy:.2e} >= 1e-6 at tariff={t_rate}"
+
+    def test_caliendo_parro_input_output_amplification(self, cp_setup: CaliendoParroModel):
+        """Verify that intermediate input linkages amplify trade policy distortions."""
+        N_cp, J_cp = cp_setup.N, cp_setup.J
+        gamma_va_noio = np.ones((N_cp, J_cp))
+        gamma_io_noio = np.zeros((N_cp, J_cp, J_cp))
+
+        cp_noio = CaliendoParroModel(
+            trade_shares=cp_setup.trade_shares,
+            gamma_va=gamma_va_noio,
+            gamma_io=gamma_io_noio,
+            alpha=cp_setup.alpha,
+            theta=cp_setup.theta,
+            labor_income=cp_setup.labor_income,
+            deficits=cp_setup.deficits,
+            nontradables=[1],
+            country_codes=cp_setup.country_codes,
+            sector_codes=cp_setup.sector_codes,
+        )
+
+        war_io = cp_setup.simulate_trade_war(["USA"], ["CHN"], tariff_rate=0.25)
+        war_noio = cp_noio.simulate_trade_war(["USA"], ["CHN"], tariff_rate=0.25)
+
+        assert war_io.converged and war_noio.converged
+        assert war_io.market_clearing_residual < 1e-6
+        assert war_noio.market_clearing_residual < 1e-6
+        # Welfare effects must be quantitatively distinct
+        diff = np.max(np.abs(war_io.welfare_pct - war_noio.welfare_pct))
+        assert diff > 0.05, f"Expected input-output amplification difference, got diff={diff:.4f}%"
 
     @pytest.mark.parametrize("cost_reduction", [0.10, 0.30, 0.50, 0.80, 0.95])
     def test_allen_arkolakis_transport_cost_reduction_shocks(
@@ -305,17 +447,19 @@ class TestNotebook55QuantitativeSpatialTradeGE:
 
 
 # ============================================================================
-# TASK 3: SHOWCASE NOTEBOOK 54 EXECUTION & COMPATIBILITY INTEGRITY
+# TASK 3: SHOWCASE NOTEBOOKS 54 & 55 EXECUTION & COMPATIBILITY INTEGRITY
 # ============================================================================
 
 class TestShowcaseNotebooks54And55Integrity:
-    """Verify execution integrity and browser-safe compatibility of notebook 54."""
+    """Verify execution integrity and browser-safe compatibility of notebooks 54 and 55."""
 
     @pytest.mark.parametrize(
         "nb_name",
         [
             "54_deep_macro_pinns_high_dim.py",
             "54_deep_macro_pinns_high_dim_es.py",
+            "55_quantitative_spatial_and_trade_ge.py",
+            "55_quantitative_spatial_and_trade_ge_es.py",
         ],
     )
     def test_notebook_file_exists_and_pyodide_safe(self, nb_name: str):

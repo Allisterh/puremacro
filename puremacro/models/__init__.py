@@ -8,6 +8,8 @@ Currently:
     (Auclert et al. 2021).
   - monetary_transmission: Comparative HANK vs RANK monetary and macroprudential
     transmission simulator (Kaplan, Moll & Violante 2018).
+  - trade_policy: Multi-country multi-sector general equilibrium trade policy
+    simulator (Caliendo & Parro 2015 exact hat algebra).
 """
 from puremacro.models.dmp_regime_dependent import (
     DMPParameters,
@@ -31,6 +33,10 @@ from puremacro.models.monetary_transmission import (
     MonetaryTransmissionResult,
     MonetaryTransmissionSimulator,
 )
+from puremacro.models.trade_policy import (
+    TradePolicySimulationResult,
+    TradePolicySimulator,
+)
 
 __all__ = [
     "DMPParameters",
@@ -49,4 +55,6 @@ __all__ = [
     "solve_nonlinear_transition",
     "MonetaryTransmissionSimulator",
     "MonetaryTransmissionResult",
+    "TradePolicySimulator",
+    "TradePolicySimulationResult",
 ]

@@ -418,6 +418,14 @@ vivo están marcadas con `VERIFY_ONLINE`.
 - **Equilibrio espacial de Allen-Arkolakis (2014)** (`spatial.allen_arkolakis`) — Equilibrio general geográfico continuo con costes de transporte bilateral tipo iceberg, movilidad laboral, aglomeración marshalliana ($\alpha$) y congestión de amenidades ($\beta$) (`AllenArkolakisModel`).
 - **Estado de validación** — `docs/es/STRUCTURAL_VALIDATION_STATUS.md` indica, superficie por superficie, el cálculo soportado, el contrato de aceptación y los límites pendientes.
 
+**Equilibrio general de comercio internacional (`puremacro.trade`, puremacro 5.2)**
+
+- **Modelo de comercio multinacional y multisectorial** (`trade.calibrate_trade_model`, `trade.solve_trade_equilibrium`, `trade.TariffScenario`, `trade.run_scenario`) — Eslabonamientos insumo-producto, aranceles bilaterales sobre bienes intermedios y finales, y contabilidad consistente a precios de productor y de comprador: costes de los factores homogéneos, derechos valorados a precios del exportador y devueltos una sola vez, ahorro externo fijo y un numerario explícito. Cualquier número de países y sectores; las dimensiones, los países y los sectores salen de la tabla o de los argumentos. Véase `docs/es/trade_accounting.md`.
+- **Bienestar y política arancelaria** (`trade.compute_hicksian_welfare`, `trade.solve_policy_equilibrium`, `trade.optimal_tariffs`, `trade.game`) — VE/VC por función de gasto con atribución exacta por extremos, recuperación auditada Newton → híbrido → continuación, aranceles óptimos y juegos arancelarios de Nash. Véanse `docs/es/trade_welfare.md` y `docs/es/trade_policy.md`.
+- **Álgebra exacta de sombreros de Caliendo-Parro (2015)** (`trade.CaliendoParroModel`, `models.trade_policy.TradePolicySimulator`) — Aranceles contrafactuales sin estimar fundamentos no observados; `TradePolicySimulator.from_icio(2019)` se calibra con la tabla incluida.
+- **Extensiones** — el CGE flexible (`trade.solve_flexible_trade_equilibrium`: CES anidada, Stone-Geary, Armington, márgenes de Atkeson-Burstein), el Newton por bloques exacto para CES anidada (`trade.ces_newton`), la demanda de los hogares y la incidencia distributiva (`trade.household`, `trade.distributional`), la continuación auditada (`trade.continuation`), un diagnóstico de estabilidad local (`trade.stability`), las tablas MRIO nativas (`trade.mrio`), el modelo arancelario de Leontief condensado (`trade.condensed`), un MRIO dinámico con previsión perfecta (`trade.dynamic`) y solvers opcionales en torch/MLX (`trade.gpu`).
+- **Datos** — `trade.data.load_icio_data()` lee la tabla OCDE ICIO 2019 incluida (19 países del G20 más un resto del mundo, 20 secciones de la CIIU Rev. 4), que `tools/build_icio_isic.py` reconstruye a partir del archivo de la OCDE; `trade.data.synthetic_icio_table(nc, ns, seed=...)` genera una tabla sintética de cualquier tamaño. Véase «Datos incluidos y atribución» más abajo.
+
 **Simulador de política monetaria y laboratorio en navegador (puremacro 4.1)**
 
 - **Simulador de transmisión monetaria y macroprudencial** (`models.monetary_transmission.MonetaryTransmissionSimulator`) — Motor comparativo HANK vs. RANK de transmisión de política con la descomposición de Kaplan-Moll-Violante (2018) entre canales directos e indirectos a través de 10 deciles de riqueza de una calibración estilizada (un gradiente pronunciado de PMC en HANK frente a la PMC plana de $1-\beta$ en RANK). Véase `docs/es/monetary_transmission.md`.
@@ -731,7 +739,7 @@ Si proviene de Stata, MATLAB/Dynare o statsmodels:
 
 Las replicaciones de extremo a extremo de artículos canónicos y cuadernos pedagógicos se encuentran en `notebooks/` y `puremacro/examples/`:
 - **Replicaciones de resultados publicados**: discreción óptima, regla simple y compromiso atemporal de Clarida, Galí y Gertler (1999) verificados fórmula por fórmula, con la advertencia sobre pérdidas incondicionales y condicionales (`66`), las tablas de Huggett (1993) y Aiyagari (1994) resueltas de nuevo, con cotas de error numérico, un solucionador independiente y el efecto de la cadena de Markov (`67`), y la perturbación de tercer orden verificada tensor por tensor con formas cerradas y Dynare 7.0 en vivo (`68`).
-- **Nowcasting regional y ML causal**: nowcasting sintético de América Latina con atribución de noticias por añadas (`59`) y Double ML interactivo IRM y DML-IV (`60`).
+- **Nowcasting regional, ML causal y política comercial**: nowcasting sintético de América Latina con atribución de noticias por añadas (`59`), Double ML interactivo IRM y DML-IV (`60`), simuladores de política comercial y HANK (`61`), bloques del CGE comercial flexible (`62`), juegos arancelarios hicksianos con recuperación auditada del equilibrio (`63`), cotas espectrales y continuación de Keller (`64`), y cascadas de costes en cadenas globales de valor con atribución de la VE/VC hicksiana (`65`).
 - **ML causal, HJB en tiempo continuo y tiempo real regional**: HJB implícito con KFE adjunta y EG de Aiyagari (`56`), OccBin multirrestricción acoplado con DML (`57`) y añadas macroeconómicas en tiempo real de América Latina (`58`).
 - **DP continuo y Deep Macro**: Chebyshev vs FEM Galerkin (`51`), dinámica de transición continua bajo choques MIT (`52`), sensibilidades paramétricas IFT y estimación GMM (`53`) y PINNs de Deep Macro con 10 estados (`54`).
 - **Escaparates de política aplicada**: Postura de política monetaria de bancos centrales y abanicos de proyección (`47`), nowcasting DFM en tiempo real y descomposición de noticias (`48`), GaR macroprudencial y conectividad sistémica (`49`), y multiplicadores fiscales trimétodo con DSA soberano (`50`).
@@ -752,9 +760,22 @@ Todos los cuadernos cumplen estrictamente el contrato con Pyodide y la arquitect
 - **`docs/es/vfi_continuous_transition.md`** — Dinámica de transición continua no lineal bajo choques MIT inesperados y solvers Quasi-Newton Broyden en espacio de secuencias.
 - **`docs/es/vfi_analytic_gradients.md`** — Gradientes y jacobianos paramétricos mediante el Teorema de la Función Implícita (IFT) para estimación estructural GMM/SMM (alcance de agente representativo).
 - **`docs/es/deep_macro.md`** — Deep Macro y Redes Neuronales Informadas por la Física (PINNs) en puro NumPy para modelos dinámicos de ultra alta dimensión (10+ estados continuos) mediante muestreo ergódico.
-- **`docs/es/spatial_and_trade_ge.md`** — Equilibrio general espacial cuantitativo: geografía económica de Allen-Arkolakis (2014) con movilidad laboral, aglomeración y congestión.
+- **`docs/es/spatial_and_trade_ge.md`** — Economía espacial cuantitativa y GE de comercio con gravedad: álgebra exacta de sombreros de Caliendo-Parro (2015) con eslabonamientos insumo-producto y aranceles, geografía económica de Allen-Arkolakis (2014) con movilidad laboral, aglomeración y congestión, y la tabla OCDE ICIO incluida con su atribución.
 - **`docs/es/STRUCTURAL_VALIDATION_STATUS.md`** — Estado de validación de los solvers estructurales: contratos de aceptación, evidencia y límites pendientes, superficie por superficie, para los solvers DSGE y VFI.
 - **`docs/es/dsge_stacked_newton.md`** — Newton-Krylov apilado en el tiempo sin matriz para sistemas de previsión perfecta (`puremacro.dsge.stacked_newton`): precondicionadores, regla de aceptación, comparación de horizontes y qué está validado y qué no.
+- **`docs/es/trade_accounting.md`** — Contabilidad a precios de productor y de comprador del modelo de comercio multinacional (`puremacro.trade`): valoración de aranceles, ingresos fiscales, el cierre de ahorro externo fijo, el numerario y la comprobación independiente de dos países.
+- **`docs/es/trade_welfare.md`** — Bienestar hicksiano de consumo (`compute_hicksian_welfare`): VE/VC por función de gasto entre dos equilibrios comerciales y la atribución exacta por extremos a precios, renta de los factores y transferencias fiscales.
+- **`docs/es/trade_policy.md`** — Política arancelaria hicksiana (`metric="hicksian_ev"`) y recuperación auditada del equilibrio (`solve_policy_equilibrium`).
+- **`docs/es/trade_continuation.md`** — Continuación auditada de parámetros y arranques múltiples en un objetivo exacto (`puremacro.trade.continuation`).
+- **`docs/es/trade_stability.md`** — Diagnóstico de estabilidad local reducida de un tanteo de precios relativos de los factores (`puremacro.trade.stability`, experimental).
+- **`docs/es/policy_simulators.md`** — Simuladores de política macroeconómica y laboratorios interactivos: equilibrio general de comercio cuantitativo de Caliendo-Parro (2015), transmisión monetaria HANK frente a RANK y laboratorios WebAssembly en el navegador.
+- **`docs/es/trade_household.md`** — Preferencias del hogar con bienestar exacto por función de gasto (`puremacro.trade.household`): canastas fijas, demanda Cobb-Douglas, Stone-Geary y CES, matrices de Slutsky y puentes con los equilibrios de comercio.
+- **`docs/es/trade_distributional.md`** — Incidencia distributiva en los hogares (`puremacro.trade.distributional`): EV y CV estáticas exactas de grupos de hogares a precios e ingresos dados, de equilibrio parcial por diseño.
+- **`docs/es/trade_ces_newton.md`** — Newton por bloques exacto para tecnología CES anidada sobre la contabilidad consistente (`puremacro.trade.ces_newton`): jacobiano exacto, homotopía arancelaria y un certificado de flujos independiente.
+- **`docs/es/trade_condensed.md`** — Modelo arancelario de Leontief condensado con un factor (`puremacro.trade.condensed`): condensación exacta de 2N, certificado de flujos brutos y medidas independientes del numerario.
+- **`docs/es/trade_mrio.md`** — Tablas MRIO nativas (`puremacro.trade.mrio`): lectores de OCDE ICIO, FIGARO y EXIOBASE con procedencia, el contrato de regularización y la agregación exacta.
+- **`docs/es/trade_dynamic.md`** — MRIO dinámico con capital específico por sector (`puremacro.trade.dynamic`): estados estacionarios, transiciones con previsión perfecta, aceptación del horizonte y el diagnóstico de determinación.
+- **`docs/es/trade_gpu.md`** — Backends de hardware para comercio y GE espacial (`puremacro.trade.gpu`): jacobianos por lotes en PyTorch y Apple MLX, la política float64 y la continuación homotópica.
 - **`docs/es/data_ecosystem.md`** — Ecosistema de datos macro globales: emisiones, transición energética, materias primas, estabilidad financiera internacional y constructores modulares de panel (`build_climate_panel`, `build_financial_panel`).
 - **`docs/es/notebooks.md`** — Catálogo completo de cuadernos (00–68), arquitectura pedagógica de 7 secciones y suites de política aplicada.
 - **`docs/es/dsge_build.md`** — Modelos DSGE desde ecuaciones, cargador de archivos `.mod`, poda de 2do orden, CLI `puremacro-dynare`, OccBin ZLB, relajación no lineal y MCMC bayesiano.
@@ -788,9 +809,26 @@ Todos los cuadernos cumplen estrictamente el contrato con Pyodide y la arquitect
 - **Objetos de resultado como dataclass congelado** para cualquier estimador que devuelva 3 o más campos o diagnósticos no triviales (véase `ARCHITECTURE.md` § Result-object standard). Los DataFrames con columnas nombradas quedan exentos.
 - **Errores de diagnóstico en lugar de resultados silenciosos incorrectos** — `X'X` singular, Σ no definida positiva, violaciones de la condición de Blanchard-Kahn y replicaciones bootstrap mal condicionadas generan excepciones o advertencias que identifican la función invocante y la causa probable.
 
+## Datos incluidos y atribución
+
+puremacro tiene licencia MIT, pero el wheel incluye además una tabla adaptada de
+las **tablas insumo-producto entre países de la OCDE (ICIO)** (edición 2023, año
+de referencia 2019), para que `puremacro.trade` se calibre sin pedirle un
+archivo. Las condiciones de uso de la OCDE permiten reutilizar y adaptar los
+datos citando la fuente.
+
+**Si publica resultados calculados con ella, cite a la OCDE** — «OECD (2023),
+OECD Inter-Country Input-Output Tables, http://oe.cd/icio» — y no a puremacro.
+La OCDE no está afiliada a este proyecto ni lo respalda. La licencia MIT cubre el
+código de puremacro, no estos datos de terceros.
+
+El aviso completo, con la concordancia, la regla de países, las sumas de
+verificación y la orden que reconstruye el archivo, se distribuye como
+`puremacro/trade/_datafiles/SOURCES.md`.
+
 ## Estado
 
-Versión actual: **5.1.0**. La versión 4.8.1 es la última con los módulos de comercio/MRIO y los estudios de investigación (`pip install "puremacro<5"`). Los [niveles de estabilidad](ARCHITECTURE.md#stability-tiers)
+Versión actual: **5.1.0**. La versión 4.8.1 es la última con los estudios de investigación (`pip install "puremacro<5"`); `puremacro.trade`, con sus módulos MRIO y sin la investigación, vuelve en la 5.2.0. Los [niveles de estabilidad](ARCHITECTURE.md#stability-tiers)
 identifican las superficies estables, experimentales y de soporte limitado.
 Los cálculos estructurales tienen [límites de validación](docs/es/STRUCTURAL_VALIDATION_STATUS.md)
 adicionales.

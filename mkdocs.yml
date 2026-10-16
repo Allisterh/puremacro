@@ -87,6 +87,7 @@ nav:
           - Sequence-Space HANK: models.md
           - Non-Linear HANK Transitions: hank_nonlinear.md
           - Monetary Transmission Simulator: monetary_transmission.md
+          - Macroeconomic Policy Simulators & Browser Labs: policy_simulators.md
           - Gertler-Karadi (2011) DSGE: gertler_karadi.md
           - Climate Macro (DICE): climate.md
           - DSGE Sketchpad & Dynare: dsge_build.md
@@ -107,7 +108,19 @@ nav:
           - Parameter Gradients (IFT): vfi_analytic_gradients.md
       - Frontier Macro & Spatial Economics:
           - Deep Macro & Neural Networks: deep_macro.md
-          - Quantitative Spatial General Equilibrium: spatial_and_trade_ge.md
+          - Quantitative Spatial Economics & Gravity Trade GE: spatial_and_trade_ge.md
+          - Consistent trade accounting: trade_accounting.md
+          - Hicksian consumption welfare: trade_welfare.md
+          - Hicksian tariff policy and solver recovery: trade_policy.md
+          - Parameter continuation and multistart: trade_continuation.md
+          - Reduced local stability (experimental): trade_stability.md
+          - Household preferences and exact welfare: trade_household.md
+          - Distributional household incidence: trade_distributional.md
+          - Exact CES block Newton: trade_ces_newton.md
+          - Condensed one-factor Leontief model: trade_condensed.md
+          - Native MRIO tables: trade_mrio.md
+          - Dynamic MRIO with sector-specific capital: trade_dynamic.md
+          - GPU, MLX and batched Jacobians: trade_gpu.md
       - Running Anywhere (iPad / browser): tablet.md
       - Local language models (iPad, Mac, Windows, Linux, Colab): local_llm.md
       - Performance & Benchmarks: benchmarks.md
@@ -162,6 +175,7 @@ nav:
           - HANK en el espacio de secuencias: es/models.md
           - Transiciones no lineales en HANK: es/hank_nonlinear.md
           - Simulador de transmisión monetaria: es/monetary_transmission.md
+          - Simuladores de política macroeconómica y laboratorios interactivos: es/policy_simulators.md
           - DSGE de Gertler-Karadi (2011): es/gertler_karadi.md
           - Macroeconomía del clima (DICE): es/climate.md
           - Cuaderno de bocetos DSGE y Dynare: es/dsge_build.md
@@ -182,7 +196,19 @@ nav:
           - Gradientes paramétricos (TFI): es/vfi_analytic_gradients.md
       - Macroeconomía de frontera y economía espacial:
           - Deep Macro y redes neuronales: es/deep_macro.md
-          - Equilibrio general espacial cuantitativo: es/spatial_and_trade_ge.md
+          - Economía espacial cuantitativa y GE de comercio con gravedad: es/spatial_and_trade_ge.md
+          - Contabilidad comercial consistente: es/trade_accounting.md
+          - Bienestar hicksiano de consumo: es/trade_welfare.md
+          - Política arancelaria hicksiana y recuperación del solver: es/trade_policy.md
+          - Continuación de parámetros y arranques múltiples: es/trade_continuation.md
+          - Estabilidad local reducida (experimental): es/trade_stability.md
+          - Preferencias del hogar y bienestar exacto: es/trade_household.md
+          - Incidencia distributiva en los hogares: es/trade_distributional.md
+          - Newton por bloques exacto para CES: es/trade_ces_newton.md
+          - Modelo de Leontief condensado con un factor: es/trade_condensed.md
+          - Tablas MRIO nativas: es/trade_mrio.md
+          - MRIO dinámico con capital específico por sector: es/trade_dynamic.md
+          - GPU, MLX y jacobianos por lotes: es/trade_gpu.md
       - Ejecución en cualquier entorno (iPad / navegador): es/tablet.md
       - Modelos de lenguaje locales (iPad, Mac, Windows, Linux, Colab): es/local_llm.md
       - Rendimiento y pruebas comparativas: es/benchmarks.md

@@ -25,6 +25,15 @@ import pytest
 from puremacro.dsge._gradients import ScoreDiagnosticsResult
 from puremacro.var.bvar_sv import BVAR_SVForecast
 from puremacro.vfi import HJBSolution, VFISolution, solve_hjb_achdou
+from puremacro.trade._results import (
+    GearyKhamisResult,
+    NashTariffResult,
+    OptimalTariffResult,
+    ScenarioBatchResult,
+    TradeCalibrationResult,
+    TradeEquilibriumResult,
+    WelfarePayoffMatrixResult,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -463,3 +472,280 @@ def test_hjb_solution_presentation_and_headless_plot():
         assert called_show, "plt.show() was not invoked when show=True!"
     finally:
         plt.show = orig_show
+
+
+# --- puremacro.trade ---------------------------------------------------------
+
+
+ADVERSARIAL_CODES = ("US#1", "CA$2", "MX*3", "DE_4", "FR[5]", "GB]6", "IT<7>", "JP>8", "AU~9", "BR@10")
+
+
+ADVERSARIAL_SECTORS = ("Sec#*", "Sec$_[]", "Sec<~>@")
+
+
+def _make_adversarial_equilibrium(
+    country_codes: tuple[str, ...] = ADVERSARIAL_CODES[:2],
+    sector_codes: tuple[str, ...] = ADVERSARIAL_SECTORS[:2],
+    values: float = 1.0,
+) -> TradeEquilibriumResult:
+    nc = len(country_codes)
+    ns = len(sector_codes)
+    return TradeEquilibriumResult(
+        x_sol=np.full(2 * ns * nc + 2 * nc + nc + nc - 1, values),
+        p_sol=np.full((1, ns, nc), values),
+        y_sol=np.full((1, ns, nc), values * 50.0),
+        r_sol=np.full((1, 1, nc), values),
+        w_sol=np.full((1, 1, nc), values),
+        T_sol=np.full((1, 1, nc), values * 5.0),
+        XN_sol=np.array([values]),
+        c_sol=np.full((1, 3, nc), values * 20.0),
+        pfd_sol=np.full((1, 3, nc), values),
+        terms_of_trade=np.full(nc, values),
+        country_codes=country_codes,
+        sector_codes=sector_codes,
+    )
+
+
+def test_trade_calibration_to_typst_special_characters():
+    """Adversarial test: TradeCalibrationResult with special characters in country and sector codes."""
+    codes = ("US#1", "CA$2")
+    s_codes = ("Sec#*", "Sec$_[]")
+    calib = TradeCalibrationResult(
+        a=np.ones((4, 2, 2)),
+        afd=np.ones((4, 3, 2)),
+        alpha=np.full((1, 2, 2), 0.33),
+        beta=np.ones((1, 2, 2)),
+        k_endow=np.ones((1, 2)),
+        l_endow=np.ones((1, 2)),
+        invforT=np.zeros((1, 2)),
+        tax=np.zeros((1, 2, 2)),
+        ytot=np.ones((1, 2, 2)),
+        n_countries=2,
+        n_sectors=2,
+        country_codes=codes,
+        sector_codes=s_codes,
+    )
+    # Detailed
+    typ_det = calib.to_typst(detailed=True)
+    info_det = validate_typst_table(typ_det)
+    assert info_det["n_rows"] == 3  # 1 header + 2 countries
+    assert r"US\#1" in typ_det
+    assert r"CA\$2" in typ_det
+
+    # Aggregate
+    typ_agg = calib.to_typst(detailed=False)
+    info_agg = validate_typst_table(typ_agg)
+    assert info_agg["n_rows"] == 10  # 1 header + 9 metrics
+
+
+def test_trade_equilibrium_to_typst_special_characters():
+    """Adversarial test: TradeEquilibriumResult with special characters in codes."""
+    codes = ("US#1", "CA$2")
+    s_codes = ("Sec#*", "Sec$_[]")
+    eq = _make_adversarial_equilibrium(country_codes=codes, sector_codes=s_codes)
+
+    typ_det = eq.to_typst(detailed=True)
+    info_det = validate_typst_table(typ_det)
+    assert info_det["n_rows"] == 3
+    assert r"US\#1" in typ_det
+    assert r"CA\$2" in typ_det
+
+    typ_agg = eq.to_typst(detailed=False)
+    info_agg = validate_typst_table(typ_agg)
+    assert info_agg["n_rows"] >= 8
+
+
+def test_geary_khamis_to_typst_special_characters():
+    """Adversarial test: GearyKhamisResult with special characters."""
+    codes = ("US#1", "CA$2", "MX*3")
+    gk = GearyKhamisResult(
+        pi=np.ones(3),
+        ppp=np.ones(3),
+        real_gdp=np.array([100.0, 200.0, 300.0]),
+        nominal_gdp=np.array([100.0, 200.0, 300.0]),
+        gdp_growth=np.array([0.01, -0.02, 0.05]),
+        country_codes=codes,
+    )
+    typ_det = gk.to_typst(detailed=True)
+    info_det = validate_typst_table(typ_det)
+    assert info_det["n_rows"] == 4
+    assert r"US\#1" in typ_det
+    assert r"CA\$2" in typ_det
+    assert r"MX\*3" in typ_det
+
+    typ_agg = gk.to_typst(detailed=False)
+    info_agg = validate_typst_table(typ_agg)
+    assert info_agg["n_rows"] == 8  # header + seven metrics
+
+
+def test_scenario_batch_to_typst_special_characters():
+    """Adversarial test: ScenarioBatchResult with special characters in scenario and country names."""
+    codes = ("US#1", "CA$2")
+    s_codes = ("Sec#*", "Sec$_[]")
+    eq = _make_adversarial_equilibrium(country_codes=codes, sector_codes=s_codes)
+    gk = GearyKhamisResult(
+        pi=np.ones(3),
+        ppp=np.ones(2),
+        real_gdp=np.array([100.0, 200.0]),
+        nominal_gdp=np.array([100.0, 200.0]),
+        gdp_growth=np.array([0.0, 0.0]),
+        country_codes=codes,
+    )
+    batch = ScenarioBatchResult(
+        scenarios={"base#0": eq, "shock$1*": eq},
+        geary_khamis={"base#0": gk, "shock$1*": gk},
+        baseline_scenario="base#0",
+        country_codes=codes,
+        sector_codes=s_codes,
+    )
+    typ_growth = batch.to_typst()
+    validate_typst_table(typ_growth)
+    assert r"shock\$1\*" in typ_growth
+    assert r"US\#1" in typ_growth
+
+    typ_tb = batch.to_typst(metric="trade_balance")
+    validate_typst_table(typ_tb)
+    assert r"shock\$1\*" in typ_tb
+
+
+def test_optimal_tariff_to_typst_special_characters():
+    """Adversarial test: OptimalTariffResult with special characters in country code."""
+    eq = _make_adversarial_equilibrium()
+    res = OptimalTariffResult(
+        country_code="US#1_$*",
+        optimal_tariff_rate=0.15,
+        welfare_gain_pct=1.2,
+        baseline_welfare=100.0,
+        optimal_welfare=101.2,
+        welfare_metric="geary_khamis",
+        terms_of_trade_initial=1.0,
+        terms_of_trade_optimal=1.04,
+        tariff_grid=np.linspace(0.0, 0.3, 5),
+        welfare_curve=np.linspace(100.0, 101.2, 5),
+        equilibrium=eq,
+    )
+    typ = res.to_typst()
+    info = validate_typst_table(typ)
+    assert info["n_rows"] == 11  # 1 header + 10 metrics
+    assert r"US\#1\_\$\*" in typ
+
+
+def test_nash_tariff_to_typst_special_characters():
+    """Adversarial test: NashTariffResult with special characters in player codes."""
+    eq = _make_adversarial_equilibrium()
+    players = ("US#1", "CN$2")
+    res = NashTariffResult(
+        strategic_players=players,
+        nash_tariffs={p: 0.15 for p in players},
+        welfare_changes_pct={p: -0.5 for p in players},
+        terms_of_trade_changes_pct={p: 1.0 for p in players},
+        world_welfare_change_pct=-0.6,
+        outer_iterations=4,
+        converged=True,
+        outer_error=1e-5,
+        equilibrium=eq,
+        tau_nash=np.ones((2, 2, 2, 2)),
+        tau_fd_nash=np.ones((2, 2, 3, 2)),
+    )
+    typ = res.to_typst()
+    info = validate_typst_table(typ)
+    assert info["n_rows"] == 3
+    assert r"US\#1" in typ
+    assert r"CN\$2" in typ
+
+
+def test_welfare_payoff_matrix_to_typst_special_characters():
+    """Adversarial test: WelfarePayoffMatrixResult with special characters in player and strategy names."""
+    eq = _make_adversarial_equilibrium()
+    players = ("US#1", "CN$2")
+    strategies = ("Coop#0", "Defect$1*")
+    res = WelfarePayoffMatrixResult(
+        players=players,
+        strategies=strategies,
+        payoff_matrix=np.array([[[0.0, 0.0], [-1.0, 0.5]], [[0.5, -1.0], [-0.5, -0.5]]]),
+        scenarios={"CC": eq, "CD": eq, "DC": eq, "DD": eq},
+        summary_df=pd.DataFrame({
+            "Player": [players[0], players[1]],
+            strategies[0]: [0.0, 0.0],
+            strategies[1]: [-0.5, -0.5],
+        }),
+    )
+    typ = res.to_typst()
+    info = validate_typst_table(typ)
+    assert info["n_rows"] == 3
+    assert r"US\#1" in typ
+    assert r"CN\$2" in typ
+    assert r"Coop\#0" in typ
+    assert r"Defect\$1\*" in typ
+
+
+@pytest.mark.parametrize("extreme_val", [np.nan, np.inf, -np.inf, 1e308, 1e-308, 0.0, -0.0])
+def test_trade_results_extreme_numbers(extreme_val: float):
+    """Stress-test trade result classes when populated with extreme numerical values."""
+    codes = ("CAN", "USA")
+    eq = _make_adversarial_equilibrium(values=extreme_val)
+    typ = eq.to_typst(detailed=True)
+    validate_typst_table(typ)
+
+    typ_agg = eq.to_typst(detailed=False)
+    validate_typst_table(typ_agg)
+
+    # GearyKhamisResult with extreme numbers
+    gk = GearyKhamisResult(
+        pi=np.full(3, extreme_val),
+        ppp=np.full(2, extreme_val),
+        real_gdp=np.full(2, extreme_val),
+        nominal_gdp=np.full(2, extreme_val),
+        gdp_growth=np.full(2, extreme_val),
+        country_codes=codes,
+        world_nominal_gdp=extreme_val,
+        world_real_gdp=extreme_val,
+    )
+    typ_gk = gk.to_typst(detailed=True)
+    validate_typst_table(typ_gk)
+
+
+def test_single_country_single_sector_boundary():
+    """Boundary test: nc=1, ns=1 minimal world model."""
+    codes = ("SOLO#1",)
+    s_codes = ("SECT$1",)
+    
+    # 1 country, 1 sector calibration
+    calib = TradeCalibrationResult(
+        a=np.ones((1, 1, 1)),
+        afd=np.ones((1, 3, 1)),
+        alpha=np.full((1, 1, 1), 0.33),
+        beta=np.ones((1, 1, 1)),
+        k_endow=np.ones((1, 1)),
+        l_endow=np.ones((1, 1)),
+        invforT=np.zeros((1, 1)),
+        tax=np.zeros((1, 1, 1)),
+        ytot=np.ones((1, 1, 1)),
+        n_countries=1,
+        n_sectors=1,
+        country_codes=codes,
+        sector_codes=s_codes,
+    )
+    typ_det = calib.to_typst(detailed=True)
+    info_det = validate_typst_table(typ_det)
+    assert info_det["n_rows"] == 2  # 1 header + 1 country
+    assert r"SOLO\#1" in typ_det
+
+    # 1 country equilibrium
+    eq = _make_adversarial_equilibrium(country_codes=codes, sector_codes=s_codes)
+    typ_eq = eq.to_typst(detailed=True)
+    info_eq = validate_typst_table(typ_eq)
+    assert info_eq["n_rows"] == 2
+
+    # 1 country Geary-Khamis
+    gk = GearyKhamisResult(
+        pi=np.ones(1),
+        ppp=np.ones(1),
+        real_gdp=np.array([500.0]),
+        nominal_gdp=np.array([500.0]),
+        gdp_growth=np.array([0.0]),
+        country_codes=codes,
+    )
+    typ_gk = gk.to_typst(detailed=True)
+    info_gk = validate_typst_table(typ_gk)
+    assert info_gk["n_rows"] == 2

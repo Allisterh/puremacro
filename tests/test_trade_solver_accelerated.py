@@ -4,6 +4,7 @@ Verifies:
 1. Array namespace and backend detection utilities (_backend.py).
 2. Tensor contraction equivalence: xp.sum(a * b[None, :, :], axis=2) vs einsum.
 3. Allen & Arkolakis spatial general equilibrium with hardware acceleration and fallback.
+4. The trade equilibrium solver: NumPy only, and other backends are refused.
 """
 from __future__ import annotations
 
@@ -115,3 +116,60 @@ def test_allen_arkolakis_backend_acceleration():
         res_fallback = model.solve_equilibrium(backend="cupy")
     assert res_fallback.converged is True
     np.testing.assert_allclose(res_np.wages, res_fallback.wages, atol=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# Trade general equilibrium
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def toy_trade_calib():
+    """Construct a minimal 2-country, 2-sector, 3-final-demand calibration."""
+    from puremacro.trade.calibration import calibrate_trade_model
+
+    nc, ns, nfd = 2, 2, 3
+    data = np.zeros((7, 10), dtype=float)
+    data[:4, :4] = np.array([
+        [20.0, 15.0, 5.0, 2.0],
+        [10.0, 25.0, 2.0, 8.0],
+        [5.0, 5.0, 12.0, 18.0],
+        [10.0, 10.0, 18.0, 22.0],
+    ])
+    y = np.array([100.0, 150.0, 120.0, 180.0])
+    va = y - data[:4, :4].sum(axis=0)
+    taxes = 0.05 * y
+    data[4, :4] = taxes
+    data[5, :4] = (2.0 / 3.0) * (va - taxes)
+    data[6, :4] = (1.0 / 3.0) * (va - taxes)
+    fd_row_sums = y - data[:4, :4].sum(axis=1)
+    home, away = [0.50, 0.25, 0.05], [0.10, 0.08, 0.02]
+    for i in range(4):
+        data[i, 4:10] = fd_row_sums[i] * np.array(home + away if i < 2 else away + home)
+    data[4, 4:] = 0.02 * data[:4, 4:].sum(axis=0)
+    return calibrate_trade_model(data, ns=ns, nc=nc, nfd=nfd, validate=True)
+
+
+def test_trade_equilibrium_runs_on_numpy_and_refuses_other_backends(toy_trade_calib):
+    """The trade solver iterates on NumPy; an accelerator backend is refused, not ignored.
+
+    A tariff-shocked problem makes the solver iterate (the unshocked calibration
+    is already an equilibrium). ``method="condensed"`` is the damped Newton solver.
+    """
+    from puremacro.trade.solver import solve_trade_equilibrium
+
+    ns, nc, nfd = 2, 2, 3
+    tau = np.ones((ns, nc, ns, nc))
+    tau_fd = np.ones((ns, nc, nfd, nc))
+    tau[:, 1, :, 0] = 1.25  # country 0 imposes 25% on imports from country 1
+    tau_fd[:, 1, :, 0] = 1.25
+
+    res_np = solve_trade_equilibrium(toy_trade_calib, tau=tau, tau_fd=tau_fd, method="condensed", backend="numpy")
+    assert res_np.converged is True
+    assert res_np.iterations > 0
+    assert res_np.max_residual < 2.5e-3
+    assert res_np.metadata["backend"] == "numpy"
+    assert res_np.metadata["effective_method"] == "newton"
+
+    for backend in ("mlx", "cupy"):
+        with pytest.raises(NotImplementedError, match="NumPy"):
+            solve_trade_equilibrium(toy_trade_calib, tau=tau, tau_fd=tau_fd, method="condensed", backend=backend)

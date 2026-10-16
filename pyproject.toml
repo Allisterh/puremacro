@@ -9,7 +9,7 @@ name = "puremacro"
 # puremacro/__init__.py (`__version__`), the top `## X.Y.Z` heading in
 # CHANGELOG.md, `version:` in CITATION.cff, and the wheel pin in
 # playground/jupyter_lite_config.json.
-version = "5.1.0"
+version = "5.2.0"
 description = "Pyodide-compatible empirical macro toolbox: SVAR + LP + GARCH + inference"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -155,6 +155,8 @@ include = ["puremacro*"]
 # they did before 1.2.0.
 "puremacro.datasets" = ["data/*.csv", "data/*.json"]
 "puremacro.validation.goldens" = ["*.json"]
+# The bundled OECD ICIO table (G20 + ROW, ISIC Rev.4 sections) and its terms.
+"puremacro.trade" = ["_datafiles/*.npz", "_datafiles/SOURCES.md"]
 # *.npz: the SW07 posterior fixture the dsge_estimation replication cases read
 # (through 4.3.0 it was read from tests/fixtures, so the cases failed in a wheel).
 "puremacro.replication.data" = ["*.csv", "*.npz", "*.json"]

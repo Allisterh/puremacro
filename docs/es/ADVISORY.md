@@ -14,6 +14,30 @@ sin volver a correrla) y qué hacer.
 
 ---
 
+## 2026-10-03 — la tabla ICIO incluida en las versiones hasta 4.8.1 colocaba mal la demanda final del resto del mundo, todas las versiones hasta 4.8.1
+
+**No es un defecto del solucionador; es un segundo defecto de los datos
+incluidos, hallado al reconstruirlos. La tabla no se distribuye desde 5.0.**
+
+Al reconstruir la tabla multipaís incluida a partir de la edición pública de la
+OCDE aparecieron dos defectos de indexación en la agregación que la había
+producido, además de la fuente dañada registrada el 2026-09-22. En el bloque que
+reensambla la tabla alrededor del país resto del mundo (ROW), las ventas de
+demanda final de ROW a los demás países se escribían en el bloque intermedio,
+dejando vacío el bloque de demanda final de ROW, y las celdas de impuestos y
+valor agregado de las propias columnas de demanda final de ROW se escribían en
+sus filas de flujos. Toda cifra derivada de esa tabla hereda ambos defectos.
+Las versiones 4.6.0 a 4.8.1 distribuían además una segunda tabla, construida a
+partir de la edición limpia OCDE 2020 con la agregación corregida
+(`source="oecd2020"`); 5.0 no distribuye ninguna de las dos.
+
+| Superficie | Condición afectada | No afectada cuando | Indicaciones |
+|---|---|---|---|
+| `load_icio_data()` sin `source=`, o con `source="legacy"`, versiones hasta 4.8.1 | Cualquier cifra calculada con la tabla devuelta | `source="oecd2020"` (4.6.0 a 4.8.1) | Desde 5.0, `load_icio_data()` devuelve una tabla reconstruida a partir de la edición OCDE ICIO 2019 comprobada por MD5 (véase [la nota de datos de comercio](spatial_and_trade_ge.md)); vuelva a calcular con ella o con una tabla nativa. `source="legacy"` lanza `ValueError`. |
+| Los lectores nativos (`load_oecd_icio_granular`, `puremacro.trade.mrio.read_oecd_native`) | Ninguna: leen los archivos nativos por etiquetas | — | Sin cambios. |
+
+---
+
 ## 2026-10-02 — Grados de libertad de la posterior de Σ en `minnesota_gibbs`, versiones 0.92.0 a 4.4.0
 
 **Corregido después de 4.4.0** (véase la sección Unreleased de `CHANGELOG.md`).
@@ -130,6 +154,91 @@ son casi colineales o tienen tendencia (el ejemplo del PIB arriba).
 - **Cualquier diagnóstico de colinealidad con datos en niveles** (PIB, índices
   de precios, población) calculado con `vif` y un intercepto. Los datos
   centrados o en tasas de crecimiento no se vieron afectados.
+
+---
+
+## 2026-10-02 — `solve_trade_equilibrium(method="quasi_condensed")` informaba `converged=True` con un residuo grande, versiones 4.2.0 a 4.4.0
+
+**Corregido después de 4.4.0.** La rama `quasi_condensed` de
+`solve_trade_equilibrium` tomaba su indicador de convergencia del solucionador
+cuasi condensado (flexible) pero su residuo, flujos y precios del
+posprocesamiento heredado, evaluado con una convención de precios que la
+solución cuasi condensada no usa. El indicador y el residuo informado no
+coincidían: en una calibración de prueba 2x2 con un arancel del 25% y
+`tol=1e-10`, 4.4.0 devolvía `converged=True` con `max_residual` 0.0487
+(`residual_norm` 0.155); con `sigma_y=0.5`, 0.498. Desde 5.0 el método
+pertenece solo al solucionador flexible:
+`solve_trade_equilibrium(method="quasi_condensed")` lanza un error que nombra
+`solve_flexible_trade_equilibrium(..., method="quasi_condensed")`.
+
+| Superficie | Condición afectada | No afectada cuando | Indicaciones |
+|---|---|---|---|
+| `solve_trade_equilibrium(..., method="quasi_condensed")` | cualquier llamada | — | `x_sol` era la solución cuasi condensada y el indicador era correcto para ese modelo; los campos de residuo y los flujos no. Vuelva a calcular con `solve_flexible_trade_equilibrium`. |
+| igual, con `sigma_y > 0` o una `config` activa | flujos, precios, IPC, términos de intercambio | — | Describían el modelo heredado, no el resuelto. |
+| igual, con `fiscal_closure`/`recycling_params`/`sigma`/`capacity_margins` | la solución ignoraba el ajuste | el ajuste estaba en su valor por defecto | El equilibrio devuelto no era solución del modelo pedido. |
+
+`solve_flexible_trade_equilibrium` nunca usó esta rama; sus propios
+`converged` y `residual_norm` eran coherentes.
+
+### ¿Le afecta?
+
+```python
+res = solve_trade_equilibrium(calib, ..., method="quasi_condensed")   # 4.2.0 to 4.4.0
+res.converged and res.max_residual > res.metadata["tol"]   # True → the flag and residual disagreed
+```
+
+### Qué hay que volver a correr
+
+- Cualquier tabla construida con los flujos, precios, IPC o términos de
+  intercambio de un resultado de
+  `solve_trade_equilibrium(..., method="quasi_condensed")`.
+
+---
+
+## 2026-10-02 — Las propiedades de flujos de `FlexibleTradeEquilibriumResult` ignoraban el modelo resuelto, versiones 4.2.0 a 4.4.0
+
+**Corregido después de 4.4.0.** Las propiedades `exports`, `imports`, `cpi`,
+`terms_of_trade`, `gdp` y `gdp_fc` de un resultado de
+`solve_flexible_trade_equilibrium` evaluaban las ecuaciones de flujos heredadas
+Cobb-Douglas/Leontief en `x_sol` sin aranceles, fuera cual fuera la llamada.
+Medido en 4.4.0, en una calibración de prueba 2x2 con un arancel del 25% a los
+insumos intermedios del país B:
+
+- ruta heredada (configuración por defecto): exportaciones `[60.73, 68.94]`
+  frente a `[60.73, 69.19]` de `solve_trade_equilibrium` con los mismos
+  argumentos;
+- ruta cuasi condensada, configuración por defecto: exportaciones
+  `[55.87, 63.12]` frente a `[56.73, 64.26]` de una solución de Newton del
+  mismo modelo;
+- ruta cuasi condensada, `sigma_trade=5`: exportaciones `[58.20, 59.86]` frente
+  a los flujos bilaterales resueltos `[62.15, 58.26]`.
+
+`cpi`, `terms_of_trade` y `gdp`/`gdp_fc` coincidían en los dos casos con la
+configuración por defecto; con una configuración activa el IPC y los términos
+de intercambio heredados describían otro modelo, y con `variable_markups=True`
+`gdp` omitía los beneficios de los márgenes. Las propiedades describen ahora el
+modelo resuelto.
+
+| Superficie | Condición afectada | No afectada cuando | Indicaciones |
+|---|---|---|---|
+| `exports`, `imports` | cualquier arancel; cualquier configuración activa en la ruta cuasi condensada | sin aranceles y con la configuración por defecto en la ruta heredada | Vuelva a calcular. |
+| `cpi`, `terms_of_trade` | configuración flexible activa | configuración por defecto | Vuelva a calcular. |
+| `gdp` | `variable_markups=True` | sin márgenes | Vuelva a calcular. |
+| `welfare_decomposition` | — | siempre: conservó su aproximación y sus valores históricos | Sin cambios (sigue siendo una aproximación). |
+
+### ¿Le afecta?
+
+```python
+res = solve_flexible_trade_equilibrium(calib, ...)   # 4.2.0 to 4.4.0
+tariffs = any(v is not None for v in res.metadata["tariff_inputs"].values())
+tariffs or bool(res.metadata["active_flexible_settings"])   # True → re-run
+```
+
+### Qué hay que volver a correr
+
+- Volúmenes de comercio, saldos comerciales y efectos en los términos de
+  intercambio leídos de estas propiedades en escenarios arancelarios o con
+  ajustes flexibles activos.
 
 ---
 
@@ -1094,6 +1203,34 @@ parte del desplazamiento es riesgo y qué parte curvatura.
 
 ---
 
+## 2026-09-30 — diagnósticos del solucionador de comercio y cierre de la política hicksiana, versiones 4.2.0 y 4.3.0
+
+**Corregido después de 4.3.0.** Diagnósticos que describían un objeto distinto
+del devuelto, y un cierre que las búsquedas de política no podían alcanzar.
+
+| Superficie | Condición afectada | No afectada cuando | Indicaciones |
+|---|---|---|---|
+| El paso de continuación del pliegue (`solve_fold_continuation_step` desde 5.0; con otro nombre en 4.3.0) | `max(abs(dw)) > max_disp`, de modo que el paso se recorta: `(residual, converged)` describían el paso sin recortar; un paso recortado se informaba con un residuo del orden del cero de máquina y `converged=True` aunque su residuo era todo el lado derecho. El índice de país rígido por defecto apuntaba a un país distinto del documentado | Pasos sin recortar, con el índice de país pasado explícitamente | La versión corregida informa del residuo del paso devuelto; `return_info=True` da los valores sin recortar. Desde 5.0 el país rígido se nombra por su código. Sin función de evaluación el paso es una solución lineal exacta reescalada uniformemente: un paso acotado, no una solución estabilizada. |
+| Docstrings de `solve_keller_pac` y `metadata["fold_points"]` (4.3.0) | Los docstrings afirmaban un pliegue donde Newton diverge; PAC no registra ninguno allí y Newton converge allí. `fold_points` enumeraba cada paso con `tau_lambda <= 0`, una entrada por cada paso restante de un único estancamiento de un precio factorial | — | No cite PAC como recorrido de un pliegue del CGE. Lea los eventos fusionados y su `kind`: `factor_price_boundary` es una esquina donde un precio factorial llega a cero, no un pliegue. |
+| `compute_unilateral_optimal_tariff`, `solve_multilateral_nash_tariffs`, `compute_welfare_payoff_matrix` hicksianos (4.3.0) | Saldos externos base no nulos: solo se alcanzaba el cierre del numerario, así que los pagos dependían de qué país se listaba primero (la EV de A por un arancel del 10% en una tabla de prueba de dos países: 2.6308% o 2.4952%) | Saldos externos nulos | Pase `foreign_saving_units="world_income"` y una referencia resuelta con él: 2.5404% en cualquier orden. |
+| Etiquetas de frontera (`metadata["boundary"]`, `["best_response_boundaries"]`, 4.3.0) | `tariff_max <= tol`: las respuestas en el techo se etiquetaban `"lower"` | Techos mayores que `2*tol` | Corregido: se usa la cota más cercana. |
+| `compute_stone_geary_final_demand` (4.2.0 y 4.3.0) | Gasto de subsistencia por encima del presupuesto: la canasta `c_bar` gastaba de más en silencio (169% con μ = 0.9 y el 5% del ingreso de referencia en una tabla 2x2) | Σ_s μ_s θ_s0 por debajo de tanh(3)/3 ≈ 0.332 | Ahora se emite un `RuntimeWarning`; compruebe el presupuesto. |
+
+### ¿Le afecta?
+
+Para el paso de continuación del pliegue: `max(abs(dw)) == max_disp` en un paso
+devuelto significa que se recortó y que su residuo informado no era el suyo.
+Para las búsquedas hicksianas: vuelva a calcular con los países listados en el
+otro orden; si un pago cambia, el cierre dependía del orden.
+
+### Qué hay que volver a correr
+
+- **Cualquier paso de continuación del pliegue recortado informado como
+  convergido**, y cualquier afirmación de pliegue basada en `fold_points`.
+- **Búsquedas arancelarias hicksianas** en tablas con saldos externos no nulos.
+
+---
+
 ## 2026-09-23 — momentos teóricos de tercer orden, versiones 2.8.0 a 4.3.0
 
 **Corregido después de 4.3.0** (véase la sección Unreleased de `CHANGELOG.md`).
@@ -1167,12 +1304,130 @@ logarítmica es idéntica bit a bit a 4.3.0.
 
 ---
 
+## 2026-09-23 — equilibrio de comercio flexible, versiones 4.2.0 y 4.3.0
+
+**Corregido después de 4.3.0.** `solve_flexible_trade_equilibrium` devolvía el
+equilibrio heredado Cobb-Douglas/Leontief, etiquetado como resultado flexible,
+para todo ajuste CES anidado, Stone-Geary (LES), de márgenes variables y de
+capacidad. Los ajustes se guardaban en `metadata["config"]` pero nunca entraban
+en las ecuaciones del equilibrio: el despacho por defecto (Newton) los
+transmitía sin leerlos, y solo `method="sparse_lu"` o la ruta `"condensed"` los
+usaban, para dar forma al patrón de dispersión del jacobiano. La solución
+convergía, no emitía ningún aviso e informaba de la configuración pedida.
+
+En una calibración sintética de 3 países y 3 sectores con un arancel del 25%,
+las versiones v4.2.0 y v4.3.0 devuelven un vector solución idéntico bit a bit al
+de la configuración por defecto (diferencia absoluta máxima 0.0, mismas
+iteraciones y residuo) para `rho_va=0.7, sigma_y=0.5`, `subsistence_ratio=0.2`,
+`variable_markups=True` y `capacity_margins={(0, 0): 0.3}`. El cuaderno tutorial
+de comercio flexible ejecutado que se distribuyó con esas versiones informaba
+de sus soluciones homotética, Stone-Geary y totalmente flexible con la misma
+norma final del residuo; sus tablas de bienestar y de márgenes solo diferían
+por el posprocesamiento de un mismo equilibrio.
+
+| Superficie | Condición afectada | No afectada cuando | Indicaciones |
+|---|---|---|---|
+| `solve_flexible_trade_equilibrium` (4.2.0, 4.3.0), `method` por defecto | Cualquier ajuste de tecnología no por defecto (`rho_va`, `sigma_va`, `sigma_y`, `sigma_inter`, `capacity_margins`), subsistencia Stone-Geary (`subsistence_shares`, `subsistence_ratio`, `mu_s`) o `variable_markups=True` | Todos los ajustes flexibles en su valor por defecto: el modelo flexible coincide entonces con el modelo central y el resultado es correcto | Vuelva a calcular con una versión corregida. |
+| La misma función con `method="quasi_condensed"` explícito (4.2.0, 4.3.0) | Los mismos ajustes | Como arriba | Esa ruta evaluaba algunos ajustes de tecnología, capacidad y márgenes pero ignoraba la subsistencia Stone-Geary; trate sus resultados como afectados y vuelva a calcular. |
+| Cifras de bienestar, EV y márgenes calculadas con estos resultados | Cualquier ejecución afectada | Como arriba | Se derivaron del equilibrio central; vuelva a calcular. |
+
+Desde 5.0 el solucionador flexible se reconstruye sobre la contabilidad
+consistente: cada ajuste entra en un sistema condensado `[log r; log w; T]` con
+la misma auditoría de aceptación que `solve_trade_equilibrium`, y con la
+configuración por defecto coincide con ese solucionador (véase
+[el estado de la validación](STRUCTURAL_VALIDATION_STATUS.md)).
+
+### Qué hay que volver a correr
+
+- **Cualquier cifra contrafactual, de bienestar o de márgenes** publicada con
+  `solve_flexible_trade_equilibrium` en 4.2.0 o 4.3.0 con un ajuste no por
+  defecto.
+- **El cuaderno tutorial de comercio flexible tal como se ejecutó en 4.2.0 y
+  4.3.0**: el barrido de `rho_va`, la comparación homotética frente a
+  Stone-Geary y la comparación competitiva frente a oligopolio muestran todas
+  el equilibrio central.
+
+---
+
+## 2026-09-23 — entradas de comercio leídas como otro esquema u otro formato, versión 4.3.0
+
+**Corregido después de 4.3.0.** Cuatro funciones de comercio que aparecieron en
+4.3.0 calculaban su resultado para una entrada distinta de la pasada, sin
+excepción ni aviso: un objetivo de continuación, un esquema de viabilidad, las
+etiquetas de los usos finales de un archivo FIGARO y el piso del valor agregado
+de la regularización MRIO.
+
+| Superficie | Condición afectada | No afectada cuando | Indicaciones |
+|---|---|---|---|
+| `solve_keller_pac` (4.3.0) | `tau_target` pasado como escalar de NumPy distinto de `np.float64` (`np.int64`, por ejemplo de `np.arange`; `np.float32`; `np.bool_`) o como arreglo 0-d: solo se gravaban las importaciones intermedias, mientras que un número de Python grava también las importaciones de demanda final | `tau_target` es un `int`, `float` o `bool` de Python, un `np.float64` o un esquema en arreglo con al menos una dimensión | Vuelva a calcular con la versión corregida, o pase `float(tau_target)`. |
+| `check_hawkins_simon_viability` (4.3.0) | `tau` pasado como lista de Python (evaluada como la referencia sin aranceles, fueran cuales fueran sus valores), como arreglo 0-d (un multiplicador de toda la matriz de costos), o como arreglo de forma `(M, M)`, `(M, ns, nc)` o `(ns, nc, ns, nc)` cuyas entradas diagonales (mismo país y sector) no son 1, que una heurística podía leer como tasas donde `solve_trade_equilibrium` lee multiplicadores (`np.ones((M, ns, nc)) * 1.10` se convertía en un multiplicador de 2.10) | `tau` es `None`, un número escalar de Python o NumPy, un vector de tasas `(nc,)` de NumPy, o un arreglo de multiplicadores cuyas entradas diagonales son 1 | Repita la comprobación con la versión corregida; un veredicto "viable" para una entrada así puede ser erróneo. |
+| `load_figaro` sobre un archivo armonizado (4.3.0) | El archivo enumera los usos finales de cada país en un orden distinto de `P3_S14, P3_S15, P3_S13, P51G, P5M`, por ejemplo el orden de Eurostat `P3_S13, P3_S14, P3_S15, P51G, P5M`: las columnas de uso final se etiquetaban por posición, así que el consumo del gobierno y el de los hogares intercambiaban etiquetas | El archivo sigue el orden de puremacro, o los datos son sintéticos (`fallback_to_synthetic=True`) | Vuelva a cargar con la versión corregida, que lee los usos finales por etiqueta. |
+| `regularize_mrio_table`, y `package_mrio_to_calibration_result` con los cargadores que la llaman (`load_figaro`, `load_exiobase`, `load_wiod`, `load_eora`, `load_oecd_icio_granular`) con `regularize=True` (4.3.0) | Un nodo cuyo valor agregado recibe piso tiene producción menor que 2 en las unidades de la tabla (2 M USD para los cargadores): el piso `max(1e-3 Y, 1)` fijaba su valor agregado en 1, por encima de la producción cuando esta es menor que 1, y restaba la diferencia de sus impuestos netos de subsidios | Todo nodo con piso tiene producción de al menos 2, o `regularize=False` | Vuelva a calibrar con la versión corregida, cuyo piso es `max(1e-3 Y, min(1, 0.5 Y))` y que registra cada nodo con piso. |
+
+Medido en la etiqueta de la versión 4.3.0 y en la versión corregida:
+
+- `solve_keller_pac` en una tabla de prueba de 2 países y 2 sectores:
+  `tau_target=np.int64(1)` devolvía `x_sol[:4]` = [0.0965, -0.0050, 0.1579, 0.1302]
+  con `converged=True`; `tau_target=1.0` devuelve [0.2008, 0.0809, 0.3446, 0.3215],
+  que la versión corregida devuelve también para `np.int64(1)`.
+- `check_hawkins_simon_viability` en la misma tabla: `[0.5, 0.5]` devolvía
+  rho 0.3379685 (la referencia) en lugar de 0.3762996; `np.array(0.1)` devolvía
+  0.0337969 en lugar de 0.3456204; `np.ones((M, ns, nc)) * 1.10` devolvía
+  0.7097339, el radio para un multiplicador de 2.10, en lugar de 0.3717654.
+- `load_figaro` en un archivo de 2 países y 2 sectores en el orden de Eurostat:
+  las participaciones de uso final (`theta`) diferían de las de los mismos datos
+  en el orden de puremacro hasta en 0.23, y un equilibrio con arancel del 10%
+  hasta en 9.7e-4 (mayor incógnita 12.8). La versión corregida da calibraciones
+  idénticas con ambos órdenes.
+- `load_oecd_icio_granular` sobre el archivo OCDE ICIO 2019 (`2019_SML.csv`):
+  4.3.0 elevaba 41 entradas de valor agregado en 9.84 M USD en total y dejaba 10
+  nodos con valor agregado por encima de la producción (impuestos netos de
+  subsidios hasta -467% de la producción); la versión corregida eleva 36
+  entradas en 2.74 M USD, ninguna por encima de la producción.
+
+### Qué hay que volver a correr
+
+- **Trayectorias de continuación** de `solve_keller_pac` cuyo objetivo salió de
+  un arreglo de NumPy o de una variable de bucle (por ejemplo
+  `for rate in np.arange(1, 4)`).
+- **Cribas de viabilidad** de esquemas en lista, arreglos 0-d o arreglos de
+  multiplicadores con entradas diagonales distintas de uno.
+- **Calibraciones de archivos FIGARO armonizados** cuyas columnas de uso final
+  no seguían el orden de puremacro, incluido cualquier resultado por categoría.
+- **Calibraciones de tablas reales con nodos pequeños** construidas por los
+  cargadores de 4.3.0, y todo contrafactual resuelto sobre ellas.
+
+---
+
+## 2026-09-22 — procedencia de la tabla ICIO incluida, todas las versiones hasta 4.8.1
+
+**No es un defecto del código; es un hallazgo sobre la procedencia de los
+datos. Documentado y protegido después de 4.3.0; la tabla no se distribuye
+desde 5.0.**
+
+La tabla multipaís incluida en las versiones hasta 4.8.1 se agregó a partir de
+una copia del archivo OCDE ICIO `data_2020_SML.csv` que está dañada: los valores
+con tres o cuatro decimales perdieron el punto decimal y los menores que 0.001
+pasaron a cero. Su MD5 `d1b887aaafa54ab3f28fde78fcd21cdf` está registrado como
+`OECD_KNOWN_CORRUPTED_MD5`. Frente a la edición limpia OCDE 2020 (MD5
+`d3e0f4979d85d6c0bb7cf4c43e324287`), cerca de una cuarta parte de las celdas
+intermedias nativas positivas pasaron a cero y muchas otras se multiplicaron por
+1e3 o 1e4, así que sus magnitudes, participaciones y elasticidades no son
+cantidades de la OCDE.
+
+| Superficie | Condición afectada | Indicaciones |
+|---|---|---|
+| `load_icio_data()` sin `source=`, o con `source="legacy"`, versiones hasta 4.8.1, las soluciones de referencia distribuidas con ella y los cuadernos de comercio que la leían | Cualquier magnitud económica, participación o elasticidad calculada con la tabla incluida | Trátelas como valores de regresión del software, no como estimaciones basadas en la OCDE. Desde 5.0 la tabla incluida se reconstruye a partir de la edición OCDE 2019 comprobada por MD5. |
+| `load_raw_45sector_icio()` sin `path` (4.3.0 y anteriores) | La búsqueda por defecto podía resolver la copia dañada y leerla sin suma de comprobación | Las versiones corregidas comprueban el MD5 del archivo resuelto y rechazan la copia dañada con `MRIOIntegrityError` (un `ValueError`); desde 5.0 ese cargador no forma parte del paquete: lea los archivos nativos con `load_oecd_icio_granular` o `read_oecd_native`. |
+| Lectores nativos (`load_oecd_icio_granular`, `puremacro.trade.mrio.read_oecd_native`) | Ninguna: leen el CSV regular OCDE 2023 por etiquetas | Úselos para el trabajo empírico nuevo; registran la suma de comprobación de la fuente en los metadatos. Véase [tablas MRIO nativas](trade_mrio.md). |
+
+---
+
 ## 2026-09-20 — modelos estructurales, APIs afectadas en 4.2.0 y anteriores
 
 **Corregidas o restringidas explícitamente en 4.3.0.** La revisión reprodujo
 resultados numéricos y señales de éxito incorrectos en VFI, DSGE/Dynare y comercio
-sobre el código de 4.2.0 (los hallazgos de comercio salieron de puremacro con el motor
-de comercio); la primera versión afectada depende de cada API.
+sobre el código de 4.2.0; la primera versión afectada depende de cada API.
 
 - **DSGE de tercer orden:** recalcular reglas y simulaciones, momentos o
   verosimilitudes que dependen de pendientes de riesgo en modelos estocásticos
@@ -1187,10 +1442,21 @@ de comercio); la primera versión afectada depende de cada API.
   muestra; se corrigió la caché de activaciones usada en el gradiente.
 - **DSGE con cambios de régimen:** no interpretar impactos, estabilidad o momentos
   de soluciones fallidas; ahora se reportan como no disponibles.
+- **Flujos comerciales y cuentas fiscales:** volver a calcular los contrafactuales
+  afectados (soluciones CES posprocesadas con flujos de Leontief, esquemas
+  fiscales incompletos o valoración incoherente entre productor y comprador).
+  4.3.0 añadió el modelo derivado de productor y comprador como
+  `accounting="consistent"`; desde 5.0 es la única contabilidad.
 
-Véase [el alcance y las referencias](STRUCTURAL_VALIDATION_STATUS.md). Estas
-referencias delimitan qué resultados se han validado y qué extensiones siguen
-pendientes.
+La política arancelaria selecciona ahora de forma explícita el bienestar del
+consumo por función de gasto con `metric="hicksian_ev"`. La nueva métrica usa una
+referencia de comparación fija y una recuperación auditada del solucionador; no
+certifica un teorema global de Nash.
+
+Véase [el alcance y las referencias](STRUCTURAL_VALIDATION_STATUS.md),
+[contabilidad de comercio](trade_accounting.md), [bienestar del consumo](trade_welfare.md)
+y [política arancelaria](trade_policy.md). Estas referencias delimitan qué
+resultados se han validado y qué extensiones siguen pendientes.
 
 ---
 

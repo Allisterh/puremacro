@@ -205,3 +205,30 @@ def test_spatial_lp_metadata_has_no_duplicates():
     assert meta[:len(LPResult._metadata)] == LPResult._metadata
     for name in ("spillover", "cumulative", "total_scale", "spec", "notes"):
         assert name in meta
+
+
+# --- puremacro.trade ---------------------------------------------------------
+
+
+def _teaching_calibration():
+    from puremacro.trade import calibrate_trade_model
+
+    flows = np.array([[10., 12., 24., 8., 6., 4., 20., 16.],
+                      [8., 14., 4.5, 15., 10.5, 35., 18., 15.]])
+    taxes = np.array([4., 6., 1.2, 1., .8, 1.8, 2., 1.2])
+    value_added = flows.sum(1) - flows[:, :2].sum(0) - taxes[:2]
+    data = np.vstack([flows, taxes, np.r_[2 * value_added / 3, np.zeros(6)],
+                      np.r_[value_added / 3, np.zeros(6)]])
+    return calibrate_trade_model(data, ns=1, nc=2, nfd=3, country_codes=["A", "B"])
+
+
+@pytest.mark.parametrize("tariff_max, overlap", [(0.2, False), (5e-5, True)])
+def test_non_hicksian_nash_records_boundary_bands_overlap(tariff_max, overlap):
+    from puremacro.trade import solve_multilateral_nash_tariffs
+
+    nash = solve_multilateral_nash_tariffs(
+        _teaching_calibration(), player_countries=("A", "B"), tariff_max=tariff_max,
+        best_response_grid_size=3, max_iter=1, relaxation=1.0, tol=1e-4)
+    assert nash.welfare_metric != "hicksian_ev"
+    assert nash.metadata["boundary_bands_overlap"] is overlap
+    assert set(nash.metadata["best_response_boundaries"]) == {"A", "B"}

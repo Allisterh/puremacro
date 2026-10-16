@@ -193,7 +193,8 @@ def test_build_tooling_multi_suite_discovery():
 
     showcase_srcs = bn.discover_sources("showcase")
     assert all(p.suffix == ".py" for p in showcase_srcs)
-    assert any("68_third_order_perturbation_trust.py" in p.name for p in showcase_srcs)
+    assert any("62_flexible_trade_cge.py" in p.name for p in showcase_srcs)
+    assert any(p.name == "68_third_order_perturbation_trust.py" for p in showcase_srcs)
     assert any("local_llm_uncertainty.py" in p.name for p in showcase_srcs)
 
     curso_srcs = bn.discover_sources("curso")

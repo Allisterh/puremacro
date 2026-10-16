@@ -8,6 +8,8 @@ Tests:
 5b. Report quintet (.to_dataframe(), .to_markdown(), .to_latex(), .to_typst(), .summary()) of the result
     classes of dsge.stacked_newton, built from the smallest fixture the module's own tests use.
 6. Deprecation warning update verification (retiring stale 2.0.0 references).
+7. ``.to_typst()`` of the trade result classes (calibration, equilibrium,
+   Geary-Khamis, scenario batch, optimal tariff, Nash tariff, payoff matrix).
 """
 from __future__ import annotations
 
@@ -291,6 +293,146 @@ def test_stacked_newton_results_quintet():
     comparison = compare_horizons(short, long, periods=20, tolerance=1e-5)
     assert isinstance(comparison, HorizonComparison)
     _assert_quintet(comparison)
+
+
+# ---------------------------------------------------------------------------
+# 4c. Trade result classes: .to_typst()
+# ---------------------------------------------------------------------------
+
+def _dummy_trade_equilibrium(nc: int = 2, ns: int = 2):
+    """A minimal TradeEquilibriumResult with neutral codes."""
+    from puremacro.trade import TradeEquilibriumResult
+
+    return TradeEquilibriumResult(
+        x_sol=np.zeros(2 * ns * nc + 2 * nc + nc + nc - 1),
+        p_sol=np.ones((1, ns, nc)),
+        y_sol=np.ones((1, ns, nc)) * 50.0,
+        r_sol=np.ones((1, 1, nc)),
+        w_sol=np.ones((1, 1, nc)),
+        T_sol=np.ones((1, 1, nc)) * 5.0,
+        XN_sol=np.array([1.0]),
+        c_sol=np.ones((1, 3, nc)) * 20.0,
+        pfd_sol=np.ones((1, 3, nc)),
+        terms_of_trade=np.array([1.02, 0.98]),
+        country_codes=("C01", "C02"),
+        sector_codes=("S01", "S02"),
+    )
+
+
+def _dummy_geary_khamis():
+    from puremacro.trade import GearyKhamisResult
+
+    return GearyKhamisResult(
+        pi=np.ones(3),
+        ppp=np.ones(2),
+        real_gdp=np.array([100.0, 200.0]),
+        nominal_gdp=np.array([100.0, 200.0]),
+        gdp_growth=np.array([0.0, 0.0]),
+        country_codes=("C01", "C02"),
+    )
+
+
+def _assert_typst_table(obj, **kwargs):
+    typ = obj.to_typst(**kwargs)
+    assert isinstance(typ, str)
+    assert "#table(" in typ
+    assert "columns:" in typ
+
+
+def test_trade_calibration_result_to_typst():
+    from puremacro.trade import TradeCalibrationResult
+
+    calib = TradeCalibrationResult(
+        a=np.zeros((4, 2, 2)),
+        afd=np.zeros((4, 3, 2)),
+        alpha=np.full((1, 2, 2), 1 / 3),
+        beta=np.ones((1, 2, 2)),
+        k_endow=np.ones((1, 2)),
+        l_endow=np.ones((1, 2)),
+        invforT=np.zeros((1, 2)),
+        tax=np.zeros((1, 2, 2)),
+        ytot=np.ones((1, 2, 2)),
+        n_countries=2,
+        n_sectors=2,
+        country_codes=("C01", "C02"),
+        sector_codes=("S01", "S02"),
+    )
+    _assert_typst_table(calib)
+
+
+def test_trade_equilibrium_result_to_typst():
+    _assert_typst_table(_dummy_trade_equilibrium())
+
+
+def test_geary_khamis_result_to_typst():
+    _assert_typst_table(_dummy_geary_khamis())
+
+
+def test_scenario_batch_result_to_typst():
+    from puremacro.trade import ScenarioBatchResult
+
+    eq, gk = _dummy_trade_equilibrium(), _dummy_geary_khamis()
+    batch = ScenarioBatchResult(
+        scenarios={"base": eq, "tariff10": eq},
+        geary_khamis={"base": gk, "tariff10": gk},
+        baseline_scenario="base",
+        country_codes=("C01", "C02"),
+        sector_codes=("S01", "S02"),
+    )
+    _assert_typst_table(batch)
+    _assert_typst_table(batch, metric="real_gdp_growth")
+
+
+def test_optimal_tariff_result_to_typst():
+    from puremacro.trade import OptimalTariffResult
+
+    res = OptimalTariffResult(
+        country_code="C01",
+        optimal_tariff_rate=0.15,
+        welfare_gain_pct=1.2,
+        baseline_welfare=100.0,
+        optimal_welfare=101.2,
+        welfare_metric="geary_khamis",
+        terms_of_trade_initial=1.0,
+        terms_of_trade_optimal=1.04,
+        tariff_grid=np.linspace(0.0, 0.3, 10),
+        welfare_curve=np.linspace(100.0, 101.2, 10),
+        equilibrium=_dummy_trade_equilibrium(),
+    )
+    _assert_typst_table(res)
+
+
+def test_nash_tariff_result_to_typst():
+    from puremacro.trade import NashTariffResult
+
+    res = NashTariffResult(
+        strategic_players=("C01", "C02"),
+        nash_tariffs={"C01": 0.18, "C02": 0.12},
+        welfare_changes_pct={"C01": -0.5, "C02": -0.8},
+        terms_of_trade_changes_pct={"C01": 1.2, "C02": -0.3},
+        world_welfare_change_pct=-0.6,
+        outer_iterations=4,
+        converged=True,
+        outer_error=1e-5,
+        equilibrium=_dummy_trade_equilibrium(),
+        tau_nash=np.ones((2, 2, 2, 2)),
+        tau_fd_nash=np.ones((2, 2, 3, 2)),
+    )
+    _assert_typst_table(res)
+
+
+def test_welfare_payoff_matrix_result_to_typst():
+    from puremacro.trade import WelfarePayoffMatrixResult
+
+    eq = _dummy_trade_equilibrium()
+    res = WelfarePayoffMatrixResult(
+        players=("C01", "C02"),
+        strategies=("Cooperate (0%)", "Defect (Nash)"),
+        payoff_matrix=np.array([[[0.0, 0.0], [-1.0, 0.5]], [[0.5, -1.0], [-0.5, -0.5]]]),
+        scenarios={"CC": eq, "CD": eq, "DC": eq, "DD": eq},
+        summary_df=pd.DataFrame({"Player": ["C01", "C02"], "Cooperate": [0.0, 0.0]}),
+    )
+    _assert_typst_table(res)
 
 
 # ---------------------------------------------------------------------------
