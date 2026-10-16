@@ -1107,7 +1107,7 @@ command that rebuilds the file, ships as `puremacro/trade/_datafiles/SOURCES.md`
 
 ## Status
 
-Current release: **5.1.0**. Release 4.8.1 is the last one with the research studies (`pip install "puremacro<5"`); `puremacro.trade`, with its MRIO modules and without the research, returns in 5.2.0. The [stability tiers](ARCHITECTURE.md#stability-tiers)
+Current release: **5.2.0**, with `puremacro.trade` and its MRIO modules back. Release 4.8.1 is the last one with the research studies (`pip install "puremacro<5"`). The [stability tiers](ARCHITECTURE.md#stability-tiers)
 identify stable, experimental and best-effort surfaces. Structural calculations
 have additional [validation limits](docs/STRUCTURAL_VALIDATION_STATUS.md).
 

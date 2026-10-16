@@ -828,7 +828,7 @@ verificación y la orden que reconstruye el archivo, se distribuye como
 
 ## Estado
 
-Versión actual: **5.1.0**. La versión 4.8.1 es la última con los estudios de investigación (`pip install "puremacro<5"`); `puremacro.trade`, con sus módulos MRIO y sin la investigación, vuelve en la 5.2.0. Los [niveles de estabilidad](ARCHITECTURE.md#stability-tiers)
+Versión actual: **5.2.0**, con `puremacro.trade` y sus módulos MRIO de vuelta. La versión 4.8.1 es la última con los estudios de investigación (`pip install "puremacro<5"`). Los [niveles de estabilidad](ARCHITECTURE.md#stability-tiers)
 identifican las superficies estables, experimentales y de soporte limitado.
 Los cálculos estructurales tienen [límites de validación](docs/es/STRUCTURAL_VALIDATION_STATUS.md)
 adicionales.

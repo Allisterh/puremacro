@@ -2,9 +2,9 @@
 
 This file records user-visible changes per release. Internal refactors that don't change behaviour are listed under "Internal" so a returning user can see what shifted under the hood without surprise.
 
-## 5.2.0 (unreleased)
+## 5.2.0 (2026-10-16)
 
-`puremacro.trade` is back. 5.0 and 5.1 shipped without it; this release brings the multi-country, multi-sector trade library back with consistent producer/purchaser accounting as its only accounting, a new bundled OECD table built by a script that ships with it, and no paper-specific defaults: every dimension, country and sector comes from the table or from an argument. Code written for the 4.x trade API needs the changes listed under "Removed relative to 4.8.1" and "Changed relative to 4.8.1".
+`puremacro.trade` is back. 5.0 and 5.1 shipped without it; this release brings the multi-country, multi-sector trade library back with consistent producer/purchaser accounting as its only accounting, a new bundled OECD table built by a script that ships with it, and no built-in defaults for the table: every dimension, country and sector comes from the table or from an argument. Code written for the 4.x trade API needs the changes listed under "Removed relative to 4.8.1" and "Changed relative to 4.8.1".
 
 ### Added
 
