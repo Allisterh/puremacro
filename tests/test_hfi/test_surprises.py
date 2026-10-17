@@ -55,6 +55,22 @@ def test_gk2015_surprise_rejects_zero_remaining():
                         days_in_month=30)
 
 
+def test_gk2015_surprise_warns_when_price_levels_passed_with_rate_quote(recwarn):
+    """Passing price levels (|quote| > 50) under quote='rate' emits a UserWarning."""
+    with pytest.warns(UserWarning, match="quote='price'"):
+        gk2015_surprise(np.array([95.25]), np.array([95.00]),
+                        days_remaining_in_month=np.array([15]),
+                        days_in_month=30, quote="rate")
+    recwarn.clear()
+    gk2015_surprise(np.array([95.25]), np.array([95.00]),
+                    days_remaining_in_month=np.array([15]),
+                    days_in_month=30, quote="price")
+    gk2015_surprise(np.array([4.75]), np.array([5.00]),
+                    days_remaining_in_month=np.array([15]),
+                    days_in_month=30, quote="rate")
+    assert len(recwarn) == 0
+
+
 from puremacro.hfi.surprises import ns2018_first_pc
 
 

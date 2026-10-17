@@ -7,6 +7,8 @@ Public functions:
 """
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pandas as pd
 
@@ -125,6 +127,15 @@ def gk2015_surprise(
             "gk2015_surprise: days_remaining_in_month cannot exceed days_in_month "
             "(it counts the days from the announcement day to the month end, "
             "announcement day included)."
+        )
+    if quote == "rate" and (np.any(np.abs(pre) > 50.0) or np.any(np.abs(post) > 50.0)):
+        warnings.warn(
+            "gk2015_surprise: quote='rate' received values with |quote| > 50 "
+            "(looks like CME futures prices 100 - rate rather than implied rates); "
+            "pass quote='price' if inputs are futures prices to avoid inverting "
+            "the surprise sign.",
+            UserWarning,
+            stacklevel=2,
         )
     change = post - pre
     if quote == "price":

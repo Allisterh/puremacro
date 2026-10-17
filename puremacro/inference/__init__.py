@@ -24,6 +24,12 @@ from .multiple import multipletests, fdrcorrection
 from .collinearity import vif
 from .proportions import proportion_confint
 from .diagnostics import durbin_watson
+# Proxy-archive inference: effective sample size of smoothed proxy
+# products, rotation / feasible-onset references, and the GLS matched filter on
+# discrete ice-core samples. Exposed as a submodule; the headline callables
+# are also re-exported here.
+from . import proxy
+from .proxy import effective_sample_size, matched_filter, stacked_matched_filter
 
 # quandt_andrews_supF is loaded lazily because quandt_andrews.py depends on
 # puremacro.tests.breaks, which can fail to resolve when the project root is
@@ -71,4 +77,8 @@ __all__ = [
     "vif",
     "proportion_confint",
     "durbin_watson",
+    "proxy",
+    "effective_sample_size",
+    "matched_filter",
+    "stacked_matched_filter",
 ]

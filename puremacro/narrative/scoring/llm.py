@@ -540,8 +540,9 @@ def score_llm(
 ) -> list[NarrativeEvent]:
     """Score each record with an LLM, parameterized by ``kind`` and ``language``.
 
-    ``text_iter`` accepts both 3-tuple ``(date, text, source_url)`` and
-    4-tuple ``(date, text, source_url, metadata)`` records. When a 4-tuple
+    ``text_iter`` accepts 3-tuple ``(date, text, source_url)``,
+    4-tuple ``(date, text, source_url, metadata)``, and 5-tuple
+    ``(date, text, source_url, metadata, magnitude)`` records. When metadata
     is passed, ``metadata["language"]`` overrides the function-level
     ``language`` per record.
 
@@ -578,9 +579,9 @@ def score_llm(
     out: list[NarrativeEvent] = []
     n_dropped_malformed = 0
     for record in items:
-        if len(record) == 4:
-            date, text, source_url, meta = record
-            record_lang = (meta or {}).get("language", language)
+        if len(record) >= 4:
+            date, text, source_url, meta = record[:4]
+            record_lang = (meta or {}).get("language", language) if isinstance(meta, dict) else language
         else:
             date, text, source_url = record
             record_lang = language

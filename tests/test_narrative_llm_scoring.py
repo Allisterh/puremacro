@@ -286,3 +286,18 @@ def test_parse_response_still_returns_empty_for_unparseable_answers():
 
 def test_parse_response_falls_back_to_the_outer_brackets():
     assert _parse_response('Events: [{"sign": -1}] (one)') == [{"sign": -1}]
+
+
+def test_score_llm_accepts_five_tuple_connector_records():
+    """5-tuple records from validate_records / connectors unpack cleanly with metadata language."""
+    records = [
+        (pd.Timestamp("2020-03-15"), "El gobierno anunció un paquete fiscal.",
+         "https://example.org/es", {"language": "es", "country": "MEX"}, 50.0)
+    ]
+    stub = _StubBackend([_one_event_response(implementation_date="2020-03-20")])
+    events = score_llm(records, backend=stub, kind="fiscal", country="MEX")
+    assert len(events) == 1
+    assert events[0].language == "es"
+    assert events[0].implementation_profile == []
+    assert events[0].effective_profile == [(pd.Timestamp("2020-03-15"), 1.0)]
+

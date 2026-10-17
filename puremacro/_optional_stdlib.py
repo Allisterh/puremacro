@@ -49,7 +49,7 @@ def _optional(name: str, hint: str) -> ModuleType | _MissingStdlibModule:
 
 
 _PYODIDE_HINT = ("In Pyodide 0.28 run `await pyodide.loadPackage({pkg!r})` (or `%pip install {pkg}` in "
-                 "JupyterLite) before using this feature; Pyodide 314 and CPython have it built in.")
+                 "JupyterLite) before importing puremacro; Pyodide 314 and CPython have it built in.")
 
 sqlite3 = _optional("sqlite3", _PYODIDE_HINT.format(pkg="sqlite3"))
 """``sqlite3`` or a placeholder: used by the HTTP/data caches and the narrative LLM kernels."""

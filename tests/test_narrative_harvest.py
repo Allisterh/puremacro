@@ -139,3 +139,23 @@ def test_harvest_narrative_corpus_mock(monkeypatch):
     assert doc.country == "USA"
     assert doc.policy_domain == "monetary"
     assert "asset purchase" in doc.text
+
+
+def test_harvest_narrative_corpus_lazy_submodule_import(monkeypatch, tmp_path):
+    """Verify harvest_narrative_corpus imports unattached source submodules via importlib."""
+    import puremacro.narrative.sources as src_pkg
+    import puremacro.narrative.sources.us_cbo as cbo_mod
+
+    monkeypatch.setattr(
+        cbo_mod,
+        "iter_cbo",
+        lambda: iter([("2022-05-01", "CBO baseline budget outlook.", "https://cbo.gov/1", {})]),
+    )
+    monkeypatch.delattr(src_pkg, "us_cbo", raising=False)
+    monkeypatch.setenv("PUREMACRO_HTTP_CACHE_DIR", str(tmp_path / "cache"))
+
+    corpus = harvest_narrative_corpus(sources=["us_cbo"], use_cache=True)
+    assert len(corpus) == 1
+    assert corpus.docs[0].source == "us_cbo"
+    assert "store" in corpus.metadata
+

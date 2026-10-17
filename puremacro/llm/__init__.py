@@ -381,9 +381,12 @@ def _cache_line() -> str:
     except Exception:
         return "unknown"
     try:
-        if not path.exists():
+        if not path.exists() and not _cache._runs_through_a_file(path):
             return f"{path} (no file yet)"
-        stats = _cache.CompletionCache(path).stats()
+        store = _cache.CompletionCache(path)
+        stats = store.stats()
+        if not store.readable and store.reason:
+            return f"{path} (unreadable: {store.reason})"
         rows = int(stats["rows"])
         return f"{path} ({rows:,} row{'' if rows == 1 else 's'}, {int(stats['bytes']):,} bytes)"
     except Exception:

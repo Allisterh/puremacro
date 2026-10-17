@@ -40,6 +40,14 @@ def _gunzip_if_encoded(body: bytes, content_encoding: str | None) -> bytes:
     return body
 
 
+def _transport_errors() -> tuple[type[BaseException], ...]:
+    """Transport / SSL exception classes; safe when ``ssl`` is the missing-stdlib placeholder."""
+    try:
+        return (urllib.error.URLError, ssl.SSLError)
+    except ImportError:
+        return (urllib.error.URLError,)
+
+
 def _request(url: str, timeout: float, user_agent: str | None = None,
              headers: dict | None = None) -> bytes:
     ua = user_agent or USER_AGENT
@@ -58,13 +66,17 @@ def _request(url: str, timeout: float, user_agent: str | None = None,
         # request against the limit. The server answered; there is
         # nothing wrong with the certificate. Propagate.
         raise
-    except (urllib.error.URLError, ssl.SSLError):
+    except _transport_errors() as exc:
+        reason = getattr(exc, "reason", None)
+        if isinstance(exc, TimeoutError) or isinstance(reason, TimeoutError):
+            raise
         # One-shot fallback: some public endpoints (older OECD / IMF /
         # ministry sites) ship certificates that Python's bundled CA
         # store does not validate. Retry once with default verification enforced.
         # See RETRY_POLICY.md §3 for why we do not loop further.
         ctx = ssl.create_default_context()
-        with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
+        retry_timeout = min(timeout, DEFAULT_TIMEOUT)
+        with urllib.request.urlopen(req, timeout=retry_timeout, context=ctx) as resp:
             return _gunzip_if_encoded(resp.read(), resp.headers.get("Content-Encoding"))
 
 
@@ -129,9 +141,11 @@ def post_json(url: str, payload: dict, *, timeout: float = DEFAULT_TIMEOUT,
               headers: dict | None = None) -> dict:
     """POST ``payload`` as JSON and return the decoded JSON response.
 
-    urllib-only (Pyodide-safe). HTTP errors propagate (not retried); a
-    transport/SSL error retries once with verification off, matching
-    ``_request``. Used by the local-LLM HTTP engine (Ollama / OpenAI-compatible).
+    urllib-only (Pyodide-safe). HTTP errors and timeouts propagate (not
+    retried); an HTTPS transport/SSL error retries once with default
+    verification enforced (``ssl.create_default_context()``) and timeout
+    capped at ``DEFAULT_TIMEOUT``, matching ``_request``. Used by the
+    local-LLM HTTP engine (Ollama / OpenAI-compatible).
     """
     data = json.dumps(payload).encode("utf-8")
     hdrs = {"Content-Type": "application/json", "User-Agent": USER_AGENT}
@@ -143,9 +157,15 @@ def post_json(url: str, payload: dict, *, timeout: float = DEFAULT_TIMEOUT,
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError:
         raise
-    except (urllib.error.URLError, ssl.SSLError):
+    except _transport_errors() as exc:
+        reason = getattr(exc, "reason", None)
+        if isinstance(exc, TimeoutError) or isinstance(reason, TimeoutError):
+            raise
+        if not url.lower().startswith("https:"):
+            raise
         ctx = ssl.create_default_context()
-        with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
+        retry_timeout = min(timeout, DEFAULT_TIMEOUT)
+        with urllib.request.urlopen(req, timeout=retry_timeout, context=ctx) as resp:
             return json.loads(resp.read().decode("utf-8"))
 
 

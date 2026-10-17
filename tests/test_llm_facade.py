@@ -452,3 +452,12 @@ def test_auto_mode_still_degrades_to_no_cache_where_the_cache_cannot_be_read(mon
     with pytest.warns(UserWarning, match="cannot be written"):
         assert L.complete("hola", max_tokens=8) == "0.7"
     assert len(fake.calls) == 1 and pointer.read_bytes() == _LFS_POINTER
+
+
+def test_report_surfaces_unreadable_cache_reason(monkeypatch, fake, tmp_path):
+    pointer = tmp_path / "llm_cache.sqlite"
+    pointer.write_bytes(_LFS_POINTER)
+    monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(pointer))
+    cache_field = _fields(L.report(probe_servers=False))["cache"]
+    assert "unreadable:" in cache_field and "file is not a database" in cache_field
+
