@@ -1756,8 +1756,8 @@ def solve_differentiable_occbin(
         from puremacro.dsge.klein import klein_solve
         try:
             sol = klein_solve(A_0_0, -A_m_0, n_pre=n_vars)
-            P_0 = sol.P
-        except (np.linalg.LinAlgError, scipy.linalg.LinAlgError, ValueError, Exception):
+            P_0 = getattr(sol, "P", sol.G)
+        except (np.linalg.LinAlgError, scipy.linalg.LinAlgError, ValueError):
             P_0 = np.zeros((n_vars, n_vars))
 
     # Find the row index of the constrained variable

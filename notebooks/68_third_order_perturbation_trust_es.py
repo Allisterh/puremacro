@@ -88,14 +88,19 @@ def labelled_tensors(sol, states=None, shocks=None, fields=tuple(AXES)):
     """Decision-rule tensors as DataFrames with columns labelled by state and shock names."""
     dr = sol.decision_rules()
     own_x, own_u = list(dr.state_variables), list(dr.shock_names)
-    states, shocks = states or own_x, shocks or own_u
+    states = list(states) if states is not None else own_x
+    shocks = list(shocks) if shocks is not None else own_u
     out = {}
     for field in fields:
         axes = AXES[field]
         own = list(product(*(own_x if a == "x" else own_u for a in axes)))
         cols = list(product(*(states if a == "x" else shocks for a in axes)))
         mat = np.asarray(getattr(dr, field)).reshape(len(dr.variable_names), -1)
-        out[field] = pd.DataFrame(mat[:, [own.index(c) for c in cols]], index=list(dr.variable_names), columns=cols)
+        data = np.zeros((len(dr.variable_names), len(cols)))
+        for j_col, c in enumerate(cols):
+            if c in own:
+                data[:, j_col] = mat[:, own.index(c)]
+        out[field] = pd.DataFrame(data, index=list(dr.variable_names), columns=cols)
     return dr, out
 
 
@@ -103,7 +108,8 @@ def claim_to_cube(beta, rho, s):
     """y_t = beta E_t y_{t+1} + x_t^3: the price of a claim to the convex payoff x^3, x an AR(1)."""
     return load_mod(f"var y x; varexo e; parameters beta rho; beta={beta!r}; rho={rho!r};\n"
                     "model; x = rho*x(-1) + e; y = beta*y(+1) + x^3; end;\n"
-                    f"initval; x=0; y=0; end;\nshocks; var e; stderr {s!r}; end;\n", order=3)
+                    f"initval; x=0; y=0; end;\nshocks; var e; stderr {s!r}; end;\n",
+                    states=["x"], order=3)
 
 
 def cube_closed_form(beta, rho, s):
@@ -227,9 +233,9 @@ else:
         record(f"Dynare 7.0: {result}", np.nan, "not run", "not run")
 
 # %% [markdown]
-# ### 3. Lo que una comparación de trayectorias no puede ver
+# ### 3. Lo que una comparación de trayectorias no puede ver, y lo que sí ve la simetría de Schwarz
 #
-# El 20 de septiembre de 2026 la comprobación en vivo encontró que el tensor $g_{xxu}$ del RBC difería en 0.0012928883 mientras todas las trayectorias simuladas coincidían. El error era antisimétrico en los dos índices de estado: sumaba un valor a la entrada (capital, tecnología) y lo restaba de la entrada (tecnología, capital). Cada observación contrae $g_{xxu}$ con $\hat x\otimes\hat x\otimes u$, que es simétrico en esos dos índices, así que el error se cancela exactamente. La celda siguiente planta ese error, y uno simétrico del mismo tamaño, en el tensor correcto y mide lo que cada uno le hace a una trayectoria simulada.
+# El 20 de septiembre de 2026 la comprobación en vivo encontró que el tensor $g_{xxu}$ del RBC difería en 0.0012928883 mientras todas las trayectorias simuladas coincidían. El error era antisimétrico en los dos índices de estado: sumaba un valor a la entrada (capital, tecnología) y lo restaba de la entrada (tecnología, capital). Cada observación contrae $g_{xxu}$ con $\hat x\otimes\hat x\otimes u$, que es simétrico en esos dos índices, así que el error se cancela en toda trayectoria simulada. Una comprobación interna de la simetría de Schwarz, $g_{xxu,(k,a,e)}=g_{xxu,(a,k,e)}$, detecta de inmediato la parte antisimétrica sin necesitar Dynare, mientras que un error simétrico en esa misma derivada cruzada pasa la prueba de Schwarz y exige un oráculo externo. La celda siguiente verifica la simetría de Schwarz de $g_{xxu}$ y mide lo que los errores plantados hacen en ambas pruebas.
 
 # %%
 rbc = load_mod(RBC, order=3)
@@ -237,6 +243,7 @@ dr, T = labelled_tensors(rbc)
 states, shocks = list(dr.state_variables), list(dr.shock_names)
 cols = list(T["ghxxu"].columns)
 i, j = cols.index((states[0], states[1], shocks[0])), cols.index((states[1], states[0], shocks[0]))
+schwarz_err = float(np.max(np.abs(T["ghxxu"].iloc[:, i] - T["ghxxu"].iloc[:, j])))
 size = 0.0012928883
 planted = {"antisymmetric": np.zeros((len(dr.variable_names), len(cols))), "symmetric": np.zeros((len(dr.variable_names), len(cols)))}
 planted["antisymmetric"][:, i], planted["antisymmetric"][:, j] = size, -size
@@ -246,11 +253,17 @@ x_lag = sim.states[states].to_numpy()[:-1]          # state deviations dated t-1
 u = sim.shocks[shocks].to_numpy()[1:]
 kron = np.einsum("ti,tj,tk->tijk", x_lag, x_lag, u).reshape(len(u), -1)   # columns follow product(states, states, shocks)
 blind = pd.DataFrame({name: {"largest tensor error": np.max(np.abs(D)),
+                             "Schwarz asymmetry |D(k,a,e) - D(a,k,e)|": np.max(np.abs(D[:, i] - D[:, j])),
                              "largest effect on a simulated observation": np.max(np.abs(kron @ D.T)) / 2}
                       for name, D in planted.items()})
+print(f"Solved RBC g_xxu Schwarz asymmetry |g(k,a,e) - g(a,k,e)|: {schwarz_err:.2e}")
 print(blind.to_string(float_format=lambda v: f"{v:.2e}"))
+record("Internal symmetry: RBC g_xxu Schwarz check |g(k,a,e) - g(a,k,e)|", schwarz_err, 1e-15, "exact")
 record("Blind spot: path effect of the antisymmetric error", blind.loc["largest effect on a simulated observation", "antisymmetric"], 1e-15, "invisible")
+assert schwarz_err < 1e-15
 assert blind.loc["largest effect on a simulated observation", "antisymmetric"] < 1e-15
+assert blind.loc["Schwarz asymmetry |D(k,a,e) - D(a,k,e)|", "antisymmetric"] > 2e-3
+assert blind.loc["Schwarz asymmetry |D(k,a,e) - D(a,k,e)|", "symmetric"] == 0.0
 assert blind.loc["largest effect on a simulated observation", "symmetric"] > 1e-10
 
 # %% [markdown]
@@ -274,7 +287,7 @@ else:
 labels = ["tensor error", "effect on a path"]
 x = np.arange(2)
 for k, name in enumerate(("antisymmetric", "symmetric")):
-    values = blind[name].clip(lower=1e-24).to_numpy()
+    values = blind.loc[["largest tensor error", "largest effect on a simulated observation"], name].clip(lower=1e-24).to_numpy()
     ax2.bar(x + (k - 0.5) * 0.36, values, width=0.34, color=col[k], edgecolor=_nbstyle.TINTA, label=f"{name} error")
 ax2.axhline(1e-10, color=_nbstyle.SPINE, lw=1.0, linestyle="--")
 ax2.annotate("path tolerance", (0.5, 1e-10), textcoords="offset points", xytext=(0, 4), ha="center",
@@ -286,7 +299,7 @@ ax2.legend(loc="upper right", frameon=True, facecolor=_nbstyle.FONDO, edgecolor=
 # %% [markdown]
 # ### 4. Lo que dice el tercer orden verificado
 #
-# En el modelo RBC, el riesgo desplaza la media ergódica por encima del estado estacionario determinista: los hogares mantienen capital precautorio. Ese desplazamiento es un término de segundo orden y debe ser proporcional a la varianza de los choques. La descomposición con poda da una comprobación de simulación precisa: la parte de primer orden tiene media cero, así que la media de las partes de segundo y tercer orden estima el desplazamiento con poco ruido. Las respuestas a choques grandes se vuelven asimétricas, y el tercer orden las hace depender del nivel de riesgo. En el derecho sobre $x^3$, toda la respuesta del precio a noticias pequeñas es un efecto de riesgo de tercer orden, $B\,e$, proporcional a la varianza.
+# En el modelo RBC, la media ergódica del capital se sitúa $+0.0785\%$ por encima del estado estacionario determinista. Como muestra `risk_decomposition()`, ese desplazamiento no proviene del término de riesgo puro $\tfrac12(I-G)^{-1}g_{\sigma\sigma}\sigma^2$ (el estado estacionario riesgoso, que aquí es ligeramente negativo con utilidad logarítmica y $\delta=0.025$), sino de los términos positivos de curvatura de Jensen $\tfrac12(I-G)^{-1}[g_{xx}\operatorname{vec}(\Omega)+g_{uu}\operatorname{vec}(\sigma^2\Sigma_u)]$ aplicados a la dispersión de estados y choques. Como $g_{\sigma^3}=0$ y los momentos impares de choques gaussianos simétricos se anulan, la componente podada de tercer orden tiene media cero ($E[x_t^{(3)}]=0$), de modo que todo el desplazamiento de la media ergódica es de segundo orden y escala con la varianza $\sigma^2$. La descomposición con poda da una comprobación de simulación precisa por variable de control: la parte de primer orden tiene media cero, así que la media muestral de las partes de segundo y tercer orden estima el desplazamiento con poco ruido. Las respuestas a choques grandes se vuelven asimétricas, y el tercer orden las hace depender del nivel de riesgo. En el derecho sobre $x^3$, toda la respuesta del precio a noticias pequeñas es un efecto de riesgo de tercer orden, $B\,e$, proporcional a la varianza.
 
 # %%
 def responses(sol, size, horizon, sigma=1.0):
@@ -302,6 +315,9 @@ def responses(sol, size, horizon, sigma=1.0):
 
 
 ys = dr.ys
+decomp_k = rbc.risk_decomposition().loc["k"]
+print("RBC capital ergodic-mean decomposition (% of steady state):",
+      {k: round(float(100 * decomp_k[k] / ys["k"]), 4) for k in ("risk", "state_curvature", "shock_curvature", "ergodic_mean")})
 shift = {scale: pd.concat(list(rbc.stochastic_steady_state(sigma=scale).values())) for scale in (1.0, 2.0, 3.0)}
 scaling_error = max(abs(shift[m]["k"] / shift[1.0]["k"] / m**2 - 1.0) for m in (2.0, 3.0))
 control_variate = {}
@@ -311,7 +327,7 @@ for scale in (1.0, 3.0):
     batches = higher.reshape(100, -1).mean(axis=1)                     # 100 batch means for the standard error
     control_variate[scale] = (higher.mean(), batches.std(ddof=1) / 10.0)
 z_scores = {m: (control_variate[m][0] - shift[m]["k"]) / control_variate[m][1] for m in control_variate}
-print("Capital above its steady state (% of the steady state), by shock s.d. multiple: "
+print("Capital ergodic mean minus steady state (% of steady state), by shock s.d. multiple: "
       + ", ".join(f"x{m:g} {100 * shift[m]['k'] / ys['k']:.4f}" for m in shift))
 print("Simulated minus analytic shift, in standard errors: " + ", ".join(f"x{m:g} {z:+.2f}" for m, z in z_scores.items()))
 
@@ -350,7 +366,7 @@ ax1.plot(grid, 100 * shift[1.0]["k"] / ys["k"] * grid**2, color=col[0], lw=2.0, 
 for m, (mean, se) in control_variate.items():
     ax1.errorbar(m, 100 * mean / ys["k"], yerr=200 * se / ys["k"], fmt="o", color=col[1], ms=6, capsize=4,
                  label="Simulated ± 2 s.e." if m == 1.0 else None)
-ax1.set(xlabel="Shock s.d., multiple of 0.01", ylabel="Capital above steady state (%)", title="Precautionary capital")
+ax1.set(xlabel="Shock s.d., multiple of 0.01", ylabel="Capital above steady state (%)", title="Ergodic capital shift")
 ax1.legend(loc="upper left", frameon=True, facecolor=_nbstyle.FONDO, edgecolor=_nbstyle.SPINE)
 up, down = responses(rbc, 0.03, 40), responses(rbc, -0.03, 40)
 ax2.plot(100 * up[3]["y"] / ys["y"], color=col[0], lw=2.0, label="+3 s.d. shock")
@@ -477,9 +493,9 @@ print(f"\n{len(ran)} of {len(scorecard)} checks ran and pass" + (f"; {missing} n
 #
 # Ambas formas cerradas se reproducen al nivel del error de redondeo, incluidos los términos de riesgo del derecho cúbico, que la tabla pone junto a los valores que devolvía el solucionador antes de la versión 4.3.0. El modelo de Brock y Mirman devuelve términos de riesgo nulos al nivel del redondeo, como exige la equivalencia cierta de su política exacta. Frente a Dynare, cada tensor de cada modelo coincide dentro de la tolerancia de los archivos de referencia con amplio margen, y lo mismo ocurre con las trayectorias con poda generadas con las propias innovaciones de Dynare y con sus momentos muestrales. Las referencias son números de Dynare, sus hashes coinciden con el manifiesto, y el modelo RBC que se usa después es el mismo archivo que ejecutó Dynare.
 #
-# La sección 3 muestra por qué la comparación de tensores es la que importa. El error antisimétrico es tan grande en el tensor como el simétrico, pero su efecto sobre la trayectoria simulada es cero al nivel del redondeo; solo una comparación entrada por entrada con una referencia independiente lo expone. Así salió a la luz el error del 20 de septiembre.
+# La sección 3 muestra por qué las trayectorias simuladas por sí solas no bastan. El error antisimétrico es tan grande en el tensor como el simétrico, pero su efecto sobre la trayectoria simulada es cero al nivel del redondeo porque $\hat x\otimes\hat x\otimes u$ es simétrico en los dos índices de estado. Una comprobación interna de la simetría de Schwarz detecta el error antisimétrico sin referencia externa, mientras que un error simétrico en la derivada cruzada cumple la simetría de Schwarz y exige una comparación entrada por entrada con un oráculo externo.
 #
-# La sección 4 recuerda que un solucionador confiable puede reportar efectos pequeños. En este modelo RBC el desplazamiento precautorio del capital es una fracción de punto porcentual con la volatilidad calibrada y crece con la varianza, exactamente como dice la fórmula analítica y dentro del error muestral de la simulación. La producción responde de manera asimétrica a choques grandes, un efecto de segundo orden; el tercer orden cambia las respuestas solo un poco, y el nivel de volatilidad apenas mueve la respuesta de impacto del consumo. El derecho sobre $x^3$ es el caso opuesto: en primer y segundo orden su precio ignora las noticias pequeñas, y en tercer orden responde en proporción a la varianza, exactamente como predice la forma cerrada.
+# La sección 4 recuerda que un solucionador confiable puede reportar efectos pequeños y separar sus fuentes. En este modelo RBC la media ergódica del capital está $+0.0785\%$ por encima del estado estacionario determinista con la volatilidad calibrada —impulsada por los términos positivos de curvatura de Jensen en estados y choques, que superan al término de riesgo puro $g_{\sigma\sigma}$, ligeramente negativo— y crece en proporción a la varianza, dentro del error muestral de la simulación. La producción responde de manera asimétrica a choques grandes, un efecto de segundo orden; el tercer orden cambia las respuestas solo un poco, y el nivel de volatilidad apenas mueve la respuesta de impacto del consumo. El derecho sobre $x^3$ es el caso opuesto: en primer y segundo orden su precio ignora las noticias pequeñas, y en tercer orden responde en proporción a la varianza, exactamente como predice la forma cerrada.
 #
 # La sección 5 aplica las comprobaciones a los momentos. Frente a la forma cerrada del derecho sobre $x^3$, la varianza y las autocorrelaciones de puremacro son exactas al nivel del redondeo, y sus medias y varianzas coinciden con la tabla de Dynare 8 en los seis modelos. Las autocorrelaciones de Dynare son la excepción. Para el precio del derecho, su autocorrelación de orden 1 es 0.7085, mientras que la forma cerrada da 0.7634. En `correlated_cubic.mod` la tabla de Dynare da 0.330, y la simulación del propio Dynare de cuatro millones de períodos da 0.475, como puremacro. Una implementación de referencia puede fallar en un resultado y acertar en el resto. Aquí la tabla de Dynare no pasa la forma cerrada, y sus propias simulaciones también la rechazan.
 
@@ -488,16 +504,16 @@ print(f"\n{len(ran)} of {len(scorecard)} checks ran and pass" + (f"; {missing} n
 #
 # Cambia el factor de descuento, la persistencia o la volatilidad del derecho; la aserción compara los términos de riesgo del solucionador con la forma cerrada.
 #
-# 1. **Básico.** Haz negativo `rho_claim`. ¿Por qué cambian de signo ambos términos de riesgo?
+# 1. **Básico.** Haz negativo `rho_claim` (o fija `rho_claim = 0.0`). ¿Por qué $g_{u\sigma\sigma}=2B$ cambia de signo cuando $\rho<0$ mientras que $g_{x\sigma\sigma}=2B\rho\propto\rho^2$ sigue siendo positivo para todo $\rho\ne 0$ (y ambos se anulan en $\rho=0$)?
 # 2. **Intermedio.** Acerca `beta_claim` a 0.99 con `rho_claim = 0.95`. ¿Qué factor de $B$ explica lo rápido que crecen los términos de riesgo?
 # 3. **Avanzado.** Añade un pago cuadrático, `y = beta*y(+1) + x^3 + c2*x^2`. Deriva la nueva forma cerrada (aparece una constante) y comprueba qué término de riesgo se vuelve distinto de cero en segundo orden.
 
 # %%
 beta_claim = 0.95   # ← change this: discount factor, 0.5 to 0.99
-rho_claim = 0.8     # ← change this: persistence of x, -0.95 to 0.95
+rho_claim = 0.8     # ← change this: persistence of x, -0.95 to 0.95 (including 0.0)
 vol_claim = 0.1     # ← change this: shock standard deviation, 0.01 to 0.5
 assert 0.5 <= beta_claim <= 0.99 and -0.95 <= rho_claim <= 0.95 and 0.01 <= vol_claim <= 0.5
-_, T = labelled_tensors(claim_to_cube(beta_claim, rho_claim, vol_claim))
+_, T = labelled_tensors(claim_to_cube(beta_claim, rho_claim, vol_claim), states=["x"])
 A, B, exact = cube_closed_form(beta_claim, rho_claim, vol_claim)
 solver = {f: T[f].loc["y"].iloc[0] for f in ("ghxss", "ghuss")}
 print(f"B = {B:.6f}; ghxss: solver {solver['ghxss']:.8f}, closed form {exact['ghxss']:.8f}; "

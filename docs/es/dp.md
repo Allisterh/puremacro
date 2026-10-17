@@ -228,7 +228,7 @@ curve = sol.lorenz("a")                          # columnas pop_share, value_sha
 `sol.simulate(n_agents=10_000, periods=None, *, seed=0, init=None, burn_in=0,
 record=None)` genera historias individuales bajo la política resuelta y
 devuelve un `dp.Panel`. `periods=None` e `init=None` toman valores por defecto
-según el horizonte: 200 periodos y `"stationary"` en horizonte infinito, las J
+según el horizonte: 200 periodos y `"stationary"` en horizonte infinito, las `T`
 edades del horizonte y `"newborn"` en un ciclo de vida. En horizonte infinito
 cada agente empieza en una celda (estado, choque) extraída de `sol.distribution`,
 así que el panel está en la distribución estacionaria desde el primer periodo;

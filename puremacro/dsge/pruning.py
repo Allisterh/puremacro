@@ -59,13 +59,15 @@ Coeurdacier, N., Rey, H. and Winant, P. (2011). The Risky Steady State.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
 import scipy.linalg
 
 from ._results import TheoreticalMomentsResult
+if TYPE_CHECKING:
+    from ._results import StochSimulResult
 from ._moments import compute_autocorr_matrices, conditional_fevd, first_order_moments
 from ._pruned_moments import (
     MAX_PRUNED_STATE_DIM,
@@ -1528,26 +1530,26 @@ class Order3PrunedSolution:
     state_names: tuple[str, ...]
     control_names: tuple[str, ...]
     shock_names: tuple[str, ...]
-    # Optional / cached fields
-    H_xu: np.ndarray | None = None
-    H_uu: np.ndarray | None = None
-    G_xu: np.ndarray | None = None
-    G_uu: np.ndarray | None = None
-    steady_state: pd.Series | None = None
-    variable_names: tuple[str, ...] | None = None
-    ghx: np.ndarray | None = None
-    ghu: np.ndarray | None = None
-    ghxx: np.ndarray | None = None
-    ghxu: np.ndarray | None = None
-    ghuu: np.ndarray | None = None
-    ghs2: np.ndarray | None = None
-    ghxxx: np.ndarray | None = None
-    ghxxu: np.ndarray | None = None
-    ghxuu: np.ndarray | None = None
-    ghuuu: np.ndarray | None = None
-    ghxss: np.ndarray | None = None
-    ghuss: np.ndarray | None = None
-    shock_cov: np.ndarray | None = None
+    # Optional / cached fields (unconditionally populated in __init__)
+    H_xu: np.ndarray
+    H_uu: np.ndarray
+    G_xu: np.ndarray
+    G_uu: np.ndarray
+    steady_state: pd.Series
+    variable_names: tuple[str, ...]
+    ghx: np.ndarray
+    ghu: np.ndarray
+    ghxx: np.ndarray
+    ghxu: np.ndarray
+    ghuu: np.ndarray
+    ghs2: np.ndarray
+    ghxxx: np.ndarray
+    ghxxu: np.ndarray
+    ghxuu: np.ndarray
+    ghuuu: np.ndarray
+    ghxss: np.ndarray
+    ghuss: np.ndarray
+    shock_cov: np.ndarray
     params: dict | None = None
     first_order: Any | None = None
     # User-overrides for test contracts

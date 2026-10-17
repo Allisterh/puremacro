@@ -27,7 +27,13 @@ import keyword
 import re
 import warnings
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
+
+if TYPE_CHECKING:
+    from puremacro.dsge._results import (
+        DSGEForecastResult,
+        StochSimulResult,
+    )
 
 import numpy as np
 import pandas as pd
@@ -2840,7 +2846,7 @@ def parse_mod(mod_text: str, base_dir: Path | str | None = None) -> dict:
     scope = {"np": np}
     exec(code_body, scope)
     eq_callable = scope["_generated_equations"]
-    eq_callable._steady_state_at = _steady_state_at
+    setattr(eq_callable, "_steady_state_at", _steady_state_at)
 
     return {
         "variables": variables,
@@ -3176,8 +3182,8 @@ def _linear_model_solve(
     return _orig_solve(self, order=order, shock_cov=shock_cov, qz_criterium=qz_criterium)
 
 
-LinearModel.solve = _linear_model_solve  # type: ignore[assignment]
-LinearModel.solve_perturbation = _linear_model_solve  # type: ignore[assignment]
+LinearModel.solve = _linear_model_solve  # type: ignore[method-assign,assignment]
+LinearModel.solve_perturbation = _linear_model_solve  # type: ignore[attr-defined,assignment]
 
 _orig_stoch_simul = LinearModel.stoch_simul
 
@@ -3199,7 +3205,7 @@ def _linear_model_stoch_simul(self, order: int = 1, **kwargs):
     return _orig_stoch_simul(self, order=order, **kwargs)
 
 
-LinearModel.stoch_simul = _linear_model_stoch_simul  # type: ignore[assignment]
+LinearModel.stoch_simul = _linear_model_stoch_simul  # type: ignore[method-assign,assignment]
 
 
 def _linear_model_perfect_foresight(
@@ -3254,10 +3260,10 @@ from puremacro.dsge.perfect_foresight import (
 )
 from puremacro.dsge.pruning import PrunedSimulationResult
 
-PrunedSimulationResult.__len__ = lambda self: len(self.states)  # type: ignore[attr-defined]
+PrunedSimulationResult.__len__ = lambda self: len(self.states)  # type: ignore[method-assign,attr-defined]
 PrunedSimulationResult.to_numpy = lambda self, *args, **kwargs: self.to_frame().to_numpy(*args, **kwargs)  # type: ignore[attr-defined]
 PrunedSimulationResult.columns = property(lambda self: self.to_frame().columns)  # type: ignore[assignment]
-PrunedSimulationResult.__getitem__ = lambda self, key: self.to_frame()[key]  # type: ignore[attr-defined]
+PrunedSimulationResult.__getitem__ = lambda self, key: self.to_frame()[key]  # type: ignore[method-assign,attr-defined]
 PrunedSimulationResult.__getattr__ = lambda self, name: getattr(self.to_frame(), name)  # type: ignore[attr-defined]
 
 

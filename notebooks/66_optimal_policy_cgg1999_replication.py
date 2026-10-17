@@ -165,9 +165,9 @@ assert disc.converged and cf["gamma_pi"] > 1.0
 assert all(c["max_error"] < c["tolerance"] for c in checks)
 
 # %% [markdown]
-# ### 2. Timeless-perspective commitment, by two independent routes
+# ### 2. Timeless-perspective commitment: matrix Lagrangian and symbolic first-order conditions
 #
-# `discretionary_policy` also solves the commitment problem with `lq_commitment`, which stacks the model with the planner's Lagrange multipliers and solves the augmented system with the Klein QZ method. `ramsey_model` takes a different route: it differentiates the Lagrangian symbolically and solves the resulting first-order conditions. Both should reproduce the closed-form path. CGG solve the problem in two stages, choosing inflation and the output gap subject to the Phillips curve and then reading the interest rate off the IS curve. The symbolic first-order conditions show why: the multiplier on the IS curve is identically zero.
+# `discretionary_policy` also solves the commitment problem with `lq_commitment`, which stacks the model's linearized matrices with the planner's Lagrange multipliers and solves the augmented system with the Klein QZ method. `ramsey_model` differentiates the Lagrangian symbolically to expose the readable first-order conditions (`foc_nodes`) and solves the same underlying quadratic objective and linear constraint system. Both representations should reproduce the closed-form path. CGG solve the problem in two stages, choosing inflation and the output gap subject to the Phillips curve and then reading the interest rate off the IS curve. The symbolic first-order conditions show why: the multiplier on the IS curve is identically zero.
 
 # %%
 comm = disc.commitment_result
@@ -196,7 +196,7 @@ print(pd.DataFrame({"dL/dx": [coef(foc["x"], "x"), coef(foc["x"], mult_pc), coef
                     "dL/dpi": [coef(foc["pi"], "pi"), coef(foc["pi"], mult_pc), coef(foc["pi"], mult_pc, -1)]},
                    index=["own variable at t", "zeta_t", "zeta_{t-1}"]).to_string(float_format=lambda v: f"{v:+.4f}"))
 irf_r = ramsey.irf(shock="eps_u", horizon=H)
-record("Commitment: symbolic route = matrix route",
+record("Commitment: symbolic representation = matrix representation",
        max(np.max(np.abs(irf_r[v].to_numpy() - irf_c[v].to_numpy())) for v in ("x", "pi", "i")))
 record("Commitment: IS-curve multiplier is zero", np.max(np.abs(irf_r[mult_is].to_numpy())))
 price_d, price_c = np.cumsum(pi_d), np.cumsum(pi_c)
@@ -264,7 +264,7 @@ assert all(c["max_error"] < c["tolerance"] for c in checks)
 # %% [markdown]
 # ### 4. How large are the gains from commitment, and by which criterion?
 #
-# The `loss` attribute of each result is the **unconditional** loss $E[\pi_t^2]+\alpha E[x_t^2]$, the average over the stationary distribution. The `conditional_loss` attribute is the planner's own criterion evaluated from the steady state, $(1-\beta)E_0\sum_t\beta^t(\pi_t^2+\alpha x_t^2)$. `stabilization_bias` compares unconditional losses by default and conditional ones with `loss_criterion="conditional"`. From the steady state the commitment solution is the fully optimal (Ramsey) policy, so it can never lose to discretion. Unconditionally it can: the timeless rule keeps honoring past promises, which is costly on average when the future is discounted heavily (Jensen and McCallum 2002). Both losses have closed forms here. Under commitment the responses are sums of two geometric sequences, $a\delta^j+b\rho^j$. The conditional losses are also checked against discounted sums of squared impulse responses. The left panel traces both regimes' variance frontiers as the output weight varies. The right panel recomputes the loss ratio at different discount factors.
+# The `loss` attribute of each result is the **unconditional** loss $E[\pi_t^2]+\alpha E[x_t^2]$, the average over the stationary distribution. The `conditional_loss` attribute is the planner's own criterion evaluated from the steady state, $(1-\beta)E_0\sum_t\beta^t(\pi_t^2+\alpha x_t^2)$. `stabilization_bias` compares unconditional losses by default and conditional ones with `loss_criterion="conditional"`. From the steady state the commitment solution is the fully optimal (Ramsey) policy, so it can never lose to discretion. Unconditionally it can: the timeless rule keeps honoring past promises, which is costly on average when the future is discounted heavily (Sauer 2010, Proposition 2; Jensen and McCallum 2002 show that even at standard discount factors the timeless rule is suboptimal within its class). Both losses have closed forms here. Under commitment the responses are sums of two geometric sequences, $a\delta^j+b\rho^j$. The conditional losses are also checked against discounted sums of squared impulse responses. The left panel traces both regimes' variance frontiers as the output weight varies. The right panel recomputes the loss ratio at different discount factors.
 
 # %%
 def conditional_loss(linear_model, weights, beta, horizon=4000):
@@ -352,33 +352,54 @@ ax2.legend(loc="upper right", frameon=True, facecolor=_nbstyle.FONDO, edgecolor=
 #
 # ### 5. Robustness: the formulas hold away from the calibration
 #
-# A replication that holds only at one calibration could be a coincidence. The loop below draws 25 random calibrations and compares the discretion and commitment paths, and both losses, with the closed forms, scaling each path error by the largest response.
+# A replication that holds only at one calibration could be a coincidence. The loop below draws 25 random calibrations and runs all four solvers (`discretionary_policy`, `lq_commitment`, `ramsey_model`, the conservative central banker, and `osr`), comparing the discretion, simple-rule and commitment paths and losses with the closed forms.
 
 # %%
 rng = np.random.default_rng(1999)
-worst_path, worst_loss = 0.0, 0.0
+worst_path, worst_loss, worst_osr = 0.0, 0.0, 0.0
 for draw in range(25):
     p = {"beta": rng.uniform(0.9, 0.995), "phi": rng.uniform(0.3, 2.0), "lam": rng.uniform(0.02, 0.5),
          "alpha": rng.uniform(0.02, 1.0), "rho": rng.uniform(0.0, 0.9), "mu": rng.uniform(0.0, 0.9)}
-    res_k = discretionary_policy(cgg_model(p), ["pi", "x"], {"pi": 1.0, "x": p["alpha"]}, "i",
+    m_k = cgg_model(p)
+    w_k = {"pi": 1.0, "x": p["alpha"]}
+    res_k = discretionary_policy(m_k, ["pi", "x"], w_k, "i",
                                  beta=p["beta"], tol=1e-12, max_iter=20000)
+    ram_k = ramsey_model(m_k, objective=f"{p['alpha']} * x^2 + pi^2",
+                         planner_discount=p["beta"], instruments="i")
+    cons_k = discretionary_policy(m_k, ["pi", "x"],
+                                  {"pi": 1.0, "x": p["alpha"] * (1.0 - p["beta"] * p["rho"])},
+                                  "i", beta=p["beta"], tol=1e-12, max_iter=20000,
+                                  compare_commitment=False)
+    osr_k = osr(cgg_model(p, rule="i = g/phi + phi_pi*pi + phi_x*x;"),
+                ["phi_pi", "phi_x"], w_k,
+                bounds={"phi_pi": (1.0, 10.0), "phi_x": (0.0, 10.0)})
     cf_k = cgg_closed_forms(**p)
     path_k = closed_form_paths(cf_k, p["rho"], p["alpha"], p["lam"], H)
     r_d = res_k.linear_model.irf("eps_u", horizon=H)
     r_c = res_k.commitment_result.linear_model.irf("eps_u", horizon=H)
+    r_ram = ram_k.irf(shock="eps_u", horizon=H)
+    x0_cons_k = cons_k.linear_model.irf("eps_u", horizon=1)["x"].iloc[0]
+    x0_osr_k = osr_k.optimal_model.irf("eps_u", horizon=1)["x"].iloc[0]
     scale = max(1.0, max(np.max(np.abs(v)) for v in path_k.values()))
     worst_path = max(worst_path, np.max(np.abs(r_d["pi"].to_numpy() - path_k["pi_disc"])) / scale,
                      np.max(np.abs(r_d["x"].to_numpy() - path_k["x_disc"])) / scale,
                      np.max(np.abs(r_c["pi"].to_numpy() - path_k["pi_comm"])) / scale,
-                     np.max(np.abs(r_c["x"].to_numpy() - path_k["x_comm"])) / scale)
+                     np.max(np.abs(r_c["x"].to_numpy() - path_k["x_comm"])) / scale,
+                     np.max(np.abs(r_ram["pi"].to_numpy() - path_k["pi_comm"])) / scale,
+                     np.max(np.abs(r_ram["x"].to_numpy() - path_k["x_comm"])) / scale,
+                     abs(x0_cons_k + cf_k["omega_c"]) / scale)
     worst_loss = max(worst_loss, abs(res_k.loss / cf_k["loss_disc"] - 1.0),
                      abs(res_k.commitment_result.loss / cf_k["loss_comm"] - 1.0),
                      abs(res_k.conditional_loss / cf_k["cond_disc"] - 1.0),
                      abs(res_k.commitment_result.conditional_loss / cf_k["cond_comm"] - 1.0))
-    assert res_k.converged
+    worst_osr = max(worst_osr, abs(osr_k.loss_opt / cf_k["loss_simple"] - 1.0),
+                    abs(x0_osr_k / cf_k["omega_c"] + 1.0))
+    assert res_k.converged and cons_k.converged and osr_k.converged
 record("Robustness: 25 random calibrations, paths (relative)", worst_path)
 record("Robustness: 25 random calibrations, both losses (relative)", worst_loss)
-print(f"Largest relative path error: {worst_path:.1e}; largest relative loss error: {worst_loss:.1e}")
+record("Robustness: 25 random calibrations, OSR loss & allocation (relative)", worst_osr, tol=1e-6)
+print(f"Largest relative path error: {worst_path:.1e}; largest relative loss error: {worst_loss:.1e}; "
+      f"largest OSR relative error: {worst_osr:.1e}")
 assert all(c["max_error"] < c["tolerance"] for c in checks)
 
 # %% [markdown]
@@ -397,7 +418,7 @@ assert scorecard["passed"].all()
 # %% [markdown]
 # ## Read the output
 #
-# Each closed-form comparison in the scorecard is at rounding level, far inside its tolerance, and it stays there at random calibrations. The two OSR rows are limited by the derivative-free search, which is why they carry a relative tolerance. So the four solvers reproduce CGG's discretion, simple-rule and commitment results as analytical statements, not just at one calibration. The two commitment routes (matrix Lagrangian and symbolic first-order conditions) agree with each other to rounding error. The symbolic conditions give the targeting rule once the zero IS-curve multiplier is dropped.
+# Each closed-form comparison in the scorecard is at rounding level, far inside its tolerance, and it stays there at random calibrations. The OSR rows are limited by the derivative-free search, which is why they carry a relative tolerance. So all four solvers reproduce CGG's discretion, simple-rule and commitment results as analytical statements across random calibrations, not just at one calibration. The two commitment entry points (`lq_commitment` and `ramsey_model`) share the underlying linear-quadratic system and agree with each other to rounding error. The symbolic conditions give the targeting rule once the zero IS-curve multiplier is dropped.
 #
 # The hero figure shows the economics. After a cost-push shock the discretionary central bank splits the adjustment between inflation and the output gap, and the price level settles permanently higher. The committed central bank accepts a smaller initial output loss but keeps the gap negative for longer, and the price level returns towards its starting value. The interest-rate panel is a model outcome, not a policy recommendation: the commitment path of $i_t$ follows from the targeting rule and the IS curve.
 #
@@ -410,7 +431,7 @@ assert scorecard["passed"].all()
 #
 # 1. **Basic.** With the default `rho_custom = 0.0`, compare $\omega^c$ with the discretionary response $\lambda q$. Why does commitment to a simple rule gain nothing when cost-push shocks are serially uncorrelated, while the timeless commitment still lowers the loss?
 # 2. **Intermediate.** Set `rho_custom = 0.9`. How do the loss gap and the conservative weight $\alpha(1-\beta\rho)$ change, and why does persistence make commitment more valuable?
-# 3. **Stretch.** Keep `rho_custom = 0.0` and set `beta_custom = 0.5`. Is `stabilization_bias` still positive? Compare it with the bias under `loss_criterion="conditional"`, and use the conditional losses to explain why the fully optimal policy still wins from the steady state (Jensen and McCallum 2002).
+# 3. **Stretch.** Keep `rho_custom = 0.0` and set `beta_custom = 0.5`. Is `stabilization_bias` still positive? Compare it with the bias under `loss_criterion="conditional"`, and use the conditional losses to explain why the fully optimal policy still wins from the steady state (Sauer 2010, Proposition 2; see also Jensen and McCallum 2002).
 
 # %%
 rho_custom = 0.0    # ← change this: cost-push persistence, any value in [0, 0.95]

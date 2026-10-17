@@ -26,7 +26,10 @@ import inspect
 import time
 import warnings
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Sequence, Tuple, Union
+
+if TYPE_CHECKING:
+    import matplotlib.pyplot as plt
 
 import numpy as np
 import pandas as pd

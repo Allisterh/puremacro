@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
 
 if TYPE_CHECKING:
     from matplotlib.figure import Figure
+    from puremacro.dsge._results import NUTSResult
 import warnings
 
 import numpy as np
@@ -247,12 +248,12 @@ class BayesianEstimationResult:
                 prior_obj = ensure_prior(self.priors[name])
 
             if prior_obj is not None:
-                p_mean = prior_obj.mean
-                p_std = prior_obj.std
-                p_lb = prior_obj.lb
-                p_ub = prior_obj.ub
-                x_lo = max(p_lb, min(d_min, p_mean - 3.2 * p_std))
-                x_hi = min(p_ub, max(d_max, p_mean + 3.2 * p_std))
+                p_mean = float(prior_obj.mean)
+                p_std = float(prior_obj.std)
+                p_lb = float(prior_obj.lb) if prior_obj.lb is not None else -np.inf
+                p_ub = float(prior_obj.ub) if prior_obj.ub is not None else np.inf
+                x_lo = max(p_lb, min(float(d_min), p_mean - 3.2 * p_std))
+                x_hi = min(p_ub, max(float(d_max), p_mean + 3.2 * p_std))
                 if not (np.isfinite(x_lo) and np.isfinite(x_hi)) or x_lo >= x_hi:
                     x_lo, x_hi = d_min - 0.1 * abs(d_min), d_max + 0.1 * abs(d_max)
                 x_grid = np.linspace(x_lo, x_hi, 300)

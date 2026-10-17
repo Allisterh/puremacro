@@ -165,9 +165,9 @@ assert disc.converged and cf["gamma_pi"] > 1.0
 assert all(c["max_error"] < c["tolerance"] for c in checks)
 
 # %% [markdown]
-# ### 2. Compromiso desde la perspectiva atemporal, por dos rutas independientes
+# ### 2. Compromiso desde la perspectiva atemporal: lagrangiano matricial y condiciones simbólicas
 #
-# `discretionary_policy` también resuelve el problema de compromiso con `lq_commitment`, que apila el modelo con los multiplicadores de Lagrange del planificador y resuelve el sistema aumentado con el método QZ de Klein. `ramsey_model` sigue otra ruta: deriva simbólicamente el lagrangiano y resuelve las condiciones de primer orden resultantes. Ambas deben reproducir la trayectoria en forma cerrada. CGG resuelven el problema en dos etapas: eligen la inflación y la brecha sujetas a la curva de Phillips y luego obtienen la tasa de interés de la curva IS. Las condiciones de primer orden simbólicas muestran por qué: el multiplicador de la curva IS es idénticamente cero.
+# `discretionary_policy` también resuelve el problema de compromiso con `lq_commitment`, que apila las matrices linealizadas del modelo con los multiplicadores de Lagrange del planificador y resuelve el sistema aumentado con el método QZ de Klein. `ramsey_model` deriva simbólicamente el lagrangiano para exponer las condiciones de primer orden legibles (`foc_nodes`) y resuelve el mismo sistema subyacente de objetivo cuadrático y restricciones lineales. Ambas representaciones deben reproducir la trayectoria en forma cerrada. CGG resuelven el problema en dos etapas: eligen la inflación y la brecha sujetas a la curva de Phillips y luego obtienen la tasa de interés de la curva IS. Las condiciones de primer orden simbólicas muestran por qué: el multiplicador de la curva IS es idénticamente cero.
 
 # %%
 comm = disc.commitment_result
@@ -196,7 +196,7 @@ print(pd.DataFrame({"dL/dx": [coef(foc["x"], "x"), coef(foc["x"], mult_pc), coef
                     "dL/dpi": [coef(foc["pi"], "pi"), coef(foc["pi"], mult_pc), coef(foc["pi"], mult_pc, -1)]},
                    index=["own variable at t", "zeta_t", "zeta_{t-1}"]).to_string(float_format=lambda v: f"{v:+.4f}"))
 irf_r = ramsey.irf(shock="eps_u", horizon=H)
-record("Commitment: symbolic route = matrix route",
+record("Commitment: symbolic representation = matrix representation",
        max(np.max(np.abs(irf_r[v].to_numpy() - irf_c[v].to_numpy())) for v in ("x", "pi", "i")))
 record("Commitment: IS-curve multiplier is zero", np.max(np.abs(irf_r[mult_is].to_numpy())))
 price_d, price_c = np.cumsum(pi_d), np.cumsum(pi_c)
@@ -264,7 +264,7 @@ assert all(c["max_error"] < c["tolerance"] for c in checks)
 # %% [markdown]
 # ### 4. ¿Qué tan grandes son las ganancias del compromiso, y con qué criterio?
 #
-# El atributo `loss` de cada resultado es la pérdida **incondicional** $E[\pi_t^2]+\alpha E[x_t^2]$, el promedio sobre la distribución estacionaria. El atributo `conditional_loss` es el criterio del propio planificador evaluado desde el estado estacionario, $(1-\beta)E_0\sum_t\beta^t(\pi_t^2+\alpha x_t^2)$. `stabilization_bias` compara pérdidas incondicionales por defecto y condicionales con `loss_criterion="conditional"`. Desde el estado estacionario, la solución de compromiso es la política plenamente óptima (de Ramsey), así que nunca puede perder frente a la discreción. Incondicionalmente sí puede: la regla atemporal sigue honrando promesas pasadas, lo que en promedio es costoso cuando el futuro se descuenta mucho (Jensen y McCallum 2002). Ambas pérdidas tienen aquí forma cerrada. Bajo compromiso las respuestas son sumas de dos sucesiones geométricas, $a\delta^j+b\rho^j$. Las pérdidas condicionales se contrastan además con sumas descontadas de respuestas al impulso al cuadrado. El panel izquierdo traza las fronteras de varianza de ambos regímenes al variar el peso sobre el producto. El panel derecho recalcula el cociente de pérdidas para distintos factores de descuento.
+# El atributo `loss` de cada resultado es la pérdida **incondicional** $E[\pi_t^2]+\alpha E[x_t^2]$, el promedio sobre la distribución estacionaria. El atributo `conditional_loss` es el criterio del propio planificador evaluado desde el estado estacionario, $(1-\beta)E_0\sum_t\beta^t(\pi_t^2+\alpha x_t^2)$. `stabilization_bias` compara pérdidas incondicionales por defecto y condicionales con `loss_criterion="conditional"`. Desde el estado estacionario, la solución de compromiso es la política plenamente óptima (de Ramsey), así que nunca puede perder frente a la discreción. Incondicionalmente sí puede: la regla atemporal sigue honrando promesas pasadas, lo que en promedio es costoso cuando el futuro se descuenta mucho (Sauer 2010, Proposición 2; Jensen y McCallum 2002 muestran que incluso con factores de descuento estándar la regla atemporal es subóptima dentro de su clase). Ambas pérdidas tienen aquí forma cerrada. Bajo compromiso las respuestas son sumas de dos sucesiones geométricas, $a\delta^j+b\rho^j$. Las pérdidas condicionales se contrastan además con sumas descontadas de respuestas al impulso al cuadrado. El panel izquierdo traza las fronteras de varianza de ambos regímenes al variar el peso sobre el producto. El panel derecho recalcula el cociente de pérdidas para distintos factores de descuento.
 
 # %%
 def conditional_loss(linear_model, weights, beta, horizon=4000):
@@ -352,33 +352,54 @@ ax2.legend(loc="upper right", frameon=True, facecolor=_nbstyle.FONDO, edgecolor=
 #
 # ### 5. Robustez: las fórmulas valen lejos de la calibración
 #
-# Una replicación que solo se cumple en una calibración podría ser una coincidencia. El ciclo siguiente sortea 25 calibraciones aleatorias y compara con las formas cerradas las trayectorias y ambas pérdidas de la discreción y del compromiso, escalando el error de cada trayectoria por la respuesta más grande.
+# Una replicación que solo se cumple en una calibración podría ser una coincidencia. El ciclo siguiente sortea 25 calibraciones aleatorias y ejecuta los cuatro solucionadores (`discretionary_policy`, `lq_commitment`, `ramsey_model`, el banquero central conservador y `osr`), comparando con las formas cerradas las trayectorias y pérdidas de discreción, regla simple y compromiso.
 
 # %%
 rng = np.random.default_rng(1999)
-worst_path, worst_loss = 0.0, 0.0
+worst_path, worst_loss, worst_osr = 0.0, 0.0, 0.0
 for draw in range(25):
     p = {"beta": rng.uniform(0.9, 0.995), "phi": rng.uniform(0.3, 2.0), "lam": rng.uniform(0.02, 0.5),
          "alpha": rng.uniform(0.02, 1.0), "rho": rng.uniform(0.0, 0.9), "mu": rng.uniform(0.0, 0.9)}
-    res_k = discretionary_policy(cgg_model(p), ["pi", "x"], {"pi": 1.0, "x": p["alpha"]}, "i",
+    m_k = cgg_model(p)
+    w_k = {"pi": 1.0, "x": p["alpha"]}
+    res_k = discretionary_policy(m_k, ["pi", "x"], w_k, "i",
                                  beta=p["beta"], tol=1e-12, max_iter=20000)
+    ram_k = ramsey_model(m_k, objective=f"{p['alpha']} * x^2 + pi^2",
+                         planner_discount=p["beta"], instruments="i")
+    cons_k = discretionary_policy(m_k, ["pi", "x"],
+                                  {"pi": 1.0, "x": p["alpha"] * (1.0 - p["beta"] * p["rho"])},
+                                  "i", beta=p["beta"], tol=1e-12, max_iter=20000,
+                                  compare_commitment=False)
+    osr_k = osr(cgg_model(p, rule="i = g/phi + phi_pi*pi + phi_x*x;"),
+                ["phi_pi", "phi_x"], w_k,
+                bounds={"phi_pi": (1.0, 10.0), "phi_x": (0.0, 10.0)})
     cf_k = cgg_closed_forms(**p)
     path_k = closed_form_paths(cf_k, p["rho"], p["alpha"], p["lam"], H)
     r_d = res_k.linear_model.irf("eps_u", horizon=H)
     r_c = res_k.commitment_result.linear_model.irf("eps_u", horizon=H)
+    r_ram = ram_k.irf(shock="eps_u", horizon=H)
+    x0_cons_k = cons_k.linear_model.irf("eps_u", horizon=1)["x"].iloc[0]
+    x0_osr_k = osr_k.optimal_model.irf("eps_u", horizon=1)["x"].iloc[0]
     scale = max(1.0, max(np.max(np.abs(v)) for v in path_k.values()))
     worst_path = max(worst_path, np.max(np.abs(r_d["pi"].to_numpy() - path_k["pi_disc"])) / scale,
                      np.max(np.abs(r_d["x"].to_numpy() - path_k["x_disc"])) / scale,
                      np.max(np.abs(r_c["pi"].to_numpy() - path_k["pi_comm"])) / scale,
-                     np.max(np.abs(r_c["x"].to_numpy() - path_k["x_comm"])) / scale)
+                     np.max(np.abs(r_c["x"].to_numpy() - path_k["x_comm"])) / scale,
+                     np.max(np.abs(r_ram["pi"].to_numpy() - path_k["pi_comm"])) / scale,
+                     np.max(np.abs(r_ram["x"].to_numpy() - path_k["x_comm"])) / scale,
+                     abs(x0_cons_k + cf_k["omega_c"]) / scale)
     worst_loss = max(worst_loss, abs(res_k.loss / cf_k["loss_disc"] - 1.0),
                      abs(res_k.commitment_result.loss / cf_k["loss_comm"] - 1.0),
                      abs(res_k.conditional_loss / cf_k["cond_disc"] - 1.0),
                      abs(res_k.commitment_result.conditional_loss / cf_k["cond_comm"] - 1.0))
-    assert res_k.converged
+    worst_osr = max(worst_osr, abs(osr_k.loss_opt / cf_k["loss_simple"] - 1.0),
+                    abs(x0_osr_k / cf_k["omega_c"] + 1.0))
+    assert res_k.converged and cons_k.converged and osr_k.converged
 record("Robustness: 25 random calibrations, paths (relative)", worst_path)
 record("Robustness: 25 random calibrations, both losses (relative)", worst_loss)
-print(f"Largest relative path error: {worst_path:.1e}; largest relative loss error: {worst_loss:.1e}")
+record("Robustness: 25 random calibrations, OSR loss & allocation (relative)", worst_osr, tol=1e-6)
+print(f"Largest relative path error: {worst_path:.1e}; largest relative loss error: {worst_loss:.1e}; "
+      f"largest OSR relative error: {worst_osr:.1e}")
 assert all(c["max_error"] < c["tolerance"] for c in checks)
 
 # %% [markdown]
@@ -397,7 +418,7 @@ assert scorecard["passed"].all()
 # %% [markdown]
 # ## Lectura de los resultados
 #
-# Cada comparación con una forma cerrada en el cuadro está al nivel del redondeo, muy por dentro de su tolerancia, y se mantiene así en calibraciones aleatorias. Las dos filas de `osr` están limitadas por la búsqueda sin derivadas, por eso llevan una tolerancia relativa. Así, los cuatro solucionadores reproducen los resultados de CGG sobre discreción, regla simple y compromiso como enunciados analíticos, no solo en una calibración. Las dos rutas de compromiso (lagrangiano matricial y condiciones de primer orden simbólicas) coinciden entre sí al nivel del redondeo. Las condiciones simbólicas dan la regla de objetivos una vez que se elimina el multiplicador nulo de la curva IS.
+# Cada comparación con una forma cerrada en el cuadro está al nivel del redondeo, muy por dentro de su tolerancia, y se mantiene así en calibraciones aleatorias. Las filas de `osr` están limitadas por la búsqueda sin derivadas, por eso llevan una tolerancia relativa. Así, los cuatro solucionadores reproducen los resultados de CGG sobre discreción, regla simple y compromiso como enunciados analíticos en calibraciones aleatorias, no solo en una calibración. Los dos puntos de entrada al compromiso (`lq_commitment` y `ramsey_model`) comparten el sistema lineal-cuadrático subyacente y coinciden entre sí al nivel del redondeo. Las condiciones simbólicas dan la regla de objetivos una vez que se elimina el multiplicador nulo de la curva IS.
 #
 # La figura principal muestra la economía. Tras un choque de costos, el banco central discrecional reparte el ajuste entre la inflación y la brecha, y el nivel de precios queda permanentemente más alto. El banco central comprometido acepta una pérdida inicial de producto menor, pero mantiene la brecha negativa por más tiempo, y el nivel de precios vuelve hacia su valor inicial. El panel de la tasa de interés es un resultado del modelo, no una recomendación de política: la trayectoria de $i_t$ bajo compromiso se deduce de la regla de objetivos y de la curva IS.
 #
@@ -410,7 +431,7 @@ assert scorecard["passed"].all()
 #
 # 1. **Básico.** Con el valor por omisión `rho_custom = 0.0`, compara $\omega^c$ con la respuesta discrecional $\lambda q$. ¿Por qué comprometerse con una regla simple no gana nada cuando los choques de costos no tienen correlación serial, mientras que el compromiso atemporal todavía reduce la pérdida?
 # 2. **Intermedio.** Fija `rho_custom = 0.9`. ¿Cómo cambian la brecha de pérdidas y el peso conservador $\alpha(1-\beta\rho)$, y por qué la persistencia hace más valioso el compromiso?
-# 3. **Avanzado.** Mantén `rho_custom = 0.0` y fija `beta_custom = 0.5`. ¿Sigue siendo positivo `stabilization_bias`? Compáralo con el sesgo bajo `loss_criterion="conditional"` y usa las pérdidas condicionales para explicar por qué la política plenamente óptima sigue ganando desde el estado estacionario (Jensen y McCallum 2002).
+# 3. **Avanzado.** Mantén `rho_custom = 0.0` y fija `beta_custom = 0.5`. ¿Sigue siendo positivo `stabilization_bias`? Compáralo con el sesgo bajo `loss_criterion="conditional"` y usa las pérdidas condicionales para explicar por qué la política plenamente óptima sigue ganando desde el estado estacionario (Sauer 2010, Proposición 2; véase también Jensen y McCallum 2002).
 
 # %%
 rho_custom = 0.0    # ← change this: cost-push persistence, any value in [0, 0.95]

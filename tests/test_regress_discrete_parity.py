@@ -392,10 +392,11 @@ def test_poisson_matches_statsmodels_glm():
     assert res.df_model == float(ref.df_model)
     assert res.scale == ref.scale == 1.0
     assert res.use_t is False and ref.use_t is False
-    # GLMResults.bic is still the deviance form in 0.14.6; reproduce it.
+    # GLMResults.bic was removed in statsmodels 0.15 in favor of bic_deviance.
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", FutureWarning)
-        assert abs(res.bic - ref.bic) < ATOL
+        ref_bic = getattr(ref, "bic_deviance", getattr(ref, "bic", None))
+        assert abs(res.bic - ref_bic) < ATOL
     assert np.max(np.abs(res.mu - np.asarray(ref.fittedvalues))) < ATOL
 
 

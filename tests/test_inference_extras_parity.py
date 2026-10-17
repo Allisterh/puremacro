@@ -446,18 +446,37 @@ def _collinear_designs():
 COLLINEAR_DESIGNS = _collinear_designs()
 
 
+def _sm_vif(exog, exog_idx):
+    """Call statsmodels' ``variance_inflation_factor`` on raw (unstandardized) columns.
+
+    statsmodels 0.15 added ``standardize=True`` by default (which centers and
+    scales non-constant columns before the auxiliary OLS) and clipped ``r_sq``
+    to ``[0, 1 - 1e-15]``. Passing ``standardize=False`` when supported keeps
+    the unstandardized 0.14 auxiliary regression that ``vif`` targets.
+    """
+    pytest.importorskip("statsmodels")
+    import inspect
+    from statsmodels.stats.outliers_influence import (
+        variance_inflation_factor as sm_vif,
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        warnings.simplefilter("ignore", RuntimeWarning)
+        if "standardize" in inspect.signature(sm_vif).parameters:
+            return sm_vif(exog, exog_idx, standardize=False)
+        return sm_vif(exog, exog_idx)
+
+
 class TestCollinearity:
     """``puremacro.inference.collinearity.vif`` vs statsmodels."""
 
     @pytest.mark.parametrize("name", list(COLLINEAR_DESIGNS))
     def test_parity_all_columns(self, name):
         pytest.importorskip("statsmodels")
-        from statsmodels.stats.outliers_influence import (
-            variance_inflation_factor as sm_vif,
-        )
 
         X = COLLINEAR_DESIGNS[name]
-        want = np.array([sm_vif(X, i) for i in range(X.shape[1])])
+        want = np.array([_sm_vif(X, i) for i in range(X.shape[1])])
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             got = np.asarray(vif(X), dtype=float)
@@ -466,9 +485,6 @@ class TestCollinearity:
     @pytest.mark.parametrize("name", list(COLLINEAR_DESIGNS))
     def test_parity_single_index(self, name):
         pytest.importorskip("statsmodels")
-        from statsmodels.stats.outliers_influence import (
-            variance_inflation_factor as sm_vif,
-        )
 
         X = COLLINEAR_DESIGNS[name]
         for i in range(X.shape[1]):
@@ -476,7 +492,7 @@ class TestCollinearity:
                 warnings.simplefilter("ignore", UserWarning)
                 got = vif(X, i)
             assert isinstance(got, float)
-            assert got == pytest.approx(sm_vif(X, i), rel=0.0, abs=1e-10)
+            assert got == pytest.approx(_sm_vif(X, i), rel=0.0, abs=1e-10)
 
     def test_corpus_call_site_strips_the_constant(self):
         """N15:562 does ``variance_inflation_factor(X_full[:, 1:], i)``.
@@ -486,16 +502,13 @@ class TestCollinearity:
         call shape, including the dict comprehension over names.
         """
         pytest.importorskip("statsmodels")
-        from statsmodels.stats.outliers_influence import (
-            variance_inflation_factor as sm_vif,
-        )
 
         racers = ["a", "b", "c"]
         X_full = COLLINEAR_DESIGNS["with_constant"]
         with pytest.warns(UserWarning, match="no constant column"):
             got = {c: float(vif(X_full[:, 1:], i))
                    for i, c in enumerate(racers)}
-        want = {c: float(sm_vif(X_full[:, 1:], i))
+        want = {c: float(_sm_vif(X_full[:, 1:], i))
                 for i, c in enumerate(racers)}
         for c in racers:
             assert got[c] == pytest.approx(want[c], rel=0.0, abs=1e-10)
@@ -522,9 +535,6 @@ class TestCollinearity:
         detection instead.
         """
         pytest.importorskip("statsmodels")
-        from statsmodels.stats.outliers_influence import (
-            variance_inflation_factor as sm_vif,
-        )
 
         X = COLLINEAR_DESIGNS["implicit_constant"]
         assert not np.any(np.all(X == 1.0, axis=0)), "fixture has a ones column"
@@ -538,7 +548,7 @@ class TestCollinearity:
         naive_uncentered = 1.0 / (1.0 - (1 - (resid @ resid) / (x_i @ x_i)))
 
         got = vif(X, idx)
-        want = sm_vif(X, idx)
+        want = _sm_vif(X, idx)
         assert got == pytest.approx(want, rel=0.0, abs=1e-10)
         assert not np.isclose(naive_uncentered, want), (
             "fixture no longer distinguishes centered from uncentered"
@@ -559,9 +569,6 @@ class TestCollinearity:
         VIFs a user actually reads down with it.
         """
         pytest.importorskip("statsmodels")
-        from statsmodels.stats.outliers_influence import (
-            variance_inflation_factor as sm_vif,
-        )
 
         from puremacro.inference.collinearity import _k_constant
 
@@ -576,12 +583,10 @@ class TestCollinearity:
         # rather than a silently vacuous one.
         assert _k_constant(X[:, 1:]) == 1
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            want = np.array([sm_vif(X, i) for i in range(X.shape[1])])
+        want = np.array([_sm_vif(X, i) for i in range(X.shape[1])])
         with pytest.warns(UserWarning, match="are constant"):
             got = np.asarray(vif(X), dtype=float)
-        assert got[0] == want[0] == 0.0           # the degenerate column
+        assert got[0] == 0.0 and want[0] in (0.0, 1.0)  # 0.0 in sm 0.14, 1.0 in sm 0.15 after clip
         # The regressors' VIFs are computed on centered data since 4.4.0. On
         # the raw levels the auxiliary regressions cancel catastrophically:
         # statsmodels returns 0.053 for the rate column, below the minimum
@@ -608,9 +613,6 @@ class TestCollinearity:
         statsmodels expression differs on none of them.
         """
         pytest.importorskip("statsmodels")
-        from statsmodels.stats.outliers_influence import (
-            variance_inflation_factor as sm_vif,
-        )
 
         checked = 0
         largest = 0.0
@@ -632,9 +634,7 @@ class TestCollinearity:
                     got = np.asarray(vif(X), dtype=float)
             except np.linalg.LinAlgError:
                 continue          # past the documented gate; not this test's job
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", RuntimeWarning)
-                want = np.array([sm_vif(X, i) for i in range(k)])
+            want = np.array([_sm_vif(X, i) for i in range(k)])
             bound = 8.0 * np.finfo(float).eps * float(got.max())
             np.testing.assert_allclose(got, want, rtol=bound, atol=0.0)
             checked += k
@@ -660,9 +660,6 @@ class TestCollinearity:
         and every real regressor's VIF is about 1.0.
         """
         pytest.importorskip("statsmodels")
-        from statsmodels.stats.outliers_influence import (
-            variance_inflation_factor as sm_vif,
-        )
 
         rng = np.random.default_rng(5)
         n = 100
@@ -674,15 +671,13 @@ class TestCollinearity:
         raw = X / np.sqrt((X ** 2).sum(axis=0))
         assert np.linalg.cond(raw.T @ raw) > 1e14
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            want = np.array([sm_vif(X, i) for i in range(X.shape[1])])
+        want = np.array([_sm_vif(X, i) for i in range(X.shape[1])])
         with pytest.warns(UserWarning, match="are constant"):
             got = np.asarray(vif(X), dtype=float)
         # statsmodels regresses on the 1e7 levels and is 4e-5 (macOS) to 1.4e-4
         # (Windows CI) off the exact values; the centered computation is exact
         # to rounding, so it is compared with exact arithmetic only.
-        assert got[0] == want[0]
+        assert got[0] == 0.0 and want[0] in (0.0, 1.0)
         exact = _exact_centered_vif(X[:, 1:])
         np.testing.assert_allclose(got[1:], exact, rtol=4 * np.finfo(float).eps, atol=0.0)
         assert np.all(got[1:] < 1.05) and np.all(got[1:] > 1.0)
@@ -755,28 +750,25 @@ class TestCollinearity:
         negative index: the column stays in its own auxiliary design and the
         auxiliary R-squared is 1 by construction, so the answer is ``inf``
         for every negative index (or ``0.0``, when the target column is the
-        constant and the degenerate centered-tss branch fires first). Either
-        way it is not that column's VIF. Reproducing it would mean
-        reproducing a bug, so ``vif`` wraps Python-style instead — and the
-        second half of this test is what makes the divergence visible if
-        statsmodels ever fixes it.
+        constant and the degenerate centered-tss branch fires first; in
+        statsmodels 0.15 ``np.clip(r_sq, 0.0, 1.0 - 1e-15)`` turns those into
+        ``~1e15`` and ``1.0``). Either way it is not that column's VIF.
+        Reproducing it would mean reproducing a bug, so ``vif`` wraps
+        Python-style instead — and the second half of this test is what makes
+        the divergence visible if statsmodels ever fixes it.
         """
         pytest.importorskip("statsmodels")
-        from statsmodels.stats.outliers_influence import (
-            variance_inflation_factor as sm_vif,
-        )
 
         X = COLLINEAR_DESIGNS["with_constant"]
         k = X.shape[1]
         for j in range(1, k + 1):
             assert vif(X, -j) == vif(X, k - j)
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", RuntimeWarning)
-                sm_value = sm_vif(X, -j)
+            sm_value = _sm_vif(X, -j)
             assert sm_value != vif(X, -j)
             # Column ``k - j == 0`` is the constant, whose degenerate branch
-            # returns 0.0 before the never-masked column can make it inf.
-            assert np.isinf(sm_value) if k - j else sm_value == 0.0
+            # returns 0.0 (or 1.0 in sm 0.15) before the never-masked column
+            # can make it inf (or ~1e15 in sm 0.15).
+            assert (np.isinf(sm_value) or sm_value >= 1e15) if k - j else sm_value in (0.0, 1.0)
 
     def test_boolean_mask_index_raises(self):
         """A boolean mask must be refused, not read as ones and zeros.
@@ -857,15 +849,14 @@ class TestCollinearity:
         # ...and the near-exact case slips past the branch, which is why the
         # whole-design gate exists. It also lands on the second reason the
         # arithmetic is done in np.float64: ssr/tss underflows, R2 rounds to
-        # exactly 1, and 1/(1-R2) is numpy's inf — statsmodels' answer —
-        # where a Python float would have raised ZeroDivisionError.
+        # exactly 1, and 1/(1-R2) is numpy's inf — statsmodels 0.14's answer
+        # (clipped to ~1e15 in statsmodels 0.15) — where a Python float would
+        # have raised ZeroDivisionError.
         near = np.column_stack([np.ones(n), rng.normal(size=n)])
         near = np.column_stack([near, 2.0 * near[:, 1]])
         assert np.isinf(_vif_one(near, 2))
-        sm = pytest.importorskip("statsmodels.stats.outliers_influence")
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            assert np.isinf(sm.variance_inflation_factor(near, 2))
+        sm_val = _sm_vif(near, 2)
+        assert np.isinf(sm_val) or sm_val >= 1e15
 
     def test_one_column_raises(self):
         with pytest.raises(ValueError, match="at least two"):

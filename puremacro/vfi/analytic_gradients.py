@@ -33,7 +33,10 @@ import inspect
 import time
 import warnings
 from dataclasses import dataclass, field, replace
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+
+if TYPE_CHECKING:
+    import matplotlib.figure
 
 import numpy as np
 import pandas as pd
@@ -424,7 +427,7 @@ def _evaluate_residual_system(
     if solution is not None and hasattr(solution, "basis") and hasattr(solution.basis, "n_dims"):
         from puremacro.vfi.collocation import _evaluate_euler_residual
 
-        prob_eval = replace(problem, params=curr_params, beta=curr_beta) if problem is not None else None
+        prob_eval: Any = replace(problem, params=curr_params, beta=curr_beta) if problem is not None else problem
         nodes = solution.basis.nodes()
         return _evaluate_euler_residual(prob_eval, solution.basis, coefficients, nodes, backend=backend)
 
@@ -497,7 +500,7 @@ def _evaluate_residual_system(
     ):
         from puremacro.vfi.splines import _evaluate_euler_residual_spline
 
-        prob_eval = replace(problem, params=curr_params, beta=curr_beta) if problem is not None else None
+        prob_eval = replace(problem, params=curr_params, beta=curr_beta) if problem is not None else problem
         basis = solution.basis
         if hasattr(basis, "nodes"):
             nodes = basis.nodes()
@@ -666,14 +669,14 @@ def _compute_aggregate_gradients(
     grad_coefficients: np.ndarray,
     param_names: List[str],
     ift_result_proxy: Optional[Any] = None,
-) -> Dict[str, np.ndarray]:
+) -> Dict[str, Any]:
     """Compute supported representative-agent aggregate sensitivities (semi-analytic)."""
     p = len(param_names)
     grad_K = np.zeros(p, dtype=np.float64)
     grad_C = np.zeros(p, dtype=np.float64)
     grad_r = np.zeros(p, dtype=np.float64)
     grad_w = np.zeros(p, dtype=np.float64)
-    grad_mu = None
+    grad_mu: Any = None
 
     # Case A: Heterogeneous-Agent General Equilibrium (AiyagariContinuousEquilibrium)
     if hasattr(solution, "distribution") and hasattr(solution.distribution, "asset_grid"):
@@ -687,7 +690,8 @@ def _compute_aggregate_gradients(
         params_dict = dict(getattr(problem, "params", {}) if problem is not None else {})
         alpha = float(params_dict.get("alpha", 0.36))
         delta = float(params_dict.get("delta", 1.0))
-        z = float(params_dict.get("z", params_dict.get("A", 1.0)))
+        z_raw = params_dict.get("z", params_dict.get("A", 1.0))
+        z = float(1.0 if z_raw is None else z_raw)
 
         # Find continuous steady state k* where g(k*) = k*
         k_min = 0.1
@@ -1058,14 +1062,16 @@ def gmm_objective_and_gradient(
         # Compute baseline aggregates from solution
         alpha_val = float(p_dict.get("alpha", 0.36))
         delta_val = float(p_dict.get("delta", 1.0))
-        z_val = float(p_dict.get("z", p_dict.get("A", 1.0)))
+        z_raw = p_dict.get("z", p_dict.get("A", 1.0))
+        z_val = float(1.0 if z_raw is None else z_raw)
 
         if hasattr(sol_eval, "distribution") and hasattr(sol_eval.distribution, "asset_grid"):
             k_val = float(np.sum(sol_eval.distribution.marginal_assets() * sol_eval.distribution.asset_grid))
         elif hasattr(sol_eval, "policy"):
-            dom = getattr(prob_eval, "domain", ((0.05, 5.0),))
-            k_min = float(dom[0][0]) if isinstance(dom[0], (tuple, list)) else float(dom[0])
-            k_max = float(dom[0][1]) if isinstance(dom[0], (tuple, list)) else float(dom[1])
+            dom: Any = getattr(prob_eval, "domain", ((0.05, 5.0),))
+            dom0: Any = dom[0] if (isinstance(dom, (tuple, list)) and len(dom) > 0 and isinstance(dom[0], (tuple, list))) else dom
+            k_min = float(dom0[0])
+            k_max = float(dom0[1])
             try:
                 f_low = sol_eval.policy(k_min + 1e-4) - (k_min + 1e-4)
                 f_high = sol_eval.policy(k_max - 1e-4) - (k_max - 1e-4)

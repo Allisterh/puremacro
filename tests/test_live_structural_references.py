@@ -1,7 +1,13 @@
 """Small frozen external references; no MATLAB or archive download in ordinary CI."""
 import json
+from pathlib import Path
+import sys
 
 import pytest
+
+_REPO_ROOT = str(Path(__file__).resolve().parents[1])
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 from tools.reference_validation.validate_dynare import FIXTURES as DYNARE_FIXTURES, compare_case
 from dataclasses import replace

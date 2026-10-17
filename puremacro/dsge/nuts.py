@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 
 from puremacro.dsge._results import NUTSResult
-from puremacro.mcmc import autocorrelations, effective_sample_size
+from puremacro.mcmc import autocorrelations, effective_sample_size, gelman_rubin
 
 
 # ---------------------------------------------------------------------------
@@ -36,34 +36,20 @@ def compute_split_rhat(chains: np.ndarray) -> float:
     r"""Compute split Gelman-Rubin \hat{R} for an (n_chains, n_draws) array.
 
     Splits each chain in half to detect both within-chain non-stationarity
-    and between-chain lack of mixing (Gelman et al. BDA3).
+    and between-chain lack of mixing (Gelman et al. BDA3). Delegates to
+    :func:`puremacro.mcmc.gelman_rubin` with ``split=True``.
     """
     chains = np.asarray(chains, dtype=float)
     if chains.ndim == 1:
         chains = chains[None, :]
-    n_chains, n_draws = chains.shape
-    if n_draws < 4:
+    if chains.shape[1] < 4:
         return 1.0
-
-    half = n_draws // 2
-    split_chains = np.empty((2 * n_chains, half), dtype=float)
-    for c in range(n_chains):
-        split_chains[2 * c] = chains[c, :half]
-        split_chains[2 * c + 1] = chains[c, half:2 * half]
-
-    M, N = split_chains.shape
-    chain_means = split_chains.mean(axis=1)
-    grand_mean = float(chain_means.mean())
-
-    B = N * float(np.sum((chain_means - grand_mean) ** 2)) / max(M - 1, 1)
-    W = float(np.sum((split_chains - chain_means[:, None]) ** 2)) / (M * max(N - 1, 1))
-
-    if W <= 0.0 or not np.isfinite(W):
+    res = gelman_rubin(chains, split=True)
+    W = res["W"]
+    var_plus = res["var_plus"]
+    if W <= 0.0 or not np.isfinite(W) or not np.isfinite(var_plus):
         return 1.0
-
-    var_plus = ((N - 1.0) / N) * W + (1.0 / N) * B
-    rhat = float(np.sqrt(max(1.0, var_plus / W)))
-    return rhat
+    return float(np.sqrt(max(1.0, var_plus / W)))
 
 
 def compute_bulk_ess(chains: np.ndarray) -> float:

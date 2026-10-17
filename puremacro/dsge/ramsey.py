@@ -1273,7 +1273,7 @@ def ramsey_model(
         foc_nodes=foc_nodes,
     )
     # Constraint nodes for RamseyResult.to_latex (not a dataclass field).
-    result._constraint_nodes = [node.simplify() for node in constraint_nodes]
+    setattr(result, "_constraint_nodes", [node.simplify() for node in constraint_nodes])
     return result
 
 

@@ -23,7 +23,15 @@
 # `pip install "puremacro[local-llm]"` (or run Ollama) to see real inference.
 
 # %%
+import os
+from pathlib import Path
 import _nbstyle  # noqa: F401  (grayscale figure style; see notebooks/_nbstyle.py)
+
+_cache_file = Path.cwd() / "_llm_cache" / "local_llm_uncertainty.sqlite"
+if not _cache_file.is_file():
+    _cache_file = Path.cwd() / "notebooks" / "_llm_cache" / "local_llm_uncertainty.sqlite"
+if _cache_file.is_file():
+    os.environ.setdefault("PUREMACRO_LLM_CACHE", str(_cache_file.resolve()))
 
 from puremacro.narrative.scoring import get_default_backend, score_llm
 from puremacro.narrative.indices import get_default_provider, llm_prob_kernel
@@ -44,8 +52,8 @@ CORPUS = [
 # CI / the browser).
 
 # %%
-backend = get_default_backend("qwen2.5-3b-instruct")
-provider = get_default_provider("qwen2.5-3b-instruct")
+backend = get_default_backend("qwen3-4b")
+provider = get_default_provider("qwen3-4b")
 
 # %% [markdown]
 # ## 2. Extract narrative fiscal events (free)

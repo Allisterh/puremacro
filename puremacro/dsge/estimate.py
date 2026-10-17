@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import math
 import warnings
-from typing import Callable, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Sequence
 
 import numpy as np
 import pandas as pd
@@ -43,6 +43,8 @@ import scipy.linalg
 from puremacro.dsge.mode import find_mode as _find_mode
 
 from puremacro.dsge._results import DSGEPosteriorResult
+if TYPE_CHECKING:
+    from puremacro.dsge._results import NUTSResult
 from puremacro.dsge.priors import (
     log_prior, prior_stds, param_bounds, param_names, _validate_priors,
 )
@@ -916,28 +918,10 @@ def estimate_dsge(
         # -inf silently. Anything else is evaluated once at initial_params
         # outside smc_estimate (so it raises), and counted and reported in a
         # warning when it happens at later draws.
-        pf_stats = {"calls": 0, "finite": 0, "other": 0,
-                    "first_other": None, "last_failure": None}
-
-        def pf_log_lik(theta_vec_or_dict, _raise_other: bool = False):
-            pf_stats["calls"] += 1
-            try:
-                val = _pf_log_lik_at(theta_vec_or_dict)
-            except _PF_DRAW_FAILURES as exc:
-                pf_stats["last_failure"] = exc
-                return -np.inf
-            except Exception as exc:
-                if _raise_other:
-                    raise
-                pf_stats["other"] += 1
-                if pf_stats["first_other"] is None:
-                    pf_stats["first_other"] = exc
-                pf_stats["last_failure"] = exc
-                return -np.inf
-            if not np.isfinite(val):
-                return -np.inf
-            pf_stats["finite"] += 1
-            return val
+        pf_stats: dict[str, Any] = {
+            "calls": 0, "finite": 0, "other": 0,
+            "first_other": None, "last_failure": None,
+        }
 
         def _pf_log_lik_at(theta_vec_or_dict):
             if isinstance(theta_vec_or_dict, (list, np.ndarray)):
@@ -994,6 +978,26 @@ def estimate_dsge(
                 measurement_error=pf_measurement_error,
             )
             return float(res.log_likelihood)
+
+        def pf_log_lik(theta_vec_or_dict, _raise_other: bool = False):
+            pf_stats["calls"] += 1
+            try:
+                val = _pf_log_lik_at(theta_vec_or_dict)
+            except _PF_DRAW_FAILURES as exc:
+                pf_stats["last_failure"] = exc
+                return -np.inf
+            except Exception as exc:
+                if _raise_other:
+                    raise
+                pf_stats["other"] += 1
+                if pf_stats["first_other"] is None:
+                    pf_stats["first_other"] = exc
+                pf_stats["last_failure"] = exc
+                return -np.inf
+            if not np.isfinite(val):
+                return -np.inf
+            pf_stats["finite"] += 1
+            return val
 
         # Outside smc_estimate: an error that is not a draw-level failure
         # (a model the filter cannot read, an observable the model does not
