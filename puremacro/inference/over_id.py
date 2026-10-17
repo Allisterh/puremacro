@@ -98,7 +98,19 @@ def hansen_j(
         if not np.allclose(W[:, 0], 1.0):
             W = np.column_stack([np.ones(T), W])
 
+    for _name, _arr in (("y", y), ("X_endog", X), ("Z", Z), ("W", W)):
+        if not np.all(np.isfinite(_arr)):
+            raise ValueError(f"{_name} contains NaN/inf entries")
+
     full_Z = np.column_stack([W, Z])       # (T, m + l) instrument set
+    _rank = np.linalg.matrix_rank(full_Z)
+    if _rank < full_Z.shape[1]:
+        raise ValueError(
+            f"[W, Z] is rank deficient (rank {_rank} < {full_Z.shape[1]} "
+            f"columns); a control appears among the instruments, an "
+            f"instrument column is duplicated, or W already holds a constant "
+            f"that Z also spans"
+        )
     XW = np.column_stack([X, W])           # (T, k + m) regressors
 
     # Step 1: 2SLS.  X_hat = P_Z X without forming the T x T projection.

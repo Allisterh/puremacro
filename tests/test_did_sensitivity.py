@@ -764,11 +764,14 @@ def test_honest_did_with_callaway_santanna_result():
     ascii_art = sens.plot_ascii()
     assert "Honest DiD Confidence Intervals vs M" in ascii_art
     assert "|" in ascii_art
-    # smoothness on the same object: FLCI finite even if the plug-in set is empty
+    # smoothness on the same object: FLCI finite even if the plug-in set is empty,
+    # and honest_did(cs_res) automatically uses cs_res.event_study_vcov
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         sd = honest_did(cs_res, method="smoothness", target_horizon=[0, 1])
+        sd_explicit = honest_did(cs_res, sigma=cs_res.event_study_vcov, method="smoothness", target_horizon=[0, 1])
     assert np.all(np.isfinite(sd.table["ci_lo"]))
+    pd.testing.assert_frame_equal(sd.table, sd_explicit.table)
     assert isinstance(sd.breakdown_value, dict)
 
 

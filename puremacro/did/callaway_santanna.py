@@ -535,6 +535,7 @@ def _callaway_santanna_arrays(
     group_g: np.ndarray,
     period_t: np.ndarray,
     unit_id: np.ndarray,
+    control: str = "never_treated",
     aggregation: str = "group",
 ) -> Dict[str, Any]:
     """Legacy four-array form. Returns the historical plain dict.
@@ -545,6 +546,8 @@ def _callaway_santanna_arrays(
     plain mean of the post-treatment cells that this form returned up to
     puremacro 4.3.0.
     """
+    if control not in _CONTROL_CHOICES:
+        raise ValueError(f"control must be one of {_CONTROL_CHOICES}; got {control!r}")
     aggregation = _resolve_aggregation(aggregation)
     y = np.asarray(y, dtype=float).ravel()
     group_g = np.asarray(group_g, dtype=float).ravel()
@@ -575,7 +578,14 @@ def _callaway_santanna_arrays(
                 se_matrix[g_idx, t_idx] = 0.0
                 continue
 
-            sample_mask = (cohort_mask | never_treated) & (
+            if control == "not_yet_treated":
+                # Untreated at both endpoints of the long difference, and not
+                # the cohort under evaluation — same pool as `_att_matrix`.
+                ctrl_pool = (group_g > max(t, base_period)) & (group_g != g)
+            else:
+                ctrl_pool = never_treated
+
+            sample_mask = (cohort_mask | ctrl_pool) & (
                 (period_t == t) | (period_t == base_period)
             )
 
@@ -589,23 +599,37 @@ def _callaway_santanna_arrays(
 
             dy = np.zeros(n_u)
             treat = np.zeros(n_u)
+            # A unit only contributes when BOTH endpoints of the long
+            # difference are on file. Without this mask a unit missing either
+            # row kept its preallocated dy = 0 and treat = 0 and entered the
+            # control mean as a phantom observation: with 10 % of the cells
+            # missing at random the overall ATT came out +0.25 too high on a
+            # tau = 2.5 design (+0.48 at 25 % missing), a bias that did not
+            # shrink with N, and pre-treatment cells that are exactly zero by
+            # construction were reported as nonzero. Invisible on a balanced
+            # panel, and on a flat common time path, where the phantom zero
+            # coincides with the true control long difference.
+            ok = np.zeros(n_u, dtype=bool)
 
             for u_i, uid in enumerate(units):
                 m_t = (u_sub == uid) & (t_sub == t)
                 m_b = (u_sub == uid) & (t_sub == base_period)
 
                 if np.any(m_t) and np.any(m_b):
+                    ok[u_i] = True
                     dy[u_i] = y_sub[m_t][0] - y_sub[m_b][0]
                     treat[u_i] = 1.0 if g_sub[m_t][0] == g else 0.0
 
-            n_treat = int(np.sum(treat == 1.0))
-            n_ctrl = int(np.sum(treat == 0.0))
+            tm = ok & (treat == 1.0)
+            cm = ok & (treat == 0.0)
+            n_treat = int(tm.sum())
+            n_ctrl = int(cm.sum())
 
             if n_treat > 0 and n_ctrl > 0:
-                att_val = float(np.mean(dy[treat == 1.0]) - np.mean(dy[treat == 0.0]))
+                att_val = float(np.mean(dy[tm]) - np.mean(dy[cm]))
                 se_val = float(np.sqrt(
-                    np.var(dy[treat == 1.0], ddof=1) / n_treat
-                    + np.var(dy[treat == 0.0], ddof=1) / n_ctrl
+                    np.var(dy[tm], ddof=1) / n_treat
+                    + np.var(dy[cm], ddof=1) / n_ctrl
                 ))
 
                 att_matrix[g_idx, t_idx] = att_val
@@ -634,7 +658,12 @@ def _callaway_santanna_arrays(
         agg = _aggregate(att_matrix[cell_g, cell_t], n_g, lay)
         overall_att = float(agg["overall"][_AGGREGATIONS.index(aggregation)])
     else:
-        overall_att = 0.0
+        # The mean of an empty identified set is not a number. This used to fall
+        # back to 0.0, i.e. it reported "no average treatment effect" on panels
+        # where nothing at all had been estimated — an error of 1.5 on a tau = 1.5
+        # design with no never-treated units, the very panel on which the
+        # DataFrame path raises. NaN matches that path's own empty-case value.
+        overall_att = float("nan")
 
     return {
         "groups": groups,
@@ -774,7 +803,7 @@ def callaway_santanna(
             "argument with missing companions"
         )
     return _callaway_santanna_arrays(df, group_g, period_t, unit_id,
-                                     aggregation=aggregation)
+                                     control=control, aggregation=aggregation)
 
 
 __all__ = ["callaway_santanna"]

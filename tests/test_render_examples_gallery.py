@@ -270,3 +270,133 @@ def test_render_emits_markdown_with_status_counts(tmp_path, monkeypatch):
     assert "FAIL" in md
     assert "a_pass" in md
     assert "b_skip" in md
+
+
+# --- description parsing, path scrubbing, and --refresh ------------------------
+
+
+def test_scrub_paths_rewrites_repo_and_home_but_not_urls():
+    """Repo paths go relative, foreign home directories go to `~/`, URLs survive."""
+    root = str(render_examples_gallery.REPO_ROOT)
+    assert render_examples_gallery.scrub_paths(f"{root}/puremacro/examples/x.py") == (
+        "puremacro/examples/x.py"
+    )
+    assert render_examples_gallery.scrub_paths(
+        "missing /" + "Users/someone/data/panel.parquet"
+    ) == "missing ~/data/panel.parquet"
+    assert render_examples_gallery.scrub_paths(
+        "/" + "home/someone/data/panel.parquet"
+    ) == "~/data/panel.parquet"
+    # The lookbehind protects URLs: no `~` may appear.
+    url = "see https://host/home/user/notes.html"
+    assert render_examples_gallery.scrub_paths(url) == url
+    assert render_examples_gallery.scrub_paths(None) is None
+
+
+def test_read_description_joins_first_paragraph_only(tmp_path):
+    """The first paragraph is joined onto one line; later paragraphs are dropped."""
+    src = tmp_path / "e.py"
+    src.write_text(
+        '"""First line of the summary\nwrapped onto a second line.\n\n'
+        'A second paragraph that must not appear.\n"""\nprint(1)\n',
+        encoding="utf-8",
+    )
+    assert render_examples_gallery.read_description(src) == (
+        "First line of the summary wrapped onto a second line."
+    )
+
+    bare = tmp_path / "bare.py"
+    bare.write_text("print(1)\n", encoding="utf-8")
+    assert render_examples_gallery.read_description(bare) is None
+
+    broken = tmp_path / "broken.py"
+    broken.write_text("def (:\n", encoding="utf-8")
+    assert render_examples_gallery.read_description(broken) is None
+
+    assert render_examples_gallery.read_description(tmp_path / "absent.py") is None
+
+
+def test_refresh_docs_preserves_run_fields_and_warns_on_drift(tmp_path, capsys):
+    """--refresh re-reads descriptions but never touches statuses or timings."""
+    import json
+
+    examples_dir = tmp_path / "examples"
+    examples_dir.mkdir()
+    (examples_dir / "kept.py").write_text('"""A fresh description."""\n', encoding="utf-8")
+    (examples_dir / "brand_new.py").write_text('"""Never rendered."""\n', encoding="utf-8")
+
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "examples_gallery.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "generated_at": "2026-01-01T00:00:00Z",
+                "examples": {
+                    "kept": {
+                        "status": "FAIL",
+                        "reason": "missing /" + "Users/someone/x.parquet",
+                        "runtime_s": 12.5,
+                        "figures": ["../puremacro/examples/output/kept.png"],
+                        "last_run": "2026-01-01T00:00:00Z",
+                    },
+                    "deleted": {
+                        "status": "PASS",
+                        "reason": None,
+                        "runtime_s": 1.0,
+                        "figures": [],
+                        "last_run": "2026-01-01T00:00:00Z",
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    data = render_examples_gallery.refresh_docs(examples_dir=examples_dir, docs_dir=docs_dir)
+    out = capsys.readouterr().out
+    assert "brand_new has no entry" in out
+    assert "deleted has an entry but no source file" in out
+
+    kept = data["examples"]["kept"]
+    assert kept["description"] == "A fresh description."
+    assert kept["reason"] == "missing ~/x.parquet"
+    assert kept["status"] == "FAIL"
+    assert kept["runtime_s"] == 12.5
+    assert kept["figures"] == ["../puremacro/examples/output/kept.png"]
+    assert kept["last_run"] == "2026-01-01T00:00:00Z"
+    # Statuses were not re-earned, so the generated_at stamp must not move.
+    assert data["generated_at"] == "2026-01-01T00:00:00Z"
+    assert data["refreshed_at"] != data["generated_at"]
+    # An entry with no source file is kept, not silently dropped.
+    assert "deleted" in data["examples"]
+
+
+def test_emit_markdown_refreshed_line_only_when_refreshed(tmp_path):
+    """The Refreshed banner appears only on files written by --refresh."""
+    entry = {
+        "description": "d",
+        "status": "PASS",
+        "reason": None,
+        "runtime_s": 0.1,
+        "figures": [],
+        "last_run": "2026-01-01T00:00:00Z",
+    }
+    base = {
+        "schema_version": 1,
+        "generated_at": "2026-01-01T00:00:00Z",
+        "examples": {"one": entry},
+    }
+
+    plain = tmp_path / "plain.md"
+    render_examples_gallery._emit_markdown(base, plain)
+    assert "Refreshed:" not in plain.read_text(encoding="utf-8")
+
+    stamped = tmp_path / "stamped.md"
+    render_examples_gallery._emit_markdown(
+        {**base, "refreshed_at": "2026-02-02T00:00:00Z"}, stamped
+    )
+    text = stamped.read_text(encoding="utf-8")
+    assert "Refreshed: 2026-02-02T00:00:00Z" in text
+    assert "every status below is from the 2026-01-01T00:00:00Z run" in text
+    assert "- **Description:** d" in text

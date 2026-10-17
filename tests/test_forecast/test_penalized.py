@@ -149,3 +149,99 @@ def test_penalized_result_presentation_contract():
     noise = forecast_penalized(rng.normal(size=(80, 5)), rng.normal(size=80), alpha=1.0, adaptive=False)
     assert isinstance(noise.plot(), Figure)
     plt.close("all")
+
+
+@pytest.fixture
+def scale_dgp():
+    """y_{t+1} = 1.5 + 1.2*x0 - 0.8*x4 + N(0, 0.5^2), X standardised to unit
+    column variance, so the population coefficient on P1 is exactly 1.2."""
+    rng = np.random.default_rng(0)
+    T, P = 600, 12
+    F = rng.normal(size=(T, 3))
+    L = rng.normal(size=(3, P))
+    X = F @ L + rng.normal(size=(T, P))
+    X = (X - X.mean(axis=0)) / X.std(axis=0)
+    y = np.empty(T)
+    y[0] = 1.5 + rng.normal(scale=0.5)
+    for t in range(1, T):
+        y[t] = 1.5 + 1.2 * X[t - 1, 0] - 0.8 * X[t - 1, 4] + rng.normal(scale=0.5)
+    df_X = pd.DataFrame(X, columns=[f"P{j+1}" for j in range(P)])
+    return df_X, pd.Series(y)
+
+
+def test_forecast_penalized_raises_on_non_finite_input(synthetic_sparse_macro):
+    """A NaN cell used to sail through: coefficients, intercept and forecast all
+    came back NaN while `in_sample_r2` was reported as exactly 1.0, because
+    `max(0.0, min(1.0, nan))` is a comparison fold that returns 1.0."""
+    df_X, s_y = synthetic_sparse_macro
+
+    bad_X = df_X.copy()
+    bad_X.iloc[60, 3] = np.nan
+    bad_X.iloc[61, 7] = np.inf
+    with pytest.raises(ValueError, match=r"2 non-finite value"):
+        forecast_penalized(bad_X, s_y, horizon=1)
+
+    bad_y = s_y.copy()
+    bad_y.iloc[60] = np.nan
+    with pytest.raises(ValueError, match=r"non-finite value"):
+        forecast_penalized(df_X, bad_y, horizon=1)
+
+    # The clean panel still fits, and its R2 is nowhere near the manufactured 1.0.
+    res = forecast_penalized(df_X, s_y, horizon=1)
+    assert 0.0 < res.in_sample_r2 < 1.0
+
+
+def test_forecast_penalized_is_equivariant_in_target_units(scale_dgp):
+    """coef(c*y) = c*coef(y) holds for the linear projection by construction, so
+    rescaling the target -- percent to basis points -- must not change anything.
+    It did: with the target fitted in its own units the single penalty `lam`
+    multiplied an L1 term homogeneous of degree 1 and an L2 term homogeneous of
+    degree 2, and coef("P1")/c fell from 1.195 at c=1 to 0.544 at c=1000
+    against a population truth of 1.2."""
+    df_X, s_y = scale_dgp
+    base = forecast_penalized(df_X, s_y, horizon=1)
+
+    for c in (1000.0, 7.0, 0.01):
+        scaled = forecast_penalized(df_X, c * s_y, horizon=1)
+        np.testing.assert_allclose(
+            scaled.coefficients.to_numpy() / c, base.coefficients.to_numpy(), atol=1e-8
+        )
+        assert scaled.forecast / c == pytest.approx(base.forecast, abs=1e-8)
+        assert scaled.intercept / c == pytest.approx(base.intercept, abs=1e-8)
+        assert scaled.in_sample_r2 == pytest.approx(base.in_sample_r2, abs=1e-10)
+        assert scaled.selected_features == base.selected_features
+
+    # Equivariant about the right value: the truth on P1 is 1.2.
+    assert base.coefficients["P1"] == pytest.approx(1.2, abs=0.1)
+    assert forecast_penalized(df_X, 1000.0 * s_y, horizon=1).coefficients["P1"] / 1000.0 == pytest.approx(1.2, abs=0.1)
+
+
+def test_forecast_penalized_ridge_alpha_zero_is_consistent():
+    """alpha=0.0 is documented as Ridge. No finite penalty zeroes a ridge
+    solution, so the L1 grid anchor `|x'y| / (T * alpha * w)` does not exist
+    there; the old `np.maximum(alpha * w, 1e-4)` clamp put the whole grid 1e4
+    above the natural scale and the estimator converged to beta/(1+lam) ~ 0.097
+    instead of to the true 3.0, at every sample size."""
+    beta_true = np.zeros(15)
+    beta_true[0], beta_true[4], beta_true[9] = 3.0, -2.0, 1.0
+
+    prev_err = np.inf
+    for T in (400, 4000):
+        rng = np.random.default_rng(3)
+        X = rng.normal(size=(T, 15))
+        y = np.empty(T)
+        y[0] = 0.7 + rng.normal(scale=0.5)
+        for t in range(1, T):
+            y[t] = 0.7 + X[t - 1] @ beta_true + rng.normal(scale=0.5)
+        df_X = pd.DataFrame(X, columns=[f"x{j+1}" for j in range(15)])
+
+        res = forecast_penalized(df_X, pd.Series(y), horizon=1, alpha=0.0, adaptive=False)
+        err = float(np.max(np.abs(res.coefficients.to_numpy() - beta_true)))
+        # Ridge over a grid that reaches the weakly-penalised region is
+        # consistent, so the error has to shrink with T towards zero.
+        assert err < 0.25, f"T={T}: max coefficient error {err:.4f}"
+        assert err < prev_err
+        prev_err = err
+        assert res.coefficients.iloc[0] == pytest.approx(3.0, rel=0.05)
+        assert res.in_sample_r2 > 0.9
+

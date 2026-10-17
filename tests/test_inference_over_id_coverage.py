@@ -613,3 +613,198 @@ class TestHansenJDFandPValueConsistency:
             assert res["df"] == l - k, (
                 f"df={res['df']} != l-k={l-k} for l={l}, k={k}"
             )
+
+
+# ---------------------------------------------------------------------------
+# TestHansenJNonFiniteInput — a bad cell must not read as "instruments valid"
+# ---------------------------------------------------------------------------
+
+class TestHansenJNonFiniteInput:
+    """A single NaN/inf used to land on the `1 - rss/tss if tss > 0` guard
+    with tss = nan.  `nan > 0` is False, so the "zero variance" branch fired
+    and the call returned stat=0.0, p_value=1.0 — the strongest possible
+    "the instruments are valid" verdict — with n_obs still the full T.  On
+    these very inputs the clean answer is J ~ 460 (T=500) / 1860 (T=2000)
+    with p ~ 0, i.e. a decisive rejection.  The contract is now to refuse,
+    matching inference.supt ("theta contains NaN/inf entries").
+    """
+
+    @staticmethod
+    def _bad_cell(T, seed=42):
+        d = _dgp_invalid(T=T, seed=seed)
+        rng = np.random.default_rng(7)
+        return d["y"], d["x"], d["Z"], rng.standard_normal((T, 2))
+
+    @pytest.mark.parametrize("T", [500, 2000])
+    @pytest.mark.parametrize("where", ["y", "X_endog", "Z", "W"])
+    def test_non_finite_raises_instead_of_blessing_instruments(self, T, where):
+        y, x, Z, W = self._bad_cell(T)
+        # sanity: on the clean version of these inputs the test rejects hard
+        clean = hansen_j(y, x, Z, W=W)
+        assert clean["p_value"] < 1e-20, (
+            f"fixture no longer rejects: p={clean['p_value']}"
+        )
+        y, x, Z, W = y.copy(), x.copy(), Z.copy(), W.copy()
+        if where == "y":
+            y[123] = np.nan
+        elif where == "X_endog":
+            x[7] = np.inf
+        elif where == "Z":
+            Z[0, 1] = np.nan
+        else:
+            W[5, 1] = np.nan
+        with pytest.raises(ValueError, match="contains NaN/inf entries"):
+            hansen_j(y, x, Z, W=W)
+
+    def test_non_finite_never_returns_p_one(self):
+        """Whatever the contract, a contaminated input must never come back
+        as a clean pass.  This is the assertion that matters to a caller."""
+        y, x, Z, W = self._bad_cell(2000)
+        y = y.copy()
+        y[123] = np.nan
+        try:
+            res = hansen_j(y, x, Z, W=W)
+        except ValueError:
+            return
+        assert not (res["stat"] == 0.0 and res["p_value"] == 1.0), (
+            "one NaN cell produced stat=0, p=1 — a silent 'instruments are "
+            "valid' verdict on data whose clean J is ~1860"
+        )
+
+
+# ---------------------------------------------------------------------------
+# TestHansenJRankDeficientInstruments — [W, Z] must have full column rank
+# ---------------------------------------------------------------------------
+
+class TestHansenJRankDeficientInstruments:
+    """With [W, Z] exactly rank deficient the normal-equations solves are
+    singular.  LAPACK raised on most draws but returned garbage on the rest
+    (J = -2.8e7 with p_value = 1.0 at T=1000 seed 13, and spurious positives
+    that reject valid instruments), and `df = l - k` is wrong there anyway:
+    when every control is also an instrument the true over-identification
+    degree is 0, not l - k.  Neither number is recoverable, so refuse.
+    """
+
+    @staticmethod
+    def _control_also_instrument(T, seed):
+        """W = [z2, z3] with z2, z3 also columns of Z = [z1, z2, z3].
+        Excluded instruments = {z1}, k = 1, so this is exactly identified
+        and J = 0 by construction — while the code reports df = 2."""
+        rng = np.random.default_rng(seed)
+        Z = rng.standard_normal((T, 3))
+        u = rng.standard_normal(T)
+        x = 0.6 * Z[:, 0] + 0.3 * Z[:, 1] + 0.4 * rng.standard_normal(T)
+        y = 2 * x + 0.5 * Z[:, 1] + 0.3 * Z[:, 2] + u
+        return y, x, Z, Z[:, 1:]
+
+    # seed 13 is one of the draws where the old code returned a number rather
+    # than raising: J = -2.789e7, p_value = 1.0, against a truth of J = 0.
+    @pytest.mark.parametrize("seed", [13, 122, 5, 0, 1])
+    def test_control_among_instruments_raises(self, seed):
+        y, x, Z, W = self._control_also_instrument(1000, seed)
+        with pytest.raises(ValueError, match="rank deficient"):
+            hansen_j(y, x, Z, W=W)
+
+    def test_duplicated_instrument_column_raises(self):
+        rng = np.random.default_rng(3)
+        T = 1000
+        Z = rng.standard_normal((T, 3))
+        x = 0.5 * Z.sum(1) + 0.5 * rng.standard_normal(T)
+        y = 2 * x + rng.standard_normal(T)
+        with pytest.raises(ValueError, match="rank deficient"):
+            hansen_j(y, x, np.column_stack([Z, Z[:, 0]]))
+
+    def test_full_rank_still_works(self):
+        """The guard must not fire on well-posed input."""
+        d = _dgp_valid(300, seed=17)
+        res = hansen_j(d["y"], d["x"], d["Z"])
+        assert res["stat"] >= 0.0 and res["df"] == 1
+
+
+# ---------------------------------------------------------------------------
+# TestHansenJHeteroskedasticity — the reference distribution must be the
+# one the p-value is read off
+# ---------------------------------------------------------------------------
+
+def _dgp_hetero(T, *, hetero, rng):
+    """H_0 true *by construction*, with conditionally heteroskedastic errors.
+
+    z ~ N(0, I3), e ~ N(0,1) independent of z, u = e * |z1|.  Then for every
+    moment condition, including the constant, E[z_j u] = E[z_j |z1|] E[e] = 0,
+    so all three instruments are exactly valid.  x = 0.5*(z1+z2+z3) + v with
+    v = 0.6 e + sqrt(0.64) w makes x endogenous (E[x u] = 0.6 E|z1| > 0) and
+    the first stage strong.  l = 3, k = 1, so df = 2.
+    """
+    Z = rng.standard_normal((T, 3))
+    e = rng.standard_normal(T)
+    u = e * np.abs(Z[:, 0]) if hetero else e
+    v = 0.6 * e + math.sqrt(1 - 0.36) * rng.standard_normal(T)
+    x = 0.5 * Z.sum(axis=1) + v
+    y = 2.0 * x + u
+    return y, x, Z
+
+
+class TestHansenJHeteroskedasticity:
+    """The homoskedastic Sargan T*R^2 does not converge to chi^2(l - k) when
+    E[u^2 | Z] varies.  On this DGP its limit is (7/3)*chi2_1 + chi2_1 (mean
+    10/3), so read off a chi^2(2) table it rejected exactly-valid instruments
+    15.8% (T=400) and 16.6% (T=2000) of the time at a nominal 5%, and the
+    distortion did not shrink with T.  The efficient two-step GMM criterion
+    rejected 4.7% / 4.9% on the same draws.
+    """
+
+    @pytest.mark.parametrize("T,reps", [(400, 1200), (1500, 600)])
+    def test_size_under_heteroskedasticity(self, T, reps):
+        rng = np.random.default_rng(20240917 + T)
+        stats = np.array([
+            hansen_j(*_dgp_hetero(T, hetero=True, rng=rng))["stat"]
+            for _ in range(reps)
+        ])
+        cv5 = 5.991464547107979  # chi2(2) 95th percentile
+        rate = float(np.mean(stats > cv5))
+        # MC se at 5% is 0.0063 (reps=1200) / 0.0089 (reps=600); this band is
+        # ~4 se wide either way and the pre-fix statistic sat at 0.158.
+        assert 0.02 <= rate <= 0.09, (
+            f"rejection rate {rate:.4f} at nominal 5% (T={T}); the p-value is "
+            "not being read off the statistic's actual limit distribution"
+        )
+
+    @pytest.mark.parametrize("T,reps", [(400, 1200), (1500, 600)])
+    def test_mean_equals_df_under_heteroskedasticity(self, T, reps):
+        """E[J] = df is a property of the chi^2(df) the p-value assumes.
+        The homoskedastic statistic averaged 10/3 here instead of 2."""
+        rng = np.random.default_rng(777000 + T)
+        stats = np.array([
+            hansen_j(*_dgp_hetero(T, hetero=True, rng=rng))["stat"]
+            for _ in range(reps)
+        ])
+        # se of the mean is sd(chi2(2))/sqrt(reps) = 2/sqrt(reps) ~ 0.058/0.082
+        assert abs(stats.mean() - 2.0) < 0.35, (
+            f"mean J = {stats.mean():.3f}, df = 2 (T={T})"
+        )
+
+    def test_homoskedastic_arm_still_correctly_sized(self):
+        """The vanishing condition: with E[u^2 | Z] constant the Sargan and
+        Hansen statistics are asymptotically equivalent, and both were
+        correctly sized.  Guards against over-correcting."""
+        rng = np.random.default_rng(31337)
+        stats = np.array([
+            hansen_j(*_dgp_hetero(400, hetero=False, rng=rng))["stat"]
+            for _ in range(1200)
+        ])
+        rate = float(np.mean(stats > 5.991464547107979))
+        assert 0.02 <= rate <= 0.09, f"rejection rate {rate:.4f} at nominal 5%"
+
+    def test_invariant_to_nonsingular_reparametrisation_of_instruments(self):
+        """J depends on Z only through its column span, by construction:
+        replacing Z by Z @ A for nonsingular A leaves the moment conditions
+        equivalent and the statistic unchanged."""
+        rng = np.random.default_rng(4242)
+        y, x, Z = _dgp_hetero(600, hetero=True, rng=rng)
+        A = rng.standard_normal((3, 3))
+        base = hansen_j(y, x, Z)["stat"]
+        rot = hansen_j(y, x, Z @ A)["stat"]
+        assert abs(rot - base) < 1e-8 * max(1.0, base), (
+            f"J changed under a nonsingular instrument rotation: "
+            f"{base} -> {rot}"
+        )

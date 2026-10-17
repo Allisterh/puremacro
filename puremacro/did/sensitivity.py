@@ -77,7 +77,10 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
-from typing import Any, Callable, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Sequence
+
+if TYPE_CHECKING:
+    import matplotlib.pyplot as plt
 
 import numpy as np
 import pandas as pd
@@ -1189,6 +1192,21 @@ def honest_did(
         et_arr, b_arr, se_arr = _extract_frame(src)
         if event_time is not None and len(event_time) != len(b_arr):
             raise ValueError("event_time, beta, and se must have equal lengths")
+        if sigma_mat is None and se is None:
+            vcov_attr = getattr(src, "event_study_vcov", None)
+            if vcov_attr is not None:
+                if isinstance(vcov_attr, pd.DataFrame):
+                    labels = [int(t) if float(t).is_integer() else float(t) for t in et_arr]
+                    if all(lbl in vcov_attr.index for lbl in labels) and all(
+                        lbl in vcov_attr.columns for lbl in labels
+                    ):
+                        cand = vcov_attr.loc[labels, labels].to_numpy(dtype=float)
+                    else:
+                        cand = np.asarray(vcov_attr, dtype=float)
+                else:
+                    cand = np.asarray(vcov_attr, dtype=float)
+                if cand.shape == (len(b_arr), len(b_arr)) and np.all(np.isfinite(cand)):
+                    sigma_mat = cand
     else:
         b_arr = np.asarray(src, dtype=float).ravel()
         if event_time is not None:

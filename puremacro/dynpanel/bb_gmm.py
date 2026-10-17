@@ -58,19 +58,26 @@ def _build_level_block(
     n_pred: int,
     n_exog: int,
     collapse: bool,
+    gmm_lag_window: tuple = (2, None),
 ) -> tuple:
     """Build the level-equation rows for system GMM:
 
     - level outcome ``y_{i,t}`` and level RHS ``[y_{i,t-p} for p=1..lag_dep_var,
       X_endog_{i,t}, X_pred_{i,t}, X_exog_{i,t}]``.
-    - level-equation instrument matrix block: ``Δy_{i,t-1}`` and
-      ``ΔX_{i,t}`` for endog/pred regressors (one column each, by
-      Roodman 2009 BB formulation, when collapse=True), plus
-      ``ΔX_exog_{i,t}`` for the exog regressors. (Note: the standard
-      uses ``Δw_{i,t-1}`` as the level instrument for ``w`` endogenous;
-      for predetermined the same lag is used. We use the lag-1
-      difference for endog and the contemporaneous diff for
-      predetermined per the Blundell-Bond convention.)
+    - level-equation instrument matrix block: one column per regressor
+      (Roodman 2009 BB formulation, collapsed), namely
+      ``Δy_{i,t-p-off}`` for the p-th lag of y, ``Δw_{i,t-1-off}`` for
+      an endogenous ``w``, ``Δw_{i,t-off}`` for a predetermined ``w``,
+      and the LEVEL ``x_{i,t}`` for a strictly exogenous ``x``.
+
+    The lag of each level instrument is one shorter than the lowest lag
+    that regressor gets in the difference block (Roodman 2009 sec. 3:
+    the levels-equation instrument is the difference at lag
+    ``laglimit_min - 1``). With ``gmm_lag_window = (lo, hi)`` the
+    difference block starts at ``lo`` for endogenous variables and at
+    ``lo - 1`` for predetermined ones, so ``off = max(lo - 2, 0)``
+    shifts every level instrument accordingly and is zero at the
+    default window ``(2, None)``.
 
     Returns
     -------
@@ -81,36 +88,30 @@ def _build_level_block(
     """
     k = lag_dep_var + n_endog + n_pred + n_exog
 
-    # First pass: collect usable level rows. A level row at (i, t) is
-    # usable when:
-    #   - y_{i,t} observed
-    #   - y_{i,t-p} observed for p=1..lag_dep_var (RHS lagged y)
-    #   - X_endog/Xpred/Xexog at t observed
-    #   - the level instrument requires Δy_{i,t-1} = y_{i,t-1} - y_{i,t-2}
-    #     (so y_{i,t-1} and y_{i,t-2} both observed)
-    #   - and Δw_{i,t} for endog requires w_{i,t} and w_{i,t-1} observed
-    #
-    # Practically, the level instrument for the lagged-y term needs
-    # Δy_{i,t-1}, which itself needs y_{i,t-2}. So the earliest level
-    # row contributable is t = t_min + 2 (when t_min, t_min+1, t_min+2
-    # are observed).
+    # Shift of every level instrument relative to the default window.
+    # Clamped at 0: lo=1 would ask for Δy_{i,t}, which contains ε_it and
+    # is never a valid level instrument.
+    lo = int(gmm_lag_window[0])
+    off = max(lo - 2, 0)
+
+    def _needed_times(t_int: int) -> set:
+        """Time stamps that must be observed for the level row at ``t``."""
+        need = {t_int}
+        for p in range(1, lag_dep_var + 1):
+            need.add(t_int - p)                       # RHS lag of y
+            need |= {t_int - p - off, t_int - p - off - 1}   # its Δy instr
+        if n_endog:
+            need |= {t_int - 1 - off, t_int - 2 - off}       # Δw_{t-1-off}
+        if n_pred:
+            need |= {t_int - off, t_int - 1 - off}           # Δw_{t-off}
+        return need
 
     rows_data = []  # (rec, t)
     for rec in records:
         tset = set(rec["t"].tolist())
         for t in rec["t"]:
             t_int = int(t)
-            ok = True
-            # need y_{t-p} for p=1..lag_dep_var
-            for p in range(1, lag_dep_var + 1):
-                if (t_int - p) not in tset:
-                    ok = False
-                    break
-            if not ok:
-                continue
-            # level instrument for the lagged-y: need Δy_{t-1} =
-            # y_{t-1} - y_{t-2}
-            if (t_int - 2) not in tset:
+            if not _needed_times(t_int) <= tset:
                 continue
             rows_data.append((rec, t_int))
 
@@ -125,12 +126,9 @@ def _build_level_block(
         )
 
     # We need to know the level-instrument ncols up front. Plan:
-    #   - 1 col for Δy_{i,t-1} (the lagged-y level instrument)
-    #   - n_endog cols for ΔX_endog_{i,t} (level instrument for endog
-    #     uses same-period Δw — equivalent to using w_{t-1} as
-    #     instrument for w_{t} after first-differencing the level
-    #     instrument)
-    #   - n_pred cols for ΔX_pred_{i,t}
+    #   - 1 col per lag of y for Δy_{i,t-p-off}
+    #   - n_endog cols for ΔX_endog_{i,t-1-off}
+    #   - n_pred cols for ΔX_pred_{i,t-off}
     #   - n_exog cols for X_exog_{i,t} itself (its differences are
     #     valid in both equations)
     if collapse:
@@ -169,28 +167,30 @@ def _build_level_block(
             X_lvl[r, col] = _level_at(rec, t_int, "Xx", j)
             col += 1
 
-        # level instruments
+        # level instruments (all endpoints guaranteed observed by the
+        # admissibility pass above)
         col = 0
-        # Δy_{t-p} as level instrument for L^p y on RHS
+        # Δy_{t-p-off} as level instrument for L^p y on RHS
         for p in range(1, lag_dep_var + 1):
-            y_a = _y_level_at(rec, t_int - p)
-            y_b = _y_level_at(rec, t_int - p - 1)
-            if y_a is not None and y_b is not None:
-                Z_lvl[r, col] = y_a - y_b
+            y_a = _y_level_at(rec, t_int - p - off)
+            y_b = _y_level_at(rec, t_int - p - off - 1)
+            Z_lvl[r, col] = y_a - y_b
             col += 1
-        # ΔX_endog_t
+        # ΔX_endog_{t-1-off}.  NOT Δw_{i,t}: for a regressor declared
+        # ENDOGENOUS, E[w_it ε_it] ≠ 0 by definition, so Δw_{i,t} =
+        # w_it - w_{i,t-1} is correlated with the level error and the
+        # moment is false by construction (Roodman 2009 uses Δw_{i,t}
+        # only for a PREdetermined regressor).
         for j in range(n_endog):
-            v_t = _level_at(rec, t_int, "Xe", j)
-            v_tm1 = _level_at(rec, t_int - 1, "Xe", j)
-            if v_t is not None and v_tm1 is not None:
-                Z_lvl[r, col] = v_t - v_tm1
+            v_t = _level_at(rec, t_int - 1 - off, "Xe", j)
+            v_tm1 = _level_at(rec, t_int - 2 - off, "Xe", j)
+            Z_lvl[r, col] = v_t - v_tm1
             col += 1
-        # ΔX_pred_t
+        # ΔX_pred_{t-off}
         for j in range(n_pred):
-            v_t = _level_at(rec, t_int, "Xp", j)
-            v_tm1 = _level_at(rec, t_int - 1, "Xp", j)
-            if v_t is not None and v_tm1 is not None:
-                Z_lvl[r, col] = v_t - v_tm1
+            v_t = _level_at(rec, t_int - off, "Xp", j)
+            v_tm1 = _level_at(rec, t_int - 1 - off, "Xp", j)
+            Z_lvl[r, col] = v_t - v_tm1
             col += 1
         # X_exog_t
         for j in range(n_exog):
@@ -260,6 +260,7 @@ def _build_system(
     X_exog: np.ndarray | None,
     gmm_lag_window: tuple,
     collapse: bool,
+    constant: bool | None = None,
 ) -> dict:
     """Stack the difference and level equations of system GMM.
 
@@ -318,6 +319,7 @@ def _build_system(
         n_pred=n_pred,
         n_exog=n_exog,
         collapse=collapse,
+        gmm_lag_window=gmm_lag_window,
     )
     n_lvl = len(lvl_rows)
 
@@ -340,14 +342,34 @@ def _build_system(
     y_full[:n_diff] = y_d
     y_full[n_diff:] = y_lvl
 
-    rows_full = list(diff_rows) + list(lvl_rows)
-
     labels_lvl = (
         [f"lvl_dL{p}.y" for p in range(1, lag_dep_var + 1)]
         + [f"lvl_dXe{j}" for j in range(n_endog)]
         + [f"lvl_dXp{j}" for j in range(n_pred)]
         + [f"lvl_Xx{j}" for j in range(n_exog)]
     )[:m_lvl]
+
+    use_constant = (
+        (n_endog + n_pred + n_exog > 0) if constant is None else bool(constant)
+    )
+    if use_constant and n_lvl > 0:
+        ones_lvl = np.ones((n_lvl, 1))
+        already_spans_const = (
+            X_lvl.shape[1] > 0
+            and np.linalg.matrix_rank(np.hstack([X_lvl, ones_lvl]))
+            == np.linalg.matrix_rank(X_lvl)
+        )
+        if not already_spans_const:
+            const_col = np.zeros((n_full, 1))
+            const_col[n_diff:, 0] = 1.0
+            X_full = np.hstack([X_full, const_col])
+            Z_full = np.hstack([Z_full, const_col])
+            m += 1
+            names_auto = list(names_auto) + ["const"]
+            labels_lvl = labels_lvl + ["lvl_const"]
+
+    rows_full = list(diff_rows) + list(lvl_rows)
+
     Z_full, instr_labels, dropped = _prune_zero_columns(
         Z_full, list(instr_labels_diff) + labels_lvl
     )
@@ -384,6 +406,7 @@ def bb_gmm(
     collapse: bool = True,
     two_step: bool = True,
     windmeijer: bool = True,
+    constant: bool | None = None,
     names: list | None = None,
 ) -> GMMResult:
     """Blundell-Bond (1998) system GMM.
@@ -394,13 +417,19 @@ def bb_gmm(
     asymptotically under mean-stationarity of the regressors).
 
     Same signature and semantics as :func:`ab_gmm` (without its one-step
-    ``robust=False`` option). The level block is
+    ``robust=False`` option), plus ``constant``. The level block is
     always collapsed (one moment per regressor per time t), regardless
     of ``collapse=True/False``: the BB level moment is intrinsically
     one-per-regressor and uncollapsing it is not standard practice.
     The ``collapse`` flag still applies to the AB difference moment
     block. Instrument columns that are identically zero on the
     estimation sample are dropped and listed in ``GMMResult.notes``.
+
+    ``gmm_lag_window`` applies to BOTH blocks: raising its lower limit
+    to ``lo`` (the usual remedy for MA(q) errors) also pushes each level
+    instrument back by ``lo - 2`` periods, so the level moment stays
+    valid alongside the difference moments it accompanies. At the
+    default ``(2, None)`` the level instruments are unshifted.
 
     The Windmeijer correction differentiates the step-2 weight at the
     one-step estimate (see
@@ -432,6 +461,7 @@ def bb_gmm(
         X_exog=X_exog,
         gmm_lag_window=gmm_lag_window,
         collapse=collapse,
+        constant=constant,
     )
     Z_full = system["Z"]
     X_full = system["X"]
@@ -549,11 +579,16 @@ def bb_gmm(
     ar2, ar2_p = ar_test(resid_diff_part, diff_rows, lag=2)
 
     if names is not None:
-        if len(names) != k:
+        has_const = len(names_auto) == k and names_auto[-1] == "const"
+        if len(names) == k:
+            coef_names = tuple(names)
+        elif has_const and len(names) == k - 1:
+            coef_names = tuple(names) + ("const",)
+        else:
+            want = f"{k}" if not has_const else f"{k} (or {k - 1} without 'const')"
             raise ValueError(
-                f"names has length {len(names)} but there are {k} coefficients."
+                f"names has length {len(names)} but there are {want} coefficients."
             )
-        coef_names = tuple(names)
     else:
         coef_names = tuple(names_auto)
 

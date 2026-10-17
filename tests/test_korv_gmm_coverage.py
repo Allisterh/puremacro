@@ -59,7 +59,14 @@ def _make_korv_panel(
     The three KORV first-order conditions in log-differences are:
       Δlog(L_s/L_u)     = σ_su * Δlog(w_s/w_u)   + ε1
       Δlog(K_e/L_u)     = σ_eu * Δlog(w_u/P_K)   + ε2
-      Δlog(LS_u_share)  = (1-σ_eu) * Δlog(P_K/P_C) + ε3
+      Δlog(LS_u_share)  = (1-σ_eu) * Δlog(w_u/P_C) + ε3
+
+    m3 is the cost-share FOC and the unskilled LABOR share pairs with its own
+    price w_u over the unit cost, not with P_K; Δlog(w_u/P_C) is the exact sum
+    Δlog(w_u/P_K) + Δlog(P_K/P_C). This helper used to plant
+    (1-σ_eu)·Δlog(P_K/P_C) on the left, which was the estimator's own
+    (mis-stated) equation restated — see _make_exact_ces_panel below for a
+    panel built from CES primitives instead.
 
     We generate the RHS series from N(0,1) draws, compute LHS exactly from
     the FOC, and add small white noise so the GMM estimator faces a nearly-
@@ -72,7 +79,8 @@ def _make_korv_panel(
     dlog_pk_pc  = rng.standard_normal(n)
     dlog_ls_lu    = -sigma_su       * dlog_ws_wu  + noise * rng.standard_normal(n)
     dlog_ke_lu    = sigma_eu        * dlog_wu_pk  + noise * rng.standard_normal(n)
-    dlog_lsushare = (1 - sigma_eu)  * dlog_pk_pc  + noise * rng.standard_normal(n)
+    dlog_lsushare = ((1 - sigma_eu) * (dlog_wu_pk + dlog_pk_pc)
+                     + noise * rng.standard_normal(n))
     return pd.DataFrame({
         'dlog_ls_lu':    dlog_ls_lu,
         'dlog_ws_wu':    dlog_ws_wu,
@@ -1099,3 +1107,310 @@ class TestShareRatioMoment:
         assert abs(fit.sigma_kl - sigma_true) < 0.05, fit.sigma_kl
         # And the sign of the departure from Cobb-Douglas is preserved.
         assert fit.sigma_kl > 1.0
+
+
+# ===========================================================================
+# 17. Regression tests for identities the estimators hold by construction
+# ===========================================================================
+
+def _make_exact_ces_panel(
+    n_countries: int = 8,
+    n_per: int = 40,
+    sigma_eu: float = 1.67,
+    sigma_su: float = 0.8,
+    alpha: float = 0.35,
+    seed: int = 0,
+) -> pd.DataFrame:
+    """Panel drawn from an exact two-factor CES nest, not from the estimator.
+
+    Nest: equipment K_e against unskilled labour L_u with elasticity σ_eu and
+    dual weight α. The unit cost
+
+        c = [α P_K^(1-σ) + (1-α) w_u^(1-σ)]^(1/(1-σ))
+
+    IS the price index P_C the cost shares are shares of, so cost minimisation
+    delivers all three KORV FOCs to machine precision:
+
+        Δlog(K_e/L_u) =  σ_eu · Δlog(w_u/P_K)
+        Δlog s_Lu     = (1-σ_eu) · Δlog(w_u/P_C)
+        Δlog(L_s/L_u) = -σ_su · Δlog(w_s/w_u)
+
+    Nothing here is copied from korv_gmm; the FOCs are asserted below before
+    the panel is handed to any estimator.
+    """
+    rng = np.random.default_rng(seed)
+    frames = []
+    for i in range(n_countries):
+        p_k = np.exp(np.cumsum(rng.normal(-0.02, 0.06, n_per)))
+        w_u = np.exp(np.cumsum(rng.normal(0.01, 0.05, n_per)))
+        w_s = np.exp(np.cumsum(rng.normal(0.015, 0.05, n_per)))
+        c = (alpha * p_k ** (1 - sigma_eu)
+             + (1 - alpha) * w_u ** (1 - sigma_eu)) ** (1 / (1 - sigma_eu))
+        s_lu = (1 - alpha) * (w_u / c) ** (1 - sigma_eu)
+        l_u = np.exp(np.cumsum(rng.normal(0.005, 0.02, n_per)))
+        k_e = l_u * (alpha / (1 - alpha)) * (w_u / p_k) ** sigma_eu
+        # L_s from the skill FOC, integrated back up to a level.
+        d_ls = -sigma_su * np.diff(np.log(w_s / w_u))
+        l_s = l_u * np.exp(np.concatenate([[0.0], np.cumsum(d_ls)]))
+        frames.append(pd.DataFrame({
+            'code': f'C{i}',
+            'dlog_ws_wu':    np.log(w_s / w_u),
+            'dlog_ls_lu':    np.log(l_s / l_u),
+            'dlog_ke_lu':    np.log(k_e / l_u),
+            'dlog_wu_pk':    np.log(w_u / p_k),
+            'dlog_pk_pc':    np.log(p_k / c),
+            'dlog_lsushare': np.log(s_lu),
+        }))
+    df = pd.concat(frames, ignore_index=True)
+    for col in ('dlog_ws_wu', 'dlog_ls_lu', 'dlog_ke_lu',
+                'dlog_wu_pk', 'dlog_pk_pc', 'dlog_lsushare'):
+        df[col] = df.groupby('code')[col].diff()
+    df = df.dropna().reset_index(drop=True)
+    df['k_equip_share_inner'] = 0.4
+    # Self-check the DGP against its own defining equations.
+    dlog_wu_pc = df['dlog_wu_pk'] + df['dlog_pk_pc']
+    assert np.abs(df['dlog_ls_lu'] + sigma_su * df['dlog_ws_wu']).max() < 1e-12
+    assert np.abs(df['dlog_ke_lu'] - sigma_eu * df['dlog_wu_pk']).max() < 1e-12
+    assert np.abs(df['dlog_lsushare']
+                  - (1 - sigma_eu) * dlog_wu_pc).max() < 1e-12
+    return df
+
+
+class TestM3CostShareFOC:
+    """m3 is a cost-share FOC: each share pairs with ITS OWN price.
+
+    Δlog s_Lu = (1-σ_eu)·Δlog(w_u/P_C) for the unskilled LABOUR share; the
+    (1-σ_eu)·Δlog(P_K/P_C) form belongs to the EQUIPMENT share. Pairing the
+    labour share with the equipment price relative is the same mistake
+    fit_sigma_kl_pooled already refuses at its m4 slot.
+    """
+
+    @pytest.mark.parametrize("sigma_eu", [0.50, 1.67, 2.20])
+    def test_moments_vanish_at_truth_on_exact_ces_panel(self, sigma_eu):
+        df = _make_exact_ces_panel(sigma_eu=sigma_eu, seed=3)
+        dat = {c: df[c].to_numpy() for c in
+               ('dlog_ls_lu', 'dlog_ws_wu', 'dlog_ke_lu',
+                'dlog_wu_pk', 'dlog_lsushare', 'dlog_pk_pc')}
+        g_bar = _moments(np.array([0.8, sigma_eu]), dat).mean(axis=0)
+        assert np.abs(g_bar).max() < 1e-12, g_bar
+
+    @pytest.mark.parametrize("sigma_eu", [0.50, 2.20])
+    def test_pooled_recovers_sigma_eu_on_exact_ces_panel(self, sigma_eu):
+        """No noise, no misspecification: the estimate must be the truth."""
+        df = _make_exact_ces_panel(sigma_eu=sigma_eu, seed=3)
+        fit = fit_korv_pooled(df)
+        assert abs(fit.sigma_eu - sigma_eu) < 5e-3, fit.sigma_eu
+        assert abs(fit.sigma_su - 0.8) < 5e-3, fit.sigma_su
+
+    def test_hansen_j_does_not_reject_model_generated_data(self):
+        """The over-identifying restriction holds exactly on an exact-CES panel."""
+        df = _make_exact_ces_panel(sigma_eu=1.67, seed=3)
+        fit = fit_korv_pooled(df)
+        assert fit.hansen_J < 1e-4, fit.hansen_J
+        assert fit.hansen_p > 0.99, fit.hansen_p
+
+
+class TestClusteredOmegaScale:
+    """The clustered weighting matrix must estimate n·Var(ḡ), because J and
+    the sandwich SEs are both scaled by n.
+
+    fit_korv_pooled_2moments (just-identified) and fit_sigma_su_pooled are two
+    shipped estimators of the SAME m1 slope under the SAME country clustering.
+    On a within-country-demeaned panel with iv_col == rhs_col they solve the
+    identical normal equation, so their clustered SEs must agree. Building
+    Omega from cluster MEANS / n_c instead of cluster SUMS / n breaks the
+    agreement by exactly sqrt(T).
+    """
+
+    @staticmethod
+    def _demeaned_panel(n_countries, n_per, seed=5):
+        rng = np.random.default_rng(seed)
+        frames = []
+        for i in range(n_countries):
+            z1 = rng.normal(0, 0.3, n_per)
+            z2 = rng.normal(0, 0.3, n_per)
+            e1 = rng.normal(0, 0.05, n_per)
+            e2 = rng.normal(0, 0.05, n_per)
+            # Exactly within-country mean zero, so fit_sigma_su_pooled's
+            # demeaning is the identity and the two estimators see one panel.
+            z1 -= z1.mean(); z2 -= z2.mean()
+            e1 -= e1.mean(); e2 -= e2.mean()
+            frames.append(pd.DataFrame({
+                'code': f'C{i}',
+                'dlog_ws_wu': z1, 'dlog_wu_pk': z2,
+                'dlog_ls_lu': -0.8 * z1 + e1,
+                'dlog_ke_lu': 1.6 * z2 + e2,
+            }))
+        return pd.concat(frames, ignore_index=True)
+
+    @pytest.mark.parametrize("n_countries,n_per", [(30, 20), (40, 8)])
+    def test_clustered_se_agrees_with_block_a(self, n_countries, n_per):
+        df = self._demeaned_panel(n_countries, n_per)
+        two = fit_korv_pooled_2moments(df)
+        blk = fit_sigma_su_pooled(df, iv_col='dlog_ws_wu',
+                                  lhs_col='dlog_ls_lu', rhs_col='dlog_ws_wu')
+        assert abs(two.sigma_su - blk.sigma_su) < 1e-6
+        assert abs(two.se_sigma_su / blk.se_sigma_su - 1.0) < 1e-3, (
+            f"2-moment SE {two.se_sigma_su:.6e} vs block-A SE "
+            f"{blk.se_sigma_su:.6e}; ratio "
+            f"{blk.se_sigma_su / two.se_sigma_su:.4f}, sqrt(T)="
+            f"{np.sqrt(n_per):.4f}"
+        )
+
+    @staticmethod
+    def _replicated_panel(n_countries, n_dup, seed=9):
+        """One distinct row per country, copied n_dup times inside the country.
+
+        Copying a cluster's single observation adds no independent information,
+        so the clustered J and the clustered SEs must not depend on n_dup.
+        """
+        rng = np.random.default_rng(seed)
+        z1 = rng.normal(0, 0.3, n_countries)
+        z2 = rng.normal(0, 0.3, n_countries)
+        z3 = rng.normal(0, 0.3, n_countries)
+        base = pd.DataFrame({
+            'code': [f'C{i}' for i in range(n_countries)],
+            'dlog_ws_wu': z1, 'dlog_wu_pk': z2, 'dlog_pk_pc': z3,
+            'dlog_ls_lu': -0.8 * z1 + rng.normal(0, 0.05, n_countries),
+            'dlog_ke_lu': 1.6 * z2 + rng.normal(0, 0.05, n_countries),
+            'dlog_lsushare': (1 - 1.6) * (z2 + z3)
+                             + rng.normal(0, 0.05, n_countries),
+        })
+        return (base.loc[base.index.repeat(n_dup)]
+                    .sort_values('code', kind='stable')
+                    .reset_index(drop=True))
+
+    @pytest.mark.parametrize("n_dup", [5, 20])
+    def test_j_and_se_invariant_to_within_cluster_duplication(self, n_dup):
+        one = fit_korv_pooled(self._replicated_panel(40, 1))
+        rep = fit_korv_pooled(self._replicated_panel(40, n_dup))
+        # Point estimates: rescaling W cannot move the argmin.
+        assert rep.sigma_su == pytest.approx(one.sigma_su, abs=1e-6)
+        assert rep.sigma_eu == pytest.approx(one.sigma_eu, abs=1e-6)
+        # Omega built from cluster MEANS / n_c makes J grow like n_dup and the
+        # SEs shrink like sqrt(n_dup), as if the copies were fresh draws.
+        assert rep.hansen_J == pytest.approx(one.hansen_J, rel=1e-3), (
+            f"J {rep.hansen_J:.4f} at n_dup={n_dup} vs {one.hansen_J:.4f} at "
+            f"n_dup=1; ratio {rep.hansen_J / one.hansen_J:.3f}"
+        )
+        assert rep.se_sigma_su == pytest.approx(one.se_sigma_su, rel=1e-3)
+        assert rep.se_sigma_eu == pytest.approx(one.se_sigma_eu, rel=1e-3)
+
+
+class TestInnerNestDuality:
+    """build_inner_nest_aggregators labels P_K and w "price duals" of K_agg and
+    L_agg. Linear homogeneity then forces P_K·K_agg == P_e·K_e + P_i·K_i at a
+    cost-minimising input mix. alpha is the DUAL weight (calibrate_nest_weights
+    inverts it out of the cost-share identity), so the quantity aggregator
+    weight is alpha^(1/sigma).
+    """
+
+    @staticmethod
+    def _cost_minimising_panel(sigma_ie, sigma_su, alpha, gamma, n=25, seed=11):
+        rng = np.random.default_rng(seed)
+
+        def dual_and_demand(p1, p2, a, sig, level):
+            c = (a * p1 ** (1 - sig) + (1 - a) * p2 ** (1 - sig)) ** (1 / (1 - sig))
+            return (level * a * (p1 / c) ** (-sig),
+                    level * (1 - a) * (p2 / c) ** (-sig), c)
+
+        p_e = np.exp(np.cumsum(rng.normal(0, 0.05, n)))
+        p_i = np.exp(np.cumsum(rng.normal(0, 0.05, n)))
+        w_s = np.exp(np.cumsum(rng.normal(0, 0.04, n)))
+        w_u = np.exp(np.cumsum(rng.normal(0, 0.04, n)))
+        k_lvl = np.exp(np.cumsum(rng.normal(0.02, 0.03, n)))
+        l_lvl = np.exp(np.cumsum(rng.normal(0.01, 0.03, n)))
+        k_e, k_i, p_k = dual_and_demand(p_e, p_i, alpha, sigma_ie, k_lvl)
+        l_s, l_u, w = dual_and_demand(w_s, w_u, gamma, sigma_su, l_lvl)
+        # Euler holds for the DGP's own dual by construction.
+        np.testing.assert_allclose(p_e * k_e + p_i * k_i, p_k * k_lvl, rtol=1e-12)
+        np.testing.assert_allclose(w_s * l_s + w_u * l_u, w * l_lvl, rtol=1e-12)
+        return pd.DataFrame({
+            'code': ['US'] * n, 'K_e': k_e, 'K_i': k_i, 'L_s': l_s, 'L_u': l_u,
+            'P_e': p_e, 'P_i': p_i, 'w_s': w_s, 'w_u': w_u,
+            'alpha_c': alpha, 'gamma_c': gamma,
+        })
+
+    @pytest.mark.parametrize("sigma_ie,sigma_su,alpha,gamma", [
+        (1.5, 0.8, 0.45, 0.40),
+        (2.5, 0.6, 0.30, 0.35),
+        (0.6, 1.8, 0.30, 0.65),
+    ])
+    def test_price_and_quantity_are_a_dual_pair(self, sigma_ie, sigma_su,
+                                                alpha, gamma):
+        df = self._cost_minimising_panel(sigma_ie, sigma_su, alpha, gamma)
+        out = build_inner_nest_aggregators(df, sigma_ie=sigma_ie,
+                                           sigma_su=sigma_su)
+        np.testing.assert_allclose(
+            out['P_K'].to_numpy() * out['K_agg'].to_numpy(),
+            (out['P_e'] * out['K_e'] + out['P_i'] * out['K_i']).to_numpy(),
+            rtol=1e-10,
+        )
+        np.testing.assert_allclose(
+            out['w'].to_numpy() * out['L_agg'].to_numpy(),
+            (out['w_s'] * out['L_s'] + out['w_u'] * out['L_u']).to_numpy(),
+            rtol=1e-10,
+        )
+
+    def test_dlog_aggregator_tracks_the_true_quantity_index(self):
+        """Δlog K_agg must equal Δlog of the level the demands were built from."""
+        sigma_ie, alpha = 2.5, 0.30
+        rng = np.random.default_rng(21)
+        n = 40
+        p_e = np.exp(np.cumsum(rng.normal(0, 0.05, n)))
+        p_i = np.exp(np.cumsum(rng.normal(0, 0.05, n)))
+        k_lvl = np.exp(np.cumsum(rng.normal(0.02, 0.03, n)))
+        c = (alpha * p_e ** (1 - sigma_ie)
+             + (1 - alpha) * p_i ** (1 - sigma_ie)) ** (1 / (1 - sigma_ie))
+        k_e = k_lvl * alpha * (p_e / c) ** (-sigma_ie)
+        k_i = k_lvl * (1 - alpha) * (p_i / c) ** (-sigma_ie)
+        df = pd.DataFrame({
+            'code': ['US'] * n, 'K_e': k_e, 'K_i': k_i,
+            'L_s': np.ones(n), 'L_u': np.ones(n),
+            'P_e': p_e, 'P_i': p_i, 'w_s': np.ones(n), 'w_u': np.ones(n),
+            'alpha_c': alpha, 'gamma_c': 0.5,
+        })
+        out = build_inner_nest_aggregators(df, sigma_ie=sigma_ie, sigma_su=0.8)
+        np.testing.assert_allclose(
+            np.diff(np.log(out['K_agg'].to_numpy())),
+            np.diff(np.log(k_lvl)), atol=1e-12,
+        )
+
+
+class TestNonFiniteMomentInputsRejected:
+    """A NaN or +/-inf in a moment column makes every objective value NaN, so
+    Nelder-Mead never leaves x0 and the fitter would report the start value
+    (0.7, 1.5) as an estimate. That must raise instead.
+    """
+
+    @pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf])
+    @pytest.mark.parametrize("col", ['dlog_ws_wu', 'dlog_ke_lu',
+                                     'dlog_lsushare', 'dlog_pk_pc'])
+    def test_pooled_raises(self, bad, col):
+        df = _make_pooled_panel(n_countries=4, n_per=30)
+        df.loc[0, col] = bad
+        with pytest.raises(ValueError, match="non-finite"):
+            fit_korv_pooled(df)
+
+    @pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf])
+    def test_country_raises(self, bad):
+        df = _make_korv_panel(n=60)
+        df.loc[3, 'dlog_wu_pk'] = bad
+        with pytest.raises(ValueError, match="non-finite"):
+            fit_korv_country(df)
+
+    @pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf])
+    def test_2moments_raises(self, bad):
+        df = _make_pooled_panel(n_countries=4, n_per=30)
+        df.loc[7, 'dlog_ke_lu'] = bad
+        with pytest.raises(ValueError, match="non-finite"):
+            fit_korv_pooled_2moments(df)
+
+    def test_2moments_ignores_columns_it_does_not_read(self):
+        """m3's inputs are not in the 2-moment system, so they cannot poison it."""
+        df = _make_pooled_panel(n_countries=4, n_per=30)
+        clean = fit_korv_pooled_2moments(df)
+        df.loc[0, 'dlog_lsushare'] = np.nan
+        dirty = fit_korv_pooled_2moments(df)
+        assert dirty.sigma_su == pytest.approx(clean.sigma_su)
+        assert dirty.sigma_eu == pytest.approx(clean.sigma_eu)

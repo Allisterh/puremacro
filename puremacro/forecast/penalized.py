@@ -293,6 +293,16 @@ def forecast_penalized(
             f"y_target has {len(y_vec)} rows but X_panel has {T_full}; alignment is positional"
         )
 
+    finite = np.isfinite(X_mat).all() and np.isfinite(y_vec).all()
+    if not finite:
+        bad = int((~np.isfinite(X_mat)).sum()) + int((~np.isfinite(y_vec)).sum())
+        raise ValueError(
+            f"forecast_penalized: inputs contain {bad} non-finite value(s). "
+            "The penalized fit propagates them silently into every coefficient, "
+            "the intercept and the point forecast. Drop or interpolate the "
+            "missing observations first."
+        )
+
     # 1. Align for direct h-step ahead forecasting: y_{t+h} on X_t
     if horizon > 0:
         X_train = X_mat[:-horizon]
@@ -313,10 +323,17 @@ def forecast_penalized(
     x_std[x_std == 0.0] = 1.0
     X_norm = (X_train - x_mean) / x_std
 
+    # 2b. Standardize the target so elastic-net and adaptive weights are
+    # scale-equivariant in the units of y_target.
+    y_scale = float(np.std(y_train))
+    if not y_scale > 0.0:
+        y_scale = 1.0
+    y_scaled = y_train / y_scale
+
     # 3. Compute Adaptive Weights (via Ridge Regression)
     if adaptive:
         ridge_pen = 1e-2 * np.eye(P)
-        beta_ridge = np.linalg.solve(X_norm.T @ X_norm + ridge_pen, X_norm.T @ (y_train - y_train.mean()))
+        beta_ridge = np.linalg.solve(X_norm.T @ X_norm + ridge_pen, X_norm.T @ (y_scaled - y_scaled.mean()))
         weights = 1.0 / (np.abs(beta_ridge) + 1e-3)
         weights = weights / np.median(weights) # Normalize scale
     else:
@@ -325,7 +342,7 @@ def forecast_penalized(
     # 4. Construct Lambda Grid
     if alpha > 0.0:
         # lambda_max is the smallest penalty that zeroes out all coefficients
-        corrs = np.abs(X_norm.T @ (y_train - y_train.mean())) / (T_eff * np.maximum(alpha * weights, 1e-12))
+        corrs = np.abs(X_norm.T @ (y_scaled - y_scaled.mean())) / (T_eff * np.maximum(alpha * weights, 1e-12))
         lambda_max = float(np.max(corrs))
     else:
         # Ridge: anchor the grid on the spectrum of the weighted design.
@@ -345,14 +362,14 @@ def forecast_penalized(
     if alpha > 0.0:
         fits = []
         for lam in lambda_grid:
-            b0, b = _fit_coordinate_descent(X_norm, y_train, lam, alpha, weights)
+            b0, b = _fit_coordinate_descent(X_norm, y_scaled, lam, alpha, weights)
             fits.append((b0, b, float(np.sum(np.abs(b) > 1e-5))))
     else:
-        fits = _ridge_path(X_norm, y_train, lambda_grid, weights)
+        fits = _ridge_path(X_norm, y_scaled, lambda_grid, weights)
 
     for lam, (b0, b, df_coef) in zip(lambda_grid, fits):
         fitted = b0 + X_norm @ b
-        mse = float(np.mean((y_train - fitted) ** 2))
+        mse = float(np.mean((y_scaled - fitted) ** 2)) * y_scale ** 2
         df_model = df_coef + 1.0
         # BIC formula: T * log(MSE) + df * log(T)
         bic = T_eff * np.log(max(1e-12, mse)) + df_model * np.log(T_eff)
@@ -364,9 +381,9 @@ def forecast_penalized(
             best_b0 = b0
             best_b = b.copy()
 
-    # 6. Unstandardize Coefficients
-    beta_orig = best_b / x_std
-    b0_orig = best_b0 - np.sum(beta_orig * x_mean)
+    # 6. Unstandardize Coefficients (both X and the target)
+    beta_orig = (best_b * y_scale) / x_std
+    b0_orig = best_b0 * y_scale - np.sum(beta_orig * x_mean)
 
     # 7. Compute Point Forecast
     y_forecast = float(b0_orig + np.dot(X_latest, beta_orig))
@@ -386,7 +403,7 @@ def forecast_penalized(
         coefficients=s_coef,
         intercept=float(b0_orig),
         optimal_lambda=best_lam,
-        in_sample_r2=max(0.0, min(1.0, float(r2))),
+        in_sample_r2=float(np.clip(r2, 0.0, 1.0)),
         bic_path=pd.Series(bic_dict),
         horizon=horizon,
     )

@@ -11,8 +11,10 @@ Verifies:
    instrument.
 3. Multi-instrument Anderson-Rubin sets are exact: the endpoints solve
    AR(beta) = crit, agree with a brute-force fine-grid inversion, are
-   equivariant under y -> c*y, do not depend on the 2SLS seed of the search,
-   and reduce to the single-instrument closed form when kz=1.
+   equivariant under y -> c*y, do not depend on the 2SLS seed of the search
+   (even an absurd one), reduce to the single-instrument closed form when
+   kz=1, and disconnected sets (two accepted components, or two rejected
+   gaps) are found from any seed and reported with a ``RuntimeWarning``.
 4. Weak-instrument designs give small F_eff and explicitly unbounded AR sets.
 5. ``la_lp`` / ``la_lp_iv`` (White-robust) share the same critical values and
    inversion, and ``la_lp_iv`` is re-exported from ``puremacro.lp``.
@@ -291,7 +293,10 @@ def test_lp_iv_multi_ar_set_independent_of_search_seed(monkeypatch):
     cap = _spy_multi(monkeypatch, _IV_MOD)
     out = lp_iv(_weak_kz2(), y="y", x="x", z=["z1", "z2"], horizons=[1], n_lags=1, weak_iv_robust=True).iloc[0]
     args = (cap["y_target"], cap["x"], cap["W_ctl"], cap["Z_mat"], cap["lags"], cap["alpha"])
-    for beta_hat, se_hat in ((-12.0, 0.1), (-30.0, 0.1), (10.0, 0.1), (0.0, np.nan), (np.nan, np.nan)):
+    # The last two seeds are absurd (5e9 / 1e18 standard errors away from the set): the window
+    # around them never reaches it, so the per-instrument IV ratios take over as seeds.
+    for beta_hat, se_hat in ((-12.0, 0.1), (-30.0, 0.1), (10.0, 0.1), (0.0, np.nan), (np.nan, np.nan),
+                             (1e9, 0.2), (-1e9, 1e-9)):
         lo, hi, kind = _compute_anderson_rubin_multi(*args, beta_hat=beta_hat, se_hat=se_hat)
         assert kind == out["ar_set_type"]
         np.testing.assert_allclose(lo, out["ar_lo"], rtol=1e-8)
@@ -336,6 +341,88 @@ def test_multi_inversion_reduces_to_single_instrument_closed_form():
             np.testing.assert_allclose(hi2, hi1, rtol=1e-8)
         kinds.append(kind1)
     assert kinds == ["bounded", "unbounded_rays", "all_real"]
+
+
+def _small_het_design(seed: int, T: int, k_z: int, pi_scale: float):
+    """Small heteroskedastic IV design (true slope 1) whose k_z >= 2 AR set can be disconnected."""
+    rng = np.random.default_rng(seed)
+    Z = rng.standard_normal((T, k_z))
+    W = np.column_stack([np.ones(T), rng.standard_normal(T)])
+    e = rng.standard_normal((T, 2))
+    u = e[:, 0]
+    v = 0.6 * e[:, 0] + 0.8 * e[:, 1]
+    het = np.exp(0.7 * Z[:, 0])
+    x = Z @ (pi_scale * np.ones(k_z)) + het * v
+    y = 1.0 * x + het * u
+    return y, x, W, Z
+
+
+def _runs(mask: np.ndarray, grid: np.ndarray) -> list[tuple[float, float]]:
+    """(first, last) grid values of every maximal run of True in ``mask``."""
+    out, i = [], 0
+    while i < len(mask):
+        if mask[i]:
+            j = i
+            while j + 1 < len(mask) and mask[j + 1]:
+                j += 1
+            out.append((float(grid[i]), float(grid[j])))
+            i = j + 1
+        else:
+            i += 1
+    return out
+
+
+def test_multi_ar_disconnected_bounded_set_is_enclosed_and_warned():
+    """A bounded AR set with two components is reported as the enclosing interval with a warning,
+    whichever component (or gap) the 2SLS seed falls in (a first-tail-point bracket only saw one)."""
+    y, x, W, Z = _small_het_design(10, 40, 2, 0.1)
+    lags, alpha = 0, 0.10
+    crit = chi2.ppf(1 - alpha, df=2)
+    stat = lambda b: _ar_stat_brute(y, x, W, Z, lags, b)  # noqa: E731
+    grid = np.linspace(-5.0, 10.0, 3001)
+    step = grid[1] - grid[0]
+    acc = np.array([stat(b) <= crit for b in grid])
+    comps = _runs(acc, grid)
+    # The design really is disconnected: [-0.66, 1.79] U [2.18, 6.42], tails rejected.
+    assert len(comps) == 2 and not acc[0] and not acc[-1]
+    assert comps[1][0] - comps[0][1] > 0.3
+
+    seeds = (1.0, comps[1][1] - 0.1, 0.5 * (comps[0][1] + comps[1][0]), 1e9, np.nan)
+    for beta_hat in seeds:
+        with pytest.warns(RuntimeWarning, match="disconnected"):
+            lo, hi, kind = _compute_anderson_rubin_multi(y, x, W, Z, lags, alpha, beta_hat=beta_hat, se_hat=0.5)
+        assert kind == "bounded"
+        assert stat(lo) == pytest.approx(crit, rel=1e-8)
+        assert stat(hi) == pytest.approx(crit, rel=1e-8)
+        # Enclosing interval: from the start of the first component to the end of the last.
+        assert abs(lo - comps[0][0]) <= step
+        assert abs(hi - comps[1][1]) <= step
+
+
+def test_multi_ar_two_rejected_gaps_reports_widest_and_warns():
+    """Tails accepted with two rejected gaps: the rays around the widest gap are reported with a warning."""
+    y, x, W, Z = _small_het_design(8, 30, 2, 0.15)
+    lags, alpha = 2, 0.10
+    crit = chi2.ppf(1 - alpha, df=2)
+    stat = lambda b: _ar_stat_brute(y, x, W, Z, lags, b)  # noqa: E731
+    grid = np.linspace(-5.0, 20.0, 5001)
+    step = grid[1] - grid[0]
+    acc = np.array([stat(b) <= crit for b in grid])
+    gaps = _runs(~acc, grid)
+    # Two rejected gaps, (0.70, 2.93) and (5.28, 14.72), the second being the widest.
+    assert len(gaps) == 2 and acc[0] and acc[-1]
+    widest = max(gaps, key=lambda g: g[1] - g[0])
+    assert widest == gaps[1]
+
+    for beta_hat in (1.0, 10.0, -1e9, np.nan):
+        with pytest.warns(RuntimeWarning, match="more than two components"):
+            lo, hi, kind = _compute_anderson_rubin_multi(y, x, W, Z, lags, alpha, beta_hat=beta_hat, se_hat=0.5)
+        assert kind == "unbounded_rays"
+        assert lo > hi
+        assert stat(lo) == pytest.approx(crit, rel=1e-8)
+        assert stat(hi) == pytest.approx(crit, rel=1e-8)
+        assert abs(hi - widest[0]) <= step
+        assert abs(lo - widest[1]) <= step
 
 
 # ---------------------------------------------------------------------------

@@ -38,10 +38,55 @@ import warnings
 
 import numpy as np
 import pandas as pd
+import scipy.sparse as sp
 
 from ._results import BorusyakJaravelSpiessResult
+from .callaway_santanna import _maybe_int
 
 _UNIDENTIFIED_CHOICES = ("raise", "drop")
+
+
+def _solve_two_way(
+    rows: np.ndarray, cols: np.ndarray, y: np.ndarray, n_u: int, n_t: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Exact least-squares fit of ``y ≈ α[rows] + λ[cols]``.
+
+    Profiles out whichever effect has more levels (its normal equation
+    is diagonal, so it inverts in closed form), leaving a dense
+    ``min(n_u, n_t)``-square Schur complement solved by minimum-norm
+    ``lstsq``.  The design is rank-deficient by one per connected
+    component of the (unit, time) bipartite graph; only ``α_i + λ_t``
+    is identified, which is all the caller predicts with.
+
+    This replaces a Gauss-Seidel backfitting loop that was hard-capped
+    at 200 sweeps and returned the 200th iterate silently when its own
+    1e-9 criterion was not met.  On poorly connected untreated designs
+    (rotating samples, short observation windows) that cap bites: a
+    T=60 rotating panel with a large time trend needed 474 sweeps and
+    came back with att_overall = 2.196 against a zero-noise truth of
+    exactly 2.0.  The error vanishes on a balanced panel with
+    never-treated units, where backfitting converges in ~10 sweeps.
+    """
+    swap = n_u < n_t
+    if swap:
+        rows, cols, n_u, n_t = cols, rows, n_t, n_u
+
+    # Absorbed side (α): n_i α_i = Y_u,i − (N λ)_i.
+    n_i = np.bincount(rows, minlength=n_u).astype(float)
+    n_j = np.bincount(cols, minlength=n_t).astype(float)
+    Y_u = np.bincount(rows, weights=y, minlength=n_u)
+    Y_t = np.bincount(cols, weights=y, minlength=n_t)
+
+    N = sp.csr_matrix(
+        (np.ones(len(y)), (rows, cols)), shape=(n_u, n_t),
+    )
+    # (Nᵀ D⁻¹ N − diag(n_j)) λ = Nᵀ D⁻¹ Y_u − Y_t, with D = diag(n_i).
+    Dinv_N = sp.diags(1.0 / np.maximum(n_i, 1.0)) @ N
+    M = np.asarray((N.T @ Dinv_N).todense()) - np.diag(n_j)
+    rhs = N.T @ (Y_u / np.maximum(n_i, 1.0)) - Y_t
+    lam, *_ = np.linalg.lstsq(M, rhs, rcond=None)
+    alpha = (Y_u - N @ lam) / np.maximum(n_i, 1.0)
+    return (lam, alpha) if swap else (alpha, lam)
 
 
 def _impute_two_way_fe(
@@ -63,28 +108,9 @@ def _impute_two_way_fe(
     n_u, n_t = len(units), len(times)
     rows = sub[unit].map(u_to_i).values
     cols = sub[time].map(t_to_j).values
-
-    # Iterative two-way demeaning to avoid building a (n_u + n_t)-wide design.
     y = sub[outcome].values.astype(float)
-    alpha = np.zeros(n_u)
-    lam = np.zeros(n_t)
-    grand = float(y.mean())
-    for _ in range(200):
-        # Update alpha.
-        diff = y - lam[cols] - grand
-        new_alpha = np.bincount(rows, weights=diff, minlength=n_u) / np.maximum(
-            np.bincount(rows, minlength=n_u), 1
-        )
-        # Update lam.
-        diff = y - new_alpha[rows] - grand
-        new_lam = np.bincount(cols, weights=diff, minlength=n_t) / np.maximum(
-            np.bincount(cols, minlength=n_t), 1
-        )
-        if (np.max(np.abs(new_alpha - alpha)) < 1e-9
-                and np.max(np.abs(new_lam - lam)) < 1e-9):
-            alpha, lam = new_alpha, new_lam
-            break
-        alpha, lam = new_alpha, new_lam
+
+    alpha, lam = _solve_two_way(rows, cols, y, n_u, n_t)
 
     # Predict for *every* (unit, time) row of the original df. Units or
     # times absent from the untreated set have no estimable fixed effect:
@@ -94,7 +120,17 @@ def _impute_two_way_fe(
     full_time_idx = df[time].map(lambda t: t_to_j.get(t, -1)).values
     a = np.where(full_unit_idx >= 0, alpha[np.maximum(full_unit_idx, 0)], np.nan)
     l = np.where(full_time_idx >= 0, lam[np.maximum(full_time_idx, 0)], np.nan)
-    return pd.Series(grand + a + l, index=df.index)
+    return pd.Series(a + l, index=df.index)
+
+
+def _identified_mask(
+    df: pd.DataFrame, *, unit: str, time: str, is_treated_cell: np.ndarray,
+) -> np.ndarray:
+    """Rows whose unit *and* period each own at least one untreated cell."""
+    untreated = pd.Series(~is_treated_cell, index=df.index)
+    u_cov = untreated.groupby(df[unit].values).transform("any")
+    t_cov = untreated.groupby(df[time].values).transform("any")
+    return (u_cov & t_cov).values
 
 
 def _unidentified_cells(
@@ -232,7 +268,7 @@ def borusyak_jaravel_spiess(
 
     # Bootstrap by resampling units.
     units = df[unit].unique()
-    boot_es: dict[int, np.ndarray] = {}        # event_time → (n_boot,) draws
+    boot_es: dict[float, np.ndarray] = {}      # event_time → (n_boot,) draws
     # Group once, index per draw. `df[df[unit] == u]` is a full-frame scan, and
     # it ran once per sampled unit per draw -- O(n_boot x n_units x N). The
     # groups are identical across draws, so the scan is loop-invariant.
@@ -247,6 +283,13 @@ def borusyak_jaravel_spiess(
         boot_df = pd.concat(boot_dfs, ignore_index=True)
         b_treat = boot_df[treat_time].values.astype(float)
         b_treated_cell = (~np.isnan(b_treat)) & (boot_df[time].values >= b_treat)
+        b_keep_mask = _identified_mask(boot_df, unit=unit, time=time,
+                                       is_treated_cell=b_treated_cell)
+        if not b_keep_mask.all():
+            boot_df = boot_df.loc[b_keep_mask].copy()
+            b_treated_cell = b_treated_cell[b_keep_mask]
+        if not b_treated_cell.any():
+            continue
         b_untreated = pd.Series(~b_treated_cell, index=boot_df.index)
         b_yhat0 = _impute_two_way_fe(boot_df, unit=unit, time=time,
                                        outcome=outcome,
@@ -257,23 +300,25 @@ def borusyak_jaravel_spiess(
         boot_df["__event_time__"] = boot_df[time] - boot_df[treat_time]
         b_keep = b_treated_cell & np.isfinite(boot_df["__tau__"].to_numpy(dtype=float))
         for e, sub in boot_df[b_keep].groupby("__event_time__"):
-            boot_es.setdefault(int(e), np.full(n_boot, np.nan))[b] = float(sub["__tau__"].mean())
+            boot_es.setdefault(float(e), np.full(n_boot, np.nan))[b] = float(sub["__tau__"].mean())
 
     rows = []
     for e, sub in treated.groupby("__event_time__"):
         att = float(sub["__tau__"].mean())
-        draws = boot_es.get(int(e), np.array([]))
+        draws = boot_es.get(float(e), np.array([]))
         if draws.size and np.isfinite(draws).any():
             se = float(np.nanstd(draws, ddof=0))
             lo = float(np.nanpercentile(draws, 100 * alpha / 2))
             hi = float(np.nanpercentile(draws, 100 * (1 - alpha / 2)))
         else:
             se = lo = hi = float("nan")
-        rows.append({"event_time": int(e), "att": att,
+        rows.append({"event_time": float(e), "att": att,
                      "se": se, "lo": lo, "hi": hi,
                      "n_obs": int(len(sub))})
     if rows:
         es_df = pd.DataFrame(rows).sort_values("event_time").reset_index(drop=True)
+        if es_df["event_time"].map(lambda v: float(v).is_integer()).all():
+            es_df["event_time"] = es_df["event_time"].map(_maybe_int)
     else:
         es_df = pd.DataFrame(columns=["event_time", "att", "se", "lo", "hi", "n_obs"])
 

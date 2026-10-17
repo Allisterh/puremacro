@@ -277,6 +277,18 @@ def nowcast_gdp(
     p = int(p_factor_lags)
     k = int(n_factors)
 
+    _vals = np.asarray(X_raw, dtype=float)
+    _bad = ~(np.isfinite(_vals) | np.isnan(_vals))
+    if _bad.any():
+        _cols = [var_names[j] for j in np.flatnonzero(_bad.any(axis=0))]
+        raise np.linalg.LinAlgError(
+            f"nowcast_gdp: monthly_data contains {int(_bad.sum())} infinite value(s) in "
+            f"column(s) {_cols}. An inf silently zeroes out the entire column during "
+            "standardisation, so the factors would be estimated from a smaller panel "
+            "without any warning. Replace them with NaN (the documented ragged-edge path) "
+            "or drop the affected observations first."
+        )
+
     # ---- 1. Standardise and run the EM / iterative PCA -------------------
     means = X_raw.mean(skipna=True)
     stds = X_raw.std(skipna=True).replace(0.0, 1.0).fillna(1.0)

@@ -2,14 +2,20 @@
 
 Discovers `puremacro/examples/*.py`, subprocess-runs each, classifies the
 result as PASS / SKIP / FAIL, captures figures from `examples/output/`,
-and emits `docs/examples_gallery.{md,json}`.
+joins the first paragraph of each script's module docstring into a one-line
+description, and emits `docs/examples_gallery.{md,json}`.
 
-Run me explicitly. Gate 5 in `tools/release_check.py` reads my JSON; it
-does not invoke me.
+Run me explicitly; a full render re-runs every example. The last full pass
+spent 10.6 minutes inside the examples, 300 s of that a single timeout
+(`hfi_gertler_karadi`). `--refresh` rewrites both docs files from the existing
+JSON without running anything, which is what you want after editing
+docstrings. Gate 5 in `tools/release_check.py` reads my JSON; it does not
+invoke me.
 """
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 import re
@@ -30,6 +36,62 @@ DATA_MARKERS = re.compile(
     r"FileNotFoundError.*\.(parquet|csv|feather|hdf5|h5|json|npz|pkl|txt|npy)"
 )
 SKIP_COMMENT = re.compile(r"^\s*#\s*skip:\s*(.+?)\s*$")
+# POSIX home directories only. Nothing under .github/workflows/ invokes this
+# script, so the only paths it ever sees are the ones the maintainer's own box
+# produced; a Windows maintainer would need a second pattern for `C:\Users\...`.
+# The lookbehind keeps `https://host/home/user/` from being mangled into a `~`.
+HOME_PATH = re.compile(r"(?<!\w)/(?:Users|home)/[^/\s:]+/")
+DESCRIPTION_MAX_CHARS = 200
+
+
+def scrub_paths(text: str | None) -> str | None:
+    """Rewrite absolute paths so the generated docs do not leak a home directory.
+
+    Paths under REPO_ROOT come out repo-relative; any other path under a POSIX
+    home directory comes out under `~/`. Exactly one example needs that second
+    case: `asset_composition_dynamics` builds its data path off
+    `MAV_ROOT = HERE.parents[3]`, two directories above the repo root, and
+    raises SystemExit carrying it, so the absolute path arrives in `reason` as
+    the last stderr line. That is why the scrub lives here and not in the
+    example.
+    """
+    if not text:
+        return text
+    root = str(REPO_ROOT)
+    text = text.replace(root + "/", "").replace(root, ".")
+    return HOME_PATH.sub("~/", text)
+
+
+def read_description(path: Path) -> str | None:
+    """Return the first paragraph of `path`'s module docstring as a single line.
+
+    Parsed with `ast`, never imported: the examples fit models, hit the network
+    and write figures, and none of that should happen to build an index. Wrapped
+    lines are joined, so a first sentence spanning two source lines still reads
+    as a sentence; truncated at DESCRIPTION_MAX_CHARS.
+
+    Returns:
+        The description, or None if the file has no module docstring, is
+        unreadable, or does not parse.
+    """
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, SyntaxError, ValueError):
+        return None
+    doc = ast.get_docstring(tree)
+    if not doc:
+        return None
+    paragraph: list[str] = []
+    for line in doc.strip().splitlines():
+        if not line.strip():
+            break
+        paragraph.append(line.strip())
+    desc = re.sub(r"\s+", " ", " ".join(paragraph)).strip()
+    if not desc:
+        return None
+    if len(desc) > DESCRIPTION_MAX_CHARS:
+        desc = desc[: DESCRIPTION_MAX_CHARS - 3].rstrip() + "..."
+    return scrub_paths(desc)
 
 
 def capture_figures(
@@ -128,16 +190,19 @@ def run_example(
     """Run one example via `python -m puremacro.examples.<name>` and classify.
 
     Returns:
-        dict with keys: name, status, reason, runtime_s, figures, last_run.
+        dict with keys: name, description, status, reason, runtime_s, figures,
+        last_run.
     """
     src_path = examples_dir / f"{name}.py"
     source_lines = _read_source_first_lines(src_path)
+    description = read_description(src_path)
     # Explicit # skip: comment shortcuts subprocess entirely.
     for line in source_lines[:10]:
         m = SKIP_COMMENT.match(line)
         if m:
             return {
                 "name": name,
+                "description": description,
                 "status": "SKIP",
                 "reason": m.group(1),
                 "runtime_s": 0.0,
@@ -179,8 +244,12 @@ def run_example(
     )
     return {
         "name": name,
+        "description": description,
         "status": cls["status"],
-        "reason": cls["reason"],
+        # Scrubbed here, not in classify(): classify is pure string logic, and
+        # tests/test_render_examples_gallery.py asserts on the raw stderr line
+        # it hands back.
+        "reason": scrub_paths(cls["reason"]),
         "runtime_s": round(runtime, 3),
         # Path is relative to docs/examples_gallery.md location (docs/),
         # so we prepend ../ to reach puremacro/examples/output/ from there.
@@ -221,6 +290,7 @@ def render_all(
         print(f"  rendering {n} ...", flush=True)
         r = run_example(n, examples_dir=examples_dir, output_dir=output_dir, timeout=timeout)
         entries[n] = {
+            "description": r["description"],
             "status": r["status"],
             "reason": r["reason"],
             "runtime_s": r["runtime_s"],
@@ -234,13 +304,60 @@ def render_all(
         prior = json.loads(json_path.read_text(encoding="utf-8")).get("examples", {})
         for k, v in prior.items():
             if k not in entries:
-                entries[k] = v
+                entries[k] = _canonical_entry(v, examples_dir / f"{k}.py")
 
     data = {
         "schema_version": 1,
         "generated_at": _now_iso(),
         "examples": entries,
     }
+    json_path.write_text(json.dumps(data, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+    _emit_markdown(data, docs_dir / "examples_gallery.md")
+    return data
+
+
+def _canonical_entry(entry: dict, src_path: Path) -> dict:
+    """Return `entry` in field order, with a fresh description and a scrubbed reason.
+
+    Used on entries loaded back from the JSON: they were written by an older
+    run and may predate the description field or the path scrub.
+    """
+    return {
+        "description": read_description(src_path),
+        "status": entry.get("status", "FAIL"),
+        "reason": scrub_paths(entry.get("reason")),
+        "runtime_s": entry.get("runtime_s", 0.0),
+        "figures": entry.get("figures", []),
+        "last_run": entry.get("last_run"),
+    }
+
+
+def refresh_docs(*, examples_dir: Path, docs_dir: Path) -> dict:
+    """Rewrite both docs files from the existing JSON, running no examples.
+
+    Statuses, runtimes and `last_run` stamps carry over untouched — they still
+    describe the last real run, which is why `generated_at` carries over too. A
+    refresh stamps `refreshed_at` instead, so Gate 5 keeps measuring staleness
+    against the date the statuses were actually earned. Descriptions are
+    re-read from source and reasons re-scrubbed, so editing a docstring costs
+    under 50 ms instead of a full re-render.
+
+    The entry set is whatever the JSON already holds, so this cannot discover a
+    new example or drop a deleted one; both cases are warned about and left
+    alone, since fixing either needs a real run.
+    """
+    json_path = docs_dir / "examples_gallery.json"
+    data = json.loads(json_path.read_text(encoding="utf-8"))
+    examples = data.get("examples", {})
+    known = set(_discover_examples(examples_dir))
+    for name in sorted(known - examples.keys()):
+        print(f"  warning: {name} has no entry — run a full render or --only {name}")
+    for name in sorted(examples.keys() - known):
+        print(f"  warning: {name} has an entry but no source file")
+    for name, entry in list(examples.items()):
+        examples[name] = _canonical_entry(entry, examples_dir / f"{name}.py")
+    data["examples"] = examples
+    data["refreshed_at"] = _now_iso()
     json_path.write_text(json.dumps(data, indent=2, sort_keys=False) + "\n", encoding="utf-8")
     _emit_markdown(data, docs_dir / "examples_gallery.md")
     return data
@@ -257,6 +374,12 @@ def _emit_markdown(data: dict, md_path: Path) -> None:
     lines.append("")
     lines.append(f"Generated: {data['generated_at']}")
     lines.append("")
+    if data.get("refreshed_at"):
+        lines.append(
+            f"Refreshed: {data['refreshed_at']} — descriptions and paths only; "
+            f"every status below is from the {data['generated_at']} run."
+        )
+        lines.append("")
     lines.append("| Status | Count |")
     lines.append("|---|---|")
     lines.append(f"| PASS | {counts['PASS']} |")
@@ -273,6 +396,7 @@ def _emit_markdown(data: dict, md_path: Path) -> None:
         for name, e in section:
             lines.append(f"### {name}")
             lines.append("")
+            lines.append(f"- **Description:** {e.get('description') or 'no module docstring'}")
             lines.append(f"- **Status:** {e['status']}")
             if e["reason"] is not None:
                 lines.append(f"- **Reason:** {e['reason']}")
@@ -297,6 +421,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--only", help="render only this example by name (no .py)")
     parser.add_argument("--timeout", type=int, default=300, help="per-example timeout in seconds")
     parser.add_argument("--limit", type=int, default=None, help="process at most N examples")
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="rewrite the docs from the existing JSON without running any example; "
+             "warns if the entry set has drifted from the source tree",
+    )
     args = parser.parse_args(argv)
 
     examples_dir = REPO_ROOT / "puremacro" / "examples"
@@ -311,6 +441,16 @@ def main(argv: list[str] | None = None) -> int:
     docs_dir.mkdir(exist_ok=True)
 
     print(f"render_examples_gallery — examples_dir={examples_dir}")
+    if args.refresh:
+        json_path = docs_dir / "examples_gallery.json"
+        if not json_path.exists():
+            print(f"error: --refresh needs {json_path}; run a full render first", file=sys.stderr)
+            return 2
+        data = refresh_docs(examples_dir=examples_dir, docs_dir=docs_dir)
+        print(f"  refreshed {len(data['examples'])} entries from {json_path.name}"
+              f" (statuses unchanged, generated_at {data['generated_at']})")
+        return 0
+
     print(f"  timeout={args.timeout} only={args.only} limit={args.limit}")
     data = render_all(
         examples_dir=examples_dir,

@@ -282,3 +282,137 @@ def test_invalid_inputs_raise():
         nowcast_gdp(monthly, gdp, n_factors=11)
     with pytest.raises(TypeError):
         nowcast_gdp(monthly.to_numpy(), gdp, n_factors=1)
+
+
+# --------------------------------------------------------------------------------------
+# Regression tests for the bridge, the EM-PCA normalisation and the news weights.
+# Each one asserts an invariance the estimand has by construction, not a stored number.
+# --------------------------------------------------------------------------------------
+
+
+def _exact_rank_k_panel(T=180, N=6, K=2, seed=0):
+    """A monthly panel that is EXACTLY rank K with no idiosyncratic noise, plus the GDP
+    series its quarterly factor averages generate. The rank-K fit is then the data."""
+    rng = np.random.default_rng(seed)
+    idx = pd.date_range("2005-01-01", periods=T, freq="MS")
+    f = np.zeros((T, K))
+    for t in range(1, T):
+        f[t] = 0.7 * f[t - 1] + rng.normal(size=K)
+    loadings = rng.normal(size=(N, K))
+    df = pd.DataFrame(f @ loadings.T, index=idx, columns=[f"S{i + 1}" for i in range(N)])
+    f_q = pd.DataFrame(f, index=idx).resample("QE").mean()
+    gdp = pd.Series(
+        2.0 + f_q.to_numpy() @ np.array([1.5, -0.8][:K]),
+        index=f_q.index.to_period("Q").astype(str),
+    )
+    return df, gdp
+
+
+def test_bridge_is_invariant_to_quarterly_gdp_row_order(synthetic_nowcast_data):
+    """The bridge aligns the two frequencies by quarter label, so a label-matched OLS is
+    invariant to the row order of `quarterly_gdp` by construction. It was not: the design
+    matrix was gathered in ascending label order while the left-hand side came back in the
+    caller's order, pairing each quarter's GDP with a different quarter's factors."""
+    df_X, s_gdp = synthetic_nowcast_data
+    base = nowcast_gdp(df_X, s_gdp, n_factors=1)
+
+    reorderings = {
+        "descending": s_gdp.iloc[::-1],
+        "shuffled": s_gdp.sample(frac=1.0, random_state=3),
+        "backfill appended last": pd.concat([s_gdp.iloc[1:], s_gdp.iloc[:1]]),
+        "last two swapped": pd.concat([s_gdp.iloc[:-2], s_gdp.iloc[[-1, -2]]]),
+    }
+    for name, gdp_perm in reorderings.items():
+        assert set(gdp_perm.index) == set(s_gdp.index)
+        res = nowcast_gdp(df_X, gdp_perm, n_factors=1)
+        assert res.nowcast == pytest.approx(base.nowcast, abs=1e-10), name
+        assert res.model_r2 == pytest.approx(base.model_r2, abs=1e-10), name
+
+
+def test_factors_times_loadings_reproduce_an_exact_rank_k_panel():
+    """`factors @ loadings.T` is the common component, which is invariant to the factor
+    normalisation. On a panel that is exactly rank K it must reproduce the standardised
+    panel to machine precision. Bare right singular vectors as loadings give sqrt(T)*U_k V_k'
+    instead of U_k S_k V_k', i.e. every entry shrunk by sqrt(T)/S_k."""
+    df, gdp = _exact_rank_k_panel()
+    res = nowcast_gdp(df, gdp, n_factors=2)
+
+    x_std = ((df - df.mean()) / df.std()).to_numpy()
+    recon = res.factors.to_numpy() @ res.loadings.to_numpy().T
+    assert np.max(np.abs(recon - x_std)) < 1e-8
+
+
+def test_news_forecast_equals_actual_on_an_exact_rank_k_panel():
+    """`forecast` is the model's expected value of the release. On an exactly rank-K panel
+    the rank-K fit is the data, so every surprise must be zero."""
+    df, gdp = _exact_rank_k_panel()
+    res = nowcast_gdp(df, gdp, n_factors=2)
+
+    news = res.news_decomposition
+    assert len(news) == df.shape[1]
+    np.testing.assert_allclose(news["forecast"].to_numpy(), news["actual"].to_numpy(), atol=1e-8)
+    assert np.max(np.abs(news["surprise"].to_numpy())) < 1e-8
+
+
+def test_ragged_edge_completion_is_exact_on_a_rank_k_panel():
+    """Tearing the last row of an exactly rank-K panel destroys no information: the rank-K
+    EM completion can put the deleted cells back exactly, so the nowcast must barely move.
+    A shrunken imputation drags those cells toward zero and moves it a great deal more."""
+    df, gdp = _exact_rank_k_panel()
+    ragged = df.copy()
+    ragged.iloc[-1, 3:] = np.nan
+
+    n_full = nowcast_gdp(df, gdp, n_factors=2).nowcast
+    n_ragged = nowcast_gdp(ragged, gdp, n_factors=2).nowcast
+    assert abs(n_full - n_ragged) < 1e-2
+
+
+def test_news_weight_matches_a_finite_difference_of_the_nowcast():
+    """`weight` is the sensitivity of the nowcast to the release value of that series.
+    Measure it as a central finite difference of `nowcast_gdp` itself -- no reimplementation
+    -- on a complete panel with deliberately unequal factor variances."""
+    rng = np.random.default_rng(5)
+    T, N, K = 900, 6, 2
+    idx = pd.date_range("1990-01-01", periods=T, freq="MS")
+    f = np.zeros((T, K))
+    for t in range(1, T):
+        f[t] = np.array([0.9, 0.5]) * f[t - 1] + np.array([3.0, 0.6]) * rng.normal(size=K)
+    x = (f @ rng.normal(size=(N, K)).T) * rng.uniform(0.5, 4.0, size=N)
+    x = x + rng.normal(scale=0.4, size=(T, N))
+    df = pd.DataFrame(x, index=idx, columns=[f"S{i + 1}" for i in range(N)])
+    f_q = pd.DataFrame(f, index=idx).resample("QE").mean()
+    gdp = pd.Series(
+        2.0 + f_q.to_numpy() @ np.array([1.1, -0.7]) + rng.normal(scale=0.2, size=len(f_q)),
+        index=f_q.index.to_period("Q").astype(str),
+    )
+
+    weights = nowcast_gdp(df, gdp, n_factors=K).news_decomposition["weight"].to_numpy()
+
+    fd = np.empty(N)
+    for i in range(N):
+        h = 1e-4 * float(df.iloc[:, i].std())
+        up, dn = df.copy(), df.copy()
+        up.iloc[-1, i] += h
+        dn.iloc[-1, i] -= h
+        fd[i] = (nowcast_gdp(up, gdp, n_factors=K).nowcast
+                 - nowcast_gdp(dn, gdp, n_factors=K).nowcast) / (2.0 * h)
+
+    # 2% leaves room for the O(1/T) re-estimation term the finite difference also picks up.
+    np.testing.assert_allclose(weights, fd, rtol=0.02)
+
+
+def test_infinite_monthly_value_raises_instead_of_dropping_the_series(synthetic_nowcast_data):
+    """An inf standardises the whole column to NaN and then to zero, which is bit-identical
+    to deleting the series -- silently, with the series still listed in `loadings`."""
+    df_X, s_gdp = synthetic_nowcast_data
+    bad = df_X.copy()
+    bad.iloc[20, 0] = np.inf
+
+    with pytest.raises(np.linalg.LinAlgError, match="infinite value"):
+        nowcast_gdp(bad, s_gdp)
+
+    # NaN in the same cell is the documented ragged-edge path and must still work.
+    ok = df_X.copy()
+    ok.iloc[20, 0] = np.nan
+    assert not np.isnan(nowcast_gdp(ok, s_gdp).nowcast)
+

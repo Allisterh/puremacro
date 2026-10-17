@@ -195,61 +195,91 @@ def _bartlett_lrv(A: np.ndarray, B: np.ndarray, lags: int) -> np.ndarray:
 
 
 def _invert_ar_statistic(
-    ar_stat: Callable[[float], float],
+    ar_stat: Callable[[np.ndarray], np.ndarray],
     crit: float,
     stat_inf: float,
     beta_hat: float,
     se_hat: float,
+    *,
+    extra_seeds: Sequence[float] = (),
+    max_roots: int | None = None,
     n_grid: int = 401,
     max_expand: int = 24,
+    outer_decades: int = 8,
 ) -> tuple[float, float, str]:
     """Invert ``{b : ar_stat(b) <= crit}`` exactly (to root-finding tolerance).
 
-    ``stat_inf`` is the closed-form limit of ``ar_stat`` as ``|b| -> inf``; it
-    decides whether the tails are rejected (set bounded or empty) or accepted
-    (two rays or the whole line). ``beta_hat``/``se_hat`` only seed the search
-    bracket, so a poor 2SLS estimate cannot change the answer.
+    ``ar_stat`` evaluates the statistic on an array of candidate ``b``.
+    ``stat_inf`` is its closed-form limit as ``|b| -> inf``; it decides whether
+    the tails are rejected (set bounded or empty) or accepted (two rays or the
+    whole line). ``beta_hat``/``se_hat`` seed the search window, and
+    ``extra_seeds`` (the per-instrument IV ratios) are tried when the window
+    around the seed finds nothing even after ``max_expand`` doublings, so a
+    poor 2SLS estimate cannot change the answer. ``max_roots`` is the largest
+    number of crossings of ``crit`` the statistic can have (``2 k_z`` for the
+    Anderson-Rubin statistic, whose inequality is rational of that degree);
+    the scan stops as soon as that many are found. Otherwise every crossing on
+    the seed window, on the bracket around the located region and on a
+    geometric scan reaching ``10**outer_decades`` times that window on either
+    side is located, with narrow dips or bumps between grid points refined by
+    a bounded minimiser before root-finding.
     """
     tails_rejected = bool(stat_inf > crit)
     sign = 1.0 if tails_rejected else -1.0
 
-    def f(b: float) -> float:
+    def f(b: np.ndarray) -> np.ndarray:
         # Negative exactly on the region the tails do NOT belong to: the
         # accepted set when the tails are rejected, the rejected set otherwise.
-        return sign * (ar_stat(float(b)) - crit)
+        return sign * (np.asarray(ar_stat(np.atleast_1d(np.asarray(b, dtype=float))), dtype=float) - crit)
 
-    centre = float(beta_hat) if np.isfinite(beta_hat) else 0.0
-    half = 10.0 * float(se_hat) if (np.isfinite(se_hat) and se_hat > 0) else max(abs(centre), 1.0)
+    def f1(b: float) -> float:
+        return float(f(np.array([float(b)]))[0])
 
     # Phase 1: locate one point b_star of the non-tail region, widening the
-    # se-scaled bracket around the seed until the sign of f flips somewhere.
+    # se-scaled window around each seed until the sign of f flips somewhere.
+    se_scale = 10.0 * float(se_hat) if (np.isfinite(se_hat) and se_hat > 0) else 0.0
+    centre0 = float(beta_hat) if np.isfinite(beta_hat) else 0.0
+    seeds: list[tuple[float, float]] = [(centre0, se_scale if se_scale > 0 else max(abs(centre0), 1.0))]
+    finite_extra = [float(s) for s in extra_seeds if np.isfinite(s)]
+    spread = (max(finite_extra) - min(finite_extra)) if len(finite_extra) > 1 else 0.0
+    for s in finite_extra:
+        if all(s != c for c, _ in seeds):
+            # Window scaled by the data (the spread of the IV ratios or the ratio
+            # itself), not by a possibly absurd se_hat.
+            seeds.append((s, max(se_scale, spread, abs(s)) or 1.0))
     b_star: float | None = None
-    for _ in range(max_expand):
-        grid = np.linspace(centre - half, centre + half, n_grid)
-        fv = np.array([f(b) for b in grid])
-        i = int(np.argmin(fv))
-        if fv[i] < 0.0:
-            b_star = float(grid[i])
+    centre, half = seeds[0]
+    for centre, half in seeds:
+        for _ in range(max_expand):
+            grid = np.linspace(centre - half, centre + half, n_grid)
+            fv = f(grid)
+            finite = np.isfinite(fv)
+            if finite.any():
+                i = int(np.flatnonzero(finite)[np.argmin(fv[finite])])
+                if fv[i] < 0.0:
+                    b_star = float(grid[i])
+                    break
+                lo_i, hi_i = max(i - 1, 0), min(i + 1, n_grid - 1)
+                res = minimize_scalar(f1, bounds=(grid[lo_i], grid[hi_i]), method="bounded")
+                if res.fun < 0.0:
+                    b_star = float(res.x)
+                    break
+            half *= 2.0
+        if b_star is not None:
             break
-        lo_i, hi_i = max(i - 1, 0), min(i + 1, n_grid - 1)
-        res = minimize_scalar(f, bounds=(grid[lo_i], grid[hi_i]), method="bounded")
-        if res.fun < 0.0:
-            b_star = float(res.x)
-            break
-        half *= 2.0
     if b_star is None:
         if tails_rejected:
             return np.nan, np.nan, "empty"
         return -np.inf, np.inf, "all_real"
 
-    # Phase 2: bracket the non-tail region by stepping outward from b_star
+    # Phase 2: bracket the located region by stepping outward from b_star
     # until f is positive on each side (guaranteed by the tail limit).
     def _first_positive(direction: float) -> float:
         step = half / 16.0
         b = b_star
         for _ in range(200):
             b = b + direction * step
-            if f(b) > 0.0:
+            if f1(b) > 0.0:
                 return float(b)
             step *= 2.0
         return direction * np.inf
@@ -257,19 +287,71 @@ def _invert_ar_statistic(
     left = _first_positive(-1.0)
     right = _first_positive(1.0)
 
-    # Phase 3: every crossing of the level ``crit`` inside [left, right].
-    lo_scan = left if np.isfinite(left) else b_star - half
-    hi_scan = right if np.isfinite(right) else b_star + half
-    grid = np.unique(np.append(np.linspace(lo_scan, hi_scan, n_grid), b_star))
-    fv = np.array([f(b) for b in grid])
+    # Phase 3: every crossing of the level ``crit`` on the seed window, the
+    # bracket and a geometric scan far beyond them (other components of the
+    # set need not be adjacent to the one found first).
+    lo_w = min(centre - half, left if np.isfinite(left) else b_star - half)
+    hi_w = max(centre + half, right if np.isfinite(right) else b_star + half)
+    span = hi_w - lo_w
+    outer = span * np.logspace(-2.0, float(outer_decades), 25 * (outer_decades + 2))
+    grid = np.unique(np.concatenate([np.linspace(lo_w, hi_w, n_grid), lo_w - outer, hi_w + outer, [b_star]]))
+    fv = f(grid)
+    finite = np.isfinite(fv)
+    grid, fv = grid[finite], fv[finite]
+
+    def _n_changes(vals: np.ndarray) -> int:
+        neg = vals < 0.0
+        return int(np.count_nonzero(neg[1:] != neg[:-1]))
+
+    budget = 2 * max_roots if max_roots is not None else 8
+    if max_roots is None or _n_changes(fv) < max_roots:
+        # A dip below zero (or a bump above zero) narrower than the grid step
+        # shows up as an interior local minimum (maximum) of f on the wrong
+        # side of zero; refine the most promising ones with a bounded minimiser.
+        interior = np.arange(1, len(grid) - 1)
+        dips = interior[(fv[1:-1] > 0.0) & (fv[1:-1] < fv[:-2]) & (fv[1:-1] < fv[2:])]
+        bumps = interior[(fv[1:-1] < 0.0) & (fv[1:-1] > fv[:-2]) & (fv[1:-1] > fv[2:])]
+        cands = sorted(np.concatenate([dips, bumps]).tolist(), key=lambda j: abs(fv[j]))[:budget]
+        new_b: list[float] = []
+        new_f: list[float] = []
+        for j in cands:
+            want_dip = fv[j] > 0.0
+            res = minimize_scalar(
+                f1 if want_dip else (lambda b: -f1(b)),
+                bounds=(grid[j - 1], grid[j + 1]),
+                method="bounded",
+            )
+            val = float(res.fun) if want_dip else -float(res.fun)
+            if (val < 0.0) == want_dip and val != 0.0:
+                new_b.append(float(res.x))
+                new_f.append(val)
+                if max_roots is not None and _n_changes(np.concatenate([fv, new_f])) >= max_roots:
+                    break
+        if new_b:
+            order = np.argsort(np.concatenate([grid, new_b]))
+            grid = np.concatenate([grid, new_b])[order]
+            fv = np.concatenate([fv, new_f])[order]
+
+    def _root(a: float, b: float) -> float:
+        # brentq's xtol is absolute: scale it by the root's magnitude, which a
+        # same-sign bracket bounds below by its nearer end. A bracket straddling
+        # zero gives no such bound, so polish relative to the first result.
+        ref = min(abs(a), abs(b)) if a * b > 0.0 else max(abs(a), abs(b))
+        tol = 1e-12 * max(ref, 1e-300)
+        r = float(brentq(f1, a, b, xtol=tol, maxiter=500))
+        if a * b <= 0.0 and r != 0.0 and 1e-12 * abs(r) < tol:
+            lo_r, hi_r = r - 2.0 * tol, r + 2.0 * tol
+            if (f1(lo_r) < 0.0) != (f1(hi_r) < 0.0):
+                r = float(brentq(f1, lo_r, hi_r, xtol=1e-12 * abs(r), maxiter=500))
+        return r
+
     roots: list[float] = []
     for j in range(len(grid) - 1):
         if (fv[j] < 0.0) != (fv[j + 1] < 0.0):
-            a, b = float(grid[j]), float(grid[j + 1])
-            roots.append(float(brentq(f, a, b, xtol=1e-12 * max(1.0, abs(a), abs(b)))))
-    if not np.isfinite(left):
+            roots.append(_root(float(grid[j]), float(grid[j + 1])))
+    if fv[0] < 0.0:
         roots.insert(0, -np.inf)
-    if not np.isfinite(right):
+    if fv[-1] < 0.0:
         roots.append(np.inf)
 
     if tails_rejected:
@@ -326,10 +408,17 @@ def _compute_anderson_rubin_multi(
     robust first-stage Wald statistic) classifies the set as bounded/empty
     versus unbounded, and the endpoints are Brent roots of ``AR - crit``. With
     ``k_z >= 2`` the inequality is of degree ``2 k_z`` in ``beta_0`` (not a
-    quadratic as in the single-instrument case), so the set can in principle
-    have more than one component; a ``RuntimeWarning`` is then issued and the
-    enclosing interval (bounded) or the two rays around the widest rejected
-    gap (unbounded) are reported. ``beta_hat``/``se_hat`` only seed the search.
+    quadratic as in the single-instrument case), so the statistic crosses the
+    critical value at most ``2 k_z`` times and the set can have more than one
+    component (this does happen in small heteroskedastic samples). Every
+    crossing on the window around the 2SLS seed, on the bracket of the region
+    found first and on a geometric scan far beyond them is located (see
+    :func:`_invert_ar_statistic`); when more than one component is found a
+    ``RuntimeWarning`` is issued and the enclosing interval (bounded) or the
+    two rays around the widest rejected gap (unbounded) are reported. Only a
+    component narrower than the scan resolution and far from every seed can
+    escape the scan. ``beta_hat``/``se_hat`` only seed the search, with the
+    per-instrument IV ratios ``delta_y / delta_x`` as fallback seeds.
     Returns ``(ar_lo, ar_hi, ar_set_type)``; for ``"unbounded_rays"`` the set
     is ``(-inf, ar_hi] U [ar_lo, inf)`` with ``ar_lo > ar_hi``.
     """
@@ -357,11 +446,29 @@ def _compute_anderson_rubin_multi(
         except np.linalg.LinAlgError:
             return float(delta @ np.linalg.pinv(V_delta) @ delta)
 
-    def ar_stat(b0: float) -> float:
-        return _wald(delta_y - b0 * delta_x, Om_yy - b0 * Om_cross + (b0 * b0) * Om_xx)
+    def ar_stat(b: np.ndarray) -> np.ndarray:
+        # AR(b) for a whole array of candidates at once: (m, k_z) deltas and
+        # (m, k_z, k_z) covariances, solved in one batched call.
+        b = np.asarray(b, dtype=float)
+        d = delta_y[None, :] - b[:, None] * delta_x[None, :]
+        Om = (
+            Om_yy[None, :, :]
+            - b[:, None, None] * Om_cross[None, :, :]
+            + (b * b)[:, None, None] * Om_xx[None, :, :]
+        )
+        V = ZtZ_inv[None, :, :] @ Om @ ZtZ_inv[None, :, :]
+        try:
+            sol = np.linalg.solve(V, d[:, :, None])[:, :, 0]
+        except np.linalg.LinAlgError:
+            sol = np.stack([np.linalg.pinv(V_i) @ d_i for V_i, d_i in zip(V, d)])
+        return np.einsum("ij,ij->i", d, sol)
 
     stat_inf = _wald(delta_x, Om_xx)
-    return _invert_ar_statistic(ar_stat, crit, stat_inf, beta_hat, se_hat)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        iv_ratios = delta_y / delta_x
+    return _invert_ar_statistic(
+        ar_stat, crit, stat_inf, beta_hat, se_hat, extra_seeds=iv_ratios, max_roots=2 * k_z
+    )
 
 
 def lp_iv(
