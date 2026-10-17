@@ -434,3 +434,21 @@ def test_main_summary_with_pyodide_flag(capsys, monkeypatch):
     captured = capsys.readouterr()
     assert rc == 0
     assert _summary_count_matches_reported_gates(captured.out)
+
+
+def test_check_external_oracle_fixtures(tmp_path, monkeypatch):
+    """External parity oracle warning helper detects missing and present fixtures."""
+    monkeypatch.delenv("PUREMACRO_ABDATA", raising=False)
+    monkeypatch.delenv("PUREMACRO_ADH_RDA", raising=False)
+    warns = release_check.check_external_oracle_fixtures(tmp_path)
+    assert len(warns) == 2
+    assert any("abdata.dta" in w for w in warns)
+    assert any("ADH.rda" in w for w in warns)
+
+    ab = tmp_path / "abdata.dta"
+    ab.write_bytes(b"stata")
+    adh = tmp_path / "ADH.rda"
+    adh.write_bytes(b"rda")
+    monkeypatch.setenv("PUREMACRO_ABDATA", str(ab))
+    monkeypatch.setenv("PUREMACRO_ADH_RDA", str(adh))
+    assert release_check.check_external_oracle_fixtures(tmp_path) == []

@@ -92,6 +92,7 @@ def _jupytext(args: list[str], *, cwd: Path | None = None, env: dict | None = No
     run_env = os.environ.copy()
     run_env["MPLBACKEND"] = "Agg"
     run_env["PYTHONUNBUFFERED"] = "1"
+    run_env.setdefault("PUREMACRO_LLM_MODE", "cache")
     if env:
         run_env.update(env)
     return subprocess.run(cmd, cwd=cwd or NB_DIR, env=run_env).returncode
@@ -186,7 +187,10 @@ def build_one(src: Path, *, check: bool = False, theme: str | None = None) -> in
     - If src is a .ipynb file (curso): executes via jupytext --execute
       with --run-path curso/notebooks/.
     """
-    env = {}
+    env: dict[str, str] = {}
+    if "PUREMACRO_LLM_MODE" in os.environ:
+        env["PUREMACRO_LLM_MODE"] = os.environ["PUREMACRO_LLM_MODE"]
+    env.setdefault("PUREMACRO_LLM_MODE", "cache")
     if theme:
         env["MAV_NB_TEMA"] = theme
 

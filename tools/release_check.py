@@ -443,6 +443,11 @@ def _is_triple_quoted(token_string: str) -> bool:
     return body[:3] in ('"""', "'''")
 
 
+def _terminator(entry: dict) -> str:
+    """The quote sequence that closes an open f-string of the scan's stack."""
+    return entry["quote"] * 3 if entry["triple"] else entry["quote"]
+
+
 def scan_fstrings_for_pep701(src: str, filename: str = "<src>") -> list[str]:
     """Return the f-string constructs in ``src`` that only Python >= 3.12 accepts.
 
@@ -454,10 +459,16 @@ def scan_fstrings_for_pep701(src: str, filename: str = "<src>") -> list[str]:
     explicit FSTRING_START .. FSTRING_END span, and applies the pre-3.12 rules,
     each checked against CPython 3.11.15 (tests/test_release_check_34fixes.py):
 
-    * inside a replacement field, no string literal (or nested f-string) may
-      open with the quote character of any enclosing single-quoted f-string;
+    * inside a replacement field, no string token — a literal, or a nested
+      f-string's opening quote, literal text or format spec — may contain the
+      closing quote sequence of any enclosing f-string (its quote character
+      when single-quoted, that character tripled when triple-quoted): the
+      pre-3.12 tokenizer ends the enclosing string right there, so
+      ``f"{'a"b'}"`` and ``f\"\"\"{f\"\"\"{a}\"\"\"}\"\"\"`` were errors, while a
+      lone ``"`` inside a triple-quoted f-string's field was fine;
     * inside a replacement field, no string token may contain a backslash
-      (a backslash in the *format spec* is fine, as it was before 3.12);
+      (a backslash in the *format spec* is fine, as it was before 3.12), and
+      no backslash line continuation either;
     * inside a replacement field, no comment;
     * a single-quoted f-string may not span lines, even inside a field.
 
@@ -482,48 +493,79 @@ def scan_fstrings_for_pep701(src: str, filename: str = "<src>") -> list[str]:
     def flag(tok: tokenize.TokenInfo, msg: str) -> None:
         problems.append(f"{filename}:{tok.start[0]}: {msg} (PEP 701; Python >= 3.12 only)")
 
-    for tok in tokens:
+    def reuses_enclosing_quote(text: str, enclosing: list[dict]) -> bool:
+        """Does ``text`` contain the closing quote sequence of any f-string in ``enclosing``?
+
+        Before 3.12 the enclosing f-string was tokenized as an ordinary string
+        first, so its terminator anywhere inside a field ended it early —
+        whether as the opening quote of a nested literal or in its content.
+        """
+        return any(_terminator(e) in text for e in enclosing)
+
+    # The previous token, whatever it was. A backslash line continuation leaves
+    # no token of its own, so inside a field the only trace of one is two
+    # consecutive tokens on different lines with no NL/NEWLINE between them.
+    prev: tokenize.TokenInfo | None = None
+
+    def visit(tok: tokenize.TokenInfo) -> None:
         in_field = bool(stack) and stack[-1]["depth"] > 0
+        if (
+            in_field
+            and prev is not None
+            and tok.start[0] > prev.end[0]
+            and prev.type not in (tokenize.NL, tokenize.NEWLINE)
+        ):
+            flag(tok, "backslash inside an f-string expression part")
         if tok.type == fstring_start:
-            quote = _quote_of(tok.string)
-            if in_field and any(not e["triple"] and e["quote"] == quote for e in stack):
+            if in_field and reuses_enclosing_quote(tok.string, stack):
                 flag(tok, "nested f-string reuses the enclosing f-string's quote")
-            stack.append({"quote": quote, "triple": _is_triple_quoted(tok.string), "depth": 0})
-            continue
+            stack.append({
+                "quote": _quote_of(tok.string), "triple": _is_triple_quoted(tok.string), "depth": 0,
+            })
+            return
         if not stack:
-            continue
+            return
         if tok.type == fstring_end:
             stack.pop()
-            continue
+            return
         if tok.type == fstring_middle:
             # Literal text or format spec of the innermost f-string: fine for
             # that f-string, but not when the whole nested f-string sits in an
             # outer f-string's expression part (or spans an outer single-quoted
             # f-string's line).
+            if reuses_enclosing_quote(tok.string, stack[:-1]):
+                flag(tok, "nested f-string reuses the enclosing f-string's quote")
             if "\\" in tok.string and any(e["depth"] > 0 for e in stack[:-1]):
                 flag(tok, "backslash inside an f-string expression part")
             if "\n" in tok.string and any(not e["triple"] for e in stack[:-1]):
                 flag(tok, "newline inside a single-quoted f-string expression")
-            continue
+            return
         if tok.type == tokenize.OP and tok.string == "{":
             stack[-1]["depth"] += 1
-            continue
+            return
         if tok.type == tokenize.OP and tok.string == "}":
             stack[-1]["depth"] = max(0, stack[-1]["depth"] - 1)
-            continue
+            return
         if not in_field:
-            continue
+            return
         if tok.type == tokenize.STRING:
-            quote = _quote_of(tok.string)
-            if any(not e["triple"] and e["quote"] == quote for e in stack):
+            if reuses_enclosing_quote(tok.string, stack):
                 flag(tok, "string literal inside an f-string expression reuses the f-string's quote")
             if "\\" in tok.string:
                 flag(tok, "backslash inside an f-string expression part")
+            # A triple-quoted literal may span lines; the single-quoted
+            # f-string around it still may not.
+            if ("\n" in tok.string or "\r" in tok.string) and any(not e["triple"] for e in stack):
+                flag(tok, "newline inside a single-quoted f-string expression")
         elif tok.type == tokenize.COMMENT:
             flag(tok, "comment inside an f-string expression part")
         elif tok.type in (tokenize.NL, tokenize.NEWLINE):
             if any(not e["triple"] for e in stack):
                 flag(tok, "newline inside a single-quoted f-string expression")
+
+    for tok in tokens:
+        visit(tok)
+        prev = tok
     return problems
 
 
@@ -538,9 +580,16 @@ def _may_have_pep701_fstrings(src: str, tree: ast.AST) -> bool:
     check is a superset (triple-quoted and implicitly concatenated f-strings
     trigger it too); the tokenizer remains the judge.
     """
-    lines = [ln.encode("utf-8", errors="surrogatepass") for ln in src.splitlines(keepends=True)]
+    if src.startswith("\ufeff"):
+        src = src[1:]
+    lines = [ln.encode("utf-8", errors="surrogatepass") for ln in _source_lines(src)]
+    format_specs = {
+        n.format_spec
+        for n in ast.walk(tree)
+        if isinstance(n, ast.FormattedValue) and n.format_spec is not None
+    }
     for node in ast.walk(tree):
-        if not isinstance(node, ast.JoinedStr) or node.end_lineno is None:
+        if not isinstance(node, ast.JoinedStr) or node in format_specs or node.end_lineno is None:
             continue
         first, last = node.lineno - 1, node.end_lineno - 1
         if first >= len(lines) or last >= len(lines):
@@ -555,9 +604,22 @@ def _may_have_pep701_fstrings(src: str, tree: ast.AST) -> bool:
             )
         body = seg.decode("utf-8", errors="replace").lstrip(_STRING_PREFIX_CHARS)
         quote, inner = body[:1], body[1:-1]
-        if "\\" in inner or "#" in inner or "\n" in inner or quote in inner:
+        if quote not in ('"', "'"):
+            return True  # the slice did not land on a string literal: let the tokenizer judge
+        if "\\" in inner or "#" in inner or "\n" in inner or "\r" in inner or quote in inner:
             return True
     return False
+
+
+# Source lines the way the tokenizer numbers them: broken on \n, \r\n and \r
+# only. ``str.splitlines`` also breaks on \f, \v, \x1c-\x1e, \x85, \u2028 and
+# \u2029, which Python treats as whitespace, so one form feed would shift the
+# pre-filter's slice of every later f-string.
+_SOURCE_LINE_RE = re.compile(r"[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+\Z")
+
+
+def _source_lines(src: str) -> list[str]:
+    return _SOURCE_LINE_RE.findall(src)
 
 
 def check_min_python_syntax(
@@ -758,6 +820,38 @@ def gate_min_python_syntax(
     }
 
 
+def check_external_oracle_fixtures(repo_root: Path | None = None) -> list[str]:
+    """Return human-readable warnings for absent external parity oracle fixtures (Batch B3c / D14).
+
+    Checks whether the Stata ``abdata.dta`` fixture (``PUREMACRO_ABDATA``) and the
+    Autor-Dorn-Hanson ``ADH.rda`` fixture are configured locally so release runs
+    do not silently overlook skipped external parity tests.
+    """
+    root = Path(repo_root) if repo_root is not None else REPO_ROOT
+    warnings_out: list[str] = []
+    abdata_env = os.environ.get("PUREMACRO_ABDATA", "").strip()
+    abdata_candidates = [
+        Path(abdata_env) if abdata_env else None,
+        root / "tests" / "fixtures" / "abdata.dta",
+        root / "data" / "abdata.dta",
+    ]
+    if not any(p is not None and p.is_file() for p in abdata_candidates):
+        warnings_out.append(
+            "PUREMACRO_ABDATA / abdata.dta not found (test_arellano_bond_matches_stata_xtabond2_on_abdata will skip)"
+        )
+    adh_env = os.environ.get("PUREMACRO_ADH_RDA", "").strip()
+    adh_candidates = [
+        Path(adh_env) if adh_env else None,
+        root / "tests" / "fixtures" / "ADH.rda",
+        root / "data" / "ADH.rda",
+    ]
+    if not any(p is not None and p.is_file() for p in adh_candidates):
+        warnings_out.append(
+            "ADH.rda not found (test_bartik_adh_2sls_matches_r_fixest will skip)"
+        )
+    return warnings_out
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="release_check",
@@ -785,6 +879,11 @@ def main(argv: list[str] | None = None) -> int:
              "Pyodide via node tools/pyodide/runner.js. Slow (~60-180s); "
              "requires node + one-time `npm install` in tools/pyodide/.",
     )
+    parser.add_argument(
+        "--allow-skipped-oracles",
+        action="store_true",
+        help="Suppress warnings when external parity oracle datasets (abdata.dta, ADH.rda) are absent.",
+    )
     args = parser.parse_args(argv)
 
     print("release_check — puremacro pre-tag gate")
@@ -792,6 +891,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.report_only:
         print("  (report-only — no gates executed)")
         return 0
+
+    if not args.no_tests and not args.allow_skipped_oracles:
+        for w in check_external_oracle_fixtures(REPO_ROOT):
+            print(f"  warning (external oracle): {w}")
 
     gates = []
     if not args.no_tests:

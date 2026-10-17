@@ -57,6 +57,45 @@ _CASES = [
     ("raw_fstring_ok", 'x = rf"\\d{n}"\n', True),
     ("implicit_concat_ok", 'x = f"{a}" "b" f"{c}"\n', True),
     ("debug_specifier_ok", 'x = f"{a=}"\n', True),
+    # Blind spots of the first scan, found by the 3.4.0 verifier pass: a
+    # backslash line continuation leaves no token, a triple-quoted literal can
+    # carry a newline inside a STRING token, and str.splitlines() breaks on a
+    # form feed, which shifted the pre-filter's line slice.
+    ("continuation_in_triple_field", 'x = f"""{a \\\n + b}"""\n', False),
+    ("continuation_in_paren_field", 'x = f"{(a \\\n + b)}"\n', False),
+    ("triple_string_spans_lines_in_single_field", "x = f\"{'''a\nb'''}\"\n", False),
+    ("form_feed_before_bad", 'y = 1\n\x0cz = 2\nx = f"{d["k"]}"\n', False),
+    ("form_feed_before_ok", "y = 1\n\x0cz = 2\nx = f\"{d['k']}\"\n", True),
+    ("crlf_bad", 'y = 1\r\nx = f"{d["k"]}"\r\n', False),
+    ("crlf_ok", "y = 1\r\nx = f\"{d['k']}\"\r\n", True),
+    ("triple_field_multiline_paren_ok", 'x = f"""{(\n    a\n)}"""\n', True),
+    ("triple_field_multiline_ok", 'x = f"""{a\n    + b\n}"""\n', True),
+    # The enclosing f-string's closing quote sequence inside a nested string's
+    # *content* (not as its opening quote): the pre-3.12 tokenizer ended the
+    # enclosing string there. A lone quote character inside a triple-quoted
+    # f-string's field is fine; the tripled one is not.
+    ("outer_quote_in_str_content", 'x = f"{\'a"b\'}"\n', False),
+    ("outer_quote_in_nested_fstring_middle", 'x = f"{f\'a"b\'}"\n', False),
+    ("outer_quote_in_nested_fstring_spec", 'x = f"{f\'{a:"}\'}"\n', False),
+    ("outer_quote_in_nested_fstring_field_str", 'x = f"{f\'{"x"}\'}"\n', False),
+    ("triple_terminator_in_str_content", 'x = f"""{\'a"""b\'}"""\n', False),
+    ("triple_reuse_nested_triple", 'x = f"""{f"""{a}"""}"""\n', False),
+    ("triple_reuse_nested_triple_str", 'x = f"""{"""a"""}"""\n', False),
+    ("triple_single_quotes_reuse", "x = f'''{f'''{a}'''}'''\n", False),
+    ("triple_nested_in_single", 'x = f"{f"""a"""}"\n', False),
+    ("spec_nested_field_same_quote", 'x = f"{a:{"x"}}"\n', False),
+    ("single_quote_char_in_triple_ok", 'x = f"""{\'a"b\'}"""\n', True),
+    ("single_nested_in_triple_ok", 'x = f"""{f"{a}"}"""\n', True),
+    ("triple_nested_other_triple_ok", "x = f'''{f\"\"\"{a}\"\"\"}'''\n", True),
+    ("spec_nested_field_diff_quote_ok", 'x = f"{a:{\'x\'}}"\n', True),
+    ("hash_in_str_in_field_ok", "x = f\"{'#'}\"\n", True),
+    ("hash_in_spec_ok", 'x = f"{a:#x}"\n', True),
+    ("hash_in_nested_fstring_field", "x = f\"{f'{a#b}'}\"\n", False),
+    ("comment_in_triple_field", 'x = f"""{a # c\n}"""\n', False),
+    ("unicode_literal_then_bad", 'x = f"ééé {d["k"]}"\n', False),
+    ("unicode_literal_then_ok", "x = f\"ééé {d['k']}\"\n", True),
+    ("bom_prefixed_bad", '\ufeffx = f"{d["k"]}"\n', False),
+    ("bom_prefixed_ok", "\ufeffx = f\"{d['k']}\"\n", True),
 ]
 
 
@@ -68,7 +107,7 @@ _CASES = [
 def test_check_min_python_syntax_matches_the_311_verdict(tmp_path, name, src, accepted):
     """On 3.11 the native parser decides; on 3.12+ the PEP 701 scan must agree with it."""
     p = tmp_path / f"{name}.py"
-    p.write_text(src, encoding="utf-8")
+    p.write_bytes(src.encode("utf-8"))  # binary: no newline translation on Windows
     problems = release_check.check_min_python_syntax(p, FLOOR, display=name)
     assert bool(problems) == (not accepted), problems
     for line in problems:
@@ -89,10 +128,12 @@ def test_verdict_table_is_what_cpython_311_says():
         pytest.skip(f"python3.11 on PATH is not 3.11: {probe.stdout.strip()!r}")
     for name, src, accepted in _CASES:
         proc = subprocess.run(
-            [_PY311, "-c", "import sys; compile(sys.stdin.read(), '<case>', 'exec')"],
-            input=src, capture_output=True, text=True, timeout=60,
+            [_PY311, "-c", "import sys; compile(sys.stdin.buffer.read(), '<case>', 'exec')"],
+            input=src.encode("utf-8"), capture_output=True, timeout=60,
         )
-        assert (proc.returncode == 0) == accepted, (name, proc.stderr.strip()[-200:])
+        assert (proc.returncode == 0) == accepted, (
+            name, proc.stderr.decode("utf-8", "replace").strip()[-200:]
+        )
 
 
 def test_gate7_fails_on_a_file_the_floor_rejects_and_names_it(tmp_path):
@@ -164,6 +205,22 @@ def test_gate7_prefilter_skips_the_tokenizer_for_plain_fstrings():
         except SyntaxError:
             continue  # rejected by ast.parse itself (PEP 695 etc.); no scan needed
         assert release_check._may_have_pep701_fstrings(src, tree) is True, src
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="the pre-filter only runs on 3.12+")
+def test_gate7_prefilter_counts_lines_like_the_tokenizer():
+    """A form feed is whitespace to Python but a line break to str.splitlines().
+
+    With the wrong split every later f-string is sliced from the wrong line;
+    the bad case must still reach the tokenizer and the good one must still
+    be skipped (so the split, not just a conservative fallback, is right).
+    """
+    import ast
+
+    bad = 'y = 1\n\x0cz = 2\nx = f"{d["k"]}"\n'
+    assert release_check._may_have_pep701_fstrings(bad, ast.parse(bad, feature_version=FLOOR)) is True
+    ok = "y = 1\n\x0cz = 2\nx = f\"{d['k']}\"\n"
+    assert release_check._may_have_pep701_fstrings(ok, ast.parse(ok, feature_version=FLOOR)) is False
 
 
 def test_gate7_is_silent_on_the_gate_and_on_this_file():

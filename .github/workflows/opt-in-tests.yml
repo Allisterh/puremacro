@@ -21,6 +21,9 @@ on:
   workflow_dispatch:
   workflow_call:
 
+env:
+  PUREMACRO_LLM_MODE: "cache"
+
 jobs:
   opt-in:
     name: slow + reference + replication (ubuntu, Python 3.12)
@@ -50,6 +53,7 @@ jobs:
       - name: Run the opt-in markers
         env:
           PUREMACRO_TIMING_SCALE: "10"
+          PUREMACRO_LLM_MODE: "cache"
           PYTHONPATH: "."
         run: |
           pytest -m "slow or reference or replication or benchmark" tests puremacro/tests \
@@ -79,6 +83,7 @@ jobs:
       - name: Execute the notebooks
         env:
           PUREMACRO_TIMING_SCALE: "10"
+          PUREMACRO_LLM_MODE: "cache"
           PYTHONPATH: "."
         run: |
           pytest -m slow tests/test_notebooks/test_notebooks_execute.py --durations=10 -rs

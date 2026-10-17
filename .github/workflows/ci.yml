@@ -10,10 +10,15 @@ on:
   # (inside a call, github.event_name is the caller's "push" of a tag).
   workflow_call:
 
+env:
+  PYTHONFAULTHANDLER: "1"
+  PUREMACRO_LLM_MODE: "cache"
+
 jobs:
   test:
     name: Test (${{ matrix.os }}, Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
@@ -49,6 +54,8 @@ jobs:
           # wall-clock budgets were written on; see tests/_timing.py.
           # 5 was exceeded once on windows/3.11 (0.53 s against 0.5 s).
           PUREMACRO_TIMING_SCALE: "10"
+          PYTHONFAULTHANDLER: "1"
+          PUREMACRO_LLM_MODE: "cache"
         run: |
           pytest --durations=10
 

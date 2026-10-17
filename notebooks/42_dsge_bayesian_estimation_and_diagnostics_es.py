@@ -42,6 +42,15 @@
 # **Densidad Marginal de Datos (MDD) y Factores de Bayes.** La comparación cuantitativa de modelos evalúa la evidencia muestral mediante la aproximación de Laplace y la media armónica modificada de Geweke (1999) evaluada en 9 niveles de truncamiento $\tau \in [0.1, 0.9]$:
 # $$ \log p_{\text{Laplace}}(Y) = \log p(Y \mid \hat{\theta}) + \log p(\hat{\theta}) + \frac{d}{2}\log(2\pi) + \frac{1}{2}\log\det \hat{\Sigma} $$
 # $$ p_{\text{MHM}}(Y)^{-1} = \frac{1}{M}\sum_{m=1}^M \frac{f(\theta^{(m)})}{p(Y \mid \theta^{(m)}) p(\theta^{(m)})}, \quad f(\theta) = \frac{\mathbb{I}_{(\theta - \bar{\theta})' \Sigma_\theta^{-1} (\theta - \bar{\theta}) \le \chi^2_d(1-\tau)}}{(2\pi)^{d/2} |\Sigma_\theta|^{1/2} (1-\tau)} \exp\left(-\frac{1}{2}(\theta - \bar{\theta})' \Sigma_\theta^{-1} (\theta - \bar{\theta})\right) $$
+#
+# | Parámetro | Símbolo | Descripción | Media Prior | Unidades |
+# |---|---|---|---|---|
+# | `csigma` | $\sigma_c$ | Inverso de la elasticidad de sustitución intertemporal | $1.50$ | Adimensional |
+# | `chabb` | $h$ | Persistencia del hábito externo en el consumo | $0.70$ | Adimensional $[0, 1)$ |
+# | `cprobp` | $\xi_p$ | Probabilidad de rigidez de precios de Calvo | $0.50$ | Probabilidad trimestral |
+# | `cprobw` | $\xi_w$ | Probabilidad de rigidez salarial de Calvo | $0.50$ | Probabilidad trimestral |
+# | `csadjcost` | $\varphi$ | Curvatura del costo de ajuste de la inversión | $4.00$ | Adimensional |
+# | `crpi` | $r_\pi$ | Respuesta de la regla de Taylor a la inflación | $1.50$ | Adimensional |
 
 # %% [markdown]
 # ## Intuición
@@ -170,7 +179,7 @@ summary_tbl = res_bayes.summary().loc[["csigma", "chabb", "cprobp", "cprobw", "c
 print(summary_tbl.round(4).to_string())
 
 p_indices = {name: i for i, name in enumerate(res_bayes.param_names)}
-r_hats = {p: gelman_rubin(res_bayes.draws[:, :, p_indices[p]])["R_hat"] for p in summary_tbl.index}
+r_hats = {p: gelman_rubin(res_bayes.draws[:, :, p_indices[p]], split=True)["R_hat"] for p in summary_tbl.index}
 esses = {p: effective_sample_size(res_bayes.draws[0, :, p_indices[p]]) for p in summary_tbl.index}
 
 assert res_bayes.draws.shape == (2, 100, 36)

@@ -122,6 +122,7 @@ ELEVATED_PARAMETER_TABLE_COHORT: list[str] = [
     "15_lp_did",
     "16_regime_girf",
     "18_beveridge_curve",
+    "42_dsge_bayesian_estimation_and_diagnostics",
 ]
 
 # Bilingual exemplar pairs
@@ -545,8 +546,7 @@ class TestTier1FeatureCoverage:
 
     def test_f3_parameter_tables_in_elevated_cohort(self) -> None:
         """Verify designated elevated notebooks contain parameter definition tables with units."""
-        if not ELEVATED_PARAMETER_TABLE_COHORT:
-            pytest.skip("ELEVATED_PARAMETER_TABLE_COHORT empty (awaiting Milestone 1 elevation rollout)")
+        assert len(ELEVATED_PARAMETER_TABLE_COHORT) >= 18, "ELEVATED_PARAMETER_TABLE_COHORT must not be empty"
         for stem in ELEVATED_PARAMETER_TABLE_COHORT:
             p_en = NB_DIR / f"{stem}.py"
             p_es = NB_DIR / f"{stem}_es.py"

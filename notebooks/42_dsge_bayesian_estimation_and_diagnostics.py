@@ -42,6 +42,15 @@
 # **Marginal Data Density (MDD) and Bayes Factors.** Quantitative model comparison evaluates marginal sample evidence via the Laplace approximation and Geweke's (1999) modified harmonic mean across 9 truncation levels $\tau \in [0.1, 0.9]$:
 # $$ \log p_{\text{Laplace}}(Y) = \log p(Y \mid \hat{\theta}) + \log p(\hat{\theta}) + \frac{d}{2}\log(2\pi) + \frac{1}{2}\log\det \hat{\Sigma} $$
 # $$ p_{\text{MHM}}(Y)^{-1} = \frac{1}{M}\sum_{m=1}^M \frac{f(\theta^{(m)})}{p(Y \mid \theta^{(m)}) p(\theta^{(m)})}, \quad f(\theta) = \frac{\mathbb{I}_{(\theta - \bar{\theta})' \Sigma_\theta^{-1} (\theta - \bar{\theta}) \le \chi^2_d(1-\tau)}}{(2\pi)^{d/2} |\Sigma_\theta|^{1/2} (1-\tau)} \exp\left(-\frac{1}{2}(\theta - \bar{\theta})' \Sigma_\theta^{-1} (\theta - \bar{\theta})\right) $$
+#
+# | Parameter | Symbol | Description | Prior Mean | Units |
+# |---|---|---|---|---|
+# | `csigma` | $\sigma_c$ | Inverse intertemporal elasticity of substitution | $1.50$ | Dimensionless |
+# | `chabb` | $h$ | External habit persistence in consumption | $0.70$ | Dimensionless $[0, 1)$ |
+# | `cprobp` | $\xi_p$ | Calvo price stickiness probability | $0.50$ | Probability per quarter |
+# | `cprobw` | $\xi_w$ | Calvo wage stickiness probability | $0.50$ | Probability per quarter |
+# | `csadjcost` | $\varphi$ | Investment adjustment cost curvature | $4.00$ | Dimensionless |
+# | `crpi` | $r_\pi$ | Taylor-rule response to inflation | $1.50$ | Dimensionless |
 
 # %% [markdown]
 # ## Intuition
@@ -170,7 +179,7 @@ summary_tbl = res_bayes.summary().loc[["csigma", "chabb", "cprobp", "cprobw", "c
 print(summary_tbl.round(4).to_string())
 
 p_indices = {name: i for i, name in enumerate(res_bayes.param_names)}
-r_hats = {p: gelman_rubin(res_bayes.draws[:, :, p_indices[p]])["R_hat"] for p in summary_tbl.index}
+r_hats = {p: gelman_rubin(res_bayes.draws[:, :, p_indices[p]], split=True)["R_hat"] for p in summary_tbl.index}
 esses = {p: effective_sample_size(res_bayes.draws[0, :, p_indices[p]]) for p in summary_tbl.index}
 
 assert res_bayes.draws.shape == (2, 100, 36)
