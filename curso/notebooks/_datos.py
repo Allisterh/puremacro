@@ -251,7 +251,9 @@ def ruta_dato(filename: str | Path) -> Path:
     # If DATOS is bundle_2026A, check parent directory (e.g. data_curso/)
     try:
         if DATOS.parent != DATOS:
+            candidates.append(DATOS.parent / p_in)
             candidates.append(DATOS.parent / nombre)
+            candidates.append(DATOS.parent / "bancos_centrales" / nombre)
             candidates.append(DATOS.parent / "bundle_2026A" / nombre)
     except OSError:
         pass
@@ -264,6 +266,8 @@ def ruta_dato(filename: str | Path) -> Path:
 
     candidates.extend([
         aqui / p_in,
+        aqui / "data_curso" / p_in,
+        aqui / "data_curso" / "bancos_centrales" / nombre,
         aqui / "data_curso" / "bundle_2026A" / nombre,
         aqui / "data_curso" / nombre,
         aqui / "bundle_2026A" / nombre,
@@ -278,6 +282,12 @@ def ruta_dato(filename: str | Path) -> Path:
 
     candidates.extend([
         cwd / p_in,
+        cwd / "notebooks" / "data_curso" / p_in,
+        cwd / "data_curso" / p_in,
+        cwd / "colab_es" / "data_curso" / p_in,
+        cwd / "notebooks" / "data_curso" / "bancos_centrales" / nombre,
+        cwd / "data_curso" / "bancos_centrales" / nombre,
+        cwd / "colab_es" / "data_curso" / "bancos_centrales" / nombre,
         cwd / "notebooks" / "data_curso" / "bundle_2026A" / nombre,
         cwd / "data_curso" / "bundle_2026A" / nombre,
         cwd / "colab_es" / "data_curso" / "bundle_2026A" / nombre,

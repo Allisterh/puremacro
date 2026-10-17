@@ -8,7 +8,7 @@ Economía del ITAM, otoño 2026. Todo el curso corre en Python con
 ejecutadas, así que se puede leer en GitHub sin correr nada.
 
 La carpeta contiene los cuadernos en español (`*_es.ipynb`) y en inglés, los
-auxiliares `_datos.py`, `_nbstyle.py` y `_tutor.py`, los datos congelados en
+auxiliares `_datos.py`, `_nbstyle.py`, `_tutor.py` y `_llm.py`, los datos congelados en
 `data_curso/` y los modelos `.mod` en `modelos/`. Las diapositivas en PDF están
 en `curso/site/diapositivas/`.
 
@@ -21,6 +21,7 @@ Haga clic en el enlace del cuaderno. La primera celda de código instala
 | Código | Tema | Español | Inglés |
 |---|---|---|---|
 | T00 | Syllabus interactivo del curso | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T00_syllabus_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T00_syllabus.ipynb) |
+| T00_B | Configura tu modelo de lenguaje local (Qwen3-4B) | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T00_B_configura_tu_modelo_local_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T00_B_local_model_setup.ipynb) |
 | T01_A | Hechos del ciclo económico desde el mercado de trabajo | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_A_data_panels_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_A_data_panels.ipynb) |
 | T01_B | Contabilidad nacional y hechos estilizados internacionales | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_B_measurement_and_cycles_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_B_measurement_and_cycles.ipynb) |
 | T01_C | El ciclo a frecuencia mensual, semanal y diaria | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_C_stylized_facts_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_C_stylized_facts.ipynb) |
@@ -44,6 +45,7 @@ Haga clic en el enlace del cuaderno. La primera celda de código instala
 | T05_D | DiD con proyecciones locales (LP-DiD) | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_D_lp_did_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_D_lp_did.ipynb) |
 | T05_E | Transmisión dependiente del estado y respuestas generalizadas | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_E_regime_girf_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_E_regime_girf.ipynb) |
 | T05_F | SVAR de la inflación de 2021–2024 (Bernanke–Blanchard) | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_F_svar_post_covid_inflation_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_F_svar_post_covid_inflation.ipynb) |
+| T05_G | Identificación narrativa de choques monetarios con un LLM local (Banxico y FOMC) | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_G_choques_narrativos_llm_banxico_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_G_narrative_llm_banxico.ipynb) |
 | T06_A | ¿De dónde viene la desigualdad de riqueza? | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_A_wealth_inequality_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_A_wealth_inequality.ipynb) |
 | T06_B | Ciclo de vida, demografía y pensiones | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_B_life_cycle_and_demographics_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_B_life_cycle_and_demographics.ipynb) |
 | T06_C | Carteras, preferencias y la frontera HANK | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_C_portfolios_and_preferences_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_C_portfolios_and_preferences.ipynb) |
@@ -97,7 +99,7 @@ programme in Economics, fall 2026. The whole course runs in Python with
 executed outputs, so you can read it on GitHub without running anything.
 
 This folder holds the notebooks in Spanish (`*_es.ipynb`) and English, the
-helpers `_datos.py`, `_nbstyle.py` and `_tutor.py`, the frozen data in
+helpers `_datos.py`, `_nbstyle.py`, `_tutor.py` and `_llm.py`, the frozen data in
 `data_curso/` and the `.mod` models in `modelos/`. The PDF slides are in
 `curso/site/diapositivas/` (in Spanish).
 
@@ -110,6 +112,7 @@ data); it does not ask for Google Drive access. Run the cells in order.
 | Code | Topic | Spanish | English |
 |---|---|---|---|
 | T00 | Interactive course syllabus | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T00_syllabus_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T00_syllabus.ipynb) |
+| T00_B | Set up your local language model (Qwen3-4B) | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T00_B_configura_tu_modelo_local_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T00_B_local_model_setup.ipynb) |
 | T01_A | Business-cycle facts from the labour side | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_A_data_panels_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_A_data_panels.ipynb) |
 | T01_B | National accounts and cross-country stylized facts | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_B_measurement_and_cycles_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_B_measurement_and_cycles.ipynb) |
 | T01_C | The cycle at monthly, weekly and daily frequency | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_C_stylized_facts_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_C_stylized_facts.ipynb) |
@@ -133,6 +136,7 @@ data); it does not ask for Google Drive access. Run the cells in order.
 | T05_D | Difference-in-differences with local projections (LP-DiD) | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_D_lp_did_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_D_lp_did.ipynb) |
 | T05_E | State-dependent transmission and generalized impulse responses | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_E_regime_girf_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_E_regime_girf.ipynb) |
 | T05_F | SVAR of the 2021–2024 inflation (Bernanke–Blanchard) | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_F_svar_post_covid_inflation_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_F_svar_post_covid_inflation.ipynb) |
+| T05_G | Narrative identification of monetary shocks with a local LLM (Banxico and FOMC) | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_G_choques_narrativos_llm_banxico_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_G_narrative_llm_banxico.ipynb) |
 | T06_A | Where does wealth inequality come from? | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_A_wealth_inequality_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_A_wealth_inequality.ipynb) |
 | T06_B | Life cycle, demographics and pensions | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_B_life_cycle_and_demographics_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_B_life_cycle_and_demographics.ipynb) |
 | T06_C | Portfolios, preferences and the HANK frontier | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_C_portfolios_and_preferences_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_C_portfolios_and_preferences.ipynb) |

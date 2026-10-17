@@ -51,6 +51,12 @@ LABS = [
     ("mercado-laboral", "M5 10c6 10 14 16 22 18s16 2 24 0 10-6 12-10",
      {"es": "Recorre la curva de Beveridge de EE. UU. y Europa, compara el desempleo con el que dictan los flujos y cambia un flujo de la ENOE para ver la informalidad mexicana como un equilibrio.",
       "en": "Trace the Beveridge curve for the US and Europe, compare unemployment with the level the flows imply, and change one ENOE flow to see Mexico's informality as an equilibrium."}),
+    ("politica-monetaria-hank", "M3 18c8 14 14 16 22 10s16-12 38-8",
+     {"es": "Compara la transmisión monetaria en HANK y RANK en el espacio de sucesiones, descompón la caída del consumo en canales directo e indirecto (Kaplan–Moll–Violante) y explora la escalera de la PMC por deciles.",
+      "en": "Compare monetary transmission in HANK and RANK in sequence space, decompose the consumption response into direct and indirect channels (Kaplan–Moll–Violante), and explore the MPC ladder across wealth deciles."}),
+    ("comercio-aranceles", "M3 28h14V14h14v8h14V10h18",
+     {"es": "Resuelve el equilibrio general cuantitativo de comercio con enlaces insumo-producto (Caliendo y Parro) para México, EE. UU. y China, y mide el desvío de comercio, el nearshoring y el bienestar ante guerras arancelarias.",
+      "en": "Solve the quantitative general-equilibrium trade model with input-output linkages (Caliendo and Parro) for Mexico, the US, and China, and measure trade diversion, nearshoring, and welfare under tariff wars."}),
 ]
 
 HEAD = """<!doctype html>

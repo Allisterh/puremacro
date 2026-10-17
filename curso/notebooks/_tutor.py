@@ -1,11 +1,16 @@
 """Offline AI tutor for the MAV course companion (notebook-side helper).
 
-Wraps puremacro's local-LLM engines so a learner can ask questions or check
-answers fully offline ($0, no API key). The course runs on a local install with
-the network closed by default; when no local engine is installed on the machine
-this degrades gracefully, pointing to the lesson's AI-exploration prompts.
+``tutor(question)`` asks the course's local model through ``_llm.get_llm()``, the path every
+lesson uses for the model, so a learner can ask questions or check answers fully offline
+($0, no API key). An answer already in the course cache (``data_curso/llm_cache.sqlite``)
+comes back with no model installed; with a local model (lesson T00_B explains the install) a
+new question is answered live and saved. With no answer the tutor returns a short notice that
+points to lesson T00_B and to the lesson's AI-exploration questions.
 Never raises — a tutor failure must not break a lesson notebook.
 Provides bilingual support (English and Spanish) based on caller notebook or prompt language.
+
+``_llm`` is imported inside :func:`tutor`, not here: a lesson that imports the tutor without
+calling it keeps its start-up cost.
 """
 from __future__ import annotations
 
@@ -27,22 +32,25 @@ _SYSTEM_ES = (
 )
 
 _FALLBACK_ES = (
-    "[tutor sin conexión] No hay ningún motor de LLM local instalado en esta "
-    "máquina. Instálalo con `pip install \"puremacro[local-llm]\"` junto con un "
-    "modelo pequeño (por ejemplo vía Ollama o MLX), o usa las preguntas de "
-    "exploración con IA de más abajo con el asistente que prefieras. El resto "
-    "del cuaderno funciona igual sin el tutor."
+    "[tutor sin conexión] No hay respuesta del modelo local en esta máquina. "
+    "Abre la lección T00_B (configura tu modelo local) para instalar uno, o usa "
+    "las preguntas de exploración con IA de más abajo con el asistente que "
+    "prefieras. El resto del cuaderno funciona igual sin el tutor."
 )
 
 _FALLBACK_EN = (
-    "[offline tutor] No local LLM engine is installed on this machine. "
-    "Install one with `pip install \"puremacro[local-llm]\"` along with a "
-    "small model (for example via Ollama or MLX), or use the AI-exploration "
-    "questions below with your preferred assistant. The rest of the notebook "
-    "works without the tutor."
+    "[offline tutor] No answer from a local model on this machine. "
+    "Open lesson T00_B (set up your local model) to install one, or use the "
+    "AI-exploration questions below with your preferred assistant. "
+    "The rest of the notebook works without the tutor."
 )
 
 _FALLBACK = _FALLBACK_ES
+
+
+def _fallback(lang: str) -> str:
+    """The notice for ``lang`` (``"es"`` or ``"en"``) when no answer is available."""
+    return _FALLBACK_ES if lang == "es" else _FALLBACK_EN
 
 
 def _detect_lang(question: str = "", context: str = "", lang: str = "auto") -> str:
@@ -103,31 +111,45 @@ def _detect_lang(question: str = "", context: str = "", lang: str = "auto") -> s
     return "en"
 
 
-def tutor(question: str, *, context: str = "", model: str = "qwen2.5:3b-instruct",
+def _build_prompt(question: str, context: str, lang: str) -> str:
+    """The prompt for ``question`` in ``lang`` (``"es"`` or ``"en"``): the lesson context, if
+    there is one, and then the question.
+
+    The system prompt (``_SYSTEM_ES`` or ``_SYSTEM_EN``) travels separately, as ``system=`` of
+    ``try_complete``, so it is not repeated here; the course cache is keyed on both texts.
+    """
+    es = lang == "es"
+    prompt = ""
+    if context:
+        ctx_label = "Contexto de la lección" if es else "Lesson context"
+        prompt += f"{ctx_label}:\n{context}\n\n"
+    q_label = "Pregunta" if es else "Question"
+    return prompt + f"{q_label}: {question}"
+
+
+def tutor(question: str, *, context: str = "", model: str = "default",
           engine: str = "auto", lang: str = "auto") -> str:
     """Ask the offline tutor. Returns the answer, or a friendly fallback string
-    if no local engine is available. Never raises.
-    
+    if no local model answers. Never raises.
+
+    The answer is the course model's (``_llm.get_llm()``): the course cache first, then a
+    local model if one is installed (lesson T00_B). ``model`` and ``engine`` are accepted
+    for backward compatibility and ignored: the course uses the reference model, and
+    ``PUREMACRO_LLM_MODEL`` changes it.
+
     Supports bilingual English/Spanish fallback and system prompts.
     """
-    resolved_lang = _detect_lang(question, context, lang)
-    fallback_text = _FALLBACK_ES if resolved_lang == "es" else _FALLBACK_EN
-    engine_detail = "detalle del motor" if resolved_lang == "es" else "engine detail"
-
+    resolved_lang = "es"
     try:
-        from puremacro.narrative._local_engines import chat
-    except Exception:
-        return fallback_text
-
-    system_prompt = _SYSTEM_ES if resolved_lang == "es" else _SYSTEM_EN
-    prompt = system_prompt + "\n\n"
-    if context:
-        ctx_label = "Contexto de la lección" if resolved_lang == "es" else "Lesson context"
-        prompt += f"{ctx_label}:\n{context}\n\n"
-    q_label = "Pregunta" if resolved_lang == "es" else "Question"
-    prompt += f"{q_label}: {question}"
-
-    try:
-        return chat(model, prompt, engine=engine, max_tokens=512, temperature=0.2)
-    except Exception as exc:  # graceful: any backend/availability error -> fallback
-        return f"{fallback_text}\n({engine_detail}: {type(exc).__name__})"
+        resolved_lang = _detect_lang(question, context, lang)
+        import _llm     # here and not at the top of the module: see the module docstring
+        answer = _llm.get_llm(lang=resolved_lang).try_complete(
+            _build_prompt(question, context, resolved_lang),
+            system=_SYSTEM_ES if resolved_lang == "es" else _SYSTEM_EN,
+            max_tokens=512, temperature=0.0)
+    except Exception as exc:  # graceful: any helper/availability error -> fallback
+        engine_detail = "detalle del motor" if resolved_lang == "es" else "engine detail"
+        return f"{_fallback(resolved_lang)}\n({engine_detail}: {type(exc).__name__})"
+    if isinstance(answer, str) and answer.strip():
+        return answer
+    return _fallback(resolved_lang)

@@ -1,0 +1,30 @@
+{
+  "archivos": [
+    {
+      "bytes": 6212,
+      "created_at": "2026-10-12",
+      "file": "minutas_banxico_muestra.csv",
+      "rows": 3,
+      "sha256": "da33ef56b5b49b078f03923eb2d6a6b89e7ac5898b2416f99f62467c724486b1",
+      "source": "Fragmentos didácticos de comunicados y minutas de política monetaria (Banco de México)"
+    },
+    {
+      "bytes": 2050816,
+      "created_at": "2026-10-17",
+      "file": "banxico_comunicados.csv",
+      "rows": 161,
+      "sha256": "44a0455ee7889bbc7bd794acae36796eb5ad2f006019e3864e2dbedc477abcbe",
+      "source": "Comunicados de decisión de política monetaria del Banco de México (2008-2026)"
+    },
+    {
+      "bytes": 986086,
+      "created_at": "2026-10-17",
+      "file": "fomc_statements.csv",
+      "rows": 161,
+      "sha256": "232521df715865188f57ad0299d21a3f8501b28157d4c33b0d29d97ac99f39a4",
+      "source": "Comunicados de decisión de política monetaria del FOMC de la Reserva Federal (2008-2026)"
+    }
+  ],
+  "generado_por": "scripts/construir_corpus_bancos_centrales.py",
+  "version": 1
+}
