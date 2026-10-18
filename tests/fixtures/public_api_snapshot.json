@@ -495,6 +495,7 @@
       "prior_predictive"
     ],
     "puremacro.dsge.build": [
+      "DynareCommandResults",
       "DynareDR",
       "EigenvalueTable",
       "IdentificationResult",
@@ -568,6 +569,8 @@
     "puremacro.dsge.hank": [
       "HANKModel",
       "HANKResult",
+      "dp_nonlinear_transition",
+      "dp_sequence_jacobian",
       "load_hank_mod",
       "solve_hank_bridge"
     ],
@@ -642,7 +645,8 @@
       "particle_filter",
       "residual_resample",
       "stratified_resample",
-      "systematic_resample"
+      "systematic_resample",
+      "tempered_particle_filter"
     ],
     "puremacro.dsge.perfect_foresight": [
       "MCPResult",
@@ -1950,6 +1954,8 @@
       "NonlinearHANKResult",
       "SequenceSpaceHANKResult",
       "TwoAssetSequenceSpaceHANKResult",
+      "dp_nonlinear_transition",
+      "dp_sequence_jacobian",
       "fake_news_algorithm",
       "simulate_targeted_transfer",
       "solve_hank_sequence_space",
@@ -4647,6 +4653,8 @@
     ],
     "puremacro.dsge._parser.ParsedModelDAG": [
       "auxiliary_variables",
+      "calib_smoother_options",
+      "commands",
       "deflators",
       "det_shocks",
       "endval",
@@ -4667,11 +4675,19 @@
       "log_trend_vars",
       "markov_switching_config",
       "named_shock_groups",
+      "optim_weights",
       "options",
+      "osr_options",
+      "osr_params",
+      "osr_params_bounds",
       "parameter_values",
       "parameters",
+      "perfect_foresight_options",
+      "planner_objective",
       "predetermined_variables",
+      "ramsey_policy_options",
       "shock_cov",
+      "shock_decomposition_options",
       "shock_groups",
       "shocks",
       "shocks_config",
@@ -4772,6 +4788,17 @@
       "state_variables",
       "variable_names",
       "ys"
+    ],
+    "puremacro.dsge._results.DynareCommandResults": [
+      "commands_executed",
+      "endval",
+      "histval",
+      "osr",
+      "perfect_foresight",
+      "ramsey",
+      "shock_decomposition",
+      "smoother",
+      "stoch_simul"
     ],
     "puremacro.dsge._results.DynareDR": [
       "ghu",
@@ -5297,6 +5324,7 @@
       "method",
       "model_name",
       "n_particles",
+      "n_tempering_stages",
       "observed_vars",
       "resample_history",
       "resampling_frequency",

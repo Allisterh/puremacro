@@ -163,6 +163,12 @@ class ParticleFilterResult:
     observed_vars: tuple[str, ...]
     filtered_volatility: pd.DataFrame | None = None
     filtered_volatility_std: pd.DataFrame | None = None
+    n_tempering_stages: pd.Series | None = None
+
+    @property
+    def effective_sample_size(self) -> pd.Series:
+        """Alias for ``self.ess`` (Effective Sample Size trajectory across filtering periods)."""
+        return self.ess
 
     def summary(self) -> pd.DataFrame:
         """Return a structured summary table of the particle filter evaluation."""
@@ -182,6 +188,9 @@ class ParticleFilterResult:
             "Min ESS": f"{self.ess.min():.1f}",
             "Max ESS": f"{self.ess.max():.1f}",
         }
+        if self.n_tempering_stages is not None:
+            metrics["Mean Tempering Stages"] = f"{float(np.mean(self.n_tempering_stages)):.2f}"
+            metrics["Max Tempering Stages"] = f"{int(np.max(self.n_tempering_stages))}"
         if self.filtered_volatility is not None:
             metrics["Stochastic Volatility"] = "Active"
 
@@ -660,8 +669,23 @@ def particle_filter(
         )
 
     method = method.lower()
+    if method == "tempered":
+        return tempered_particle_filter(
+            model,
+            data,
+            observed_vars,
+            n_particles=n_particles,
+            resampling_method=resampling_method,
+            measurement_error=measurement_error,
+            init_states=init_states,
+            burn_in=burn_in,
+            prefilter=prefilter,
+            observation_fn=observation_fn,
+            ridge=ridge,
+            seed=seed,
+        )
     if method not in ("bootstrap", "auxiliary"):
-        raise ValueError(f"method must be 'bootstrap' or 'auxiliary', got {method!r}")
+        raise ValueError(f"method must be 'bootstrap', 'auxiliary', or 'tempered', got {method!r}")
 
     resampling_method = resampling_method.lower()
     resample_fn_map = {
@@ -1357,12 +1381,544 @@ def particle_filter(
     )
 
 
+def tempered_particle_filter(
+    model: Any,
+    data: pd.DataFrame | np.ndarray,
+    observed_vars: Sequence[str],
+    *,
+    n_particles: int = 2_000,
+    target_ineff: float = 2.0,
+    max_stages: int = 10,
+    n_mh_steps: int = 1,
+    c_init: float = 0.3,
+    resampling_method: str = "systematic",
+    measurement_error: Mapping[str, float] | np.ndarray | None = None,
+    init_states: str | np.ndarray = "stationary",
+    burn_in: int = 50,
+    prefilter: bool = False,
+    observation_fn: Callable[[np.ndarray], np.ndarray] | None = None,
+    ridge: float = 1e-6,
+    seed: int | None = None,
+) -> ParticleFilterResult:
+    """Evaluate DSGE log-likelihood via the Tempered Particle Filter (Herbst & Schorfheide 2019).
+
+    Constructs an adaptive sequence of bridge distributions at each time step ``t``
+    by inflating the measurement error covariance as ``phi_{t,n}^{-1} R`` with
+    ``0 < phi_{t,1} < ... < phi_{t,M_t} = 1``. At each bridge stage ``n``:
+
+    1. **Adaptive Bridge Selection**: chooses ``phi_{t,n}`` via bisection so the
+       particle InEfficiency Ratio ``InEff(phi) = N / ESS(phi)`` equals
+       ``target_ineff`` (or sets ``phi_{t,n} = 1`` if ``InEff(1) <= target_ineff``).
+    2. **Selection**: resamples particles using systematic (or user-selected)
+       resampling.
+    3. **Mutation**: rejuvenates the structural shock innovations ``z_t^{(i)}``
+       across all ``N`` particles simultaneously via ``n_mh_steps`` vectorized
+       Random-Walk Metropolis-Hastings (RWMH) steps that leave the stage-``n``
+       bridge distribution invariant, adapting the proposal scale ``c_t`` toward
+       a 25% acceptance rate.
+
+    Parameters
+    ----------
+    model : LinearModel | PrunedDSGESolution | Order3PrunedSolution
+        Solved macroeconomic DSGE model.
+    data : pd.DataFrame | np.ndarray
+        Observed time series of shape ``(T, k)``.
+    observed_vars : Sequence[str]
+        Names of observable variables corresponding to data columns.
+    n_particles : int, default 2_000
+        Number of particles ``N``.
+    target_ineff : float, default 2.0
+        Target InEfficiency Ratio ``r* = N / ESS > 1.0`` for adaptive tempering.
+    max_stages : int, default 10
+        Maximum number of tempering bridge stages ``M_t`` per time step.
+    n_mh_steps : int, default 1
+        Number of RWMH mutation steps per tempering bridge stage.
+    c_init : float, default 0.3
+        Initial RWMH innovation proposal standard deviation scaling factor.
+    resampling_method : {"systematic", "stratified", "residual", "multinomial"}, default "systematic"
+        Resampling algorithm.
+    measurement_error : Mapping[str, float] | np.ndarray | None, optional
+        Standard deviations (or covariance matrix) of measurement errors.
+    init_states : {"stationary", "steady_state"} | np.ndarray, default "stationary"
+        Initialization distribution for initial particles.
+    burn_in : int, default 50
+        Burn-in simulation periods for ergodic state initialization under pruning.
+    prefilter : bool, default False
+        If True, treat data as demeaned deviations from steady state.
+    observation_fn : callable, optional
+        Custom observation function mapping particles ``(N, n_vars)`` to observables ``(N, k)``.
+    ridge : float, default 1e-6
+        Ridge floor added to covariance matrices to ensure strict positive-definiteness.
+    seed : int | None, optional
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    ParticleFilterResult
+        Frozen dataclass with log-likelihood, filtered states, ESS, and
+        ``n_tempering_stages`` recording the number of bridge stages per period.
+    """
+    from scipy.optimize import brentq
+
+    if n_particles < 1:
+        raise ValueError(f"n_particles must be >= 1, got {n_particles}")
+    target_ineff = float(target_ineff)
+    if target_ineff <= 1.0:
+        raise ValueError(f"target_ineff must be > 1.0, got {target_ineff}")
+    max_stages = max(1, int(max_stages))
+    n_mh_steps = max(0, int(n_mh_steps))
+    c_scale = max(1e-3, float(c_init))
+
+    resampling_method = resampling_method.lower()
+    resample_fn_map = {
+        "systematic": systematic_resample,
+        "stratified": stratified_resample,
+        "residual": residual_resample,
+        "multinomial": multinomial_resample,
+    }
+    if resampling_method not in resample_fn_map:
+        raise ValueError(
+            f"resampling_method must be one of {list(resample_fn_map.keys())}, got {resampling_method!r}"
+        )
+    resample_fn = resample_fn_map[resampling_method]
+
+    rng = np.random.default_rng(seed)
+
+    # 1. Parse observed data and index
+    obs_names = list(observed_vars)
+    k = len(obs_names)
+    if k == 0:
+        raise ValueError("observed_vars must contain at least one variable name")
+
+    if hasattr(data, "to_frame") and not isinstance(data, pd.DataFrame):
+        data = data.to_frame()
+
+    if isinstance(data, pd.DataFrame):
+        data_index = data.index
+        missing = [v for v in obs_names if v not in data.columns]
+        if missing:
+            raise ValueError(f"Observed variables {missing} not found in data columns: {list(data.columns)}")
+        y_mat = data[obs_names].to_numpy(dtype=float)
+    else:
+        y_mat = np.asarray(data, dtype=float)
+        if y_mat.ndim == 1:
+            y_mat = y_mat[:, None]
+        if y_mat.shape[1] != k:
+            raise ValueError(f"data columns ({y_mat.shape[1]}) must match observed_vars length ({k})")
+        data_index = pd.RangeIndex(len(y_mat))
+
+    T = len(y_mat)
+    if T == 0:
+        raise ValueError("Observed data is empty (T=0)")
+    if not np.all(np.isfinite(y_mat)):
+        raise ValueError("Observed data contains NaN, Inf, or non-finite values")
+
+    # 2. Extract model matrices and variables
+    m_info = _extract_model_tensors(model)
+    G = m_info["G"]
+    N_mat = m_info["N"]
+    F = m_info["F"]
+    L = m_info["L"]
+    H_xx = m_info["H_xx"]
+    G_xx = m_info["G_xx"]
+    H_ss = m_info["H_ss"]
+    G_ss = m_info["G_ss"]
+    H_xu = m_info["H_xu"]
+    G_xu = m_info["G_xu"]
+    H_uu = m_info["H_uu"]
+    G_uu = m_info["G_uu"]
+
+    state_names = m_info["state_names"]
+    control_names = m_info["control_names"]
+    shock_names = m_info["shock_names"]
+    order_vars = m_info["order_vars"]
+    variable_names = m_info["variable_names"]
+    model_name = m_info["model_name"]
+    is_order3 = m_info["is_order3"]
+
+    n_x = len(state_names)
+    n_y = len(control_names)
+    n_e = len(shock_names)
+    n_vars = n_x + n_y
+
+    if is_order3:
+        H_xxx = m_info["H_xxx"]
+        G_xxx = m_info["G_xxx"]
+        H_xxu = m_info["H_xxu"]
+        G_xxu = m_info["G_xxu"]
+        H_xuu = m_info["H_xuu"]
+        G_xuu = m_info["G_xuu"]
+        H_uuu = m_info["H_uuu"]
+        G_uuu = m_info["G_uuu"]
+        H_x_ss = m_info["H_x_ss"]
+        G_x_ss = m_info["G_x_ss"]
+        H_u_ss = m_info["H_u_ss"]
+        G_u_ss = m_info["G_u_ss"]
+
+    obs_indices_list = []
+    for nm in obs_names:
+        if nm in order_vars:
+            obs_indices_list.append(order_vars.index(nm))
+        elif nm in variable_names:
+            idx = variable_names.index(nm)
+            var_target = variable_names[idx]
+            if var_target in order_vars:
+                obs_indices_list.append(order_vars.index(var_target))
+            else:
+                raise ValueError(f"Observable {nm!r} cannot be mapped to model variables: {order_vars}")
+        else:
+            raise ValueError(f"Observable {nm!r} is not declared in model variables: {order_vars}")
+    obs_indices = np.array(obs_indices_list, dtype=int)
+
+    ss = m_info["steady_state"]
+    ss_vec = np.zeros(n_vars, dtype=float)
+    if ss is not None and not prefilter:
+        if isinstance(ss, (pd.Series, dict, Mapping)):
+            for i, v in enumerate(order_vars):
+                ss_vec[i] = float(ss.get(v, 0.0))
+        else:
+            raw_ss = np.asarray(ss, dtype=float).ravel()
+            n_copy = min(len(raw_ss), n_vars)
+            ss_vec[:n_copy] = raw_ss[:n_copy]
+
+    raw_Q = m_info["shock_cov"]
+    if raw_Q is not None:
+        Q = np.atleast_2d(np.asarray(raw_Q, dtype=float))
+        if Q.shape != (n_e, n_e):
+            raise ValueError(
+                f"tempered_particle_filter: the model's shock covariance has shape "
+                f"{Q.shape}, but it has {n_e} shocks {list(shock_names)}; "
+                f"expected ({n_e}, {n_e})."
+            )
+    else:
+        Q = np.eye(n_e)
+
+    base_sigmas = np.sqrt(np.maximum(1e-12, np.diag(Q)))
+    corr_Q = Q / (base_sigmas[:, None] * base_sigmas[None, :])
+    np.fill_diagonal(corr_Q, 1.0)
+    try:
+        L_corr = scipy.linalg.cholesky(corr_Q + ridge * np.eye(n_e), lower=True)
+    except (ValueError, ArithmeticError, np.linalg.LinAlgError, Exception):
+        L_corr = np.eye(n_e)
+
+    if measurement_error is not None:
+        if isinstance(measurement_error, (dict, Mapping)):
+            me_diag = [float(measurement_error.get(nm, 0.1)) ** 2 for nm in obs_names]
+            R = np.diag(me_diag)
+        else:
+            R_in = np.asarray(measurement_error, dtype=float)
+            if R_in.ndim == 1:
+                R = np.diag(R_in**2)
+            else:
+                R = R_in
+    else:
+        std_data = np.std(y_mat, axis=0) if T > 1 else np.ones(k)
+        std_data = np.where(std_data > 0, std_data * 0.15, 0.1)
+        R = np.diag(std_data**2)
+
+    R = R + ridge * np.eye(k)
+    log_det_R = float(np.linalg.slogdet(R)[1])
+    inv_R = np.linalg.inv(R)
+    const_gaussian_obs = -0.5 * (k * math.log(2.0 * math.pi) + log_det_R)
+
+    # 3. Initialize particle states (x1, x2, x3)
+    x1 = np.zeros((n_particles, n_x), dtype=float)
+    x2 = np.zeros((n_particles, n_x), dtype=float)
+    x3 = np.zeros((n_particles, n_x), dtype=float)
+
+    if isinstance(init_states, np.ndarray):
+        if init_states.ndim == 1:
+            x1 = np.tile(init_states[:n_x], (n_particles, 1))
+        else:
+            x1 = init_states[:n_particles, :n_x].copy()
+    elif init_states == "stationary" and n_x > 0:
+        NQNT = N_mat @ Q @ N_mat.T
+        try:
+            P_stat = scipy.linalg.solve_discrete_lyapunov(G, NQNT)
+            P_stat = 0.5 * (P_stat + P_stat.T)
+            eigvals, eigvecs = np.linalg.eigh(P_stat)
+            P_stat = eigvecs @ np.diag(np.maximum(1e-12, eigvals)) @ eigvecs.T
+            L_P = scipy.linalg.cholesky(P_stat + ridge * np.eye(n_x), lower=True)
+            x1 = rng.normal(0.0, 1.0, size=(n_particles, n_x)) @ L_P.T
+        except (ValueError, ArithmeticError, np.linalg.LinAlgError, Exception):
+            x1 = rng.normal(0.0, 0.1, size=(n_particles, n_x))
+
+        if (H_xx is not None and np.any(np.abs(H_xx) > 1e-12)) and burn_in > 0:
+            for _ in range(burn_in):
+                z_b = rng.normal(0.0, 1.0, size=(n_particles, n_e))
+                e_b = (z_b @ L_corr.T) * base_sigmas[None, :]
+                x1_n = x1 @ G.T + e_b @ N_mat.T
+                kron_xx = np.einsum("mi,mj->mij", x1, x1).reshape(n_particles, -1)
+                kron_xe = np.einsum("mi,mj->mij", x1, e_b).reshape(n_particles, -1) if n_e > 0 else np.zeros((n_particles, 0))
+                kron_ee = np.einsum("mi,mj->mij", e_b, e_b).reshape(n_particles, -1) if n_e > 0 else np.zeros((n_particles, 0))
+                x2_n = (
+                    x2 @ G.T
+                    + 0.5 * (kron_xx @ H_xx.T)
+                    + (kron_xe @ H_xu.T)
+                    + 0.5 * (kron_ee @ H_uu.T)
+                    + 0.5 * H_ss[None, :]
+                )
+                x1, x2 = x1_n, x2_n
+
+    has_order2 = H_xx is not None and (
+        np.any(H_xx != 0.0) or np.any(G_xx != 0.0) or np.any(H_uu != 0.0) or np.any(G_uu != 0.0)
+    )
+
+    def _propagate_batch(
+        x1_p: np.ndarray,
+        x2_p: np.ndarray,
+        x3_p: np.ndarray,
+        z_std: np.ndarray,
+        y_obs_t: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Vectorized propagation of N particles from parent states + standard normal shocks z_std."""
+        e_t = (z_std @ L_corr.T) * base_sigmas[None, :]
+        x1_n = x1_p @ G.T + e_t @ N_mat.T
+        y1_n = x1_p @ F.T + e_t @ L.T
+
+        if has_order2 or is_order3:
+            kron_x1_x1 = np.einsum("mi,mj->mij", x1_p, x1_p).reshape(n_particles, -1) if n_x > 0 else np.zeros((n_particles, 0))
+            kron_x1_e = np.einsum("mi,mj->mij", x1_p, e_t).reshape(n_particles, -1) if (n_x > 0 and n_e > 0) else np.zeros((n_particles, 0))
+            kron_e_e = np.einsum("mi,mj->mij", e_t, e_t).reshape(n_particles, -1) if n_e > 0 else np.zeros((n_particles, 0))
+
+            x2_n = (
+                x2_p @ G.T
+                + 0.5 * (kron_x1_x1 @ H_xx.T)
+                + (kron_x1_e @ H_xu.T)
+                + 0.5 * (kron_e_e @ H_uu.T)
+                + 0.5 * H_ss[None, :]
+            )
+            y2_n = (
+                x2_p @ F.T
+                + 0.5 * (kron_x1_x1 @ G_xx.T)
+                + (kron_x1_e @ G_xu.T)
+                + 0.5 * (kron_e_e @ G_uu.T)
+                + 0.5 * G_ss[None, :]
+            )
+        else:
+            x2_n = np.zeros_like(x1_n)
+            y2_n = np.zeros_like(y1_n)
+
+        if is_order3:
+            kron_x1_x2 = np.einsum("mi,mj->mij", x1_p, x2_p).reshape(n_particles, -1) if n_x > 0 else np.zeros((n_particles, 0))
+            kron_x2_e = np.einsum("mi,mj->mij", x2_p, e_t).reshape(n_particles, -1) if (n_x > 0 and n_e > 0) else np.zeros((n_particles, 0))
+            kron_x1_3 = np.einsum("mi,mj->mij", kron_x1_x1, x1_p).reshape(n_particles, -1) if n_x > 0 else np.zeros((n_particles, 0))
+            kron_x1_2_e = np.einsum("mi,mj->mij", kron_x1_x1, e_t).reshape(n_particles, -1) if (n_x > 0 and n_e > 0) else np.zeros((n_particles, 0))
+            kron_x1_e_2 = np.einsum("mi,mj->mij", x1_p, kron_e_e).reshape(n_particles, -1) if (n_x > 0 and n_e > 0) else np.zeros((n_particles, 0))
+            kron_e_3 = np.einsum("mi,mj->mij", kron_e_e, e_t).reshape(n_particles, -1) if n_e > 0 else np.zeros((n_particles, 0))
+
+            x3_n = (
+                x3_p @ G.T
+                + (kron_x1_x2 @ H_xx.T)
+                + (kron_x2_e @ H_xu.T)
+                + (1.0 / 6.0) * (kron_x1_3 @ H_xxx.T)
+                + 0.5 * (kron_x1_2_e @ H_xxu.T)
+                + 0.5 * (kron_x1_e_2 @ H_xuu.T)
+                + (1.0 / 6.0) * (kron_e_3 @ H_uuu.T)
+                + 0.5 * (x1_p @ H_x_ss.T)
+                + 0.5 * (e_t @ H_u_ss.T)
+            )
+            y3_n = (
+                x3_p @ F.T
+                + (kron_x1_x2 @ G_xx.T)
+                + (kron_x2_e @ G_xu.T)
+                + (1.0 / 6.0) * (kron_x1_3 @ G_xxx.T)
+                + 0.5 * (kron_x1_2_e @ G_xxu.T)
+                + 0.5 * (kron_x1_e_2 @ G_xuu.T)
+                + (1.0 / 6.0) * (kron_e_3 @ G_uuu.T)
+                + 0.5 * (x1_p @ G_x_ss.T)
+                + 0.5 * (e_t @ G_u_ss.T)
+            )
+        else:
+            x3_n = np.zeros_like(x1_n)
+            y3_n = np.zeros_like(y1_n)
+
+        tot_s = x1_n + x2_n + x3_n
+        tot_c = y1_n + y2_n + y3_n
+        V_p = (np.hstack([tot_s, tot_c]) if n_y > 0 else tot_s) + ss_vec[None, :]
+        pred_y = observation_fn(V_p) if observation_fn is not None else V_p[:, obs_indices]
+        res = y_obs_t[None, :] - pred_y
+        quad = np.sum((res @ inv_R) * res, axis=1)
+        return x1_n, x2_n, x3_n, V_p, quad
+
+    def _ineff_from_dphi(dphi: float, quad_vec: np.ndarray) -> float:
+        """Compute InEff(dphi) = N * sum(W^2) where w_i = exp(-0.5 * dphi * quad_i)."""
+        if dphi <= 0.0:
+            return 1.0
+        lw = -0.5 * dphi * quad_vec
+        lw_max = float(np.max(lw))
+        w = np.exp(np.clip(lw - lw_max, -700.0, 0.0))
+        sw = float(np.sum(w))
+        if sw <= 0.0 or not np.isfinite(sw):
+            return float(n_particles)
+        return float(n_particles * np.sum(w * w) / (sw * sw))
+
+    log_lik_contributions = np.zeros(T, dtype=float)
+    filtered_states_arr = np.zeros((T, n_vars), dtype=float)
+    filtered_states_std_arr = np.zeros((T, n_vars), dtype=float)
+    ess_history = np.zeros(T, dtype=float)
+    resample_history = np.ones(T, dtype=bool)
+    n_stages_history = np.zeros(T, dtype=int)
+
+    for t in range(T):
+        y_obs = y_mat[t]
+        x1_parents = x1.copy()
+        x2_parents = x2.copy()
+        x3_parents = x3.copy()
+
+        z_t = rng.normal(0.0, 1.0, size=(n_particles, n_e))
+        x1_cur, x2_cur, x3_cur, V_cur, quad_cur = _propagate_batch(
+            x1_parents, x2_parents, x3_parents, z_t, y_obs
+        )
+
+        phi_prev = 0.0
+        stage = 0
+        ll_t = 0.0
+        ess_last = float(n_particles)
+
+        while phi_prev < 1.0 - 1e-12:
+            stage += 1
+            rem_stages = max_stages - stage + 1
+            max_dphi = 1.0 - phi_prev
+
+            if rem_stages <= 1 or _ineff_from_dphi(max_dphi, quad_cur) <= target_ineff:
+                phi_new = 1.0
+            else:
+                min_dphi = max(1e-8, max_dphi / (rem_stages * 20.0))
+                if _ineff_from_dphi(min_dphi, quad_cur) >= target_ineff:
+                    dphi_star = max(min_dphi, max_dphi / rem_stages)
+                else:
+                    try:
+                        dphi_star = float(
+                            brentq(
+                                lambda dphi: _ineff_from_dphi(dphi, quad_cur) - target_ineff,
+                                min_dphi,
+                                max_dphi,
+                                xtol=1e-6,
+                                maxiter=40,
+                            )
+                        )
+                    except (ValueError, RuntimeError):
+                        dphi_star = max_dphi / rem_stages
+                phi_new = min(1.0, phi_prev + dphi_star)
+
+            dphi = phi_new - phi_prev
+            if stage == 1:
+                const_stage = const_gaussian_obs + 0.5 * k * math.log(max(phi_new, 1e-300))
+            else:
+                const_stage = 0.5 * k * math.log(max(phi_new / max(phi_prev, 1e-300), 1e-300))
+
+            log_w = const_stage - 0.5 * dphi * quad_cur
+            max_lw = float(np.max(log_w))
+            if not np.isfinite(max_lw):
+                W_stage = np.full(n_particles, 1.0 / n_particles, dtype=float)
+                ll_stage = -100.0 * k
+            else:
+                w_exp = np.exp(np.clip(log_w - max_lw, -700.0, 50.0))
+                sum_w = float(np.sum(w_exp))
+                if sum_w <= 0.0 or not np.isfinite(sum_w):
+                    W_stage = np.full(n_particles, 1.0 / n_particles, dtype=float)
+                    ll_stage = max_lw
+                else:
+                    W_stage = w_exp / sum_w
+                    ll_stage = max_lw + math.log(sum_w / n_particles)
+
+            ll_t += ll_stage
+            ess_last = float(1.0 / np.sum(W_stage * W_stage))
+
+            # Selection: resample parent states, innovations, and current states
+            idx = resample_fn(W_stage, rng)
+            x1_parents = x1_parents[idx]
+            x2_parents = x2_parents[idx]
+            x3_parents = x3_parents[idx]
+            z_t = z_t[idx]
+            x1_cur = x1_cur[idx]
+            x2_cur = x2_cur[idx]
+            x3_cur = x3_cur[idx]
+            V_cur = V_cur[idx]
+            quad_cur = quad_cur[idx]
+
+            # Mutation: vectorized RWMH steps on z_t targeting bridge density at phi_new
+            if n_mh_steps > 0 and n_e > 0:
+                prior_norm_cur = np.sum(z_t * z_t, axis=1)
+                for _ in range(n_mh_steps):
+                    z_prop = z_t + c_scale * rng.normal(0.0, 1.0, size=(n_particles, n_e))
+                    x1_p, x2_p, x3_p, V_p, quad_p = _propagate_batch(
+                        x1_parents, x2_parents, x3_parents, z_prop, y_obs
+                    )
+                    prior_norm_prop = np.sum(z_prop * z_prop, axis=1)
+                    log_alpha = -0.5 * phi_new * (quad_p - quad_cur) - 0.5 * (prior_norm_prop - prior_norm_cur)
+                    log_u = np.log(np.maximum(rng.uniform(0.0, 1.0, size=n_particles), 1e-300))
+                    accept = log_u < log_alpha
+                    if np.any(accept):
+                        z_t = np.where(accept[:, None], z_prop, z_t)
+                        x1_cur = np.where(accept[:, None], x1_p, x1_cur)
+                        x2_cur = np.where(accept[:, None], x2_p, x2_cur)
+                        x3_cur = np.where(accept[:, None], x3_p, x3_cur)
+                        V_cur = np.where(accept[:, None], V_p, V_cur)
+                        quad_cur = np.where(accept, quad_p, quad_cur)
+                        prior_norm_cur = np.where(accept, prior_norm_prop, prior_norm_cur)
+                    acc_rate = float(np.mean(accept))
+                    # Herbst & Schorfheide (2019) logistic scale adaptation targeting 0.25 acceptance
+                    exp_arg = max(-20.0, min(20.0, 16.0 * (acc_rate - 0.25)))
+                    mult = 0.95 + 0.10 * (math.exp(exp_arg) / (1.0 + math.exp(exp_arg)))
+                    c_scale = max(0.01, min(5.0, c_scale * mult))
+
+            phi_prev = phi_new
+
+        log_lik_contributions[t] = ll_t
+        n_stages_history[t] = stage
+        ess_history[t] = ess_last
+
+        # Filtered state mean and std across equal-weighted mutated particles at phi = 1
+        f_mean = np.mean(V_cur, axis=0)
+        f_var = np.mean((V_cur - f_mean[None, :]) ** 2, axis=0)
+        filtered_states_arr[t] = f_mean
+        filtered_states_std_arr[t] = np.sqrt(np.maximum(0.0, f_var))
+
+        x1 = x1_cur.copy()
+        x2 = x2_cur.copy()
+        x3 = x3_cur.copy()
+
+    total_log_likelihood = float(np.sum(log_lik_contributions))
+    state_cols = list(order_vars)
+    df_filtered_states = pd.DataFrame(filtered_states_arr, index=data_index, columns=state_cols)
+    df_filtered_states_std = pd.DataFrame(filtered_states_std_arr, index=data_index, columns=state_cols)
+    if set(variable_names) == set(state_cols) and variable_names != tuple(state_cols):
+        df_filtered_states = df_filtered_states[list(variable_names)]
+        df_filtered_states_std = df_filtered_states_std[list(variable_names)]
+
+    s_ess = pd.Series(ess_history, index=data_index, name="ESS")
+    s_resample = pd.Series(resample_history, index=data_index, name="Resampled")
+    s_ll_contrib = pd.Series(log_lik_contributions, index=data_index, name="LogLikelihood")
+    s_stages = pd.Series(n_stages_history, index=data_index, name="TemperingStages")
+
+    return ParticleFilterResult(
+        log_likelihood=total_log_likelihood,
+        log_likelihood_contributions=s_ll_contrib,
+        filtered_states=df_filtered_states,
+        filtered_states_std=df_filtered_states_std,
+        ess=s_ess,
+        resample_history=s_resample,
+        resampling_frequency=1.0,
+        n_particles=n_particles,
+        method="tempered",
+        resampling_method=resampling_method,
+        model_name=model_name,
+        variable_names=variable_names,
+        observed_vars=tuple(obs_names),
+        n_tempering_stages=s_stages,
+    )
+
+
 __all__ = [
     "StochasticVolatilitySpec",
     "ParticleFilterResult",
     "particle_filter",
+    "tempered_particle_filter",
     "systematic_resample",
     "stratified_resample",
     "residual_resample",
     "multinomial_resample",
 ]
+

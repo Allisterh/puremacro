@@ -523,11 +523,171 @@ class WelfordVariance:
 
 
 # ---------------------------------------------------------------------------
+# Fast Vectorized / Forward-Sensitivity Numerical Gradient Engine
+# ---------------------------------------------------------------------------
+
+def _numerical_gradient(
+    f: Callable[[np.ndarray], Any],
+    x: np.ndarray,
+    eps: float = 1e-5,
+    *,
+    fx: float | None = None,
+    method: str = "central",
+    bounds: Sequence[tuple[float, float]] | None = None,
+    vectorized: bool = False,
+) -> np.ndarray:
+    r"""Compute numerical gradient of a scalar log-posterior / objective function ``f(x)``.
+
+    Features:
+    - Adaptive per-coordinate step sizes ``h_i = eps * max(|x_i|, 1.0)``.
+    - ``method="forward"``: reuses cached baseline value ``fx = f(x)`` so computing
+      the gradient requires only ``d`` evaluations instead of ``2d + 1``; automatically
+      flips to a backward step if ``x_i + h_i`` crosses a prior boundary or enters an
+      indeterminate/non-finite region.
+    - ``method="central"``: second-order central finite differences with automatic
+      one-sided fallback reusing ``fx`` when either ``x_i + h_i`` or ``x_i - h_i``
+      violates bounds or yields ``-inf`` / ``NaN``.
+    - ``method="complex"``: complex-step derivative ``Im(f(x + i h e_j)) / h`` with zero
+      subtractive cancellation (falls back to ``"central"`` if ``f`` rejects complex input).
+    - ``vectorized=True``: evaluates all perturbed parameter vectors in a single batch
+      call ``f(X_batch)`` when ``f`` accepts a 2D ``(M, d)`` array.
+    """
+    x_arr = np.asarray(x, dtype=float).ravel()
+    d = x_arr.size
+    if d == 0:
+        return np.zeros(0, dtype=float)
+
+    eps = float(eps)
+    h = eps * np.maximum(np.abs(x_arr), 1.0)
+    method_norm = method.lower()
+
+    def _scalar_eval(pt: np.ndarray) -> float:
+        res = f(pt)
+        if isinstance(res, tuple):
+            return float(res[0])
+        return float(np.asarray(res, dtype=float).item())
+
+    if method_norm == "complex":
+        try:
+            grad_c = np.empty(d, dtype=float)
+            for i in range(d):
+                xc = x_arr.astype(complex)
+                xc[i] += 1j * h[i]
+                val_c = f(xc)
+                if isinstance(val_c, tuple):
+                    val_c = val_c[0]
+                grad_c[i] = float(np.imag(val_c)) / h[i]
+            if np.all(np.isfinite(grad_c)):
+                return grad_c
+        except Exception:
+            pass
+        method_norm = "central"
+
+    lb = np.full(d, -np.inf, dtype=float)
+    ub = np.full(d, np.inf, dtype=float)
+    if bounds is not None:
+        for i, (lo, hi) in enumerate(bounds):
+            if lo is not None:
+                lb[i] = float(lo)
+            if hi is not None:
+                ub[i] = float(hi)
+
+    if method_norm == "forward":
+        f0 = float(fx) if fx is not None else _scalar_eval(x_arr)
+        if not math.isfinite(f0):
+            return np.zeros(d, dtype=float)
+
+        step_vec = np.where(x_arr + h <= ub, h, -h)
+        X_pert = np.broadcast_to(x_arr, (d, d)).copy()
+        X_pert[np.arange(d), np.arange(d)] += step_vec
+
+        if vectorized:
+            f_pert = np.asarray(f(X_pert), dtype=float).ravel()
+        else:
+            f_pert = np.array([_scalar_eval(X_pert[i]) for i in range(d)], dtype=float)
+
+        grad = np.zeros(d, dtype=float)
+        for i in range(d):
+            if math.isfinite(f_pert[i]):
+                grad[i] = (f_pert[i] - f0) / step_vec[i]
+            else:
+                alt_step = -step_vec[i]
+                if lb[i] <= x_arr[i] + alt_step <= ub[i]:
+                    x_alt = x_arr.copy()
+                    x_alt[i] += alt_step
+                    f_alt = _scalar_eval(x_alt)
+                    if math.isfinite(f_alt):
+                        grad[i] = (f_alt - f0) / alt_step
+        return grad
+
+    # Default: central difference with one-sided boundary fallback
+    X_plus = np.broadcast_to(x_arr, (d, d)).copy()
+    X_minus = np.broadcast_to(x_arr, (d, d)).copy()
+    X_plus[np.arange(d), np.arange(d)] += h
+    X_minus[np.arange(d), np.arange(d)] -= h
+
+    if vectorized:
+        X_both = np.vstack([X_plus, X_minus])
+        f_both = np.asarray(f(X_both), dtype=float).ravel()
+        f_plus = f_both[:d]
+        f_minus = f_both[d:]
+    else:
+        f_plus = np.empty(d, dtype=float)
+        f_minus = np.empty(d, dtype=float)
+        for i in range(d):
+            f_plus[i] = _scalar_eval(X_plus[i]) if X_plus[i, i] <= ub[i] else -math.inf
+            f_minus[i] = _scalar_eval(X_minus[i]) if X_minus[i, i] >= lb[i] else -math.inf
+
+    grad = np.zeros(d, dtype=float)
+    f0_cached: float | None = float(fx) if fx is not None else None
+
+    for i in range(d):
+        fp = f_plus[i]
+        fm = f_minus[i]
+        if math.isfinite(fp) and math.isfinite(fm):
+            grad[i] = (fp - fm) / (2.0 * h[i])
+        elif math.isfinite(fp):
+            if f0_cached is None:
+                f0_cached = _scalar_eval(x_arr)
+            if math.isfinite(f0_cached):
+                grad[i] = (fp - f0_cached) / h[i]
+        elif math.isfinite(fm):
+            if f0_cached is None:
+                f0_cached = _scalar_eval(x_arr)
+            if math.isfinite(f0_cached):
+                grad[i] = (f0_cached - fm) / h[i]
+    return grad
+
+
+def _log_prob_and_numerical_grad(
+    f: Callable[[np.ndarray], float],
+    x: np.ndarray,
+    eps: float = 1e-5,
+    *,
+    method: str = "central",
+    bounds: Sequence[tuple[float, float]] | None = None,
+    vectorized: bool = False,
+) -> tuple[float, np.ndarray]:
+    """Evaluate ``(f(x), grad_f(x))`` reusing ``fx = f(x)`` across finite-difference stencils."""
+    x_arr = np.asarray(x, dtype=float).ravel()
+    res = f(x_arr)
+    if isinstance(res, tuple) and len(res) == 2:
+        return float(res[0]), np.asarray(res[1], dtype=float)
+    fx = float(res)
+    if not math.isfinite(fx):
+        return -math.inf, np.zeros_like(x_arr)
+    grad = _numerical_gradient(
+        f, x_arr, eps=eps, fx=fx, method=method, bounds=bounds, vectorized=vectorized,
+    )
+    return fx, grad
+
+
+# ---------------------------------------------------------------------------
 # Main NUTS Sampler Driver
 # ---------------------------------------------------------------------------
 
 def nuts_sample(
-    target_log_prob_and_grad: Callable[[np.ndarray], tuple[float, np.ndarray]],
+    target_log_prob_and_grad: Callable[[np.ndarray], Any],
     init_params: np.ndarray,
     n_draws: int = 1000,
     n_chains: int = 2,
@@ -545,6 +705,12 @@ def nuts_sample(
     mode_hessian_inv: np.ndarray | None = None,
     data_n_obs: int = 0,
     record_warmup: bool = False,
+    *,
+    grad_log_post_fn: Callable[[np.ndarray], np.ndarray] | None = None,
+    grad_method: str = "central",
+    grad_eps: float = 1e-5,
+    bounds: Sequence[tuple[float, float]] | None = None,
+    vectorized_grad: bool = False,
 ) -> NUTSResult:
     r"""Sample posterior distribution using Hamiltonian Monte Carlo / No-U-Turn Sampler."""
     init_arr = np.asarray(init_params, dtype=float)
@@ -552,6 +718,31 @@ def nuts_sample(
         n_params = len(init_arr)
     else:
         n_params = init_arr.shape[1]
+
+    def _wrapped_log_prob_and_grad(th: np.ndarray) -> tuple[float, np.ndarray]:
+        if grad_log_post_fn is not None:
+            res = target_log_prob_and_grad(th)
+            lp_val = float(res[0] if isinstance(res, tuple) else res)
+            if not math.isfinite(lp_val):
+                return -math.inf, np.zeros_like(th)
+            g_val = np.asarray(grad_log_post_fn(th), dtype=float)
+            return lp_val, g_val
+        res = target_log_prob_and_grad(th)
+        if isinstance(res, tuple) and len(res) == 2:
+            return float(res[0]), np.asarray(res[1], dtype=float)
+        lp_val = float(res)
+        if not math.isfinite(lp_val):
+            return -math.inf, np.zeros_like(th)
+        g_val = _numerical_gradient(
+            target_log_prob_and_grad,
+            th,
+            eps=grad_eps,
+            fx=lp_val,
+            method=grad_method,
+            bounds=bounds,
+            vectorized=vectorized_grad,
+        )
+        return lp_val, g_val
 
     if param_names is None:
         p_names = tuple(f"param_{i}" for i in range(n_params))
@@ -593,17 +784,17 @@ def nuts_sample(
                 perturb = rng.normal(0.0, 0.01 * np.sqrt(np.clip(base_M_inv, 1e-4, 1e4)))
                 theta = init_arr + perturb
 
-        lp, grad = target_log_prob_and_grad(theta)
+        lp, grad = _wrapped_log_prob_and_grad(theta)
         if not math.isfinite(lp):
             theta = init_arr.copy()
-            lp, grad = target_log_prob_and_grad(theta)
+            lp, grad = _wrapped_log_prob_and_grad(theta)
 
         M_inv = base_M_inv.copy()
 
         if step_size is not None:
             eps = float(step_size)
         else:
-            eps = find_reasonable_step_size(theta, lp, grad, target_log_prob_and_grad, M_inv, rng)
+            eps = find_reasonable_step_size(theta, lp, grad, _wrapped_log_prob_and_grad, M_inv, rng)
 
         da = DualAveraging(eps, target_accept=target_accept)
         welford = WelfordVariance(n_params)
@@ -613,7 +804,7 @@ def nuts_sample(
 
         for m in range(warmup):
             theta, lp, grad, H, depth, div, alpha = nuts_step(
-                theta, lp, grad, eps, target_log_prob_and_grad, M_inv,
+                theta, lp, grad, eps, _wrapped_log_prob_and_grad, M_inv,
                 max_tree_depth=max_tree_depth, rng=rng
             )
 
@@ -644,7 +835,7 @@ def nuts_sample(
         alphas_retained = np.empty(n_draws, dtype=float)
         for t in range(n_draws):
             theta, lp, grad, H, depth, div, alpha = nuts_step(
-                theta, lp, grad, eps, target_log_prob_and_grad, M_inv,
+                theta, lp, grad, eps, _wrapped_log_prob_and_grad, M_inv,
                 max_tree_depth=max_tree_depth, rng=rng
             )
             draws_all[c, t] = theta
@@ -692,3 +883,5 @@ __all__ = [
     "compute_tail_ess",
     "compute_ebfmi",
 ]
+
+

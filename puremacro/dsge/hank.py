@@ -30,6 +30,9 @@ from puremacro.models.hank_sequence_space import (
     solve_two_asset_hank_sequence_space,
     solve_nonlinear_transition,
     fake_news_algorithm,
+    dp_sequence_jacobian,
+    dp_nonlinear_transition,
+    _prepare_dp_household_block,
     _solve_household_block,
     _solve_two_asset_household_block,
     _consumption_jacobians,
@@ -68,9 +71,11 @@ class HANKModel:
         self,
         dag: ParsedModelDAG,
         params: dict[str, float] | None = None,
+        household_model: Any = None,
     ) -> None:
         self.dag = dag
         self.hetagent_config = dict(dag.hetagent_block or {})
+        self.household_model = household_model
         
         # Merge declared parameters with explicit overrides
         p = dict(dag.parameter_values)
@@ -85,9 +90,12 @@ class HANKModel:
         assets_val = self.hetagent_config.get("assets", 1)
         model_type = str(self.hetagent_config.get("model", "")).lower()
         self.is_two_asset = (
-            int(float(assets_val)) == 2
-            or "two_asset" in model_type
-            or "2_asset" in model_type
+            self.household_model is None
+            and (
+                int(float(assets_val)) == 2
+                or "two_asset" in model_type
+                or "2_asset" in model_type
+            )
         )
 
         # Baseline calibration parameters
@@ -114,10 +122,64 @@ class HANKModel:
         self.deposit_distribution: np.ndarray | None = None
         self.mpc_distribution: np.ndarray | None = None
         self._hh_block = None
+        self._dp_block: dict[str, Any] | None = None
+        self._dp_inputs: list[str] = []
         self._solve_steady_state()
+
+    def _resolve_dp_inputs(self) -> list[str]:
+        """Identify rate and income/wage input names on ``self.household_model``."""
+        from puremacro.dp._results import DPSolution
+
+        m_orig = self.household_model._c.model if isinstance(self.household_model, DPSolution) else self.household_model
+        avail = set(m_orig._params.keys()) | set(m_orig._prices.keys()) | {n for n, _ in m_orig._locals}
+        inputs: list[str] = []
+        for cand in ("r", "w", "y"):
+            if cand in avail:
+                inputs.append(cand)
+        if not inputs:
+            inputs = list(m_orig._prices.keys()) or list(m_orig._params.keys())[:1]
+        return inputs
 
     def _solve_steady_state(self) -> None:
         """Solve the microeconomic stationary distribution and aggregate steady state."""
+        if self.household_model is not None:
+            self._dp_inputs = self._resolve_dp_inputs()
+            blk = _prepare_dp_household_block(self.household_model, inputs=self._dp_inputs, outputs=None)
+            self._dp_block = blk
+            self.asset_grid = blk["a_grid"].copy()
+            D_ss = blk["D_ss"]
+            self.asset_distribution = np.sum(D_ss, axis=1)
+            params_ss = blk["params_ss"]
+            if "p_r" in params_ss:
+                self.r_ss = float(params_ss["p_r"])
+            w_ss = float(params_ss.get("p_w", params_ss.get("p_y", 1.0)))
+            c_ss_grid = blk["c_ss"]
+            n_a = len(self.asset_grid)
+            mpc_mat = _local_mpc(c_ss_grid, self.asset_grid, self.r_ss)
+            weight = np.sum(D_ss, axis=1)
+            mpc_cond = np.zeros(n_a)
+            mask = weight > 1e-12
+            mpc_cond[mask] = np.sum(D_ss[mask] * mpc_mat[mask], axis=1) / weight[mask]
+            mpc_cond[~mask] = np.mean(mpc_mat[~mask], axis=1)
+            self.mpc_distribution = mpc_cond
+
+            c_ss = float(np.sum(D_ss * c_ss_grid))
+            b_ss = float(np.sum(D_ss * blk["aprime_ss"]))
+            self.steady_state = {
+                "Y": c_ss,
+                "C": c_ss,
+                "r": self.r_ss,
+                "pi": 0.0,
+                "i": self.r_ss,
+                "w": w_ss,
+                "B": b_ss,
+                "A": b_ss,
+            }
+            for v in self.variables:
+                if v not in self.steady_state:
+                    self.steady_state[v] = 0.0
+            return
+
         if self.is_two_asset:
             ta = _TWO_ASSET_DEFAULTS
             n_a = int(self.hetagent_config.get("n_a", ta["n_a"]))
@@ -210,6 +272,34 @@ class HANKModel:
         dated, plus ``J_z_*`` for non-financial income); see
         :func:`puremacro.models.hank_sequence_space._two_asset_jacobians`.
         """
+        if self.household_model is not None:
+            if self._dp_block is None:
+                self._solve_steady_state()
+            J_dp = dp_sequence_jacobian(self.household_model, inputs=self._dp_inputs, outputs=None, T=T)
+            c_key = "C" if "C" in J_dp else ("c" if "c" in J_dp else next(iter(J_dp)))
+            r_key = "r" if "r" in self._dp_inputs else self._dp_inputs[0]
+            w_key = "w" if "w" in self._dp_inputs else ("y" if "y" in self._dp_inputs else None)
+            J_C_r = J_dp[c_key][r_key]
+            c_ss = max(float(self.steady_state.get("C", 1.0)), 1e-12)
+            w_ss = float(self.steady_state.get("w", 1.0))
+            if w_key is not None:
+                # Apply balanced-budget fiscal closure (dw_net = dw - B * dr) when both r and w are present
+                B_ss = float(self.steady_state.get("B", 0.0))
+                J_C_w = J_dp[c_key][w_key]
+                J_C_Y = J_C_w * (w_ss / c_ss)
+                J_C_r_closed = J_C_r - B_ss * J_C_w
+            else:
+                J_C_Y = np.zeros((T, T), dtype=float)
+                J_C_r_closed = J_C_r
+            out: dict[str, np.ndarray] = {
+                "J_C_r": J_C_r_closed,
+                "J_C_Y": J_C_Y,
+            }
+            for y_name, x_map in J_dp.items():
+                for x_name, mat in x_map.items():
+                    out[f"J_{y_name}_{x_name}"] = mat
+            return out
+
         if self._hh_block is None:
             self._solve_steady_state()
         if self.is_two_asset:
@@ -230,6 +320,46 @@ class HANKModel:
     ) -> HANKResult:
         """Simulate general equilibrium transition dynamics for an MIT shock."""
         shock_path = magnitude * (rho ** np.arange(horizon))
+
+        if self.household_model is not None:
+            J_dict = self.compute_jacobians(T=horizon)
+            J_C_r = J_dict["J_C_r"]
+            J_C_Y = J_dict["J_C_Y"]
+            K_pi, M_r_Y = _ge_matrices(horizon, float(self.beta), float(self.kappa), float(self.phi_pi))
+            H_Y = np.eye(horizon) - J_C_Y - J_C_r @ M_r_Y
+            rhs = J_C_r @ shock_path
+            dY = np.linalg.solve(H_Y, rhs)
+            dC = dY.copy()
+            dr = M_r_Y @ dY + shock_path
+            dpi = K_pi @ dY
+            di = self.phi_pi * dpi + shock_path
+            converged = bool(np.all(np.isfinite(dY)))
+
+            path_data_dp: dict[str, np.ndarray] = {
+                "Y": dY,
+                "C": dC,
+                "r": dr,
+                "pi": dpi,
+                "i": di,
+            }
+            if shock in self.shocks:
+                path_data_dp[shock] = shock_path
+            for v in self.variables:
+                if v not in path_data_dp:
+                    path_data_dp[v] = dY - dC if v == "I" else np.zeros(horizon)
+
+            return HANKResult(
+                steady_state=self.steady_state,
+                transition_paths=pd.DataFrame(path_data_dp),
+                jacobians=J_dict,
+                asset_distribution=self.asset_distribution,
+                asset_grid=self.asset_grid,
+                mpc_distribution=self.mpc_distribution,
+                shock_name=shock,
+                horizon=horizon,
+                model_name=self.hetagent_config.get("model", "hank_dp_bridge"),
+                converged=converged,
+            )
 
         if self.is_two_asset:
             # Linear GE on the steady state solved at construction (the same block the
@@ -380,7 +510,11 @@ class HANKModel:
         )
 
 
-def load_hank_mod(source: str | Path, **param_overrides: Any) -> HANKModel:
+def load_hank_mod(
+    source: str | Path,
+    household_model: Any = None,
+    **param_overrides: Any,
+) -> HANKModel:
     """Load and parse a Dynare .mod file containing a hetagent_block."""
     if isinstance(source, Path) or (isinstance(source, str) and "\n" not in source and Path(source).exists()):
         text = Path(source).read_text(encoding="utf-8")
@@ -388,13 +522,13 @@ def load_hank_mod(source: str | Path, **param_overrides: Any) -> HANKModel:
         text = str(source)
 
     dag = parse_mod_to_dag(text)
-    if dag.hetagent_block is None:
+    if dag.hetagent_block is None and household_model is None:
         raise ValueError(
             "load_hank_mod: the supplied .mod file does not contain a hetagent_block; "
             "use load_mod for standard representative-agent DSGE models."
         )
 
-    return HANKModel(dag, params=param_overrides)
+    return HANKModel(dag, params=param_overrides, household_model=household_model)
 
 
 def solve_hank_bridge(
@@ -404,10 +538,11 @@ def solve_hank_bridge(
     rho: float = 0.5,
     horizon: int = 40,
     nonlinear: bool = False,
+    household_model: Any = None,
     **param_overrides: Any,
 ) -> HANKResult:
     """High-level interface to solve a HANK .mod model and return transition dynamics."""
-    model = load_hank_mod(source, **param_overrides)
+    model = load_hank_mod(source, household_model=household_model, **param_overrides)
     return model.simulate(
         shock=shock,
         magnitude=magnitude,
@@ -422,4 +557,7 @@ __all__ = [
     "HANKResult",
     "load_hank_mod",
     "solve_hank_bridge",
+    "dp_sequence_jacobian",
+    "dp_nonlinear_transition",
 ]
+

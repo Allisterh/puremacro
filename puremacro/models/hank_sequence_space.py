@@ -3117,6 +3117,447 @@ def _two_asset_ge_solve(
     )
 
 
+# ---------------------------------------------------------------------------
+# General puremacro.dp.Model <-> Sequence-Space Jacobian Bridge (ABRS 2021)
+# ---------------------------------------------------------------------------
+
+def _d_lottery_push_dp(
+    mu: np.ndarray,
+    ap_base: np.ndarray,
+    dap: np.ndarray,
+    a_grid: np.ndarray,
+    P_z: np.ndarray,
+) -> np.ndarray:
+    """Analytical Frechet derivative of ``lottery_push(mu, ap, a_grid, P_z)`` w.r.t. ``ap``."""
+    n_a, n_z = mu.shape
+    j = np.clip(np.searchsorted(a_grid, ap_base) - 1, 0, n_a - 2)
+    span = a_grid[j + 1] - a_grid[j]
+    dw_hi = dap / span
+    z_idx = np.broadcast_to(np.arange(n_z), (n_a, n_z))
+    dmu_half = np.zeros((n_a, n_z), dtype=float)
+    np.add.at(dmu_half, (j, z_idx), -mu * dw_hi)
+    np.add.at(dmu_half, (j + 1, z_idx), mu * dw_hi)
+    return dmu_half @ P_z
+
+
+def _lottery_adjoint_push_dp(
+    E: np.ndarray,
+    j_ss: np.ndarray,
+    w_lo_ss: np.ndarray,
+    P_z: np.ndarray,
+) -> np.ndarray:
+    """Matrix-free adjoint step ``Lambda.T @ E`` on the ``(n_a, n_z)`` state space."""
+    E_P = E @ P_z.T
+    e_lo = np.take_along_axis(E_P, j_ss, axis=0)
+    e_hi = np.take_along_axis(E_P, j_ss + 1, axis=0)
+    return w_lo_ss * e_lo + (1.0 - w_lo_ss) * e_hi
+
+
+def _prepare_dp_household_block(
+    model_or_sol: Any,
+    inputs: Sequence[str],
+    outputs: Sequence[str] | None,
+) -> dict[str, Any]:
+    """Compile a ``puremacro.dp.Model`` or ``DPSolution`` into a continuous EGM household block."""
+    from puremacro.dp._egm import EGMPlan
+    from puremacro.dp._expr import ModelSpecError, parse
+    from puremacro.dp._results import DPSolution
+    from puremacro.dp.model import Model as DPModel
+    from puremacro.vfi.distribution import lottery_distribution
+    from puremacro.vfi.egm import egm_step, solve_egm
+
+    if isinstance(model_or_sol, DPSolution):
+        sol = model_or_sol
+        m_orig = sol._c.model
+    elif isinstance(model_or_sol, DPModel):
+        m_orig = model_or_sol
+        try:
+            sol = m_orig.solve(method="egm")
+        except Exception:
+            sol = m_orig.solve(method="vfi")
+    else:
+        raise TypeError(
+            "model_or_sol must be a puremacro.dp.Model or DPSolution instance; "
+            f"got {type(model_or_sol).__name__}"
+        )
+
+    if len(m_orig._states) != 1:
+        raise ValueError(
+            f"dp_sequence_jacobian requires a one-state dp.Model; got states {[s for s, _ in m_orig._states]}"
+        )
+    if m_orig._horizon is not None:
+        raise ValueError("dp_sequence_jacobian requires an infinite-horizon dp.Model")
+
+    inputs_list = [str(x) for x in inputs]
+    if not inputs_list:
+        raise ValueError("inputs must be a non-empty sequence of input variable names")
+
+    # Build an isolated household-block Model with all prices and input-listed locals promoted to parameters
+    import copy
+
+    m_hh = copy.copy(m_orig)
+    m_hh._states = list(m_orig._states)
+    m_hh._shocks = list(m_orig._shocks)
+    m_hh._agg_state = None
+    m_hh._params = dict(m_orig._params)
+    for p_name in m_orig._prices:
+        m_hh._params[p_name] = float(sol.prices[p_name])
+    m_hh._prices = {}
+    if "beta" in inputs_list and "beta" not in m_hh._params and isinstance(m_orig._beta, (int, float)):
+        m_hh._params["beta"] = float(m_orig._beta)
+
+    input_set = set(inputs_list)
+    kept_locals: list[tuple[str, str]] = []
+    for loc_name, loc_expr in m_orig._locals:
+        if loc_name in input_set and loc_name not in m_hh._params:
+            val_ss = float(np.sum(sol.distribution * sol.policy(loc_name)))
+            m_hh._params[loc_name] = val_ss
+        else:
+            kept_locals.append((loc_name, loc_expr))
+    m_hh._locals = kept_locals
+    m_hh._functions = dict(m_orig._functions)
+    m_hh._constraints = list(m_orig._constraints)
+    m_hh._aggregates = dict(m_orig._aggregates)
+    m_hh._clear = None
+    m_hh._market_clearing = []
+
+    for x_name in inputs_list:
+        if x_name not in m_hh._params:
+            raise ValueError(
+                f"Unknown input {x_name!r}; available parameters/prices/locals: "
+                f"{sorted(set(m_hh._params.keys()) | {n for n, _ in m_orig._locals})}"
+            )
+
+    comp = m_hh.check()
+    plan = EGMPlan(comp)
+    a_grid = np.asarray(plan.a, dtype=float)
+    n_a = a_grid.size
+    n_z = int(plan.n_z)
+    P = np.asarray(comp.P, dtype=float)
+    state_name = comp.state_names[0]
+    cname = plan.cname
+
+    params_ss = comp.param_values()
+    beta_ss = float(params_ss["p_beta"]) if "p_beta" in params_ss else float(comp.beta)
+    R_ss, y_ss = plan.budget(params_ss)
+    c_max_ss = float(np.max(R_ss * a_grid[-1] + y_ss) - a_grid[0])
+    _, u_prime_ss, u_prime_inv_ss = plan._u_funcs(params_ss, max(c_max_ss, 1.0))
+
+    def step_fn(V_a_next: np.ndarray, params_t: dict[str, Any]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        beta_t = float(params_t["p_beta"]) if "p_beta" in params_t else float(comp.beta)
+        R_t, y_t = plan.budget(params_t)
+        c_max_t = float(np.max(R_t * a_grid[-1] + y_t) - a_grid[0])
+        _, u_prime_t, u_prime_inv_t = plan._u_funcs(params_t, max(c_max_t, 1.0))
+        rhs = beta_t * np.maximum(V_a_next @ P.T, 1e-300)
+        c_raw = egm_step(rhs, a_grid, y_t, R_t, u_prime_inv_t)
+        coh_t = R_t * a_grid[:, None] + np.asarray(y_t, dtype=float)[None, :]
+        ap_t = np.clip(coh_t - c_raw, a_grid[0], a_grid[-1])
+        c_t = np.maximum(coh_t - ap_t, 1e-10)
+        V_a_t = R_t * u_prime_t(c_raw)
+        return V_a_t, c_t, ap_t
+
+    c0 = getattr(sol.raw, "c", None)
+    egm_ss = solve_egm(
+        a_grid,
+        np.arange(n_z),
+        y_ss,
+        P,
+        beta=beta_ss,
+        r=R_ss - 1.0,
+        u_prime=u_prime_ss,
+        u_prime_inv=u_prime_inv_ss,
+        c0=c0,
+        tol=1e-12,
+        max_iter=20_000,
+    )
+    V_a_ss = R_ss * u_prime_ss(egm_ss.c)
+    c_ss = egm_ss.c
+    aprime_ss = egm_ss.aprime
+    for _ in range(500):
+        V_next_ss, c_ss, aprime_ss = step_fn(V_a_ss, params_ss)
+        if float(np.max(np.abs(V_next_ss - V_a_ss))) < 1e-13:
+            V_a_ss = V_next_ss
+            break
+        V_a_ss = V_next_ss
+    D_ss = lottery_distribution(aprime_ss, a_grid, P, tol=1e-13, max_iter=100_000)
+
+    # Determine output names and build vectorized policy evaluators
+    if outputs is None:
+        out_names = list(
+            dict.fromkeys([*m_orig._aggregates.keys(), cname, state_name, cname.upper(), state_name.upper()])
+        )
+    else:
+        out_names = [str(y) for y in outputs]
+
+    zs: list[np.ndarray] = [np.zeros((1, 1))]
+    if comp.z_grids:
+        zs = [zc.reshape(1, n_z) for zc in np.meshgrid(*comp.z_grids, indexing="ij")]
+    cur_a = a_grid.reshape(n_a, 1)
+
+    out_evals: dict[str, Any] = {}
+    for idx_y, y_name in enumerate(out_names):
+        agg_expr = m_orig._aggregates.get(y_name)
+        raw_expr = agg_expr.strip() if agg_expr is not None else y_name.strip()
+        if raw_expr in (state_name, f"{state_name}(+1)") or (
+            agg_expr is None and y_name == state_name.upper() and y_name not in comp.local_names
+        ):
+            out_evals[y_name] = lambda ap, c_pol, _p: ap
+        elif raw_expr == cname or (
+            agg_expr is None and y_name == cname.upper() and y_name not in comp.local_names
+        ):
+            out_evals[y_name] = lambda ap, c_pol, _p: c_pol
+        else:
+            if agg_expr is None and y_name not in comp.local_names and y_name.lower() in comp.local_names:
+                raw_expr = y_name.lower()
+            try:
+                node = parse(raw_expr, set(comp.state_names), functions=comp.model._functions)
+                fn_y = comp._household_function(f"_dp_ssj_out_{idx_y}", node)
+            except ModelSpecError as exc:
+                raise ValueError(f"Cannot resolve output variable or expression {y_name!r}: {exc}") from exc
+
+            def _make_eval(fn_compiled):
+                def _eval(ap: np.ndarray, _c_pol: np.ndarray, params_t: dict[str, Any]) -> np.ndarray:
+                    val = fn_compiled(ap, cur_a, *zs, *params_t.values(), xp=np)
+                    return np.broadcast_to(np.asarray(val, dtype=float), (n_a, n_z)).copy()
+
+                return _eval
+
+            out_evals[y_name] = _make_eval(fn_y)
+
+    return {
+        "comp": comp,
+        "plan": plan,
+        "a_grid": a_grid,
+        "n_a": n_a,
+        "n_z": n_z,
+        "P": P,
+        "params_ss": params_ss,
+        "V_a_ss": V_a_ss,
+        "c_ss": c_ss,
+        "aprime_ss": aprime_ss,
+        "D_ss": D_ss,
+        "step_fn": step_fn,
+        "inputs": inputs_list,
+        "outputs": out_names,
+        "out_evals": out_evals,
+    }
+
+
+def dp_sequence_jacobian(
+    model_or_sol: Any,
+    inputs: Sequence[str],
+    outputs: Sequence[str] | None = None,
+    T: int = 300,
+    dx: float = 1e-4,
+) -> dict[str, dict[str, np.ndarray]]:
+    """Compute Sequence-Space Jacobians for a ``puremacro.dp.Model`` or ``DPSolution``.
+
+    Applies the Fake News Algorithm of Auclert, Bardóczy, Rognlie & Straub
+    (2021, *Econometrica*) directly to the compiled dynamic programming
+    household block:
+
+    1. **Backward policy perturbation** (one pass of length ``T`` per input ``X``):
+       perturbs input ``X`` by ``±dx`` around its steady-state value and
+       propagates the continuation marginal-value sensitivity backward through
+       the steady-state Euler/Bellman operator to obtain the date-0 policy
+       derivatives ``dy_0 / dX_s`` and ``da'_0 / dX_s`` for all ``s = 0, ..., T-1``.
+    2. **Forward lottery transition perturbation**: maps ``da'_0 / dX_s`` into
+       the date-1 distribution sensitivity ``dD_1^s = (d Lambda_0 / dX_s) D*``.
+    3. **Expectation vectors**: iterates ``E_t^Y = (Lambda*)^T E_{t-1}^Y`` for
+       each output ``Y`` using the matrix-free adjoint of the steady-state
+       lottery transition.
+    4. **Fake News matrix & Jacobian recursion**: assembles ``F^{Y,X}_{t,s}``
+       and accumulates ``J^{Y,X}_{t,s} = J^{Y,X}_{t-1,s-1} + F^{Y,X}_{t,s}``.
+
+    Parameters
+    ----------
+    model_or_sol : puremacro.dp.Model or DPSolution
+        A ``puremacro.dp.Model`` specification or an already-solved ``DPSolution``.
+    inputs : Sequence[str]
+        Input variable names to perturb (parameters, prices, or scalar locals
+        such as ``["r", "w"]``).
+    outputs : Sequence[str] or None, optional
+        Output variable names (e.g., ``["C", "A"]`` or ``["c", "a"]``), or
+        ``None`` to default to all declared aggregates plus consumption and
+        asset policies.
+    T : int, default 300
+        Truncation horizon ``T >= 1``.
+    dx : float, default 1e-4
+        Central finite-difference step size for the backward pass.
+
+    Returns
+    -------
+    dict[str, dict[str, np.ndarray]]
+        Nested dictionary ``J[Y][X]`` where each entry is a ``(T, T)``
+        ``np.ndarray`` holding ``dY_t / dX_s``.
+    """
+    T = int(T)
+    if T < 1:
+        raise ValueError(f"T must be >= 1; got {T}")
+    dx = float(dx)
+    if dx <= 0.0:
+        raise ValueError(f"dx must be > 0; got {dx}")
+
+    blk = _prepare_dp_household_block(model_or_sol, inputs=inputs, outputs=outputs)
+    a_grid = blk["a_grid"]
+    n_a, n_z = blk["n_a"], blk["n_z"]
+    N = n_a * n_z
+    P = blk["P"]
+    params_ss = blk["params_ss"]
+    V_a_ss = blk["V_a_ss"]
+    c_ss = blk["c_ss"]
+    aprime_ss = blk["aprime_ss"]
+    D_ss = blk["D_ss"]
+    D_ss_flat = D_ss.ravel()
+    step_fn = blk["step_fn"]
+    inputs_list = blk["inputs"]
+    out_names = blk["outputs"]
+    out_evals = blk["out_evals"]
+
+    # Baseline one-step policy at steady state
+    base_V, base_c, base_a = step_fn(V_a_ss, params_ss)
+
+    # Precompute steady-state lottery weights and expectation vectors E^Y_t for each output Y
+    j_ss = np.clip(np.searchsorted(a_grid, base_a) - 1, 0, n_a - 2)
+    w_lo_ss = np.clip((a_grid[j_ss + 1] - base_a) / (a_grid[j_ss + 1] - a_grid[j_ss]), 0.0, 1.0)
+
+    E_by_out: dict[str, np.ndarray] = {}
+    for y_name in out_names:
+        y_ss_grid = out_evals[y_name](base_a, base_c, params_ss)
+        E_y = np.empty((max(T - 1, 1), N), dtype=float)
+        cur_E = y_ss_grid.copy()
+        for t in range(max(T - 1, 1)):
+            E_y[t] = cur_E.ravel()
+            if t + 1 < T - 1:
+                cur_E = _lottery_adjoint_push_dp(cur_E, j_ss, w_lo_ss, P)
+        E_by_out[y_name] = E_y
+
+    J_all: dict[str, dict[str, np.ndarray]] = {y_name: {} for y_name in out_names}
+
+    # One backward pass of length T per input X
+    for x_name in inputs_list:
+        pkey = f"p_{x_name}"
+        x_ss = float(params_ss[pkey])
+        # Ensure perturbed parameter stays within valid domain (e.g., beta < 1)
+        step = dx
+        if x_name == "beta" and x_ss + step >= 1.0:
+            step = min(dx, 0.5 * (1.0 - x_ss))
+
+        params_p = dict(params_ss)
+        params_m = dict(params_ss)
+        params_p[pkey] = x_ss + step
+        params_m[pkey] = x_ss - step
+
+        dy_by_out: dict[str, np.ndarray] = {y_name: np.empty((T, N), dtype=float) for y_name in out_names}
+        dD1 = np.empty((T, N), dtype=float)
+
+        # s = 0: direct perturbation of X at date 0
+        V_p, c_p, a_p = step_fn(V_a_ss, params_p)
+        V_m, c_m, a_m = step_fn(V_a_ss, params_m)
+        inv_2h = 1.0 / (2.0 * step)
+        dV = (V_p - V_m) * inv_2h
+        da_k = (a_p - a_m) * inv_2h
+
+        for y_name in out_names:
+            ev = out_evals[y_name]
+            y_p = ev(a_p, c_p, params_p)
+            y_m = ev(a_m, c_m, params_m)
+            dy_by_out[y_name][0] = ((y_p - y_m) * inv_2h).ravel()
+        dD1[0] = _d_lottery_push_dp(D_ss, base_a, da_k, a_grid, P).ravel()
+
+        # s = 1, ..., T - 1: unperturbed date-t parameters, perturbed continuation V_a
+        for s in range(1, T):
+            V_p, c_p, a_p = step_fn(V_a_ss + step * dV, params_ss)
+            V_m, c_m, a_m = step_fn(V_a_ss - step * dV, params_ss)
+            dV = (V_p - V_m) * inv_2h
+            da_k = (a_p - a_m) * inv_2h
+            for y_name in out_names:
+                ev = out_evals[y_name]
+                y_p = ev(a_p, c_p, params_ss)
+                y_m = ev(a_m, c_m, params_ss)
+                dy_by_out[y_name][s] = ((y_p - y_m) * inv_2h).ravel()
+            dD1[s] = _d_lottery_push_dp(D_ss, base_a, da_k, a_grid, P).ravel()
+
+        # Assemble Fake News matrix F and Jacobian J for each output Y
+        for y_name in out_names:
+            F = np.zeros((T, T), dtype=float)
+            F[0, :] = dy_by_out[y_name] @ D_ss_flat
+            if T > 1:
+                F[1:, :] = E_by_out[y_name][: T - 1] @ dD1.T
+            J = np.zeros((T, T), dtype=float)
+            J[0, :] = F[0, :]
+            for t in range(1, T):
+                J[t, 0] = F[t, 0]
+                J[t, 1:] = J[t - 1, :-1] + F[t, 1:]
+            J_all[y_name][x_name] = J
+
+    return J_all
+
+
+def dp_nonlinear_transition(
+    model_or_sol: Any,
+    input_paths: Mapping[str, Sequence[float] | np.ndarray],
+    outputs: Sequence[str] | None = None,
+) -> dict[str, np.ndarray]:
+    """Simulate the exact non-linear MIT-shock transition of a ``puremacro.dp.Model``.
+
+    Given deterministic sequences of input deviations ``dX_t`` (for ``t = 0, ..., T-1``),
+    iterates the household policy backward from the terminal steady state at ``T``
+    and pushes the cross-sectional distribution forward from ``D*`` via the
+    continuous lottery transition. Returns the path of deviations ``Y_t - Y*``
+    for every requested output ``Y``.
+    """
+    from puremacro.vfi.distribution import lottery_push
+
+    if not input_paths:
+        raise ValueError("input_paths must be a non-empty mapping of {input_name: dX_seq}")
+    inputs_list = list(input_paths.keys())
+    paths_arr = {k: np.asarray(v, dtype=float).ravel() for k, v in input_paths.items()}
+    lengths = {len(v) for v in paths_arr.values()}
+    if len(lengths) != 1:
+        raise ValueError(f"All input_paths must have the same length T; got lengths {lengths}")
+    T = lengths.pop()
+
+    blk = _prepare_dp_household_block(model_or_sol, inputs=inputs_list, outputs=outputs)
+    a_grid = blk["a_grid"]
+    n_a, n_z = blk["n_a"], blk["n_z"]
+    P = blk["P"]
+    params_ss = blk["params_ss"]
+    V_a_ss = blk["V_a_ss"]
+    D_ss = blk["D_ss"]
+    step_fn = blk["step_fn"]
+    out_names = blk["outputs"]
+    out_evals = blk["out_evals"]
+
+    base_V, base_c, base_a = step_fn(V_a_ss, params_ss)
+    y_ss_val = {
+        y_name: float(np.sum(D_ss * out_evals[y_name](base_a, base_c, params_ss)))
+        for y_name in out_names
+    }
+
+    c_path = np.empty((T, n_a, n_z), dtype=float)
+    ap_path = np.empty((T, n_a, n_z), dtype=float)
+    params_path: list[dict[str, Any]] = [dict(params_ss) for _ in range(T)]
+
+    V_next = base_V.copy()
+    for t in range(T - 1, -1, -1):
+        p_t = dict(params_ss)
+        for k, arr in paths_arr.items():
+            p_t[f"p_{k}"] = float(params_ss[f"p_{k}"] + arr[t])
+        params_path[t] = p_t
+        V_next, c_path[t], ap_path[t] = step_fn(V_next, p_t)
+
+    out_paths = {y_name: np.empty(T, dtype=float) for y_name in out_names}
+    D_t = D_ss.copy()
+    for t in range(T):
+        for y_name in out_names:
+            val_t = float(np.sum(D_t * out_evals[y_name](ap_path[t], c_path[t], params_path[t])))
+            out_paths[y_name][t] = val_t - y_ss_val[y_name]
+        D_t = lottery_push(D_t, ap_path[t], a_grid, P)
+
+    return out_paths
+
+
 __all__ = [
     "SequenceSpaceHANKResult",
     "TwoAssetSequenceSpaceHANKResult",
@@ -3128,4 +3569,7 @@ __all__ = [
     "fake_news_algorithm",
     "simulate_targeted_transfer",
     "solve_nonlinear_transition",
+    "dp_sequence_jacobian",
+    "dp_nonlinear_transition",
 ]
+

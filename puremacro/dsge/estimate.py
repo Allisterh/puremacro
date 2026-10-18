@@ -1181,10 +1181,21 @@ def estimate_dsge(
         inv_H = np.diag(stds ** 2)
 
     if method == "nuts":
-        from puremacro.dsge.nuts import nuts_sample
+        from puremacro.dsge.nuts import _numerical_gradient, nuts_sample
 
-        # Build target evaluator returning log posterior and analytical gradient
-        if model_template is not None:
+        custom_grad_fn = kwargs.get("grad_log_post_fn", None)
+        grad_method = str(kwargs.get("grad_method", "central"))
+        grad_eps = float(kwargs.get("grad_eps", 1e-5))
+        bounds_list = param_bounds(priors)
+
+        # Build target evaluator returning log posterior and analytical or fast numerical gradient
+        if custom_grad_fn is not None:
+            def target_fn(v):
+                lp = float(-neg_log_post(v))
+                if not np.isfinite(lp):
+                    return -np.inf, np.zeros(len(v))
+                return lp, np.asarray(custom_grad_fn(v), dtype=float)
+        elif model_template is not None:
             from puremacro.dsge._gradients import log_posterior_and_gradient
 
             def target_fn(v):
@@ -1192,20 +1203,21 @@ def estimate_dsge(
                     v, names, model_template, y, observed_vars, priors, fixed,
                 )
         else:
+            def _pos_log_post(v_in: np.ndarray) -> float:
+                return float(-neg_log_post(v_in))
+
             def target_fn(v):
-                lp = float(-neg_log_post(v))
+                lp = _pos_log_post(v)
                 if not np.isfinite(lp):
                     return -np.inf, np.zeros(len(v))
-                h = 1e-5
-                g = np.zeros(len(v))
-                for i in range(len(v)):
-                    v_p = v.copy()
-                    v_p[i] += h
-                    v_m = v.copy()
-                    v_m[i] -= h
-                    lp_p = float(-neg_log_post(v_p))
-                    lp_m = float(-neg_log_post(v_m))
-                    g[i] = (lp_p - lp_m) / (2.0 * h)
+                g = _numerical_gradient(
+                    _pos_log_post,
+                    v,
+                    eps=grad_eps,
+                    fx=lp,
+                    method=grad_method,
+                    bounds=bounds_list,
+                )
                 return lp, g
 
         mode_dict = _vec_to_dict(mode_vec, names, fixed)
@@ -1233,6 +1245,7 @@ def estimate_dsge(
             mode_hessian_inv=inv_H if use_hessian else None,
             data_n_obs=len(data),
             record_warmup=kwargs.get("record_warmup", False),
+            bounds=bounds_list,
         )
 
     # 5. Proposal scaling.
