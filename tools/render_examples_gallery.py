@@ -313,6 +313,8 @@ def render_all(
     }
     json_path.write_text(json.dumps(data, indent=2, sort_keys=False) + "\n", encoding="utf-8")
     _emit_markdown(data, docs_dir / "examples_gallery.md")
+    if (docs_dir / "es").is_dir():
+        _emit_es_markdown(data, docs_dir / "es" / "examples_gallery.md")
     return data
 
 
@@ -360,6 +362,8 @@ def refresh_docs(*, examples_dir: Path, docs_dir: Path) -> dict:
     data["refreshed_at"] = _now_iso()
     json_path.write_text(json.dumps(data, indent=2, sort_keys=False) + "\n", encoding="utf-8")
     _emit_markdown(data, docs_dir / "examples_gallery.md")
+    if (docs_dir / "es").is_dir():
+        _emit_es_markdown(data, docs_dir / "es" / "examples_gallery.md")
     return data
 
 
@@ -370,6 +374,8 @@ def _emit_markdown(data: dict, md_path: Path) -> None:
         counts[e["status"]] = counts.get(e["status"], 0) + 1
 
     lines = []
+    lines.append("> 🇬🇧 English · 🇪🇸 [Español](es/examples_gallery.md)")
+    lines.append("")
     lines.append("# puremacro examples gallery")
     lines.append("")
     lines.append(f"Generated: {data['generated_at']}")
@@ -408,6 +414,58 @@ def _emit_markdown(data: dict, md_path: Path) -> None:
                     lines.append(f"  - `{f}`")
             else:
                 lines.append("- **Figures:** none")
+            lines.append("")
+
+    md_path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _emit_es_markdown(data: dict, md_path: Path) -> None:
+    examples = data["examples"]
+    counts = {"PASS": 0, "SKIP": 0, "FAIL": 0}
+    for e in examples.values():
+        counts[e["status"]] = counts.get(e["status"], 0) + 1
+
+    lines = []
+    lines.append("> 🇬🇧 [English](../examples_gallery.md) · 🇪🇸 Español")
+    lines.append("")
+    lines.append("# Galería de ejemplos de puremacro")
+    lines.append("")
+    lines.append(f"Generado: {data['generated_at']}")
+    lines.append("")
+    if data.get("refreshed_at"):
+        lines.append(
+            f"Actualizado: {data['refreshed_at']} — solo descripciones y rutas; "
+            f"todos los estados provienen de la ejecución de {data['generated_at']}."
+        )
+        lines.append("")
+    lines.append("| Estado | Cantidad |")
+    lines.append("|---|---|")
+    lines.append(f"| PASS | {counts['PASS']} |")
+    lines.append(f"| SKIP | {counts['SKIP']} |")
+    lines.append(f"| FAIL | {counts['FAIL']} |")
+    lines.append("")
+
+    for status in ("FAIL", "PASS", "SKIP"):
+        section = [(name, e) for name, e in sorted(examples.items()) if e["status"] == status]
+        if not section:
+            continue
+        lines.append(f"## {status} ({len(section)})")
+        lines.append("")
+        for name, e in section:
+            lines.append(f"### {name}")
+            lines.append("")
+            lines.append(f"- **Descripción:** {e.get('description') or 'sin docstring de módulo'}")
+            lines.append(f"- **Estado:** {e['status']}")
+            if e["reason"] is not None:
+                lines.append(f"- **Motivo:** {e['reason']}")
+            lines.append(f"- **Tiempo de ejecución:** {e['runtime_s']} s")
+            lines.append(f"- **Última ejecución:** {e['last_run']}")
+            if e["figures"]:
+                lines.append("- **Figuras:**")
+                for f in e["figures"]:
+                    lines.append(f"  - `{f}`")
+            else:
+                lines.append("- **Figuras:** ninguna")
             lines.append("")
 
     md_path.write_text("\n".join(lines), encoding="utf-8")

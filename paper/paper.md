@@ -34,11 +34,11 @@ bibliography: paper.bib
      2 published) / 31 analytical / 59 internal, all passing (4.6.0 had 114 with
      four trade cases; 4.4.0 had 110: 20 / 31 / 59; 3.4.0 had 107: 19 / 29 / 59).
      The module, line and test counts of the "Scale" paragraph and the Pyodide
-     sentence were recomputed on the 5.0.0a1 tree on 2026-10-13 (RELEASING 6.5
-     recipe: 777 tracked modules, 254,858 lines, 17,406 collected tests of which
-     the default selection runs 17,180; Pyodide 0.28.3 and 314.0.5 110/110). The
-     swept-library-module, notebook-pair and commit counts still come from the
-     4.6.0 tree (commit d2634362, 2026-10-04). The text was extended on
+     sentence were recomputed on the 5.3.0 tree on 2026-10-17 (RELEASING 6.5
+     recipe: 836 tracked modules, 297,579 lines, 20,342 collected tests of which
+     the default selection runs 20,088; Pyodide 0.28.3 and 314.0.5 110/110). The
+     swept-library-module (631), notebook-pair (70) and commit counts (369 of 555)
+     also come from the 5.3.0 tree (commit d74eb7cb, 2026-10-17). The text was extended on
      2026-10-12 to cover `dp`, the survey microdata and `puremacro.text`
      (unreleased at the time). The krusellsmith1998 and dolo entries in paper.bib
      were not checked against Crossref (no access from the drafting session).
@@ -144,7 +144,7 @@ would not change its host's dependency graph.
 Matplotlib (plus requests, in the data layer) at module scope; anything else is
 imported only when available. Two tests enforce the rule against the packages most
 likely to leak in.
-The first imports each of the 597 library modules (examples, teaching helpers,
+The first imports each of the 631 library modules (examples, teaching helpers,
 text-scraping sources and optional Numba kernels are excluded) and fails if
 statsmodels, linearmodels, arch or the scraping packages bs4, pdfplumber and pypdf
 have entered `sys.modules`. The second repeats the sweep with those packages
@@ -179,8 +179,8 @@ and 314.0.5 (the playground's version): every check passed on both.
 <!-- AUTHOR: re-run `python tools/pyodide_gallery.py` on the submitted commit and
      update the sentence above if the counts or Pyodide versions changed. -->
 
-**Scale.** Version 5.0.0a1 comprises about 780 modules and 255,000 lines of Python,
-exercised by about 17,400 tests, of which CI runs 17,200 on Linux, macOS and Windows
+**Scale.** Version 5.3.0 comprises about 835 modules and 298,000 lines of Python,
+exercised by about 20,300 tests, of which CI runs 20,100 on Linux, macOS and Windows
 under Python 3.11–3.13 on every push and the remaining slow, reference and
 replication tests weekly and on every release tag, where they gate publication.
 Before each release tag, a script checks the suite against a recorded baseline,
@@ -189,7 +189,7 @@ the import invariant and a snapshot of the public API.
 ## Verification
 
 The gallery counts below and the scale measurements above were recomputed on
-2026-10-13 on the 5.0.0a1 tree.
+2026-10-17 on the 5.3.0 tree.
 
 The validation gallery, `puremacro.validation.scorecard()`, runs 110 checks across
 15 subsystems in under a minute, with none of the oracle packages installed; all
@@ -244,8 +244,8 @@ guidelines, and CI on three operating systems.
 
 Generative AI was used extensively in writing `puremacro`, its documentation and
 this paper. Anthropic's Claude models, used through the Claude Code agent (Claude
-Opus 5, Claude Opus 5.5, Claude Fable 5 and Claude Fable 5.1), generated or
-co-wrote much of the code, tests, documentation and notebooks: 205 of the 344
+Opus 5, Claude Opus 5.5, Claude Fable 5, Claude Fable 5.1 and Claude Sonnet 5.5), generated or
+co-wrote much of the code, tests, documentation and notebooks: 369 of the 555
 commits in the public repository carry a Claude co-author trailer. Google's Jules coding agent
 contributed 20 pull requests (refactoring, performance and test improvements),
 each reviewed and merged by the author. Claude also drafted and revised this
@@ -263,9 +263,10 @@ and CI.
      disclosure as an ethical breach). Only you can confirm items 1-4; do not
      submit with this comment still here.
      (1) TOOLS AND MODELS, PUBLIC PERIOD (2026-07-20 onward). The commit trailers
-         on origin/main at d2634362 (4.6.0) name: Claude Opus 5 (105 commits),
-         Claude Opus 5.5 (31), Claude Fable 5.1 (29), Claude Opus 5 (1M context)
-         (26) and Claude Fable 5 (14); the sentence above now names all four model
+         on origin/main at d74eb7cb (5.3.0) name: Claude Opus 5 (105 commits),
+         Claude Opus 5.5 (99), Claude Opus 5.5 (1M context) (62), Claude Fable 5.1 (52),
+         Claude Opus 5 (1M context) (26), Claude Fable 5 (14) and Claude Sonnet 5.5 (12);
+         the sentence above now names all five model
          families. Confirm that no other assistant (Copilot, ChatGPT, Cursor,
          Gemini, ...) was used without leaving a trailer.
      (2) TOOLS AND MODELS, PRIVATE PERIOD (2026-04-28 to 2026-07-20, inside the
@@ -280,11 +281,11 @@ and CI.
      (4) REVIEW ASSERTION: confirm that "reviewed, edited and validated all
          AI-assisted output before it was merged" is literally true, including
          for multi-agent workflow commits; if not, soften it to what is true.
-     (5) COUNTS ("205 of the 344 commits"): recomputed on 2026-10-04 at
-         d2634362 with RELEASING.md §6.5, i.e.
+     (5) COUNTS ("369 of the 555 commits"): recomputed on 2026-10-17 at
+         d74eb7cb with RELEASING.md §6.5, i.e.
          `git rev-list --count origin/main` and
          `git log origin/main -i --grep='co-authored-by: claude' --oneline | wc -l`.
-         Re-run on the submitted commit; commits after 4.6.0 will move both. -->
+         Re-run on the submitted commit; commits after 5.3.0 will move both. -->
 
 # Acknowledgements
 
