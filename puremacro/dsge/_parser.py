@@ -159,7 +159,20 @@ KEYWORDS = {
     "periods",
     "values",
     "markov_switching",
+    "planner_objective",
+    "ramsey_policy",
+    "ramsey_model",
+    "optim_weights",
+    "osr_params",
+    "osr_params_bounds",
+    "osr",
+    "calib_smoother",
+    "shock_decomposition",
+    "perfect_foresight_setup",
+    "perfect_foresight_solver",
+    "simul",
 }
+
 
 
 class Tokenizer:
@@ -461,6 +474,7 @@ def _eval_steady_state_defs(
     param_values: Mapping[str, float],
     variables: Sequence[str],
     auxiliary: Mapping[str, Mapping[str, Any]],
+    local_variables: Mapping[str, Node] | None = None,
 ) -> dict[str, float]:
     """Evaluate a ``steady_state_model`` block in order at ``param_values``.
 
@@ -472,6 +486,13 @@ def _eval_steady_state_defs(
     ``ValueError`` naming it.
     """
     ss_scope: dict[str, float] = dict(param_values)
+    if local_variables:
+        for loc_name, loc_node in local_variables.items():
+            if not loc_node.variables():
+                try:
+                    ss_scope[loc_name] = float(loc_node.eval(ss_scope, ss_scope))
+                except Exception:
+                    pass
     for s_name, s_expr in defs.items():
         try:
             val = s_expr.eval(ss_scope, {**param_values, **ss_scope})
@@ -482,7 +503,10 @@ def _eval_steady_state_defs(
             ) from exc
     steady_state = {v: ss_scope.get(v, 0.0) for v in variables}
     for aux, info in auxiliary.items():
-        steady_state[aux] = steady_state.get(info["root"], 0.0)
+        if info.get("kind") in ("exo_lag", "exo_lead"):
+            steady_state[aux] = 0.0
+        else:
+            steady_state[aux] = steady_state.get(info["root"], 0.0)
     return steady_state
 
 
@@ -491,14 +515,22 @@ def _eval_initval_defs(
     param_values: Mapping[str, float],
     variables: Sequence[str],
     auxiliary: Mapping[str, Mapping[str, Any]],
+    local_variables: Mapping[str, Node] | None = None,
 ) -> dict[str, float]:
     """Evaluate an ``initval`` block at ``param_values`` into a solver guess.
 
     Lines that cannot be evaluated are skipped (``initval`` values are only a
     starting point); auxiliary lead/lag variables inherit their root's guess,
-    defaulting to ``1.0``.
+    defaulting to ``1.0`` (or ``0.0`` for exogenous shock auxiliaries).
     """
     init_scope: dict[str, float] = dict(param_values)
+    if local_variables:
+        for loc_name, loc_node in local_variables.items():
+            if not loc_node.variables():
+                try:
+                    init_scope[loc_name] = float(loc_node.eval(init_scope, init_scope))
+                except Exception:
+                    pass
     for i_name, i_expr in defs.items():
         try:
             val = i_expr.eval(init_scope, {**param_values, **init_scope})
@@ -507,8 +539,12 @@ def _eval_initval_defs(
             pass
     guess = {v: init_scope[v] for v in variables if v in init_scope}
     for aux, info in auxiliary.items():
-        guess[aux] = guess.get(info["root"], 1.0)
+        if info.get("kind") in ("exo_lag", "exo_lead"):
+            guess[aux] = 0.0
+        else:
+            guess[aux] = guess.get(info["root"], 1.0)
     return guess
+
 
 
 _COMPOSITE = (UnaryOp, BinOp, Call)
@@ -659,6 +695,16 @@ class ParsedModelDAG:
     named_shock_groups: dict[str, dict[str, list[str]]] = field(default_factory=dict)
     hetagent_block: dict[str, Any] | None = None
     markov_switching_config: dict[str, Any] | None = None
+    planner_objective: Node | None = None
+    ramsey_policy_options: dict[str, Any] = field(default_factory=dict)
+    optim_weights: dict[Any, Node] = field(default_factory=dict)
+    osr_params: list[str] = field(default_factory=list)
+    osr_params_bounds: dict[str, tuple[float, float]] = field(default_factory=dict)
+    osr_options: dict[str, Any] = field(default_factory=dict)
+    calib_smoother_options: dict[str, Any] = field(default_factory=dict)
+    shock_decomposition_options: dict[str, Any] = field(default_factory=dict)
+    perfect_foresight_options: dict[str, Any] = field(default_factory=dict)
+    commands: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def varexo_det(self) -> list[str]:
@@ -744,6 +790,25 @@ class ParsedModelDAG:
             self.auxiliary_variables,
         )
 
+    def _steady_state_model_fn(
+        self, params_dict: Mapping[str, float] | None = None
+    ) -> np.ndarray:
+        """Compiled steady-state evaluator mapping ``params_dict -> y_ss`` array."""
+        ss = self.evaluate_steady_state(params_dict)
+        if ss is None:
+            raise ValueError("Model does not define a steady_state_model block.")
+        return np.array([float(ss.get(v, 0.0)) for v in self.variables], dtype=float)
+
+    def evaluate_optim_weights(
+        self, params: Mapping[str, float] | None = None
+    ) -> dict[Any, float]:
+        """Evaluate ``optim_weights`` block expressions at ``params``."""
+        merged = self._merged_params(params)
+        out: dict[Any, float] = {}
+        for k, node in self.optim_weights.items():
+            out[k] = float(node.eval({}, merged))
+        return out
+
     def evaluate_initval(
         self, params: Mapping[str, float] | None = None
     ) -> dict[str, float] | None:
@@ -813,6 +878,9 @@ class ParsedModelDAG:
             ),
             "guess": dict(self.guess) if self.guess else None,
             "steady_state": dict(self.steady_state) if self.steady_state else None,
+            "steady_state_model_fn": (
+                self._steady_state_model_fn if self.steady_state_model else None
+            ),
             "histval": dict(self.histval_values) if self.histval_values else None,
             "endval": dict(self.endval_values) if self.endval_values else None,
             "equations": self.compile_equations(),
@@ -830,6 +898,18 @@ class ParsedModelDAG:
                 if self.shocks_config.get("anticipated")
                 else None
             ),
+            "planner_objective": self.planner_objective,
+            "ramsey_policy_options": dict(self.ramsey_policy_options),
+            "optim_weights": (
+                self.evaluate_optim_weights() if self.optim_weights else {}
+            ),
+            "osr_params": list(self.osr_params),
+            "osr_params_bounds": dict(self.osr_params_bounds),
+            "osr_options": dict(self.osr_options),
+            "calib_smoother_options": dict(self.calib_smoother_options),
+            "shock_decomposition_options": dict(self.shock_decomposition_options),
+            "perfect_foresight_options": dict(self.perfect_foresight_options),
+            "commands": list(self.commands),
         }
 
 
@@ -856,6 +936,7 @@ class Parser:
         self.equation_tags: dict[int, dict[str, str]] = {}
         self.local_var_defs: dict[str, Node] = {}
         self.local_var_names: set[str] = set()
+        self._in_model_block: bool = False
         self.tex_labels: dict[str, str] = {}
         self.is_linear: bool = False
 
@@ -881,6 +962,18 @@ class Parser:
         self.named_shock_groups: dict[str, dict[str, list[str]]] = {}
         self.hetagent_config: dict[str, Any] | None = None
         self.markov_switching_config: dict[str, Any] | None = None
+
+        # Native Command Blocks
+        self.planner_objective: Node | None = None
+        self.ramsey_policy_options: dict[str, Any] = {}
+        self.optim_weights: dict[Any, Node] = {}
+        self.osr_params: list[str] = []
+        self.osr_params_bounds: dict[str, tuple[Node, Node]] = {}
+        self.osr_options: dict[str, Any] = {}
+        self.calib_smoother_options: dict[str, Any] = {}
+        self.shock_decomposition_options: dict[str, Any] = {}
+        self.perfect_foresight_options: dict[str, Any] = {}
+        self.commands: list[dict[str, Any]] = []
 
     def _curr(self) -> Token:
         return self.tokens[self.pos]
@@ -1038,10 +1131,11 @@ class Parser:
                 # It is a lead/lag index if:
                 # 1. ident is NOT a standard math function (or is in variables/shocks/locals)
                 # 2. tokens inside parens match [+-]? INT )
+                is_local = self._in_model_block and (ident in self.local_var_names)
                 is_math_fn = (
                     ident_lower in MATH_FUNCTIONS
                     and ident not in self.variables
-                    and ident not in self.local_var_names
+                    and not is_local
                 )
 
                 can_be_lead_lag = not is_math_fn
@@ -1055,7 +1149,7 @@ class Parser:
                         self._advance()  # (
                         lead_val = int(self._advance().value)
                         self._advance()  # )
-                        if ident in self.local_var_names:
+                        if is_local:
                             return _LocalRef(ident, lead_val)
                         return Var(ident, lead_val)
                     # Pattern: ( +/- INT )
@@ -1069,7 +1163,7 @@ class Parser:
                         sign = -1 if self._advance().type == "MINUS" else 1
                         lead_val = sign * int(self._advance().value)
                         self._advance()  # )
-                        if ident in self.local_var_names:
+                        if is_local:
                             return _LocalRef(ident, lead_val)
                         return Var(ident, lead_val)
 
@@ -1086,7 +1180,7 @@ class Parser:
 
             # Identifier without parenthesis
             self._advance()
-            if ident in self.local_var_names:
+            if self._in_model_block and ident in self.local_var_names:
                 return _LocalRef(ident, 0)
             if ident in self.variables or ident in self.shocks:
                 return Var(ident, 0)
@@ -1167,69 +1261,73 @@ class Parser:
             self._expect("RPAREN")
         self._expect("SEMI")
 
-        # First pass: collect all '#' local variable names so parser knows them as _LocalRef
-        lookahead_pos = self.pos
-        while lookahead_pos < len(self.tokens):
-            tok = self.tokens[lookahead_pos]
-            if tok.type == "KEYWORD" and tok.value == "end":
-                break
-            if tok.type == "HASH":
-                next_tok = self.tokens[lookahead_pos + 1]
-                if next_tok.type in ("IDENT", "KEYWORD"):
-                    loc_name = str(next_tok.value)
-                    if loc_name in self.variables:
+        self._in_model_block = True
+        try:
+            # First pass: collect all '#' local variable names so parser knows them as _LocalRef
+            lookahead_pos = self.pos
+            while lookahead_pos < len(self.tokens):
+                tok = self.tokens[lookahead_pos]
+                if tok.type == "KEYWORD" and tok.value == "end":
+                    break
+                if tok.type == "HASH":
+                    next_tok = self.tokens[lookahead_pos + 1]
+                    if next_tok.type in ("IDENT", "KEYWORD"):
+                        loc_name = str(next_tok.value)
+                        if loc_name in self.variables:
+                            raise ModelError(
+                                f"Model-local variable '{loc_name}' collides with declared endogenous variable"
+                            )
+                        self.local_var_names.add(loc_name)
+                lookahead_pos += 1
+
+            # Second pass: parse equations and '#' definitions
+            saw_end = False
+            while self._curr().type != "EOF":
+                if self._curr().type == "KEYWORD" and self._curr().value == "end":
+                    self._advance()
+                    self._expect("SEMI")
+                    saw_end = True
+                    break
+
+                # Parse optional tags [name='...']
+                tags = self._parse_equation_tags()
+
+                # Check for model-local '#' variable definition
+                if self._match("HASH"):
+                    var_tok = self._expect("IDENT")
+                    name = str(var_tok.value)
+                    if name in self.variables:
                         raise ModelError(
-                            f"Model-local variable '{loc_name}' collides with declared endogenous variable"
+                            f"Model-local variable '{name}' collides with declared endogenous variable"
                         )
-                    self.local_var_names.add(loc_name)
-            lookahead_pos += 1
+                    self._expect("ASSIGN")
+                    expr = self.parse_expression()
+                    self._expect("SEMI")
+                    self.local_var_defs[name] = expr
+                    continue
 
-        # Second pass: parse equations and '#' definitions
-        saw_end = False
-        while self._curr().type != "EOF":
-            if self._curr().type == "KEYWORD" and self._curr().value == "end":
-                self._advance()
+                # Regular model equation: lhs = rhs; or expr;
+                lhs = self.parse_expression()
+                if self._match("ASSIGN"):
+                    rhs = self.parse_expression()
+                    eq_node = BinOp("-", lhs, rhs)
+                else:
+                    eq_node = lhs
                 self._expect("SEMI")
-                saw_end = True
-                break
 
-            # Parse optional tags [name='...']
-            tags = self._parse_equation_tags()
+                eq_idx = len(self.equations)
+                if tags:
+                    self.equation_tags[eq_idx] = tags
+                self.equations.append(eq_node)
 
-            # Check for model-local '#' variable definition
-            if self._match("HASH"):
-                var_tok = self._expect("IDENT")
-                name = str(var_tok.value)
-                if name in self.variables:
-                    raise ModelError(
-                        f"Model-local variable '{name}' collides with declared endogenous variable"
-                    )
-                self._expect("ASSIGN")
-                expr = self.parse_expression()
-                self._expect("SEMI")
-                self.local_var_defs[name] = expr
-                continue
-
-            # Regular model equation: lhs = rhs; or expr;
-            lhs = self.parse_expression()
-            if self._match("ASSIGN"):
-                rhs = self.parse_expression()
-                eq_node = BinOp("-", lhs, rhs)
-            else:
-                eq_node = lhs
-            self._expect("SEMI")
-
-            eq_idx = len(self.equations)
-            if tags:
-                self.equation_tags[eq_idx] = tags
-            self.equations.append(eq_node)
-
-        if not saw_end:
-            raise DynareParseError(
-                "Unclosed model block: expected 'end;'",
-                self._curr().line,
-                self._curr().col,
-            )
+            if not saw_end:
+                raise DynareParseError(
+                    "Unclosed model block: expected 'end;'",
+                    self._curr().line,
+                    self._curr().col,
+                )
+        finally:
+            self._in_model_block = False
 
     def _parse_assignment_block(self, block_name: str) -> dict[str, Node]:
         """Parse assignment block (initval, histval, endval, steady_state_model) storing AST expressions."""
@@ -1442,26 +1540,187 @@ class Parser:
             else:
                 self._advance()
 
-    def _parse_stoch_simul(self) -> None:
-        """Parse stoch_simul options."""
-        self._expect("KEYWORD", "stoch_simul")
+    def _parse_command_options_and_vars(
+        self, cmd_name: str
+    ) -> tuple[dict[str, Any], list[str]]:
+        """Parse ``cmd_name(opt1=val1, opt2=(a, b), flag) var1 var2;``."""
+        self._expect("KEYWORD", cmd_name)
+        opts: dict[str, Any] = {}
         if self._match("LPAREN"):
             while self._curr().type != "RPAREN" and self._curr().type != "EOF":
                 if self._curr().type in ("IDENT", "KEYWORD"):
                     opt_name = str(self._advance().value)
                     if self._match("ASSIGN"):
-                        if self._curr().type == "NUMBER":
-                            self.options[opt_name] = self._advance().value
+                        if self._match("LPAREN") or self._match("LBRACKET"):
+                            items: list[Any] = []
+                            while self._curr().type not in ("RPAREN", "RBRACKET", "EOF"):
+                                if self._curr().type == "COMMA":
+                                    self._advance()
+                                    continue
+                                if self._curr().type == "MINUS" and self._peek_token(1).type == "NUMBER":
+                                    self._advance()
+                                    items.append(-self._advance().value)
+                                elif self._curr().type == "NUMBER":
+                                    items.append(self._advance().value)
+                                elif self._curr().type in ("IDENT", "KEYWORD", "STRING"):
+                                    items.append(str(self._advance().value).strip("'\""))
+                                else:
+                                    self._advance()
+                            if not (self._match("RPAREN") or self._match("RBRACKET")):
+                                pass
+                            opts[opt_name] = items
+                        elif self._curr().type == "MINUS" and self._peek_token(1).type == "NUMBER":
+                            self._advance()
+                            opts[opt_name] = -self._advance().value
+                        elif self._curr().type == "NUMBER":
+                            opts[opt_name] = self._advance().value
                         elif self._curr().type in ("IDENT", "KEYWORD", "STRING"):
-                            self.options[opt_name] = self._advance().value
+                            val_tok = self._advance()
+                            # Could also be an expression like beta or 0.99
+                            opts[opt_name] = val_tok.value
                     else:
-                        self.options[opt_name] = True
+                        opts[opt_name] = True
+                else:
+                    self._advance()
                 self._match("COMMA")
             self._expect("RPAREN")
-        # Consume any trailing variable list until ';'
+
+        var_list: list[str] = []
         while self._curr().type != "SEMI" and self._curr().type != "EOF":
-            self._advance()
+            if self._curr().type in ("IDENT", "KEYWORD"):
+                var_list.append(str(self._advance().value))
+            else:
+                self._advance()
         self._expect("SEMI")
+        return opts, var_list
+
+    def _parse_stoch_simul(self) -> None:
+        """Parse stoch_simul options."""
+        opts, var_list = self._parse_command_options_and_vars("stoch_simul")
+        self.options.update(opts)
+        if var_list:
+            self.options["var_list"] = var_list
+        self.commands.append(
+            {"command": "stoch_simul", "options": dict(opts), "variables": var_list}
+        )
+
+    def _parse_planner_objective(self) -> None:
+        """Parse ``planner_objective expr;`` or ``planner_objective(expr);``."""
+        self._expect("KEYWORD", "planner_objective")
+        expr = self.parse_expression()
+        self._expect("SEMI")
+        self.planner_objective = expr
+        self.options["planner_objective"] = expr
+
+    def _parse_ramsey_policy(self, kw: str = "ramsey_policy") -> None:
+        """Parse ``ramsey_policy(...) var_list;`` or ``ramsey_model(...);``."""
+        opts, var_list = self._parse_command_options_and_vars(kw)
+        if var_list and "var_list" not in opts:
+            opts["var_list"] = var_list
+        self.ramsey_policy_options.update(opts)
+        self.options["ramsey_policy"] = dict(self.ramsey_policy_options)
+        if kw == "ramsey_policy":
+            self.commands.append(
+                {"command": "ramsey_policy", "options": dict(self.ramsey_policy_options), "variables": var_list}
+            )
+        else:
+            self.commands.append(
+                {"command": "ramsey_model", "options": dict(self.ramsey_policy_options), "variables": var_list}
+            )
+
+    def _parse_optim_weights_block(self) -> None:
+        """Parse ``optim_weights; var expr; var1, var2 expr; end;``."""
+        self._expect("KEYWORD", "optim_weights")
+        self._expect("SEMI")
+        while self._curr().type != "EOF":
+            if self._curr().type == "KEYWORD" and self._curr().value == "end":
+                self._advance()
+                self._expect("SEMI")
+                break
+            if self._curr().type == "SEMI":
+                self._advance()
+                continue
+            if self._curr().type in ("IDENT", "KEYWORD"):
+                v1 = str(self._advance().value)
+                if self._match("COMMA"):
+                    v2 = str(self._expect("IDENT").value)
+                    self._match("ASSIGN")
+                    expr = self.parse_expression()
+                    self._expect("SEMI")
+                    self.optim_weights[(v1, v2)] = expr
+                else:
+                    self._match("ASSIGN")
+                    expr = self.parse_expression()
+                    self._expect("SEMI")
+                    self.optim_weights[v1] = expr
+            else:
+                self._advance()
+
+    def _parse_osr_params_bounds_block(self) -> None:
+        """Parse ``osr_params_bounds; param, lb, ub; end;``."""
+        self._expect("KEYWORD", "osr_params_bounds")
+        self._expect("SEMI")
+        while self._curr().type != "EOF":
+            if self._curr().type == "KEYWORD" and self._curr().value == "end":
+                self._advance()
+                self._expect("SEMI")
+                break
+            if self._curr().type == "SEMI":
+                self._advance()
+                continue
+            if self._curr().type in ("IDENT", "KEYWORD"):
+                pname = str(self._advance().value)
+                self._expect("COMMA")
+                lb_expr = self.parse_expression()
+                self._expect("COMMA")
+                ub_expr = self.parse_expression()
+                self._expect("SEMI")
+                self.osr_params_bounds[pname] = (lb_expr, ub_expr)
+            else:
+                self._advance()
+
+    def _parse_osr_command(self) -> None:
+        """Parse ``osr(...) var_list;``."""
+        opts, var_list = self._parse_command_options_and_vars("osr")
+        if var_list:
+            opts["var_list"] = var_list
+        self.osr_options.update(opts)
+        self.options["osr"] = dict(self.osr_options)
+        self.commands.append(
+            {"command": "osr", "options": dict(self.osr_options), "variables": var_list}
+        )
+
+    def _parse_calib_smoother_command(self) -> None:
+        """Parse ``calib_smoother(...) var_list;``."""
+        opts, var_list = self._parse_command_options_and_vars("calib_smoother")
+        if var_list:
+            opts["var_list"] = var_list
+        self.calib_smoother_options.update(opts)
+        self.options["calib_smoother"] = dict(self.calib_smoother_options)
+        self.commands.append(
+            {"command": "calib_smoother", "options": dict(self.calib_smoother_options), "variables": var_list}
+        )
+
+    def _parse_shock_decomposition_command(self) -> None:
+        """Parse ``shock_decomposition(...) var_list;``."""
+        opts, var_list = self._parse_command_options_and_vars("shock_decomposition")
+        if var_list:
+            opts["var_list"] = var_list
+        self.shock_decomposition_options.update(opts)
+        self.options["shock_decomposition"] = dict(self.shock_decomposition_options)
+        self.commands.append(
+            {"command": "shock_decomposition", "options": dict(self.shock_decomposition_options), "variables": var_list}
+        )
+
+    def _parse_perfect_foresight_command(self, kw: str) -> None:
+        """Parse ``perfect_foresight_setup(...);``, ``perfect_foresight_solver(...);``, or ``simul(...);``."""
+        opts, var_list = self._parse_command_options_and_vars(kw)
+        self.perfect_foresight_options.update(opts)
+        self.options["perfect_foresight"] = dict(self.perfect_foresight_options)
+        if kw in ("perfect_foresight_solver", "simul"):
+            self.commands.append(
+                {"command": "perfect_foresight_solver", "options": dict(self.perfect_foresight_options), "variables": var_list}
+            )
 
     def _parse_shock_groups_block(self) -> None:
         """Parse Dynare shock_groups; or shock_groups(name = ...); block."""
@@ -1801,8 +2060,10 @@ class Parser:
                     self.initval_defs = self._parse_assignment_block("initval")
                 elif t.value == "histval":
                     self.histval_defs = self._parse_assignment_block("histval")
+                    self.commands.append({"command": "histval"})
                 elif t.value == "endval":
                     self.endval_defs = self._parse_assignment_block("endval")
+                    self.commands.append({"command": "endval"})
                 elif t.value == "steady_state_model":
                     self.steady_state_defs = self._parse_assignment_block(
                         "steady_state_model"
@@ -1811,6 +2072,29 @@ class Parser:
                     self._parse_shocks_block()
                 elif t.value == "stoch_simul":
                     self._parse_stoch_simul()
+                elif t.value == "planner_objective":
+                    self._parse_planner_objective()
+                elif t.value in ("ramsey_policy", "ramsey_model"):
+                    self._parse_ramsey_policy(str(t.value))
+                elif t.value == "optim_weights":
+                    self._parse_optim_weights_block()
+                elif t.value == "osr_params":
+                    self._advance()
+                    self.osr_params.extend(self._parse_id_list())
+                elif t.value == "osr_params_bounds":
+                    self._parse_osr_params_bounds_block()
+                elif t.value == "osr":
+                    self._parse_osr_command()
+                elif t.value == "calib_smoother":
+                    self._parse_calib_smoother_command()
+                elif t.value == "shock_decomposition":
+                    self._parse_shock_decomposition_command()
+                elif t.value in (
+                    "perfect_foresight_setup",
+                    "perfect_foresight_solver",
+                    "simul",
+                ):
+                    self._parse_perfect_foresight_command(str(t.value))
                 elif t.value == "shock_groups":
                     self._parse_shock_groups_block()
                 elif t.value == "hetagent_block":
@@ -1870,6 +2154,28 @@ class Parser:
             if not progress:
                 break
         self.param_values = eval_scope
+
+        # Resolve parameter references inside command options (e.g. planner_discount=beta)
+        for opt_dict in (
+            self.ramsey_policy_options,
+            self.osr_options,
+            self.calib_smoother_options,
+            self.shock_decomposition_options,
+            self.perfect_foresight_options,
+        ):
+            for k_opt, v_opt in list(opt_dict.items()):
+                if isinstance(v_opt, str) and v_opt in self.param_values:
+                    opt_dict[k_opt] = float(self.param_values[v_opt])
+
+        # Evaluate osr_params_bounds expressions
+        evaluated_osr_bounds: dict[str, tuple[float, float]] = {}
+        for pname, (lb_node, ub_node) in self.osr_params_bounds.items():
+            try:
+                lb_val = float(lb_node.eval({}, self.param_values))
+                ub_val = float(ub_node.eval({}, self.param_values))
+                evaluated_osr_bounds[pname] = (lb_val, ub_val)
+            except Exception:
+                pass
 
         # ---------------------------------------------------------------------
         # Post-Processing: Model-Local '#' Variables Inlining & Cycle Detection
@@ -1941,14 +2247,22 @@ class Parser:
                 inlined_equations.append(inlined_eq)
             self.equations = inlined_equations
 
+            if self.planner_objective is not None:
+                self.planner_objective = _substitute_locals(
+                    self.planner_objective, resolved_locals
+                ).simplify()
+
         # ---------------------------------------------------------------------
-        # Post-Processing: Multi-Period Lead/Lag Expansion (|lead| >= 2)
+        # Post-Processing: Multi-Period Lead/Lag & Dated Exogenous Shock Expansion
         # ---------------------------------------------------------------------
         lag_leads_needed: set[tuple[str, int]] = set()
+        exo_lag_leads_needed: set[tuple[str, int]] = set()
         for eq in self.equations:
             for v_name, v_lead in eq.variables():
                 if abs(v_lead) >= 2 and v_name in self.variables:
                     lag_leads_needed.add((v_name, v_lead))
+                elif v_lead != 0 and v_name in self.shocks:
+                    exo_lag_leads_needed.add((v_name, v_lead))
 
         aux_vars: list[str] = []
         aux_eqs: list[Node] = []
@@ -1985,6 +2299,70 @@ class Parser:
                         aux_eqs.append(aux_eq)
                 replacements[(v, offset)] = Var(f"AUX_LEAD_{v}_{k-1}", 1)
 
+        # Dated exogenous shocks e(-k) and e(+k) (including through '#' model-local variables)
+        for s_name, offset in sorted(exo_lag_leads_needed, key=lambda x: (x[0], abs(x[1]))):
+            if offset <= -1:
+                k = abs(offset)
+                for step in range(1, k):
+                    aux_name = f"AUX_EXO_LAG_{s_name}_{step}"
+                    if aux_name not in aux_vars:
+                        aux_vars.append(aux_name)
+                        auxiliary[aux_name] = {
+                            "root": s_name,
+                            "kind": "exo_lag",
+                            "step": step,
+                        }
+                        prev_node = (
+                            Var(s_name, 0)
+                            if step == 1
+                            else Var(f"AUX_EXO_LAG_{s_name}_{step-1}", -1)
+                        )
+                        aux_eq = BinOp("-", Var(aux_name, 0), prev_node)
+                        aux_eqs.append(aux_eq)
+                # Final auxiliary variable AUX_EXO_LAG_{s}_{k} only needs to exist if k >= 1
+                # Wait: for e(-1), AUX_EXO_LAG_{s}_1(0) = s(0), and e(-1) -> AUX_EXO_LAG_{s}_1(-1)!
+                # For e(-k), we need steps 1..k, where step 1 = s(0), step j = step_{j-1}(-1),
+                # and e(-k) -> AUX_EXO_LAG_{s}_{k}(-1) (Wait: if step 1 = s(0) at t, then step 1(-1) = s(-1);
+                # step 2(0) = step 1(-1) = s(-1), so step 2(-1) = s(-2);
+                # step k(0) = step_{k-1}(-1) = s(-(k-1)), so step k(-1) = s(-k)!)
+                aux_k = f"AUX_EXO_LAG_{s_name}_{k}"
+                if aux_k not in aux_vars:
+                    aux_vars.append(aux_k)
+                    auxiliary[aux_k] = {
+                        "root": s_name,
+                        "kind": "exo_lag",
+                        "step": k,
+                    }
+                    prev_node = (
+                        Var(s_name, 0)
+                        if k == 1
+                        else Var(f"AUX_EXO_LAG_{s_name}_{k-1}", -1)
+                    )
+                    aux_eq = BinOp("-", Var(aux_k, 0), prev_node)
+                    aux_eqs.append(aux_eq)
+                replacements[(s_name, offset)] = Var(aux_k, -1)
+            elif offset >= 1:
+                k = offset
+                for step in range(1, k + 1):
+                    aux_name = f"AUX_EXO_LEAD_{s_name}_{step}"
+                    if aux_name not in aux_vars:
+                        aux_vars.append(aux_name)
+                        auxiliary[aux_name] = {
+                            "root": s_name,
+                            "kind": "exo_lead",
+                            "step": step,
+                        }
+                        prev_node = (
+                            Var(s_name, 0)
+                            if step == 1
+                            else Var(f"AUX_EXO_LEAD_{s_name}_{step-1}", 1)
+                        )
+                        aux_eq = BinOp("-", Var(aux_name, 0), prev_node)
+                        aux_eqs.append(aux_eq)
+                replacements[(s_name, offset)] = Var(
+                    f"AUX_EXO_LEAD_{s_name}_{k}", 1
+                )
+
         if replacements:
             new_eqs = [_substitute_vars(eq, replacements) for eq in self.equations]
             self.equations = new_eqs + aux_eqs
@@ -2019,7 +2397,7 @@ class Parser:
                     pass
             histval_values = {
                 v: h_scope[v]
-                for v in (self.variables + self.shocks + self.det_shocks + self.parameters)
+                for v in self.histval_defs
                 if v in h_scope
             }
 
@@ -2034,7 +2412,7 @@ class Parser:
                     pass
             endval_values = {
                 v: e_scope[v]
-                for v in (self.variables + self.shocks + self.det_shocks + self.parameters)
+                for v in self.endval_defs
                 if v in e_scope
             }
 
@@ -2167,6 +2545,16 @@ class Parser:
             named_shock_groups=self.named_shock_groups,
             hetagent_block=self.hetagent_config,
             markov_switching_config=self.markov_switching_config,
+            planner_objective=self.planner_objective,
+            ramsey_policy_options=self.ramsey_policy_options,
+            optim_weights=self.optim_weights,
+            osr_params=self.osr_params,
+            osr_params_bounds=evaluated_osr_bounds,
+            osr_options=self.osr_options,
+            calib_smoother_options=self.calib_smoother_options,
+            shock_decomposition_options=self.shock_decomposition_options,
+            perfect_foresight_options=self.perfect_foresight_options,
+            commands=self.commands,
         )
 
 

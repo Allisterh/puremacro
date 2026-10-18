@@ -3967,6 +3967,119 @@ class ParityDashboardResult:
         return target_ax
 
 
+@dataclass(frozen=True)
+class DynareCommandResults:
+    """Structured container for executed Dynare .mod file commands.
+
+    Attributes
+    ----------
+    stoch_simul : StochSimulResult or None
+        Result of ``stoch_simul`` command if present in the .mod file.
+    ramsey : Any or None
+        Result of ``ramsey_policy`` / ``ramsey_model`` command (:class:`RamseyResult`).
+    osr : OSRResult or None
+        Result of ``osr`` command (:class:`OSRResult`).
+    smoother : SmootherResult or None
+        Result of ``calib_smoother`` command (:class:`SmootherResult`).
+    shock_decomposition : Any or None
+        Result of ``shock_decomposition`` command (:class:`ShockDecompResult` or
+        :class:`ShockDecompositionResult`).
+    histval : dict[str, float] or None
+        Parsed initial historical values from ``histval; ... end;``.
+    endval : dict[str, float] or None
+        Parsed terminal values from ``endval; ... end;``.
+    perfect_foresight : Any or None
+        Result of ``perfect_foresight_solver`` / ``simul`` command
+        (:class:`PerfectForesightResult` or :class:`MCPResult`).
+    commands_executed : tuple[str, ...]
+        Ordered tuple of command names executed from the .mod file.
+    """
+
+    stoch_simul: StochSimulResult | None = None
+    ramsey: Any | None = None
+    osr: OSRResult | None = None
+    smoother: SmootherResult | None = None
+    shock_decomposition: Any | None = None
+    histval: dict[str, float] | None = None
+    endval: dict[str, float] | None = None
+    perfect_foresight: Any | None = None
+    commands_executed: tuple[str, ...] = ()
+
+    @property
+    def calib_smoother(self) -> SmootherResult | None:
+        """Alias for ``smoother``."""
+        return self.smoother
+
+    def __getitem__(self, key: str) -> Any:
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(f"Unknown command result {key!r} in DynareCommandResults")
+
+    def to_frame(self) -> pd.DataFrame:
+        """Return a summary DataFrame of executed commands and their status."""
+        attr_map = {
+            "calib_smoother": "smoother",
+            "ramsey_policy": "ramsey",
+            "ramsey_model": "ramsey",
+            "perfect_foresight_solver": "perfect_foresight",
+        }
+        rows = []
+        for cmd in self.commands_executed:
+            val = getattr(self, attr_map.get(cmd, cmd), None)
+            rows.append({
+                "command": cmd,
+                "result_type": type(val).__name__ if val is not None else "None",
+                "executed": val is not None,
+            })
+        return pd.DataFrame(rows)
+
+    def summary(self) -> str:
+        """Render a human-readable summary of all executed .mod commands."""
+        lines = [
+            "=" * 72,
+            "  Dynare .mod Command Execution Summary",
+            "=" * 72,
+            f"Commands executed: {', '.join(self.commands_executed) if self.commands_executed else '(none)'}",
+        ]
+        if self.histval:
+            lines.append(f"  histval             : {self.histval}")
+        if self.stoch_simul is not None:
+            lines.append(f"  stoch_simul         : order={self.stoch_simul.order}, irfs={len(self.stoch_simul.irfs)}")
+        if self.ramsey is not None:
+            lines.append(
+                f"  ramsey_policy       : discount={getattr(self.ramsey, 'planner_discount', 0.99)}, "
+                f"multipliers={len(getattr(self.ramsey, 'multipliers', ()))}"
+            )
+        if self.osr is not None:
+            lines.append(
+                f"  osr                 : converged={self.osr.converged}, "
+                f"loss_opt={self.osr.loss_opt:.6g}, optimal_params={self.osr.optimal_params}"
+            )
+        if self.smoother is not None:
+            lines.append(f"  calib_smoother      : log_likelihood={self.smoother.log_likelihood:.4f}")
+        if self.shock_decomposition is not None:
+            lines.append(f"  shock_decomposition : {type(self.shock_decomposition).__name__}")
+        if self.perfect_foresight is not None:
+            lines.append(
+                f"  perfect_foresight   : converged={getattr(self.perfect_foresight, 'converged', None)}, "
+                f"residual_norm={getattr(self.perfect_foresight, 'residual_norm', float('nan')):.3e}"
+            )
+        lines.append("=" * 72)
+        return "\n".join(lines)
+
+    def to_markdown(self, **kwargs: Any) -> str:
+        from puremacro.reports import _df_to_markdown
+        return _df_to_markdown(self.to_frame(), **kwargs)
+
+    def to_latex(self, **kwargs: Any) -> str:
+        from puremacro.reports import _df_to_latex
+        return _df_to_latex(self.to_frame(), **kwargs)
+
+    def to_typst(self, **kwargs: Any) -> str:
+        from puremacro.reports import _df_to_typst
+        return _df_to_typst(self.to_frame(), **kwargs)
+
+
 
 
 

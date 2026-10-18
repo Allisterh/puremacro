@@ -116,6 +116,7 @@ from puremacro.dsge._results import (
     ModelDiagnosticsResult,
     IdentificationResult,
     OSRResult,
+    DynareCommandResults,
 )
 from puremacro.dsge._moments import conditional_fevd, first_order_moments
 
@@ -131,6 +132,7 @@ __all__ = [
     "ModelDiagnosticsResult",
     "IdentificationResult",
     "OSRResult",
+    "DynareCommandResults",
 ]
 
 # Complex-step size. Any value small enough that h**2 underflows relative
@@ -1491,6 +1493,16 @@ class LinearModel:
                     f"initial_state length ({len(init_arr)}) must equal n_states ({self.n_states}) "
                     f"or n_vars ({len(self.variables)})"
                 )
+        elif actual_burn == 0 and getattr(self, "_histval", None):
+            histval_map = getattr(self, "_histval", {})
+            x = np.array(
+                [
+                    float(histval_map.get(s, self.steady_state[s]))
+                    - float(self.steady_state[s])
+                    for s in self.states
+                ],
+                dtype=float,
+            )
         else:
             x = np.zeros(self.n_states)
         for t in range(total):
@@ -1501,8 +1513,8 @@ class LinearModel:
 
     def stoch_simul(
         self,
-        *,
         order: int = 1,
+        *,
         irf: int = 40,
         periods: int = 0,
         sigma: float | Mapping[str, float] | None = None,
@@ -1516,7 +1528,7 @@ class LinearModel:
         contemporaneous_correlation: bool = True,
         ar: int | None = None,
         qz_criterium: float = 1.0 + 1e-8,
-        pruning: bool = False,
+        pruning: bool | None = None,
     ) -> StochSimulResult:
         """Execute Dynare-compatible stoch_simul routine.
 
@@ -1529,9 +1541,10 @@ class LinearModel:
         Parameters
         ----------
         order : int, default 1
-            Approximation order. If order=2, the second-order solution is
-            computed with the requested shock covariance and the call is
-            delegated to :meth:`PrunedDSGESolution.stoch_simul`.
+            Approximation order (1, 2, or 3). If order=2 or 3, the higher-order
+            solution is computed with the requested shock covariance and the call is
+            delegated to :meth:`PrunedDSGESolution.stoch_simul` or
+            :meth:`Order3PrunedSolution.stoch_simul`.
         irf : int, default 40
             Horizon for impulse response functions. Set to 0 to skip IRFs.
         periods : int, default 0
@@ -1562,11 +1575,12 @@ class LinearModel:
             Number of autocorrelation lags (overrides ``lags`` if specified).
         qz_criterium : float, default 1.0 + 1e-8
             Eigenvalue cutoff for generalized Schur decomposition.
-        pruning : bool, default False
+        pruning : bool, optional
             At order 2, report the exact moments of the pruned solution, as
             Dynare's ``stoch_simul(order=2, pruning)`` does, instead of
-            first-order second moments with the second-order mean. Simulations
-            at order 2 are always pruned. No effect at order 1.
+            first-order second moments with the second-order mean (default False
+            at order 2, True at order 3). Simulations at orders 2 and 3 are
+            always pruned. No effect at order 1.
 
         Returns
         -------
@@ -1574,6 +1588,7 @@ class LinearModel:
             Container holding dr, theoretical_moments, simulated_moments, irfs, and export methods.
         """
         if order == 2:
+            eff_pruning = False if pruning is None else bool(pruning)
             sol2 = self.solve_second_order(shock_cov=self._shock_covariance(sigma))
             return sol2.stoch_simul(
                 order=2,
@@ -1583,10 +1598,27 @@ class LinearModel:
                 seed=seed,
                 burn=burn,
                 lags=lags if ar is None else int(ar),
-                pruning=pruning,
+                pruning=eff_pruning,
+            )
+        elif order == 3:
+            eff_pruning = True if pruning is None else bool(pruning)
+            if not eff_pruning:
+                raise NotImplementedError(
+                    "order=3 solutions are simulated with pruning, and Dynare reports no theoretical "
+                    "moments at order 3 without it. Use pruning=True (the default at order 3)."
+                )
+            sol3 = self.solve_third_order(shock_cov=self._shock_covariance(sigma))
+            return sol3.stoch_simul(
+                order=3,
+                irf=irf,
+                periods=periods,
+                sigma=1.0,
+                seed=seed,
+                burn=burn,
+                lags=lags if ar is None else int(ar),
             )
         elif order != 1:
-            raise ValueError(f"unsupported perturbation order {order}; must be 1 or 2")
+            raise ValueError(f"unsupported perturbation order {order}; must be 1, 2, or 3")
 
         if periods == 0 and (one_sided_hp_filter is not None and one_sided_hp_filter is not False):
             raise ValueError(
@@ -1802,32 +1834,155 @@ class LinearModel:
             )
         return "\n".join(lines)
 
+    def steady(
+        self,
+        params: Mapping[str, float] | None = None,
+        *,
+        tol: float = 1e-8,
+        solve_algo: str = "block",
+        homotopy: Mapping[str, tuple[float, float]] | None = None,
+        homotopy_steps: int = 10,
+    ) -> pd.Series:
+        """Evaluate or solve for the deterministic steady state at ``params``.
+
+        When the model carries a compiled ``steady_state_model; ... end;``
+        evaluator (``_steady_state_model_fn``), it is evaluated first in O(1)
+        time and checked against the dynamic equations. If the residual exceeds
+        ``tol``, or if no analytic block exists, falls back to nonlinear
+        root-finding (:func:`puremacro.dsge.steady.steady`) with optional
+        homotopy continuation.
+        """
+        variables = list(self.variables)
+        shocks = list(self.shocks)
+        merged = dict(self._params or {})
+        if params:
+            merged.update({str(k): float(v) for k, v in dict(params).items()})
+
+        ss_fn = getattr(self, "_steady_state_model_fn", None)
+        if ss_fn is None and hasattr(self, "_dag") and self._dag is not None:
+            if getattr(self._dag, "steady_state_model", None):
+                ss_fn = getattr(self._dag, "_steady_state_model_fn", None)
+
+        def _eval_resid(y_arr: np.ndarray) -> float:
+            try:
+                par_vec = _Vec(list(merged.keys()), list(merged.values()), what="parameter")
+                y_v = _Vec(variables, y_arr, what="variable")
+                e_0 = _Vec(shocks, np.zeros(len(shocks)), what="shock")
+                if self._dynare_equations is not None:
+                    res = np.asarray(
+                        self._dynare_equations(y_v, y_v, y_v, e_0, par_vec),
+                        dtype=float,
+                    )
+                elif self._equations is not None:
+                    res = np.asarray(
+                        self._equations(y_v, y_v, e_0, par_vec),
+                        dtype=float,
+                    )
+                else:
+                    return 0.0
+                if res.shape != (len(variables),) or not np.all(np.isfinite(res)):
+                    return float("inf")
+                return float(np.max(np.abs(res))) if res.size else 0.0
+            except Exception:
+                return float("inf")
+
+        cand_arr: np.ndarray | None = None
+        if ss_fn is not None:
+            try:
+                cand_arr = np.asarray(ss_fn(merged), dtype=float)
+                if cand_arr.shape == (len(variables),) and _eval_resid(cand_arr) <= tol:
+                    return pd.Series(cand_arr, index=variables, name="steady_state")
+            except Exception:
+                cand_arr = None
+
+        curr_arr = np.array([float(self.steady_state[v]) for v in variables], dtype=float)
+        if cand_arr is None and _eval_resid(curr_arr) <= tol:
+            return pd.Series(curr_arr, index=variables, name="steady_state")
+
+        guess_arr = (
+            cand_arr
+            if (cand_arr is not None and cand_arr.shape == (len(variables),) and np.all(np.isfinite(cand_arr)))
+            else curr_arr
+        )
+        guess_dict = {v: float(guess_arr[i]) for i, v in enumerate(variables)}
+        eq_target = self._dynare_equations if self._dynare_equations is not None else self._equations
+        if eq_target is None:
+            return pd.Series(guess_arr, index=variables, name="steady_state")
+
+        from .steady import steady as _solve_ss
+
+        ss_arr, _ = _solve_ss(
+            eq_target,
+            variables=variables,
+            guess=guess_dict,
+            params=merged,
+            shocks=shocks,
+            solve_algo=solve_algo,
+            homotopy=homotopy,
+            homotopy_steps=homotopy_steps,
+            tol=tol,
+            allow_singular=getattr(self, "_allow_singular", None),
+        )
+        return pd.Series(ss_arr, index=variables, name="steady_state")
+
     def solve(
         self,
         order: int = 1,
         *,
         shock_cov: np.ndarray | None = None,
         qz_criterium: float | None = None,
+        pruning: bool = True,
+        params: Mapping[str, float] | None = None,
+        tol: float = 1e-8,
     ):
-        """Return the solution at the requested perturbation order.
+        """Return the perturbation solution at ``order`` 1, 2 or 3.
 
-        Parameters
-        ----------
-        order : {1, 2}, default 1
-            ``1`` returns this (already solved) first-order model itself (or re-solved
-            if qz_criterium is specified);
-            ``2`` returns the pruned second-order solution from
-            :meth:`solve_second_order`.
-        shock_cov : np.ndarray, optional
-            Innovation covariance used for the second-order risk correction.
-            Defaults to the declared shock covariance, else the identity.
-        qz_criterium : float, optional
-            Stability threshold override for generalised Schur (QZ) root sorting.
+        ``order=1`` returns the solved first-order model itself (re-solved when
+        ``qz_criterium`` or ``params`` is given); ``order=2`` returns the pruned
+        second-order solution (:class:`~puremacro.dsge.pruning.PrunedDSGESolution`)
+        and ``order=3`` the pruned third-order solution
+        (:class:`~puremacro.dsge.pruning.Order3PrunedSolution`). ``shock_cov``
+        overrides the declared innovation covariance used in the risk terms.
 
-        Returns
-        -------
-        LinearModel | PrunedDSGESolution
+        ``pruning`` mirrors Dynare's option: higher-order solutions are always
+        simulated with pruning (Kim, Kim, Schaumburg and Sims 2008; Andreasen,
+        Fernandez-Villaverde and Rubio-Ramirez 2018), so ``pruning=False`` raises
+        ``NotImplementedError`` at orders 2 and 3 and has no effect at order 1.
         """
+        if order >= 2 and not pruning:
+            raise NotImplementedError(
+                f"order={order} solutions are simulated with pruning; unpruned higher-order "
+                "simulation is not implemented. Use pruning=True (the default)."
+            )
+        if params is not None:
+            if self._dynare_equations is not None:
+                from puremacro.dsge.dynare import _resolve_dynare_model
+
+                m_resolved = _resolve_dynare_model(
+                    self,
+                    params,
+                    qz_criterium=qz_criterium,
+                    shock_cov=shock_cov,
+                    tol=tol,
+                )
+            elif self._equations is not None:
+                m_resolved = _resolve_build_model(
+                    self,
+                    params,
+                    qz_criterium=qz_criterium,
+                    shock_cov=shock_cov,
+                )
+            else:
+                raise ModelError("Cannot re-solve model with new params without equations.")
+            if order == 1:
+                return m_resolved
+            return m_resolved.solve(
+                order=order,
+                shock_cov=shock_cov,
+                qz_criterium=qz_criterium,
+                pruning=pruning,
+            )
+
         if order == 1:
             if qz_criterium is None and shock_cov is None:
                 return self
@@ -1849,7 +2004,6 @@ class LinearModel:
                     sol = KleinSolution(
                         G=G, F=F, N=N, L=L, eu=tuple(sol_full.eu), eigenvalues=sol_full.eigenvalues,
                     )
-                    import dataclasses
                     res = dataclasses.replace(self, solution=sol)
                     object.__setattr__(res, "_qz_criterium", qz_criterium)
                     return res
@@ -1857,20 +2011,374 @@ class LinearModel:
                     sol = klein_solve(
                         self.A, self.B, n_pre=len(self.states), C=self.C, strict=True, div=div,
                     )
-                    import dataclasses
                     res = dataclasses.replace(self, solution=sol)
                     object.__setattr__(res, "_qz_criterium", qz_criterium)
                     return res
             return self
         if order == 2:
             return self.solve_second_order(shock_cov=shock_cov)
-        raise ValueError(f"unsupported perturbation order {order}; must be 1 or 2")
+        if order == 3:
+            return self.solve_third_order(shock_cov=shock_cov)
+        raise ValueError(f"unsupported perturbation order {order}; must be 1, 2, or 3")
+
+    solve_perturbation = solve
 
     @property
     def shock_groups(self) -> dict[str, list[str]]:
         """Dictionary of parsed shock groups if defined in .mod file."""
         return getattr(self, "_shock_groups", {}) or (
             getattr(self._dag, "shock_groups", {}) if hasattr(self, "_dag") and self._dag else {}
+        )
+
+    @property
+    def histval(self) -> dict[str, float] | None:
+        """Historical initial values declared in a ``histval; ... end;`` block."""
+        return getattr(self, "_histval", None) or (
+            getattr(self._dag, "histval_values", None) if hasattr(self, "_dag") and self._dag else None
+        )
+
+    @property
+    def endval(self) -> dict[str, float] | None:
+        """Terminal values declared in an ``endval; ... end;`` block."""
+        return getattr(self, "_endval", None) or (
+            getattr(self._dag, "endval_values", None) if hasattr(self, "_dag") and self._dag else None
+        )
+
+    @property
+    def mod_commands(self) -> list[dict[str, Any]]:
+        """List of parsed native Dynare command specifications from the ``.mod`` file."""
+        dag = getattr(self, "_dag", None)
+        if dag is not None and getattr(dag, "commands", None):
+            return list(dag.commands)
+        opts = getattr(self, "_mod_options", None) or {}
+        if "commands" in opts:
+            return list(opts["commands"])
+        return []
+
+    def ramsey_policy(
+        self,
+        objective: Any | None = None,
+        *,
+        planner_discount: float | None = None,
+        instruments: Sequence[str] | str | None = None,
+        strict: bool = False,
+        multiplier_prefix: str = "mult_",
+    ):
+        """Solve the linear-quadratic Ramsey optimal commitment policy problem.
+
+        Defaults ``objective``, ``planner_discount``, and ``instruments`` from
+        the ``planner_objective`` and ``ramsey_policy`` declarations of the
+        ``.mod`` file when present.
+        """
+        from puremacro.dsge.ramsey import ramsey_model
+
+        dag = getattr(self, "_dag", None)
+        if (
+            objective is None
+            and planner_discount is None
+            and instruments is None
+            and getattr(self, "_ramsey_result", None) is not None
+        ):
+            return getattr(self, "_ramsey_result")
+
+        ramsey_opts = (
+            dict(getattr(dag, "ramsey_policy_options", {}) or {})
+            if dag is not None
+            else dict((self._mod_options or {}).get("ramsey_policy", {}) or {})
+        )
+        eff_obj = objective
+        if eff_obj is None and dag is not None:
+            eff_obj = getattr(dag, "planner_objective", None)
+        if eff_obj is None and self._mod_options:
+            eff_obj = self._mod_options.get("planner_objective")
+        if eff_obj is None:
+            raise ModelError(
+                "ramsey_policy() requires a planner_objective; pass objective=... "
+                "or declare `planner_objective ...;` in the .mod file."
+            )
+
+        eff_beta = planner_discount
+        if eff_beta is None:
+            raw_beta = ramsey_opts.get("planner_discount", 0.99)
+            if isinstance(raw_beta, str):
+                eff_beta = float((self._params or {}).get(raw_beta, 0.99))
+            else:
+                eff_beta = float(raw_beta)
+
+        eff_inst = instruments
+        if eff_inst is None:
+            eff_inst = ramsey_opts.get("instruments")
+
+        target_model: Any = self
+        if dag is not None and len(dag.equations) < len(dag.variables):
+            ss_sub = {
+                v: float(self.steady_state[v])
+                for v in dag.variables
+                if v in self.steady_state.index
+            }
+            target_model = dataclasses.replace(
+                dag,
+                parameter_values=dict(self._params or dag.parameter_values),
+                steady_state=ss_sub or dag.steady_state,
+            )
+
+        return ramsey_model(
+            target_model,
+            objective=eff_obj,
+            planner_discount=float(eff_beta),
+            instruments=eff_inst,
+            strict=strict,
+            multiplier_prefix=multiplier_prefix,
+        )
+
+    def execute_mod_commands(
+        self,
+        data: pd.DataFrame | None = None,
+        *,
+        sigma: float | Mapping[str, float] | None = None,
+    ) -> DynareCommandResults:
+        """Execute all native Dynare command blocks declared in the ``.mod`` file.
+
+        Dispatches parsed ``stoch_simul``, ``ramsey_policy`` / ``planner_objective``,
+        ``osr`` / ``osr_params`` / ``optim_weights``, ``calib_smoother``,
+        ``shock_decomposition``, ``histval`` / ``endval``, and
+        ``perfect_foresight_solver`` commands to their corresponding solvers.
+
+        Parameters
+        ----------
+        data : pd.DataFrame, optional
+            Observable time-series DataFrame required when the ``.mod`` file
+            contains ``calib_smoother`` or ``shock_decomposition`` commands.
+        sigma : float or Mapping[str, float], optional
+            Optional shock standard deviation override.
+
+        Returns
+        -------
+        DynareCommandResults
+            Structured results container with attributes ``.stoch_simul``,
+            ``.ramsey``, ``.osr``, ``.smoother``, ``.shock_decomposition``,
+            ``.histval``, ``.endval``, and ``.perfect_foresight``.
+        """
+        dag = getattr(self, "_dag", None)
+        cmd_list = self.mod_commands
+        cmd_names = [c.get("command") for c in cmd_list]
+
+        stoch_res = None
+        ramsey_res = getattr(self, "_ramsey_result", None)
+        osr_res = None
+        smoother_res = None
+        decomp_res = None
+        pf_res = None
+        histval_dict = dict(self.histval) if self.histval else None
+        endval_dict = dict(self.endval) if self.endval else None
+        executed: list[str] = []
+
+        if histval_dict is not None:
+            executed.append("histval")
+        if endval_dict is not None:
+            executed.append("endval")
+
+        # 1. Ramsey policy
+        has_ramsey = (
+            "ramsey_policy" in cmd_names
+            or "ramsey_model" in cmd_names
+            or (dag is not None and getattr(dag, "planner_objective", None) is not None)
+            or ramsey_res is not None
+        )
+        if has_ramsey:
+            if ramsey_res is None:
+                ramsey_res = self.ramsey_policy()
+            executed.append("ramsey_policy")
+
+        # 2. Optimal Simple Rules (OSR)
+        has_osr = "osr" in cmd_names or (
+            dag is not None
+            and bool(getattr(dag, "osr_params", None))
+            and bool(getattr(dag, "optim_weights", None))
+        )
+        if has_osr:
+            if dag is not None:
+                rule_params = list(dag.osr_params)
+                raw_weights = dag.evaluate_optim_weights(self._params)
+                bounds = dict(dag.osr_params_bounds) if dag.osr_params_bounds else None
+                osr_opts = dict(dag.osr_options)
+            else:
+                opts = self._mod_options or {}
+                rule_params = list(opts.get("osr_params", []))
+                raw_weights = dict(opts.get("optim_weights", {}))
+                bounds = opts.get("osr_params_bounds")
+                osr_opts = dict(opts.get("osr", {}))
+
+            weights_clean: dict[str, float] = {}
+            for k, v in raw_weights.items():
+                if isinstance(k, str):
+                    weights_clean[k] = float(v)
+                elif isinstance(k, tuple) and len(k) == 2 and k[0] == k[1]:
+                    weights_clean[str(k[0])] = float(v)
+            optimizer = str(osr_opts.get("optimizer", "Nelder-Mead"))
+            maxiter = int(osr_opts.get("maxiter", 1000))
+            osr_res = self.osr(
+                rule_params=rule_params,
+                weights=weights_clean,
+                bounds=bounds,
+                optimizer=optimizer,
+                maxiter=maxiter,
+            )
+            executed.append("osr")
+
+        # 3. stoch_simul
+        if "stoch_simul" in cmd_names:
+            ss_opts: dict[str, Any] = {}
+            for c in cmd_list:
+                if c.get("command") == "stoch_simul":
+                    ss_opts.update(c.get("options", {}))
+            order_val = int(ss_opts.get("order", 1))
+            irf_val = int(ss_opts.get("irf", 40))
+            periods_val = int(ss_opts.get("periods", 0))
+            ar_val = int(ss_opts["ar"]) if "ar" in ss_opts else None
+            hp_val = float(ss_opts["hp_filter"]) if "hp_filter" in ss_opts else None
+            pruning_val = bool(ss_opts["pruning"]) if "pruning" in ss_opts else None
+            stoch_res = self.stoch_simul(
+                order=order_val,
+                irf=irf_val,
+                periods=periods_val,
+                sigma=sigma,
+                ar=ar_val,
+                hp_filter=hp_val,
+                pruning=pruning_val,
+            )
+            executed.append("stoch_simul")
+
+        # 4. calib_smoother
+        if "calib_smoother" in cmd_names:
+            if data is None:
+                raise ValueError(
+                    "calib_smoother command in .mod file requires `data` DataFrame "
+                    "passed to `model.execute_mod_commands(data=...)`."
+                )
+            smoother_res = self.smoother(data)
+            executed.append("calib_smoother")
+
+        # 5. shock_decomposition
+        if "shock_decomposition" in cmd_names:
+            if data is None:
+                raise ValueError(
+                    "shock_decomposition command in .mod file requires `data` DataFrame "
+                    "passed to `model.execute_mod_commands(data=...)`."
+                )
+            decomp_res = self.shock_decomposition(data, sigma=sigma)
+            executed.append("shock_decomposition")
+
+        # 6. perfect_foresight_solver / simul
+        has_pf = "perfect_foresight_solver" in cmd_names or (
+            dag is not None and bool(getattr(dag, "perfect_foresight_options", None))
+        )
+        if has_pf:
+            pf_opts = (
+                dict(dag.perfect_foresight_options)
+                if dag is not None
+                else dict((self._mod_options or {}).get("perfect_foresight", {}) or {})
+            )
+            periods_pf = int(pf_opts.get("periods", 100))
+            tol_pf = float(pf_opts.get("tol", 1e-8))
+            max_iter_pf = int(pf_opts.get("maxit", pf_opts.get("max_iter", 50)))
+
+            # Construct deterministic shock path from shocks(periods=..., values=...) if present
+            exo_shocks: np.ndarray | None = None
+            ant = self.anticipated_shocks or (
+                dag.shocks_config.get("anticipated")
+                if dag is not None and getattr(dag, "shocks_config", None)
+                else None
+            )
+            if ant:
+                exo_shocks = np.zeros((periods_pf, len(self.shocks)), dtype=float)
+                for sh_name, spec in ant.items():
+                    if sh_name in self.shocks:
+                        j = self.shocks.index(sh_name)
+                        for p_idx, val in zip(spec.get("periods", []), spec.get("values", [])):
+                            if 1 <= int(p_idx) <= periods_pf:
+                                exo_shocks[int(p_idx) - 1, j] = float(val)
+
+            pf_res = self.perfect_foresight(
+                periods=periods_pf,
+                shocks=exo_shocks,
+                histval=histval_dict,
+                endval=endval_dict,
+                tol=tol_pf,
+                max_iter=max_iter_pf,
+            )
+            executed.append("perfect_foresight_solver")
+
+        return DynareCommandResults(
+            stoch_simul=stoch_res,
+            ramsey=ramsey_res,
+            osr=osr_res,
+            smoother=smoother_res,
+            shock_decomposition=decomp_res,
+            histval=histval_dict,
+            endval=endval_dict,
+            perfect_foresight=pf_res,
+            commands_executed=tuple(executed),
+        )
+
+    def model_info(self) -> Any:
+        """Return structural diagnostic summary of the model."""
+        from puremacro.dsge._utils import model_info as _model_info
+
+        dag = getattr(self, "_dag", self)
+        return _model_info(dag)
+
+    def write_latex_dynamic_model(
+        self,
+        filepath: Any = None,
+        write_equation_tags: bool = True,
+    ) -> str:
+        """Render the dynamic model equations in LaTeX."""
+        from puremacro.dsge._utils import write_latex_dynamic_model as _write_latex
+
+        dag = getattr(self, "_dag", self)
+        return _write_latex(dag, filepath=filepath, write_equation_tags=write_equation_tags)
+
+    def perfect_foresight(
+        self,
+        periods: int = 100,
+        shocks: Any | None = None,
+        y_init: np.ndarray | None = None,
+        y_end: np.ndarray | None = None,
+        mcp: bool = False,
+        mcp_bounds: Mapping[str | int, tuple[float | None, float | None]] | None = None,
+        **kwargs,
+    ):
+        """Solve deterministic non-linear perfect foresight path via stacked Newton-Raphson."""
+        from puremacro.dsge.perfect_foresight import solve_perfect_foresight
+
+        return solve_perfect_foresight(
+            self,
+            periods=periods,
+            shocks=shocks,
+            y_init=y_init,
+            y_end=y_end,
+            mcp=mcp,
+            mcp_bounds=mcp_bounds,
+            **kwargs,
+        )
+
+    solve_perfect_foresight = perfect_foresight
+
+    def simulate_surprise_shocks(
+        self,
+        surprise_shocks: np.ndarray | Mapping[str, Sequence[float]],
+        horizon: int = 100,
+        **kwargs,
+    ):
+        """Simulate rolling unanticipated surprise shocks under perfect foresight."""
+        from puremacro.dsge.perfect_foresight import simulate_surprise_shocks
+
+        return simulate_surprise_shocks(
+            self,
+            surprise_shocks=surprise_shocks,
+            horizon=horizon,
+            **kwargs,
         )
 
     def conditional_forecast(
@@ -2010,6 +2518,30 @@ class LinearModel:
 
         cov = shock_cov if shock_cov is not None else self._shock_cov
         return solve_dynare_2nd_order(
+            self._dynare_equations,
+            variables=self.variables,
+            shocks=self.shocks,
+            params=self._params,
+            steady_state=self.steady_state.to_dict(),
+            states=self.states,
+            shock_cov=cov,
+            method=self.method,
+        )
+
+    def solve_third_order(
+        self,
+        shock_cov: np.ndarray | None = None,
+    ):
+        """Solve third-order perturbation approximation with pruning (Andreasen et al. 2018)."""
+        if self._dynare_equations is None:
+            raise ModelError(
+                "solve_third_order requires the model to be built with build_dynare "
+                "or load_mod (using canonical lead-lag equations)."
+            )
+        from puremacro.dsge.dynare import solve_dynare_3rd_order
+
+        cov = shock_cov if shock_cov is not None else self._shock_cov
+        return solve_dynare_3rd_order(
             self._dynare_equations,
             variables=self.variables,
             shocks=self.shocks,

@@ -599,6 +599,12 @@ def build_dynare(
         is_linear = True
     if dag is not None:
         object.__setattr__(model, "_dag", dag)
+        if getattr(dag, "steady_state_model", None):
+            object.__setattr__(model, "_steady_state_model_fn", dag._steady_state_model_fn)
+    elif hasattr(equations, "_steady_state_model_fn"):
+        object.__setattr__(
+            model, "_steady_state_model_fn", getattr(equations, "_steady_state_model_fn")
+        )
     if compiled is not None:
         object.__setattr__(model, "_compiled", compiled)
     object.__setattr__(model, "_is_linear", is_linear)
@@ -1721,19 +1727,13 @@ def _format_mod_lead(name: str, lead: int) -> str:
 def _shift_mod_expr(
     expr: str, offset: int, variables: Sequence[str], shocks: Sequence[str]
 ) -> str:
-    """Shift every endogenous variable in the .mod expression ``expr`` by ``offset``.
+    """Shift every endogenous variable and exogenous shock in ``expr`` by ``offset``.
 
     This is how Dynare treats a model-local variable used with a lead or lag
     (Reference Manual 4.5: "if the model-local variable appears with a lead
     or a lag ... shifting the expression accordingly"). Parameters and
-    numbers are left alone; ``|lead| >= 2`` results are expanded into
-    auxiliary variables later, like any other long lead or lag.
-
-    Raises
-    ------
-    DynareFeatureError
-        ``expr`` contains an exogenous variable and ``offset != 0``: the
-        regex reader only handles shocks dated ``t``.
+    numbers are left alone; ``|lead| >= 2`` endogenous variables and dated
+    exogenous shocks are expanded into auxiliary variables later.
     """
     if offset == 0:
         return expr
@@ -1741,18 +1741,15 @@ def _shift_mod_expr(
 
     def repl(m: re.Match) -> str:
         name = m.group(1)
-        if name in vset:
+        if name in vset or name in sset:
             lead = int(m.group(3) + m.group(4)) if m.group(2) else 0
             return _format_mod_lead(name, lead + offset)
-        if name in sset:
-            raise DynareFeatureError(
-                f"the model-local expression {expr!r} contains the exogenous "
-                f"variable {name!r} and is used with a lead or lag of {offset:+d}; "
-                "the legacy .mod reader cannot date exogenous variables away from t"
-            )
         return m.group(0)
 
     return _MOD_IDENT_WITH_LEAD.sub(repl, expr)
+
+
+_shift_mod_expr_leads = _shift_mod_expr
 
 
 def _inline_mod_locals_text(
@@ -2107,6 +2104,22 @@ def _resolve_dynare_model(
         object.__setattr__(solved, "_resolve_states_cache", tuple(st))
     except Exception:
         pass
+    for attr in (
+        "_steady_state_model_fn",
+        "_dag",
+        "_compiled",
+        "_histval",
+        "_endval",
+        "_varexo_det",
+        "_det_shocks",
+        "_shock_groups",
+        "_named_shock_groups",
+    ):
+        if hasattr(model, attr) and not hasattr(solved, attr):
+            try:
+                object.__setattr__(solved, attr, getattr(model, attr))
+            except Exception:
+                pass
     return solved
 
 
@@ -2120,8 +2133,11 @@ def _dag_equations(dag: Any) -> Callable:
     is one ``exec`` of the rendered equations.
     """
     eq_fn = dag.compile_equations()
-    for attr, val in (("_dag", dag),
-                      ("_steady_state_at", getattr(dag, "evaluate_steady_state", None))):
+    for attr, val in (
+        ("_dag", dag),
+        ("_steady_state_at", getattr(dag, "evaluate_steady_state", None)),
+        ("_steady_state_model_fn", getattr(dag, "_steady_state_model_fn", None)),
+    ):
         if val is not None:
             try:
                 object.__setattr__(eq_fn, attr, val)
@@ -2293,9 +2309,11 @@ def _expand_multiperiod_leads_lags(
     variables: list[str],
     steady_state: dict[str, float] | None = None,
     guess: dict[str, float] | None = None,
+    shocks: Sequence[str] = (),
 ) -> tuple[list[str], list[str], dict[str, float] | None, dict[str, float] | None]:
-    """Expand leads and lags with |offset| >= 2 into first-order auxiliary variables."""
+    """Expand leads and lags with |offset| >= 2 and dated exogenous shocks into first-order auxiliary variables."""
     lag_leads_needed = set()
+    exo_lag_leads_needed = set()
     for eq in raw_eqs:
         for v in variables:
             matches = re.findall(rf"\b{v}\s*\(\s*([+-]?\d+)\s*\)", eq)
@@ -2303,8 +2321,14 @@ def _expand_multiperiod_leads_lags(
                 offset = int(m)
                 if abs(offset) >= 2:
                     lag_leads_needed.add((v, offset))
+        for s in shocks:
+            matches = re.findall(rf"\b{s}\s*\(\s*([+-]?\d+)\s*\)", eq)
+            for m in matches:
+                offset = int(m)
+                if offset != 0:
+                    exo_lag_leads_needed.add((s, offset))
 
-    if not lag_leads_needed:
+    if not lag_leads_needed and not exo_lag_leads_needed:
         return raw_eqs, list(variables), steady_state, guess
 
     aux_vars: list[str] = []
@@ -2331,6 +2355,26 @@ def _expand_multiperiod_leads_lags(
                     aux_eqs.append(f"{aux_name} = {prev}")
             replacements[rf"\b{v}\s*\(\s*\+?{offset}\s*\)"] = f"AUX_LEAD_{v}_{k-1}(+1)"
 
+    for s, offset in sorted(exo_lag_leads_needed, key=lambda x: (x[0], abs(x[1]))):
+        if offset <= -1:
+            k = abs(offset)
+            for step in range(1, k + 1):
+                aux_name = f"AUX_EXO_LAG_{s}_{step}"
+                if aux_name not in aux_vars:
+                    aux_vars.append(aux_name)
+                    prev = f"{s}" if step == 1 else f"AUX_EXO_LAG_{s}_{step-1}(-1)"
+                    aux_eqs.append(f"{aux_name} = {prev}")
+            replacements[rf"\b{s}\s*\(\s*{offset}\s*\)"] = f"AUX_EXO_LAG_{s}_{k}(-1)"
+        elif offset >= 1:
+            k = offset
+            for step in range(1, k + 1):
+                aux_name = f"AUX_EXO_LEAD_{s}_{step}"
+                if aux_name not in aux_vars:
+                    aux_vars.append(aux_name)
+                    prev = f"{s}" if step == 1 else f"AUX_EXO_LEAD_{s}_{step-1}(+1)"
+                    aux_eqs.append(f"{aux_name} = {prev}")
+            replacements[rf"\b{s}\s*\(\s*\+?{offset}\s*\)"] = f"AUX_EXO_LEAD_{s}_{k}(+1)"
+
     new_eqs = []
     for eq in raw_eqs:
         mod_eq = eq
@@ -2344,14 +2388,20 @@ def _expand_multiperiod_leads_lags(
     updated_ss = dict(steady_state) if steady_state is not None else None
     if updated_ss is not None:
         for aux in aux_vars:
-            root_var = aux.split("_")[2]
-            updated_ss[aux] = updated_ss.get(root_var, 0.0)
+            if aux.startswith("AUX_EXO_"):
+                updated_ss[aux] = 0.0
+            else:
+                root_var = aux.split("_")[2]
+                updated_ss[aux] = updated_ss.get(root_var, 0.0)
 
     updated_guess = dict(guess) if guess is not None else None
     if updated_guess is not None:
         for aux in aux_vars:
-            root_var = aux.split("_")[2]
-            updated_guess[aux] = updated_guess.get(root_var, 1.0)
+            if aux.startswith("AUX_EXO_"):
+                updated_guess[aux] = 0.0
+            else:
+                root_var = aux.split("_")[2]
+                updated_guess[aux] = updated_guess.get(root_var, 1.0)
 
     return updated_eqs, updated_vars, updated_ss, updated_guess
 
@@ -2421,12 +2471,15 @@ def parse_mod(mod_text: str, base_dir: Path | str | None = None) -> dict:
         # steady_state_model / initval are functions of the parameters:
         # load_mod(params=) and re-solves re-run them at the new values.
         res["_steady_state_at"] = dag.evaluate_steady_state
+        res["_steady_state_model_fn"] = dag._steady_state_model_fn
         res["_guess_at"] = dag.evaluate_initval
         eq_callable = res["equations"]
         try:
             object.__setattr__(eq_callable, "_dag", dag)
             object.__setattr__(eq_callable, "_compiled", compiled)
             object.__setattr__(eq_callable, "_steady_state_at", dag.evaluate_steady_state)
+            if dag._steady_state_model_fn is not None:
+                object.__setattr__(eq_callable, "_steady_state_model_fn", dag._steady_state_model_fn)
         except Exception:
             pass
         return res
@@ -2769,7 +2822,11 @@ def parse_mod(mod_text: str, base_dir: Path | str | None = None) -> dict:
     # 11. Multi-period lead and lag expansion
     base_eqs, base_variables = list(clean_eqs), list(variables)
     clean_eqs, variables, steady_state, guess = _expand_multiperiod_leads_lags(
-        clean_eqs, variables, steady_state=steady_state, guess=guess_init if guess_init else None
+        clean_eqs,
+        variables,
+        steady_state=steady_state,
+        guess=guess_init if guess_init else None,
+        shocks=shocks,
     )
 
     # 11b. steady_state_model / initval as functions of the parameters, for
@@ -2782,7 +2839,7 @@ def parse_mod(mod_text: str, base_dir: Path | str | None = None) -> dict:
             ss_match.group(1), "steady_state_model", new_params, dict(ss_globals)
         )
         ss_new = {v: scope.get(v, 0.0) for v in base_variables}
-        return _expand_multiperiod_leads_lags(base_eqs, base_variables, steady_state=ss_new)[2]
+        return _expand_multiperiod_leads_lags(base_eqs, base_variables, steady_state=ss_new, shocks=shocks)[2]
 
     def _guess_at(new_params: Mapping[str, float] | None = None) -> dict[str, float] | None:
         if not initval_match:
@@ -2793,7 +2850,7 @@ def parse_mod(mod_text: str, base_dir: Path | str | None = None) -> dict:
         g_new = {v: scope[v] for v in base_variables if v in scope}
         if not g_new:
             return None
-        return _expand_multiperiod_leads_lags(base_eqs, base_variables, guess=g_new)[3]
+        return _expand_multiperiod_leads_lags(base_eqs, base_variables, guess=g_new, shocks=shocks)[3]
 
     # 12. Compile equations to Python callable
     kw_names = [n for n in (*variables, *shocks, *params) if keyword.iskeyword(n)]
@@ -3011,11 +3068,54 @@ def load_mod(
         if not guess and file_guess is not None and guess_at is not None:
             file_guess = guess_at(merged_params) or file_guess
 
-    # Merge steady state
-    final_ss = steady_state if steady_state is not None else file_ss
+    # Merge steady state: if steady_state_model block was provided (and no
+    # explicit steady_state= override), verify whether the analytic steady state
+    # solves the dynamic equations within tol; if not, fall back to using it as
+    # the initial guess for the nonlinear root-finding / homotopy solver.
+    dag = parsed.get("_dag", getattr(parsed.get("equations"), "_dag", None))
+    compiled = parsed.get("_compiled", getattr(parsed.get("equations"), "_compiled", None))
+    is_linear = parsed.get("is_linear", False)
+    ss_fn = parsed.get("_steady_state_model_fn", getattr(dag, "_steady_state_model_fn", None))
 
-    # Merge guess
+    final_ss = steady_state if steady_state is not None else file_ss
     final_guess = guess or file_guess
+    if (
+        steady_state is None
+        and file_ss is not None
+        and (dag is None or len(dag.equations) == len(parsed["variables"]))
+    ):
+        try:
+            variables_list = list(parsed["variables"])
+            shocks_list = list(parsed["shocks"])
+            y_cand = _Vec(
+                variables_list,
+                np.array([float(file_ss.get(v, 0.0)) for v in variables_list]),
+                what="variable",
+            )
+            e_zero = _Vec(shocks_list, np.zeros(len(shocks_list)), what="shock")
+            par_vec = _Vec(
+                list(merged_params.keys()),
+                [float(v) for v in merged_params.values()],
+                what="parameter",
+            )
+            with np.errstate(all="ignore"):
+                res_cand = np.asarray(
+                    parsed["equations"](y_cand, y_cand, y_cand, e_zero, par_vec),
+                    dtype=float,
+                )
+            if (
+                res_cand.shape != (len(variables_list),)
+                or not np.all(np.isfinite(res_cand))
+                or float(np.max(np.abs(res_cand), initial=0.0)) > tol
+            ):
+                final_ss = None
+                if not guess:
+                    final_guess = dict(file_ss)
+        except Exception:
+            final_ss = None
+            if not guess:
+                final_guess = dict(file_ss)
+
     if final_ss is None and final_guess is None:
         final_guess = {v: 0.0 for v in parsed["variables"]}
 
@@ -3031,34 +3131,60 @@ def load_mod(
     # Determine effective shock_cov
     eff_shock_cov = shock_cov if shock_cov is not None else parsed.get("shock_cov")
 
-    model = build_dynare(
-        parsed["equations"],
-        variables=parsed["variables"],
-        shocks=parsed["shocks"],
-        params=merged_params,
-        steady_state=final_ss,
-        guess=final_guess,
-        solve_algo=solve_algo,
-        homotopy=homotopy,
-        homotopy_steps=homotopy_steps,
-        states=final_states,
-        order=eff_order,
-        shock_cov=eff_shock_cov,
-        tol=tol,
-        method=method,
-        verify_derivatives=verify_derivatives,
-        strict=strict,
-        qz_criterium=qz_criterium,
-        allow_singular=allow_singular,
-    )
+    # If the .mod file declares a Ramsey problem with fewer equations than
+    # endogenous variables (omitting the policy rule), solve via ramsey_model.
+    ramsey_res = None
+    if (
+        dag is not None
+        and getattr(dag, "planner_objective", None) is not None
+        and len(dag.equations) < len(dag.variables)
+    ):
+        ramsey_opts = dict(getattr(dag, "ramsey_policy_options", {}) or {})
+        raw_beta = ramsey_opts.get("planner_discount", 0.99)
+        if isinstance(raw_beta, str):
+            eff_beta = float(merged_params.get(raw_beta, 0.99))
+        else:
+            eff_beta = float(raw_beta)
+        eff_inst = ramsey_opts.get("instruments")
+        dag_eff = dataclasses.replace(
+            dag,
+            parameter_values=merged_params,
+            steady_state=final_ss if isinstance(final_ss, Mapping) else dag.steady_state,
+            shock_cov=eff_shock_cov if eff_shock_cov is not None else dag.shock_cov,
+        )
+        ramsey_res = ramsey_model(
+            dag_eff,
+            objective=dag_eff.planner_objective,
+            planner_discount=eff_beta,
+            instruments=eff_inst,
+            strict=strict,
+        )
+        model: Any = ramsey_res.augmented_model
+    else:
+        model = build_dynare(
+            parsed["equations"],
+            variables=parsed["variables"],
+            shocks=parsed["shocks"],
+            params=merged_params,
+            steady_state=final_ss,
+            guess=final_guess,
+            solve_algo=solve_algo,
+            homotopy=homotopy,
+            homotopy_steps=homotopy_steps,
+            states=final_states,
+            order=eff_order,
+            shock_cov=eff_shock_cov,
+            tol=tol,
+            method=method,
+            verify_derivatives=verify_derivatives,
+            strict=strict,
+            qz_criterium=qz_criterium,
+            allow_singular=allow_singular,
+        )
 
     # Carry the file's own declarations onto the solved model so
     # ``model.estimate(data)`` needs no second copy of them. LinearModel is a
     # frozen dataclass, so this is ``replace``, never assignment.
-    dag = parsed.get("_dag", getattr(parsed.get("equations"), "_dag", None))
-    compiled = parsed.get("_compiled", getattr(parsed.get("equations"), "_compiled", None))
-    is_linear = parsed.get("is_linear", False)
-
     if isinstance(model, LinearModel):
         solved = model
         model = dataclasses.replace(
@@ -3076,6 +3202,10 @@ def load_mod(
             object.__setattr__(model, "_dag", dag)
         if compiled is not None:
             object.__setattr__(model, "_compiled", compiled)
+        if ss_fn is not None:
+            object.__setattr__(model, "_steady_state_model_fn", ss_fn)
+        if ramsey_res is not None:
+            object.__setattr__(model, "_ramsey_result", ramsey_res)
         object.__setattr__(model, "_is_linear", is_linear)
         if parsed.get("histval"):
             object.__setattr__(model, "_histval", parsed["histval"])
@@ -3094,6 +3224,13 @@ def load_mod(
             object.__setattr__(model, "_dag", dag)
         if compiled is not None:
             object.__setattr__(model, "_compiled", compiled)
+        if ss_fn is not None:
+            object.__setattr__(model, "_steady_state_model_fn", ss_fn)
+            if getattr(model, "first_order", None) is not None:
+                try:
+                    object.__setattr__(model.first_order, "_steady_state_model_fn", ss_fn)
+                except Exception:
+                    pass
         object.__setattr__(model, "_is_linear", is_linear)
         if parsed.get("histval"):
             object.__setattr__(model, "_histval", parsed["histval"])
@@ -3104,153 +3241,23 @@ def load_mod(
         if parsed.get("det_shocks"):
             object.__setattr__(model, "_det_shocks", parsed["det_shocks"])
 
-
     return model
 
 
 # Backwards compatibility alias
 load_dynare_mod = load_mod
 
-
-# Attach model_info and write_latex_dynamic_model to LinearModel
-def _linear_model_model_info(self) -> Any:
-    dag = getattr(self, "_dag", self)
-    return model_info(dag)
-
-
-def _linear_model_write_latex(self, filepath: str | Path | None = None, write_equation_tags: bool = True) -> str:
-    dag = getattr(self, "_dag", self)
-    return write_latex_dynamic_model(dag, filepath=filepath, write_equation_tags=write_equation_tags)
-
-
-def _linear_model_solve_third_order(self, shock_cov: np.ndarray | None = None) -> Order3PrunedSolution:
-    """Solve third-order perturbation approximation with pruning (Andreasen et al. 2018)."""
-    if self._dynare_equations is None:
-        raise ModelError(
-            "solve_third_order requires the model to be built with build_dynare "
-            "or load_mod (using canonical lead-lag equations)."
-        )
-    cov = shock_cov if shock_cov is not None else self._shock_cov
-    return solve_dynare_3rd_order(
-        self._dynare_equations,
-        variables=self.variables,
-        shocks=self.shocks,
-        params=self._params,
-        steady_state=self.steady_state.to_dict(),
-        states=self.states,
-        shock_cov=cov,
-        method=self.method,
-    )
-
-
-LinearModel.model_info = _linear_model_model_info  # type: ignore[attr-defined]
-LinearModel.write_latex_dynamic_model = _linear_model_write_latex  # type: ignore[attr-defined]
-LinearModel.solve_third_order = _linear_model_solve_third_order  # type: ignore[attr-defined]
-
+# Module-level backwards-compatibility aliases to native LinearModel methods
+# (puremacro/dsge/__init__.py imports _orig_stoch_simul and _linear_model_stoch_simul).
+_linear_model_model_info = LinearModel.model_info
+_linear_model_write_latex = LinearModel.write_latex_dynamic_model
+_linear_model_solve_third_order = LinearModel.solve_third_order
 _orig_solve = LinearModel.solve
-
-
-def _linear_model_solve(
-    self,
-    order: int = 1,
-    *,
-    shock_cov: np.ndarray | None = None,
-    qz_criterium: float | None = None,
-    pruning: bool = True,
-):
-    """Return the perturbation solution at ``order`` 1, 2 or 3.
-
-    ``order=1`` returns the solved first-order model itself (re-solved when
-    ``qz_criterium`` is given); ``order=2`` returns the pruned second-order
-    solution (:class:`~puremacro.dsge.pruning.PrunedDSGESolution`) and
-    ``order=3`` the pruned third-order solution
-    (:class:`~puremacro.dsge.pruning.Order3PrunedSolution`). ``shock_cov``
-    overrides the declared innovation covariance used in the risk terms.
-
-    ``pruning`` mirrors Dynare's option: higher-order solutions are always
-    simulated with pruning (Kim, Kim, Schaumburg and Sims 2008; Andreasen,
-    Fernandez-Villaverde and Rubio-Ramirez 2018), so ``pruning=False`` raises
-    ``NotImplementedError`` at orders 2 and 3 and has no effect at order 1.
-    """
-    if order >= 2 and not pruning:
-        raise NotImplementedError(
-            f"order={order} solutions are simulated with pruning; unpruned higher-order "
-            "simulation is not implemented. Use pruning=True (the default)."
-        )
-    if order == 3:
-        return self.solve_third_order(shock_cov=shock_cov)
-    return _orig_solve(self, order=order, shock_cov=shock_cov, qz_criterium=qz_criterium)
-
-
-LinearModel.solve = _linear_model_solve  # type: ignore[method-assign,assignment]
-LinearModel.solve_perturbation = _linear_model_solve  # type: ignore[attr-defined,assignment]
-
+_linear_model_solve = LinearModel.solve
 _orig_stoch_simul = LinearModel.stoch_simul
-
-
-def _linear_model_stoch_simul(self, order: int = 1, **kwargs):
-    if order == 3:
-        if not kwargs.get("pruning", True):
-            raise NotImplementedError(
-                "order=3 solutions are simulated with pruning, and Dynare reports no theoretical "
-                "moments at order 3 without it. Use pruning=True (the default at order 3)."
-            )
-        sol3 = self.solve_third_order(shock_cov=self._shock_covariance(kwargs.get("sigma", None)))
-        irf = kwargs.get("irf", 40)
-        periods = kwargs.get("periods", 0)
-        seed = kwargs.get("seed", 0)
-        burn = kwargs.get("burn", 100)
-        lags = kwargs.get("lags", 5)
-        return sol3.stoch_simul(order=3, irf=irf, periods=periods, sigma=1.0, seed=seed, burn=burn, lags=lags)
-    return _orig_stoch_simul(self, order=order, **kwargs)
-
-
-LinearModel.stoch_simul = _linear_model_stoch_simul  # type: ignore[method-assign,assignment]
-
-
-def _linear_model_perfect_foresight(
-    self,
-    periods: int = 100,
-    shocks: Any | None = None,
-    y_init: np.ndarray | None = None,
-    y_end: np.ndarray | None = None,
-    mcp: bool = False,
-    mcp_bounds: Mapping[str | int, tuple[float | None, float | None]] | None = None,
-    **kwargs,
-):
-    from puremacro.dsge.perfect_foresight import solve_perfect_foresight
-
-    return solve_perfect_foresight(
-        self,
-        periods=periods,
-        shocks=shocks,
-        y_init=y_init,
-        y_end=y_end,
-        mcp=mcp,
-        mcp_bounds=mcp_bounds,
-        **kwargs,
-    )
-
-
-def _linear_model_simulate_surprise_shocks(
-    self,
-    surprise_shocks: np.ndarray | Mapping[str, Sequence[float]],
-    horizon: int = 100,
-    **kwargs,
-):
-    from puremacro.dsge.perfect_foresight import simulate_surprise_shocks
-
-    return simulate_surprise_shocks(
-        self,
-        surprise_shocks=surprise_shocks,
-        horizon=horizon,
-        **kwargs,
-    )
-
-
-LinearModel.perfect_foresight = _linear_model_perfect_foresight  # type: ignore[attr-defined]
-LinearModel.solve_perfect_foresight = _linear_model_perfect_foresight  # type: ignore[attr-defined]
-LinearModel.simulate_surprise_shocks = _linear_model_simulate_surprise_shocks  # type: ignore[attr-defined]
+_linear_model_stoch_simul = LinearModel.stoch_simul
+_linear_model_perfect_foresight = LinearModel.perfect_foresight
+_linear_model_simulate_surprise_shocks = LinearModel.simulate_surprise_shocks
 
 from puremacro.dsge.perfect_foresight import (
     MCPResult,
