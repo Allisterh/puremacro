@@ -245,8 +245,11 @@ class MLXEngine:
                 from mlx_lm import load
             except ImportError as exc:
                 raise _missing("mlx-lm", exc) from exc
-            options = {} if self.adapter_path is None else {"adapter_path": self.adapter_path}
-            self._loaded[model_id] = load(model_id, **options)
+            if self.adapter_path is not None:
+                res = load(model_id, adapter_path=self.adapter_path)
+            else:
+                res = load(model_id)
+            self._loaded[model_id] = (res[0], res[1])
         return self._loaded[model_id]
 
     def complete(self, model_id: str, prompt: str, *, system: str | None = None,

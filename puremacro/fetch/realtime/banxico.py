@@ -195,6 +195,7 @@ def fetch_banxico_vintages(
             if not cached.empty:
                 return cached
         credentials.require("banxico")
+    assert tok is not None
 
     url = BANXICO_SERIES_URL.format(series_id=series_id)
     req = urllib.request.Request(

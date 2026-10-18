@@ -326,8 +326,12 @@ def la_lp(
     do_ar = anderson_rubin or weak_iv_robust
     own = y == x  # response of a series to its own innovation: lags enter once
 
-    has_iv = z is not None
-    z_names = ([z] if isinstance(z, str) else list(z)) if has_iv else []
+    if z is None:
+        has_iv = False
+        z_names: list[str] = []
+    else:
+        has_iv = True
+        z_names = [z] if isinstance(z, str) else list(z)
     k_z = len(z_names)
     cv_10, cv_20 = mop_critical_values(k_z) if has_iv else (np.nan, np.nan)
 

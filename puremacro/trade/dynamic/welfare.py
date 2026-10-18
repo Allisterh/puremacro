@@ -15,7 +15,7 @@ government consumption inside the household basket.
 """
 from __future__ import annotations
 
-from typing import Any, Sequence
+from typing import Any, Sequence, overload
 
 import numpy as np
 
@@ -31,6 +31,14 @@ def _positive_vector(value: Any, *, name: str, size: int) -> np.ndarray:
     if not np.all(np.isfinite(array)) or np.any(array <= 0):
         raise ValueError(f"{name} must be finite and strictly positive")
     return array
+
+
+@overload
+def _readonly(value: None) -> None: ...
+
+
+@overload
+def _readonly(value: np.ndarray) -> np.ndarray: ...
 
 
 def _readonly(value: np.ndarray | None) -> np.ndarray | None:
@@ -144,6 +152,7 @@ def consumption_equivalent_welfare(
     if baseline_gdp is not None:
         if baseline_price is None:
             raise ValueError("baseline_price is required when baseline_gdp is supplied")
+        assert annual is not None
         gdp = _positive_vector(baseline_gdp, name="baseline_gdp", size=countries)
         gdp_pct = 100.0 * annual / gdp
     tail = terminal_consumption is not None

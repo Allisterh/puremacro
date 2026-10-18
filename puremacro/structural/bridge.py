@@ -177,7 +177,8 @@ class MomentTargets:
         meta = dict(metadata or {})
         meta.update({"covariance_source": "joint_estimator_draws", "n_draws": len(array),
                      "covariance_ddof": 1})
-        return cls(values, covariance, labels, units, meta)
+        units_tup: tuple[str, ...] | str = units if isinstance(units, str) else tuple(units)
+        return cls(values, covariance, labels, units_tup, meta)
 
     @classmethod
     def from_irf(cls, irf: Any, *, covariance: Any, response: str, shock: str,
@@ -254,8 +255,10 @@ class MomentTargets:
         covariance = np.block([[self.covariance, cross], [cross.T, other.covariance]])
         metadata = {"components": (self.metadata, other.metadata),
                     "cross_covariance_assumption": "independent" if assume_independent else "supplied"}
+        self_u = (self.units,) if isinstance(self.units, str) else self.units
+        other_u = (other.units,) if isinstance(other.units, str) else other.units
         return MomentTargets(np.r_[self.values, other.values], covariance,
-                             self.labels + other.labels, self.units + other.units, metadata)
+                             self.labels + other.labels, self_u + other_u, metadata)
 
     def rescale(self, factors: Any, *, units: str | Sequence[str]) -> MomentTargets:
         """Change moment units with covariance transformed on both axes."""
@@ -270,8 +273,9 @@ class MomentTargets:
         metadata = dict(self.metadata)
         metadata["rescaling"] = {"factors": f, "previous_units": self.units,
                                   "previous_rescaling": self.metadata.get("rescaling")}
+        units_tup: tuple[str, ...] | str = units if isinstance(units, str) else tuple(units)
         return MomentTargets(self.values * f, self.covariance * f[:, None] * f[None, :],
-                             self.labels, units, metadata)
+                             self.labels, units_tup, metadata)
 
     def to_frame(self) -> pd.DataFrame:
         return pd.DataFrame({"label": self.labels, "estimate": self.values,
@@ -597,7 +601,7 @@ def fit_structural(
     j_available = inference_valid and optimal and assume_correct_specification and degrees > 0
     j_statistic = objective if j_available else float("nan")
     j_pvalue = float(chi2.sf(objective, degrees)) if j_available else float("nan")
-    held_model = None if held_out is None else _model_values(held_out_moments_at, theta, held_out)
+    held_model = None if held_out is None or held_out_moments_at is None else _model_values(held_out_moments_at, theta, held_out)
     diagnostics = {
         "inference_unavailable_reasons": tuple(reasons), "weighting": "optimal" if optimal else "custom",
         "covariance_scale": "empirical_estimator", "rank_rtol": rank_rtol,

@@ -66,11 +66,17 @@ def _objective(y: np.ndarray, *, presample: int, lik_init: str, diffuse_scale: f
     from puremacro.dsge.sw07_priors import PRIORS, param_names
 
     names = param_names()
-    kw = dict(presample=presample, lik_init=lik_init, diffuse_scale=diffuse_scale,
-              caller="sw07_laplace_mdd")
-    nlp = _make_neg_log_posterior(y, make_state_space, PRIORS, names, _FIXED_PARAMS, **kw)
-    nlp_opt = _make_neg_log_posterior(y, make_state_space, PRIORS, names, _FIXED_PARAMS,
-                                      penalty=_OPT_PENALTY, **kw)
+    nlp = _make_neg_log_posterior(
+        y, make_state_space, PRIORS, names, _FIXED_PARAMS,
+        presample=presample, lik_init=lik_init, diffuse_scale=diffuse_scale,
+        caller="sw07_laplace_mdd",
+    )
+    nlp_opt = _make_neg_log_posterior(
+        y, make_state_space, PRIORS, names, _FIXED_PARAMS,
+        penalty=_OPT_PENALTY,
+        presample=presample, lik_init=lik_init, diffuse_scale=diffuse_scale,
+        caller="sw07_laplace_mdd",
+    )
     lb = np.array([PRIORS[n]["lb"] for n in names], dtype=float)
     ub = np.array([PRIORS[n]["ub"] for n in names], dtype=float)
     return names, nlp, nlp_opt, lb, ub

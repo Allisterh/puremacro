@@ -1030,3 +1030,26 @@ def test_curso_llm_helper_two_tier_open_cache(tmp_path, monkeypatch):
     monkeypatch.setenv("MAV_LLM_USER_CACHE", str(student_path))
     assert mod.user_cache_path() == student_path.absolute()
 
+
+def test_course_fallback_cache_explicit_empty_tiers_override_environment(tmp_path, monkeypatch):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "_curso_llm_empty_fallback_test",
+        Path(__file__).resolve().parents[1] / "curso" / "notebooks" / "_llm.py",
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    monkeypatch.setattr(mod, "_LIBRARY", None)
+    course = tmp_path / "environment.sqlite"
+    CompletionCache(course).set(_row(_k("environment_question"), text="environment answer"))
+    monkeypatch.setenv("PUREMACRO_LLM_FALLBACK_CACHE", str(course))
+    student = tmp_path / "student.sqlite"
+
+    assert mod.open_cache(student).get(_k("environment_question")) == "environment answer"
+    for cache in (CompletionCache(student, fallback_paths=()),
+                  mod._FallbackCache(student, fallback_paths=()),
+                  mod.open_cache(student, fallback_paths=())):
+        assert cache.fallback_paths == ()
+        assert cache.get(_k("environment_question")) is None
+

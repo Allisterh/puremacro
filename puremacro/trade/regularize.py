@@ -27,7 +27,7 @@ Core capabilities:
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Sequence, Tuple
+from typing import Any, Dict, Literal, Sequence, Tuple, overload
 import warnings
 
 import numpy as np
@@ -209,7 +209,7 @@ def compute_spectral_radius(
         for label in range(count):
             idx = np.flatnonzero(labels == label)
             blocks.append(compute_spectral_radius(B[np.ix_(idx, idx)], max_iter=max_iter, tol=tol, shift=shift))
-        return tuple(float(max(v[i] for v in blocks)) for i in range(3))
+        return (float(max(v[0] for v in blocks)), float(max(v[1] for v in blocks)), float(max(v[2] for v in blocks)))
     x, lower, upper = _cw_power_iteration(B, np.ones(n), shift, max_iter, tol, 0.0, float("inf"))
     if upper - lower > tol * max(1.0, upper) and n > _DENSE_RESOLVENT_MAX_N:
         # Periodic or nearly periodic block (lambda_2 near -rho): the small
@@ -241,6 +241,48 @@ def spectral_radius(B: np.ndarray) -> float:
     if abs(cw_upper - rho) < 1e-4:
         return max(rho, cw_upper)
     return rho
+
+
+@overload
+def regularize_mrio_table(
+    Z: np.ndarray,
+    F: np.ndarray,
+    VA: np.ndarray,
+    TLS: np.ndarray,
+    Y: np.ndarray | None = None,
+    floor_output: float = 1e-6,
+    floor_va_ratio: float = 1e-3,
+    floor_va_abs: float = 1.0,
+    *,
+    tau: np.ndarray | None = None,
+    spectral_tol: float = 1e-3,
+    n_countries: int | None = None,
+    n_sectors: int | None = None,
+    floor_va_max_share: float = 0.5,
+    output_mismatch: str = "warn",
+    return_report: Literal[True],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict[str, Any]]: ...
+
+
+@overload
+def regularize_mrio_table(
+    Z: np.ndarray,
+    F: np.ndarray,
+    VA: np.ndarray,
+    TLS: np.ndarray,
+    Y: np.ndarray | None = None,
+    floor_output: float = 1e-6,
+    floor_va_ratio: float = 1e-3,
+    floor_va_abs: float = 1.0,
+    *,
+    tau: np.ndarray | None = None,
+    spectral_tol: float = 1e-3,
+    n_countries: int | None = None,
+    n_sectors: int | None = None,
+    floor_va_max_share: float = 0.5,
+    output_mismatch: str = "warn",
+    return_report: Literal[False] = ...,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]: ...
 
 
 def regularize_mrio_table(

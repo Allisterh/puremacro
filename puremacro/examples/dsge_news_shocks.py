@@ -53,7 +53,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from puremacro.dsge.dynare import build_dynare
+from puremacro.dsge.dynare import LinearModel, build_dynare
 from puremacro.dsge.news import (
     NewsDecompositionResult,
     NewsIRFResult,
@@ -107,6 +107,7 @@ def main() -> tuple[NewsIRFResult, NewsDecompositionResult]:
 
     # 1. Compile DSGE model
     model = build_dynare(NK_NEWS_MOD)
+    assert isinstance(model, LinearModel)
     print("Structural Model compiled successfully:")
     print(f"  Variables : {list(model.variables)}")
     print(f"  States    : {list(model.states)}")

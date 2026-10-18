@@ -91,10 +91,10 @@ def build_initial_guess(calib: TradeCalibrationResult) -> np.ndarray:
 
 def _resolve_tariffs(
     calib: TradeCalibrationResult,
-    tau: np.ndarray | None,
-    tau_fd: np.ndarray | None,
-    tauf: np.ndarray | None = None,
-    tauf_fd: np.ndarray | None = None,
+    tau: np.ndarray | float | None,
+    tau_fd: np.ndarray | float | None,
+    tauf: np.ndarray | float | None = None,
+    tauf_fd: np.ndarray | float | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Resolve and validate tariff multipliers and national tariff vectors."""
     nc, ns, nfd = calib.n_countries, calib.n_sectors, calib.n_final_demand
@@ -2037,7 +2037,7 @@ def solve_keller_pac(
         tau_lam = v_lam / tangent_norm
 
         # Orientation check: maintain forward path progression
-        if prev_tau_x is not None:
+        if prev_tau_x is not None and prev_tau_lam is not None:
             dot_prod = float(np.sum(tau_x * prev_tau_x * (w_scale ** 2)) + tau_lam * prev_tau_lam)
             if dot_prod < 0:
                 tau_x = -tau_x

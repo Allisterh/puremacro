@@ -405,8 +405,8 @@ def parse_estimated_params(
             p = [_num(f) for f in tail[:4]]
             prior = _build_prior(shape, p, statement)
             jscale_field = tail[4] if len(tail) > 4 else ""
-            jscale = _num(jscale_field)
-            jscale = 1.0 if jscale is None else jscale
+            jscale_raw = _num(jscale_field)
+            jscale = 1.0 if jscale_raw is None else jscale_raw
             if len(tail) > 5:
                 raise ValueError(
                     f"cannot read {statement.strip()!r}: at most P1..P4 and "

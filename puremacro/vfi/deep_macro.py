@@ -39,7 +39,10 @@ import math
 import time
 import warnings
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+
+if TYPE_CHECKING:
+    import matplotlib.figure
 
 import numpy as np
 import pandas as pd

@@ -277,7 +277,7 @@ class ParticleFilterResult:
 
         # 2. Stochastic Volatility panel (if present)
         idx_curr = n_vars
-        if has_sv:
+        if has_sv and self.filtered_volatility is not None:
             ax_sv = axes[idx_curr]
             for col in self.filtered_volatility.columns:
                 ax_sv.plot(x_vals, self.filtered_volatility[col], lw=1.4, label=f"Vol {col}")
@@ -787,20 +787,20 @@ def particle_filter(
         G_u_ss = m_info["G_u_ss"]
 
     # Map observable names to indices in order_vars
-    obs_indices = []
+    obs_indices_list = []
     for nm in obs_names:
         if nm in order_vars:
-            obs_indices.append(order_vars.index(nm))
+            obs_indices_list.append(order_vars.index(nm))
         elif nm in variable_names:
             idx = variable_names.index(nm)
             var_target = variable_names[idx]
             if var_target in order_vars:
-                obs_indices.append(order_vars.index(var_target))
+                obs_indices_list.append(order_vars.index(var_target))
             else:
                 raise ValueError(f"Observable {nm!r} cannot be mapped to model variables: {order_vars}")
         else:
             raise ValueError(f"Observable {nm!r} is not declared in model variables: {order_vars}")
-    obs_indices = np.array(obs_indices, dtype=int)
+    obs_indices = np.array(obs_indices_list, dtype=int)
 
     # Steady state alignment
     ss = m_info["steady_state"]
@@ -1643,25 +1643,9 @@ def tempered_particle_filter(
         except (ValueError, ArithmeticError, np.linalg.LinAlgError, Exception):
             x1 = rng.normal(0.0, 0.1, size=(n_particles, n_x))
 
-        if (H_xx is not None and np.any(np.abs(H_xx) > 1e-12)) and burn_in > 0:
-            for _ in range(burn_in):
-                z_b = rng.normal(0.0, 1.0, size=(n_particles, n_e))
-                e_b = (z_b @ L_corr.T) * base_sigmas[None, :]
-                x1_n = x1 @ G.T + e_b @ N_mat.T
-                kron_xx = np.einsum("mi,mj->mij", x1, x1).reshape(n_particles, -1)
-                kron_xe = np.einsum("mi,mj->mij", x1, e_b).reshape(n_particles, -1) if n_e > 0 else np.zeros((n_particles, 0))
-                kron_ee = np.einsum("mi,mj->mij", e_b, e_b).reshape(n_particles, -1) if n_e > 0 else np.zeros((n_particles, 0))
-                x2_n = (
-                    x2 @ G.T
-                    + 0.5 * (kron_xx @ H_xx.T)
-                    + (kron_xe @ H_xu.T)
-                    + 0.5 * (kron_ee @ H_uu.T)
-                    + 0.5 * H_ss[None, :]
-                )
-                x1, x2 = x1_n, x2_n
-
-    has_order2 = H_xx is not None and (
-        np.any(H_xx != 0.0) or np.any(G_xx != 0.0) or np.any(H_uu != 0.0) or np.any(G_uu != 0.0)
+    has_order2 = any(
+        tensor is not None and np.any(tensor != 0.0)
+        for tensor in (H_xx, G_xx, H_xu, G_xu, H_uu, G_uu, H_ss, G_ss)
     )
 
     def _propagate_batch(
@@ -1669,7 +1653,7 @@ def tempered_particle_filter(
         x2_p: np.ndarray,
         x3_p: np.ndarray,
         z_std: np.ndarray,
-        y_obs_t: np.ndarray,
+        y_obs_t: np.ndarray | None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Vectorized propagation of N particles from parent states + standard normal shocks z_std."""
         e_t = (z_std @ L_corr.T) * base_sigmas[None, :]
@@ -1736,6 +1720,8 @@ def tempered_particle_filter(
         tot_s = x1_n + x2_n + x3_n
         tot_c = y1_n + y2_n + y3_n
         V_p = (np.hstack([tot_s, tot_c]) if n_y > 0 else tot_s) + ss_vec[None, :]
+        if y_obs_t is None:
+            return x1_n, x2_n, x3_n, V_p, np.zeros(n_particles)
         pred_y = observation_fn(V_p) if observation_fn is not None else V_p[:, obs_indices]
         res = y_obs_t[None, :] - pred_y
         quad = np.sum((res @ inv_R) * res, axis=1)
@@ -1752,6 +1738,15 @@ def tempered_particle_filter(
         if sw <= 0.0 or not np.isfinite(sw):
             return float(n_particles)
         return float(n_particles * np.sum(w * w) / (sw * sw))
+
+    # Initialize every pruned component using the same transition as filtering.
+    # Pure risk drifts, state-shock cross terms and third-order states also
+    # need burn-in, even when the state-state Hessian happens to be zero.
+    if (isinstance(init_states, str) and init_states == "stationary"
+            and (has_order2 or is_order3) and burn_in > 0):
+        for _ in range(burn_in):
+            z_b = rng.normal(0.0, 1.0, size=(n_particles, n_e))
+            x1, x2, x3, _, _ = _propagate_batch(x1, x2, x3, z_b, None)
 
     log_lik_contributions = np.zeros(T, dtype=float)
     filtered_states_arr = np.zeros((T, n_vars), dtype=float)

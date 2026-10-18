@@ -287,6 +287,16 @@ res_mcp.plot(title="NK Deflation Experiment with Active ZLB")
 
 ## 4. Multi-Constraint OccBin & Piecewise Kalman Filter
 
+`solve_pruned_occbin` currently supports two checked limits: linear OccBin
+(including anticipated shocks and binding regimes), and a nonlinear
+second-order pruned path with a single initial innovation whose constraint
+stays slack. `order=1` or `sigma=0` explicitly selects linear OccBin.
+Nonlinear binding episodes and nonlinear anticipated future innovations raise
+`NotImplementedError`: they need regime-specific second-order decision rules.
+Unconstrained curvature cannot simply be added to a constrained path because
+it may violate the other equilibrium equations. Second-order solver failures
+are propagated rather than silently returning a first-order result.
+
 ### 4.1 Multi-Constraint Piecewise Linear Architecture
 
 **OccBin (Guerrieri & Iacoviello 2015)** approximates models with occasionally binding constraints by defining piecewise linear regimes:

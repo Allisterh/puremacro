@@ -2,13 +2,24 @@
 
 # puremacro examples gallery
 
-Generated: 2026-10-18T06:11:25Z
+Generated: 2026-10-19T00:01:39Z
 
 | Status | Count |
 |---|---|
 | PASS | 84 |
-| SKIP | 9 |
-| FAIL | 0 |
+| SKIP | 8 |
+| FAIL | 1 |
+
+## FAIL (1)
+
+### romer_romer_2010_replication
+
+- **Description:** Original-data Romer–Romer (2010) baseline and independent evidence.
+- **Status:** FAIL
+- **Reason:** RR2010 baseline: FAIL; h10=-3.08081276, t=-3.52499608; output=output/romer_romer_2010_replication
+- **Runtime:** 1.458 s
+- **Last run:** 2026-10-19T00:01:39Z
+- **Figures:** none
 
 ## PASS (84)
 
@@ -16,8 +27,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Weak-instrument-robust Anderson-Rubin inference for local projections (LP-IV).
 - **Status:** PASS
-- **Runtime:** 1.609 s
-- **Last run:** 2026-09-02T16:09:27Z
+- **Runtime:** 3.281 s
+- **Last run:** 2026-10-18T23:39:34Z
 - **Figures:**
   - `../puremacro/examples/output/anderson_rubin_weak_iv_demo.png`
 
@@ -25,8 +36,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Business cycle filtering comparison: Baxter-King, Christiano-Fitzgerald, Beveridge-Nelson & Hamilton.
 - **Status:** PASS
-- **Runtime:** 0.888 s
-- **Last run:** 2026-09-02T16:09:29Z
+- **Runtime:** 1.645 s
+- **Last run:** 2026-10-18T23:39:36Z
 - **Figures:**
   - `../puremacro/examples/output/bandpass_cycles_comparison.png`
 
@@ -34,16 +45,16 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Berkowitz (2001) joint LR test: a more powerful PIT diagnostic.
 - **Status:** PASS
-- **Runtime:** 0.928 s
-- **Last run:** 2026-09-02T16:09:30Z
+- **Runtime:** 1.836 s
+- **Last run:** 2026-10-18T23:39:38Z
 - **Figures:** none
 
 ### bvar_fan_chart
 
 - **Description:** Density forecast (fan chart) from a Minnesota-prior BVAR via Gibbs.
 - **Status:** PASS
-- **Runtime:** 1.535 s
-- **Last run:** 2026-09-02T16:09:32Z
+- **Runtime:** 2.647 s
+- **Last run:** 2026-10-18T23:39:43Z
 - **Figures:**
   - `../puremacro/examples/output/bvar_fan_chart.png`
 
@@ -51,8 +62,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Central Bank Narrative Sentiment & Monetary Policy Transmission.
 - **Status:** PASS
-- **Runtime:** 1.906 s
-- **Last run:** 2026-09-02T16:09:35Z
+- **Runtime:** 3.199 s
+- **Last run:** 2026-10-18T23:39:48Z
 - **Figures:**
   - `../puremacro/examples/output/central_bank_narrative_sentiment.png`
 
@@ -61,7 +72,7 @@ Generated: 2026-10-18T06:11:25Z
 - **Description:** DICE Climate-Macroeconomic Simulation & Policy Analysis.
 - **Status:** PASS
 - **Runtime:** 1.397 s
-- **Last run:** 2026-10-18T06:06:30Z
+- **Last run:** 2026-10-18T23:39:49Z
 - **Figures:**
   - `../puremacro/examples/output/climate_dice_simulation.png`
 
@@ -69,8 +80,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Climate Transition Risk and Sovereign Debt Sustainability.
 - **Status:** PASS
-- **Runtime:** 1.06 s
-- **Last run:** 2026-09-02T16:09:37Z
+- **Runtime:** 1.486 s
+- **Last run:** 2026-10-18T23:39:51Z
 - **Figures:**
   - `../puremacro/examples/output/climate_sovereign_debt_risk.png`
 
@@ -78,16 +89,16 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Engle-Granger and Johansen cointegration on a 3-variable simulated system.
 - **Status:** PASS
-- **Runtime:** 1.113 s
-- **Last run:** 2026-09-02T16:09:38Z
+- **Runtime:** 1.246 s
+- **Last run:** 2026-10-18T23:39:52Z
 - **Figures:** none
 
 ### dcc_volatility
 
 - **Description:** Engle (2002) DCC: time-varying correlations among three return series.
 - **Status:** PASS
-- **Runtime:** 2.062 s
-- **Last run:** 2026-09-02T16:16:16Z
+- **Runtime:** 2.813 s
+- **Last run:** 2026-10-18T23:39:55Z
 - **Figures:**
   - `../puremacro/examples/output/dcc_volatility.png`
 
@@ -95,8 +106,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** High-dimensional dynamic factor model: Bai-Ng IC + PCA factors.
 - **Status:** PASS
-- **Runtime:** 0.782 s
-- **Last run:** 2026-09-02T16:09:41Z
+- **Runtime:** 1.106 s
+- **Last run:** 2026-10-18T23:39:56Z
 - **Figures:**
   - `../puremacro/examples/output/dfm_bai_ng.png`
 
@@ -104,8 +115,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Single-factor dynamic factor model via the Kalman filter.
 - **Status:** PASS
-- **Runtime:** 0.739 s
-- **Last run:** 2026-09-02T16:09:42Z
+- **Runtime:** 0.932 s
+- **Last run:** 2026-10-18T23:39:57Z
 - **Figures:**
   - `../puremacro/examples/output/dfm_nowcast_kalman.png`
 
@@ -113,32 +124,40 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Callaway-Sant'Anna + Sun-Abraham staggered DiD demo.
 - **Status:** PASS
-- **Runtime:** 0.915 s
-- **Last run:** 2026-09-02T16:09:43Z
+- **Runtime:** 1.518 s
+- **Last run:** 2026-10-18T23:39:58Z
 - **Figures:** none
 
 ### diebold_yilmaz_spillover
 
 - **Description:** Diebold-Yilmaz (2012) volatility-spillover index on a synthetic 4-variable VAR.
 - **Status:** PASS
-- **Runtime:** 1.12 s
-- **Last run:** 2026-09-02T16:09:44Z
+- **Runtime:** 1.279 s
+- **Last run:** 2026-10-18T23:40:00Z
+- **Figures:** none
+
+### distributional_trade_ge
+
+- **Description:** Synthetic GE tariff experiment with synthetic household groups.
+- **Status:** PASS
+- **Runtime:** 1.769 s
+- **Last run:** 2026-10-18T23:48:28Z
 - **Figures:** none
 
 ### dsge_ar1_demo
 
 - **Description:** Toy AR(1) state-space — demonstrates puremacro.dsge.estimate_dsge.
 - **Status:** PASS
-- **Runtime:** 56.542 s
-- **Last run:** 2026-09-02T16:10:41Z
+- **Runtime:** 55.334 s
+- **Last run:** 2026-10-18T23:40:56Z
 - **Figures:** none
 
 ### dsge_markov_switching
 
 - **Description:** Markov-Switching DSGE Perturbation: Monetary Policy Regimes & Analytical GIRFs.
 - **Status:** PASS
-- **Runtime:** 1.868 s
-- **Last run:** 2026-10-18T06:02:34Z
+- **Runtime:** 2.345 s
+- **Last run:** 2026-10-18T23:40:59Z
 - **Figures:**
   - `../puremacro/examples/output/dsge_markov_switching.png`
 
@@ -146,8 +165,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** DSGE News & Anticipated Shocks Engine: State Augmentation & Variance Decomposition.
 - **Status:** PASS
-- **Runtime:** 2.165 s
-- **Last run:** 2026-10-18T06:02:37Z
+- **Runtime:** 2.255 s
+- **Last run:** 2026-10-18T23:41:01Z
 - **Figures:**
   - `../puremacro/examples/output/dsge_news_shocks.png`
 
@@ -155,16 +174,16 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Three-equation New Keynesian model, written as equations rather than matrices.
 - **Status:** PASS
-- **Runtime:** 1.064 s
-- **Last run:** 2026-09-02T16:10:43Z
+- **Runtime:** 1.674 s
+- **Last run:** 2026-10-18T23:41:02Z
 - **Figures:** none
 
 ### dsge_nuts_estimation
 
 - **Description:** Bayesian DSGE Estimation via No-U-Turn Sampler (NUTS) Hamiltonian Monte Carlo.
 - **Status:** PASS
-- **Runtime:** 40.721 s
-- **Last run:** 2026-10-18T06:03:17Z
+- **Runtime:** 45.685 s
+- **Last run:** 2026-10-18T23:41:48Z
 - **Figures:**
   - `../puremacro/examples/output/dsge_nuts_autocorr.png`
   - `../puremacro/examples/output/dsge_nuts_estimation.png`
@@ -175,8 +194,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Optimal Monetary Policy: Markov-Perfect Discretion vs LQ Commitment.
 - **Status:** PASS
-- **Runtime:** 1.981 s
-- **Last run:** 2026-10-18T06:03:19Z
+- **Runtime:** 2.118 s
+- **Last run:** 2026-10-18T23:41:50Z
 - **Figures:**
   - `../puremacro/examples/output/dsge_optimal_discretion.png`
 
@@ -184,8 +203,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Nonlinear DSGE Particle Filtering with Stochastic Volatility (BPF vs Constant Baseline).
 - **Status:** PASS
-- **Runtime:** 2.089 s
-- **Last run:** 2026-10-18T06:03:21Z
+- **Runtime:** 2.324 s
+- **Last run:** 2026-10-18T23:41:53Z
 - **Figures:**
   - `../puremacro/examples/output/dsge_particle_filter_sv.png`
 
@@ -193,8 +212,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Linearised RBC model solved with the Klein (2000) QZ method.
 - **Status:** PASS
-- **Runtime:** 1.45 s
-- **Last run:** 2026-09-02T16:10:45Z
+- **Runtime:** 1.751 s
+- **Last run:** 2026-10-18T23:41:54Z
 - **Figures:**
   - `../puremacro/examples/output/dsge_rbc_klein.png`
 
@@ -202,8 +221,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** DSGE-VAR Hybrid Estimation & Marginal Data Density Optimization.
 - **Status:** PASS
-- **Runtime:** 2.22 s
-- **Last run:** 2026-10-18T06:03:24Z
+- **Runtime:** 2.279 s
+- **Last run:** 2026-10-18T23:41:57Z
 - **Figures:**
   - `../puremacro/examples/output/dsge_var_estimation.png`
 
@@ -211,8 +230,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Empirical Benchmark Replications: Galí (1999) & Mertens-Ravn (2013).
 - **Status:** PASS
-- **Runtime:** 3.107 s
-- **Last run:** 2026-10-18T06:06:34Z
+- **Runtime:** 2.674 s
+- **Last run:** 2026-10-18T23:41:59Z
 - **Figures:**
   - `../puremacro/examples/output/empirical_benchmark_replications.png`
 
@@ -220,8 +239,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Exact-diffuse Kalman initialisation (Koopman-Durbin 2003).
 - **Status:** PASS
-- **Runtime:** 0.429 s
-- **Last run:** 2026-09-02T16:10:48Z
+- **Runtime:** 0.718 s
+- **Last run:** 2026-10-18T23:42:00Z
 - **Figures:**
   - `../puremacro/examples/output/exact_diffuse_kalman.png`
 
@@ -229,8 +248,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Live FRED fetch + LP + markdown report — full pipeline.
 - **Status:** PASS
-- **Runtime:** 2.338 s
-- **Last run:** 2026-09-02T16:10:50Z
+- **Runtime:** 1.667 s
+- **Last run:** 2026-10-18T23:42:02Z
 - **Figures:**
   - `../puremacro/examples/output/fetch_fred_demo.png`
 
@@ -238,8 +257,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Phillips-Hansen FM-OLS and Stock-Watson DOLS vs naive OLS on a known cointegrating DGP.
 - **Status:** PASS
-- **Runtime:** 1.542 s
-- **Last run:** 2026-09-02T16:10:52Z
+- **Runtime:** 1.643 s
+- **Last run:** 2026-10-18T23:42:03Z
 - **Figures:**
   - `../puremacro/examples/output/fm_ols_dols.png`
 
@@ -247,8 +266,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Density-forecast evaluation: PIT, CRPS, KLIC for two competing models.
 - **Status:** PASS
-- **Runtime:** 1.488 s
-- **Last run:** 2026-09-02T16:10:53Z
+- **Runtime:** 1.464 s
+- **Last run:** 2026-10-18T23:42:05Z
 - **Figures:**
   - `../puremacro/examples/output/forecast_density_eval.png`
 
@@ -256,8 +275,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Gali (1999 AER) technology shocks and the hours debate — BQ long-run SVAR on real US data.
 - **Status:** PASS
-- **Runtime:** 1.96 s
-- **Last run:** 2026-09-02T16:10:55Z
+- **Runtime:** 1.905 s
+- **Last run:** 2026-10-18T23:42:07Z
 - **Figures:**
   - `../puremacro/examples/output/gali_1999_hours.png`
 
@@ -265,8 +284,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** GARCH-MIDAS mixed-frequency volatility model (Engle, Ghysels & Sohn 2013).
 - **Status:** PASS
-- **Runtime:** 1.818 s
-- **Last run:** 2026-09-02T16:10:57Z
+- **Runtime:** 1.672 s
+- **Last run:** 2026-10-18T23:42:08Z
 - **Figures:**
   - `../puremacro/examples/output/garch_midas_macro_volatility.png`
 
@@ -274,16 +293,16 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Diebold-Yilmaz spillover with GFEVD: order-invariance demo.
 - **Status:** PASS
-- **Runtime:** 1.115 s
-- **Last run:** 2026-09-02T16:10:58Z
+- **Runtime:** 1.004 s
+- **Last run:** 2026-10-18T23:42:09Z
 - **Figures:** none
 
 ### gk_robust_from_gibbs
 
 - **Description:** Posterior-aware sign-restriction bands: Giacomini-Kitagawa 2021 fed by ``minnesota_gibbs`` posterior draws.
 - **Status:** PASS
-- **Runtime:** 4.78 s
-- **Last run:** 2026-09-02T16:11:03Z
+- **Runtime:** 4.633 s
+- **Last run:** 2026-10-18T23:42:14Z
 - **Figures:**
   - `../puremacro/examples/output/gk_robust_from_gibbs.png`
 
@@ -291,8 +310,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Giacomini-Kitagawa (2021) robust bands vs RWZ posterior bands on a sign-restricted SVAR.
 - **Status:** PASS
-- **Runtime:** 2.983 s
-- **Last run:** 2026-09-02T16:11:06Z
+- **Runtime:** 2.787 s
+- **Last run:** 2026-10-18T23:42:17Z
 - **Figures:**
   - `../puremacro/examples/output/gk_robust_signs.png`
 
@@ -300,8 +319,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Global fiscal stance — sum of signed narrative magnitudes across the homogeneous IV panel, per quarter.
 - **Status:** PASS
-- **Runtime:** 0.882 s
-- **Last run:** 2026-09-02T16:17:09Z
+- **Runtime:** 0.943 s
+- **Last run:** 2026-10-18T23:42:18Z
 - **Figures:**
   - `../puremacro/examples/output/global_fiscal_stance.csv`
   - `../puremacro/examples/output/global_fiscal_stance.png`
@@ -310,8 +329,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Empirical-Bayes hyperparameter search for a Minnesota BVAR (Giannone-Lenza-Primiceri 2015, simplified).
 - **Status:** PASS
-- **Runtime:** 1.577 s
-- **Last run:** 2026-09-02T16:11:08Z
+- **Runtime:** 1.551 s
+- **Last run:** 2026-10-18T23:42:19Z
 - **Figures:**
   - `../puremacro/examples/output/glp_lambda_search.png`
 
@@ -319,8 +338,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Sequence-Space HANK Model Simulation & Multiplier Decomposition.
 - **Status:** PASS
-- **Runtime:** 1.672 s
-- **Last run:** 2026-09-02T16:11:10Z
+- **Runtime:** 2.219 s
+- **Last run:** 2026-10-18T23:42:22Z
 - **Figures:**
   - `../puremacro/examples/output/hank_sequence_space.png`
 
@@ -328,8 +347,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Heterogeneous-Agent New Keynesian (HANK) Sequence-Space Bridge (.mod).
 - **Status:** PASS
-- **Runtime:** 2.387 s
-- **Last run:** 2026-10-18T06:03:26Z
+- **Runtime:** 2.263 s
+- **Last run:** 2026-10-18T23:42:24Z
 - **Figures:**
   - `../puremacro/examples/output/hank_sequence_space_bridge.png`
 
@@ -337,8 +356,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Corsi (2009) HAR-RV regression on simulated intra-day returns.
 - **Status:** PASS
-- **Runtime:** 1.541 s
-- **Last run:** 2026-09-02T16:11:12Z
+- **Runtime:** 1.624 s
+- **Last run:** 2026-10-18T23:42:26Z
 - **Figures:**
   - `../puremacro/examples/output/har_realized_vol.png`
 
@@ -346,8 +365,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** HFI monetary-policy shock: synthetic Gertler-Karadi 2015-style pipeline.
 - **Status:** PASS
-- **Runtime:** 1.671 s
-- **Last run:** 2026-10-18T06:06:36Z
+- **Runtime:** 1.564 s
+- **Last run:** 2026-10-18T23:42:27Z
 - **Figures:**
   - `../puremacro/examples/output/hfi_gertler_karadi.png`
 
@@ -355,8 +374,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Kilian (2009 AER) "Not All Oil Price Shocks Are Alike" — recursive oil-market VAR with historical decomposition.
 - **Status:** PASS
-- **Runtime:** 2.691 s
-- **Last run:** 2026-09-02T16:11:16Z
+- **Runtime:** 2.686 s
+- **Last run:** 2026-10-18T23:42:30Z
 - **Figures:**
   - `../puremacro/examples/output/kilian_2009_oil.png`
 
@@ -364,8 +383,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Lag-augmented LP (Montiel Olea & Plagborg-Møller 2021) vs Newey-West Jordà LP.
 - **Status:** PASS
-- **Runtime:** 1.673 s
-- **Last run:** 2026-10-18T06:06:38Z
+- **Runtime:** 2.008 s
+- **Last run:** 2026-10-18T23:42:32Z
 - **Figures:**
   - `../puremacro/examples/output/la_lp_pmw.png`
 
@@ -373,40 +392,40 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Labor-force transitions demo using the Shimer 2-state fallback.
 - **Status:** PASS
-- **Runtime:** 0.455 s
-- **Last run:** 2026-09-02T16:11:18Z
+- **Runtime:** 0.415 s
+- **Last run:** 2026-10-18T23:42:33Z
 - **Figures:** none
 
 ### lp_asymmetric_tenreyro
 
 - **Description:** Tenreyro-Thwaites (2016)-style asymmetric local projection on synthetic data.
 - **Status:** PASS
-- **Runtime:** 1.106 s
-- **Last run:** 2026-09-02T16:11:19Z
+- **Runtime:** 1.16 s
+- **Last run:** 2026-10-18T23:42:34Z
 - **Figures:** none
 
 ### lp_smooth_demo
 
 - **Description:** Barnichon-Brownlees (2019) smoothed local projections on synthetic data.
 - **Status:** PASS
-- **Runtime:** 1.293 s
-- **Last run:** 2026-10-18T06:06:39Z
+- **Runtime:** 1.178 s
+- **Last run:** 2026-10-18T23:42:36Z
 - **Figures:** none
 
 ### lwui_wage_demo
 
 - **Description:** LWUI-wage demo: labor x uncertainty x wage triple co-occurrence.
 - **Status:** PASS
-- **Runtime:** 0.49 s
-- **Last run:** 2026-09-02T16:11:22Z
+- **Runtime:** 1.352 s
+- **Last run:** 2026-10-18T23:42:38Z
 - **Figures:** none
 
 ### mcmc_diagnostics
 
 - **Description:** MCMC convergence diagnostics on a real Gibbs sampler.
 - **Status:** PASS
-- **Runtime:** 1.611 s
-- **Last run:** 2026-10-18T06:06:41Z
+- **Runtime:** 1.786 s
+- **Last run:** 2026-10-18T23:42:40Z
 - **Figures:**
   - `../puremacro/examples/output/mcmc_diagnostics.png`
 
@@ -414,8 +433,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** MIDAS nowcasting: quarterly y on monthly x.
 - **Status:** PASS
-- **Runtime:** 1.456 s
-- **Last run:** 2026-09-02T16:11:25Z
+- **Runtime:** 1.703 s
+- **Last run:** 2026-10-18T23:42:41Z
 - **Figures:**
   - `../puremacro/examples/output/midas_quarterly_monthly.png`
 
@@ -423,16 +442,16 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Bring-your-own-likelihood: Student-t MLE with sandwich SE.
 - **Status:** PASS
-- **Runtime:** 0.967 s
-- **Last run:** 2026-09-02T16:11:26Z
+- **Runtime:** 1.773 s
+- **Last run:** 2026-10-18T23:42:43Z
 - **Figures:** none
 
 ### ms_var_business_cycle
 
 - **Description:** Two-regime MSIH MS-VAR for a recession dating exercise.
 - **Status:** PASS
-- **Runtime:** 1.676 s
-- **Last run:** 2026-10-18T06:06:42Z
+- **Runtime:** 2.063 s
+- **Last run:** 2026-10-18T23:42:45Z
 - **Figures:**
   - `../puremacro/examples/output/ms_var_business_cycle.png`
 
@@ -440,8 +459,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Narrative Macroeconomics: Transcripts, Dynamic Topics, Burst Anomalies, and SVARs.
 - **Status:** PASS
-- **Runtime:** 1.829 s
-- **Last run:** 2026-09-02T16:11:30Z
+- **Runtime:** 1.846 s
+- **Last run:** 2026-10-18T23:42:47Z
 - **Figures:**
   - `../puremacro/examples/output/narrative_bursts_and_transcripts.png`
 
@@ -449,8 +468,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Custom-corpus pipeline (workflow A): user-supplied texts → keyword scoring → quarterly IV → diagnostics. No network, no LLM.
 - **Status:** PASS
-- **Runtime:** 0.81 s
-- **Last run:** 2026-09-02T16:11:30Z
+- **Runtime:** 1.434 s
+- **Last run:** 2026-10-18T23:42:48Z
 - **Figures:**
   - `../puremacro/examples/output/narrative_custom_corpus.png`
 
@@ -458,8 +477,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** G7 narrative-instrument panel demo.
 - **Status:** PASS
-- **Runtime:** 31.332 s
-- **Last run:** 2026-10-18T06:07:14Z
+- **Runtime:** 1.508 s
+- **Last run:** 2026-10-18T23:42:50Z
 - **Figures:**
   - `../puremacro/examples/output/narrative_g7_panel.png`
 
@@ -467,8 +486,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Build the homogeneous cross-country fiscal-narrative-IV panel.
 - **Status:** PASS
-- **Runtime:** 9.072 s
-- **Last run:** 2026-10-18T06:07:23Z
+- **Runtime:** 1.764 s
+- **Last run:** 2026-10-18T23:42:52Z
 - **Figures:**
   - `../puremacro/examples/output/homogeneous_panel.png`
   - `../puremacro/examples/output/narrative_iv_panel_consumption.csv`
@@ -481,32 +500,32 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Narrative indices demo — assembles all six indices from a synthetic in-process corpus and prints summary statistics.
 - **Status:** PASS
-- **Runtime:** 0.503 s
-- **Last run:** 2026-09-02T16:11:41Z
+- **Runtime:** 1.244 s
+- **Last run:** 2026-10-18T23:42:53Z
 - **Figures:** none
 
 ### narrative_llm_pipeline
 
 - **Description:** End-to-end LLM pipeline (workflow C): a small corpus → LLM scoring → ``NarrativeInstrument``.
 - **Status:** PASS
-- **Runtime:** 4.017 s
-- **Last run:** 2026-10-18T06:07:27Z
+- **Runtime:** 0.99 s
+- **Last run:** 2026-10-18T23:42:54Z
 - **Figures:** none
 
 ### narrative_local_llm
 
 - **Description:** Run puremacro's narrative LLM features for FREE on a local model.
 - **Status:** PASS
-- **Runtime:** 25.588 s
-- **Last run:** 2026-10-18T06:07:53Z
+- **Runtime:** 0.999 s
+- **Last run:** 2026-10-18T23:42:55Z
 - **Figures:** none
 
 ### narrative_multilingual_live
 
 - **Description:** Live multilingual fetch + IMF Article-IV + Google News across the G7 countries plus the IMF and ECB.
 - **Status:** PASS
-- **Runtime:** 113.667 s
-- **Last run:** 2026-10-18T06:09:46Z
+- **Runtime:** 1.438 s
+- **Last run:** 2026-10-18T23:42:56Z
 - **Figures:**
   - `../puremacro/examples/output/narrative_multilingual_live.png`
 
@@ -514,8 +533,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Replication-layer demo (workflow B): Ramey (2011) defense-news narrative instrument → ``proxy_svar`` on a small US-style VAR → spending-multiplier-style IRF.
 - **Status:** PASS
-- **Runtime:** 1.815 s
-- **Last run:** 2026-09-02T16:12:17Z
+- **Runtime:** 1.808 s
+- **Last run:** 2026-10-18T23:42:58Z
 - **Figures:**
   - `../puremacro/examples/output/narrative_ramey_2011.png`
 
@@ -523,8 +542,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Replication-layer demo (workflow B): Romer-Romer (2010) US tax narrative shocks → comparison against the Ramey defense-news series.
 - **Status:** PASS
-- **Runtime:** 2.924 s
-- **Last run:** 2026-10-18T06:09:50Z
+- **Runtime:** 1.478 s
+- **Last run:** 2026-10-18T23:43:00Z
 - **Figures:**
   - `../puremacro/examples/output/narrative_rr_vs_ramey.png`
 
@@ -532,8 +551,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Narrative sign restrictions (Antolín-Díaz & Rubio-Ramírez 2018) — the October 1979 Volcker episode as an identification input.
 - **Status:** PASS
-- **Runtime:** 2.233 s
-- **Last run:** 2026-10-18T06:09:52Z
+- **Runtime:** 1.75 s
+- **Last run:** 2026-10-18T23:43:02Z
 - **Figures:**
   - `../puremacro/examples/output/narrative_sign_adrr.png`
 
@@ -541,8 +560,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Link a user's US narrative-instrument series to the canonical published instruments: Ramey (2011) defense news, Romer-Romer (2010) exogenous tax, Mertens-Ravn (2013) unanticipated tax.
 - **Status:** PASS
-- **Runtime:** 2.743 s
-- **Last run:** 2026-10-18T06:09:55Z
+- **Runtime:** 1.86 s
+- **Last run:** 2026-10-18T23:43:04Z
 - **Figures:**
   - `../puremacro/examples/output/narrative_us_canonical_compare.png`
 
@@ -550,8 +569,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** SVAR identification by non-Gaussianity (Lanne-Meitz-Saikkonen 2017).
 - **Status:** PASS
-- **Runtime:** 1.494 s
-- **Last run:** 2026-09-02T16:12:23Z
+- **Runtime:** 1.254 s
+- **Last run:** 2026-10-18T23:43:05Z
 - **Figures:**
   - `../puremacro/examples/output/non_gaussian_svar.png`
 
@@ -559,8 +578,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Mixed-Frequency GDP Nowcasting & News Decomposition.
 - **Status:** PASS
-- **Runtime:** 1.752 s
-- **Last run:** 2026-09-02T16:12:24Z
+- **Runtime:** 1.636 s
+- **Last run:** 2026-10-18T23:43:06Z
 - **Figures:**
   - `../puremacro/examples/output/nowcasting_gdp_news.png`
 
@@ -568,8 +587,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** High-Dimensional Penalized Macroeconomic Forecasting.
 - **Status:** PASS
-- **Runtime:** 1.813 s
-- **Last run:** 2026-09-02T16:12:26Z
+- **Runtime:** 1.565 s
+- **Last run:** 2026-10-18T23:43:08Z
 - **Figures:**
   - `../puremacro/examples/output/penalized_macro_forecasting.png`
 
@@ -577,8 +596,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Posterior-predictive fan chart from BVAR Gibbs draws.
 - **Status:** PASS
-- **Runtime:** 1.564 s
-- **Last run:** 2026-09-02T16:12:28Z
+- **Runtime:** 1.34 s
+- **Last run:** 2026-10-18T23:43:09Z
 - **Figures:**
   - `../puremacro/examples/output/posterior_predictive_fan.png`
 
@@ -586,8 +605,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Ramey-Zubairy (2018 JPE) spending multipliers — LP-IV with military news shocks on 126 years of US data.
 - **Status:** PASS
-- **Runtime:** 1.939 s
-- **Last run:** 2026-09-02T16:12:30Z
+- **Runtime:** 2.443 s
+- **Last run:** 2026-10-18T23:43:12Z
 - **Figures:**
   - `../puremacro/examples/output/ramey_zubairy_2018_multipliers.png`
 
@@ -595,8 +614,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** End-to-end regime workflow: Bai-Perron breaks → regime indicator → regime-conditional LP.
 - **Status:** PASS
-- **Runtime:** 2.089 s
-- **Last run:** 2026-09-02T16:17:13Z
+- **Runtime:** 2.042 s
+- **Last run:** 2026-10-18T23:43:14Z
 - **Figures:**
   - `../puremacro/examples/output/regime_workflow.png`
 
@@ -604,48 +623,40 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Render LP and IRF results as Markdown / LaTeX tables ready to drop into a paper or a Quarto / Jupyter notebook on iPad.
 - **Status:** PASS
-- **Runtime:** 1.125 s
-- **Last run:** 2026-09-02T16:17:14Z
-- **Figures:** none
-
-### scf_aiyagari
-
-- **Description:** Aiyagari (1994) calibrated to the Survey of Consumer Finances.
-- **Status:** PASS
-- **Runtime:** 46.415 s
-- **Last run:** 2026-10-18T06:04:15Z
+- **Runtime:** 0.997 s
+- **Last run:** 2026-10-18T23:43:15Z
 - **Figures:** none
 
 ### shock_atlas_demo
 
 - **Description:** Shock-atlas registry demo.
 - **Status:** PASS
-- **Runtime:** 1.15 s
-- **Last run:** 2026-10-18T06:09:56Z
+- **Runtime:** 0.964 s
+- **Last run:** 2026-10-18T23:43:18Z
 - **Figures:** none
 
 ### sigma_decomposition
 
 - **Description:** SigmaObject volatility decomposition — Python equivalent of ``MASTER_VolatilityDecomposition_Labor.m``.
 - **Status:** PASS
-- **Runtime:** 1.111 s
-- **Last run:** 2026-09-02T16:12:34Z
+- **Runtime:** 0.981 s
+- **Last run:** 2026-10-18T23:43:19Z
 - **Figures:** none
 
 ### sign_restrictions_uhlig
 
 - **Description:** Uhlig (2005)-style sign-restricted SVAR on a synthetic 3-variable DGP.
 - **Status:** PASS
-- **Runtime:** 1.136 s
-- **Last run:** 2026-09-02T16:12:35Z
+- **Runtime:** 1.075 s
+- **Last run:** 2026-10-18T23:43:20Z
 - **Figures:** none
 
 ### spectral_business_cycle
 
 - **Description:** Spectral analysis of a synthetic business-cycle-style series.
 - **Status:** PASS
-- **Runtime:** 0.393 s
-- **Last run:** 2026-09-02T16:12:36Z
+- **Runtime:** 0.686 s
+- **Last run:** 2026-10-18T23:43:21Z
 - **Figures:**
   - `../puremacro/examples/output/spectral_business_cycle.png`
 
@@ -653,16 +664,16 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Empirical LPs -> joint sampling covariance -> a three-equation NK model.
 - **Status:** PASS
-- **Runtime:** 2.535 s
-- **Last run:** 2026-10-18T06:04:17Z
+- **Runtime:** 1.688 s
+- **Last run:** 2026-10-18T23:43:23Z
 - **Figures:** none
 
 ### svariv_mertens_ravn
 
 - **Description:** Mertens-Ravn (2013)-style proxy-SVAR replication on synthetic data.
 - **Status:** PASS
-- **Runtime:** 1.688 s
-- **Last run:** 2026-10-18T06:09:58Z
+- **Runtime:** 1.372 s
+- **Last run:** 2026-10-18T23:43:24Z
 - **Figures:**
   - `../puremacro/examples/output/svariv_mertens_ravn_irf.png`
 
@@ -670,8 +681,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Synthetic control on a simulated treatment.
 - **Status:** PASS
-- **Runtime:** 1.125 s
-- **Last run:** 2026-09-02T16:12:38Z
+- **Runtime:** 0.958 s
+- **Last run:** 2026-10-18T23:43:25Z
 - **Figures:**
   - `../puremacro/examples/output/synthetic_control.png`
 
@@ -679,8 +690,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Synthetic Difference-in-Differences causal policy evaluation (Arkhangelsky et al. 2021).
 - **Status:** PASS
-- **Runtime:** 2.561 s
-- **Last run:** 2026-10-18T06:10:01Z
+- **Runtime:** 1.783 s
+- **Last run:** 2026-10-18T23:43:27Z
 - **Figures:**
   - `../puremacro/examples/output/synthetic_did_prop99.png`
 
@@ -688,8 +699,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Self-exciting threshold VAR: regime-dependent dynamics.
 - **Status:** PASS
-- **Runtime:** 1.438 s
-- **Last run:** 2026-09-02T16:12:42Z
+- **Runtime:** 1.585 s
+- **Last run:** 2026-10-18T23:43:28Z
 - **Figures:**
   - `../puremacro/examples/output/tvar_threshold.png`
 
@@ -697,8 +708,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Threshold cointegration / TVECM demo.
 - **Status:** PASS
-- **Runtime:** 1.438 s
-- **Last run:** 2026-09-02T16:12:43Z
+- **Runtime:** 1.285 s
+- **Last run:** 2026-10-18T23:43:30Z
 - **Figures:**
   - `../puremacro/examples/output/tvecm.png`
 
@@ -706,8 +717,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Time-varying-parameter VAR (Primiceri-style FFBS Gibbs).
 - **Status:** PASS
-- **Runtime:** 3.214 s
-- **Last run:** 2026-09-02T16:12:47Z
+- **Runtime:** 3.758 s
+- **Last run:** 2026-10-18T23:43:34Z
 - **Figures:**
   - `../puremacro/examples/output/tvp_var.png`
 
@@ -715,8 +726,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** TVP-VAR with stochastic volatility (Primiceri 2005, KSC sampler).
 - **Status:** PASS
-- **Runtime:** 4.739 s
-- **Last run:** 2026-09-02T16:12:51Z
+- **Runtime:** 5.524 s
+- **Last run:** 2026-10-18T23:43:39Z
 - **Figures:**
   - `../puremacro/examples/output/tvp_var_sv.png`
 
@@ -724,16 +735,16 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Are GDP revisions news or noise? A cross-country answer.
 - **Status:** PASS
-- **Runtime:** 35.975 s
-- **Last run:** 2026-09-02T16:13:27Z
+- **Runtime:** 33.729 s
+- **Last run:** 2026-10-18T23:49:22Z
 - **Figures:** none
 
 ### vintage_revisions
 
 - **Description:** Real-time vintages and forecast revisions.
 - **Status:** PASS
-- **Runtime:** 0.797 s
-- **Last run:** 2026-09-02T16:13:28Z
+- **Runtime:** 0.831 s
+- **Last run:** 2026-10-18T23:43:45Z
 - **Figures:**
   - `../puremacro/examples/output/vintage_revisions.png`
 
@@ -741,8 +752,8 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Adrian-Boyarchenko-Giannone (2019) vulnerable-growth demo.
 - **Status:** PASS
-- **Runtime:** 54.913 s
-- **Last run:** 2026-09-02T16:18:09Z
+- **Runtime:** 56.654 s
+- **Last run:** 2026-10-18T23:44:42Z
 - **Figures:**
   - `../puremacro/examples/output/vulnerable_growth.png`
 
@@ -750,20 +761,20 @@ Generated: 2026-10-18T06:11:25Z
 
 - **Description:** Wavelet variance decomposition of a synthetic GDP-like series.
 - **Status:** PASS
-- **Runtime:** 0.39 s
-- **Last run:** 2026-09-02T16:13:30Z
+- **Runtime:** 0.632 s
+- **Last run:** 2026-10-18T23:44:42Z
 - **Figures:**
   - `../puremacro/examples/output/wavelet_business_cycle.png`
 
-## SKIP (9)
+## SKIP (8)
 
 ### asset_composition_dynamics
 
 - **Description:** Investment composition over time, per country, from the augmented asset-breakdown panel.
 - **Status:** SKIP
 - **Reason:** local data file missing
-- **Runtime:** 0.725 s
-- **Last run:** 2026-10-18T06:06:29Z
+- **Runtime:** 0.738 s
+- **Last run:** 2026-10-18T23:39:35Z
 - **Figures:** none
 
 ### bloom2009
@@ -771,8 +782,8 @@ Generated: 2026-10-18T06:11:25Z
 - **Description:** Bloom (2009)-style uncertainty-shock VAR replication on quarterly USA data.
 - **Status:** SKIP
 - **Reason:** local data file missing
-- **Runtime:** 1.142 s
-- **Last run:** 2026-09-02T16:09:31Z
+- **Runtime:** 2.231 s
+- **Last run:** 2026-10-18T23:39:40Z
 - **Figures:** none
 
 ### caldara_iacoviello
@@ -780,17 +791,8 @@ Generated: 2026-10-18T06:11:25Z
 - **Description:** Caldara-Iacoviello (2022)-style geopolitical-risk shock VAR on USA quarterly data.
 - **Status:** SKIP
 - **Reason:** local data file missing
-- **Runtime:** 1.141 s
-- **Last run:** 2026-09-02T16:09:33Z
-- **Figures:** none
-
-### distributional_trade_ge
-
-- **Description:** Synthetic GE tariff experiment with synthetic household groups.
-- **Status:** SKIP
-- **Reason:** CLI dossier script (requires --output DIR)
-- **Runtime:** 1.216 s
-- **Last run:** 2026-10-18T06:02:32Z
+- **Runtime:** 1.707 s
+- **Last run:** 2026-10-18T23:39:45Z
 - **Figures:** none
 
 ### govt_vs_private_investment
@@ -798,8 +800,8 @@ Generated: 2026-10-18T06:11:25Z
 - **Description:** Government vs private investment shares from the augmented panel.
 - **Status:** SKIP
 - **Reason:** local data file missing
-- **Runtime:** 0.48 s
-- **Last run:** 2026-10-18T06:06:34Z
+- **Runtime:** 0.377 s
+- **Last run:** 2026-10-18T23:42:20Z
 - **Figures:** none
 
 ### lp_panel_dk
@@ -807,8 +809,8 @@ Generated: 2026-10-18T06:11:25Z
 - **Description:** Panel local projection of GDP on uncertainty with Driscoll-Kraay SE.
 - **Status:** SKIP
 - **Reason:** local data file missing
-- **Runtime:** 1.135 s
-- **Last run:** 2026-09-02T16:11:20Z
+- **Runtime:** 1.474 s
+- **Last run:** 2026-10-18T23:42:35Z
 - **Figures:** none
 
 ### narrative_event_study
@@ -817,7 +819,7 @@ Generated: 2026-10-18T06:11:25Z
 - **Status:** SKIP
 - **Reason:** requires local narrative-IV panel + MAV wedges file (not shipped)
 - **Runtime:** 0.0 s
-- **Last run:** 2026-10-18T06:06:42Z
+- **Last run:** 2026-10-18T23:42:48Z
 - **Figures:** none
 
 ### narrative_panel_lp
@@ -825,15 +827,15 @@ Generated: 2026-10-18T06:11:25Z
 - **Description:** Cross-country fiscal-multiplier panel local projection using the homogeneous narrative-IV panel as the shock series and the wedges-panel RGDP as the outcome.
 - **Status:** SKIP
 - **Reason:** local data file missing
-- **Runtime:** 0.62 s
-- **Last run:** 2026-10-18T06:09:47Z
+- **Runtime:** 0.329 s
+- **Last run:** 2026-10-18T23:42:57Z
 - **Figures:** none
 
-### romer_romer_2010_replication
+### scf_aiyagari
 
-- **Description:** Original-data Romer–Romer (2010) baseline and independent evidence.
+- **Description:** Aiyagari (1994) calibrated to the Survey of Consumer Finances.
 - **Status:** SKIP
-- **Reason:** CLI benchmark dossier (strict 2-decimal published rounding check)
-- **Runtime:** 1.816 s
-- **Last run:** 2026-10-18T06:03:28Z
+- **Reason:** network unavailable
+- **Runtime:** 1.193 s
+- **Last run:** 2026-10-18T23:43:17Z
 - **Figures:** none

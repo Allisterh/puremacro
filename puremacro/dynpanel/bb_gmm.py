@@ -174,7 +174,7 @@ def _build_level_block(
         for p in range(1, lag_dep_var + 1):
             y_a = _y_level_at(rec, t_int - p - off)
             y_b = _y_level_at(rec, t_int - p - off - 1)
-            Z_lvl[r, col] = y_a - y_b
+            Z_lvl[r, col] = np.nan if (y_a is None or y_b is None) else (y_a - y_b)
             col += 1
         # ΔX_endog_{t-1-off}.  NOT Δw_{i,t}: for a regressor declared
         # ENDOGENOUS, E[w_it ε_it] ≠ 0 by definition, so Δw_{i,t} =
@@ -184,13 +184,13 @@ def _build_level_block(
         for j in range(n_endog):
             v_t = _level_at(rec, t_int - 1 - off, "Xe", j)
             v_tm1 = _level_at(rec, t_int - 2 - off, "Xe", j)
-            Z_lvl[r, col] = v_t - v_tm1
+            Z_lvl[r, col] = np.nan if (v_t is None or v_tm1 is None) else (v_t - v_tm1)
             col += 1
         # ΔX_pred_{t-off}
         for j in range(n_pred):
             v_t = _level_at(rec, t_int - off, "Xp", j)
             v_tm1 = _level_at(rec, t_int - 1 - off, "Xp", j)
-            Z_lvl[r, col] = v_t - v_tm1
+            Z_lvl[r, col] = np.nan if (v_t is None or v_tm1 is None) else (v_t - v_tm1)
             col += 1
         # X_exog_t
         for j in range(n_exog):

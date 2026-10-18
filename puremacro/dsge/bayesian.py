@@ -1117,6 +1117,9 @@ def bayesian_irf(
                 s_bands[b_val] = (s_quantiles[low_q], s_quantiles[high_q])
         all_bands[s] = s_bands
 
+    final_median: Any
+    final_bands: Any
+    final_quantiles: Any
     if shock is not None or len(target_shocks) == 1:
         chosen_shock = shock if shock is not None else target_shocks[0]
         final_median = all_medians[chosen_shock]

@@ -155,6 +155,7 @@ class TradePolicySimulationResult:
         """Plot counterfactual outcome by country."""
         import matplotlib.pyplot as plt
 
+        fig: Any
         if ax is None:
             fig, ax = plt.subplots(figsize=figsize)
         else:
@@ -847,8 +848,10 @@ def _caliendo_parro_model_from_icio(
             fd_codes=tuple(f"FD{k:02d}" for k in range(1, nfd + 1)),
         )
     else:
-        icio = load_icio_data(table, return_structured=True, nfd=nfd,
-                              country_codes=country_codes, sector_codes=sector_codes)
+        loaded = load_icio_data(table, return_structured=True, nfd=nfd,
+                                country_codes=country_codes, sector_codes=sector_codes)
+        assert isinstance(loaded, ICIOData)
+        icio = loaded
 
     N, J = len(icio.country_codes), len(icio.sector_codes)
     F = len(icio.fd_codes)

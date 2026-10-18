@@ -244,7 +244,7 @@ class DynamicTariff:
         Full-table rows are subset to the calibration's active cells. Domestic
         entries (source country equal to destination) must be zero.
         """
-        tables = []
+        tables: list[np.ndarray | None] = []
         for name, value in (("rates", rates), ("consumption_rates", consumption_rates),
                             ("investment_rates", investment_rates)):
             if value is None:

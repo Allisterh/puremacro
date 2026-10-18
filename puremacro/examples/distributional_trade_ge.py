@@ -191,12 +191,13 @@ def run_application(output: Path, *, tariff_rate: float = .10):
     duties = pd.concat([_duties(base, calibration, "baseline"),
                         _duties(cf, calibration, "counterfactual")], ignore_index=True)
     revenue_rows = []
-    for name, result in (("baseline", base), ("counterfactual", cf)):
+    for name, eq_res in (("baseline", base), ("counterfactual", cf)):
         reconstructed = duties[duties.state == name].groupby("destination").duty_model_units.sum()
+        assert eq_res.tariffs is not None
         for country, index in zip(calibration.country_codes, range(nc)):
             receipt = float(reconstructed[country])
-            reported = float(result.tariffs[index])
-            government = float(result.T_sol.ravel()[index])
+            reported = float(eq_res.tariffs[index])
+            government = float(eq_res.T_sol.ravel()[index])
             _close(receipt, reported, f"{name} {country} bilateral tariff receipts")
             _close(receipt, government, f"{name} {country} zero-other-tax government budget")
             revenue_rows.append({"state": name, "country": country,
@@ -265,6 +266,10 @@ def run_application(output: Path, *, tariff_rate: float = .10):
               "tariff_transactions": duties, "revenue_audit": revenue_audit, "fiscal_allocation": fiscal}
     for name, frame in tables.items():
         frame.to_csv(output / f"{name}.csv", index=name not in ("all_scenarios", "tariff_transactions", "revenue_audit", "fiscal_allocation"))
+    assert base.intermediate_flows is not None
+    assert cf.intermediate_flows is not None
+    assert base.final_demand_flows is not None
+    assert cf.final_demand_flows is not None
     np.savez_compressed(output / "equilibrium_evidence.npz", calibration_table=raw,
                         baseline_solution=base.x_sol, counterfactual_solution=cf.x_sol,
                         baseline_wages=base.w_sol, counterfactual_wages=cf.w_sol,
@@ -385,7 +390,7 @@ def _report(output, incidence, aggregate, prices, fiscal, manifest):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, required=True, help="directory for the tables, figure and manifest")
+    parser.add_argument("--output", type=Path, default=Path("output/distributional_trade_ge"), help="directory for the tables, figure and manifest")
     parser.add_argument("--tariff-rate", type=float, default=.10)
     args = parser.parse_args()
     study = run_application(args.output, tariff_rate=args.tariff_rate)

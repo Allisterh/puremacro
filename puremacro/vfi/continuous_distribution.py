@@ -24,7 +24,10 @@ import sys
 import time
 import warnings
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Sequence, Tuple, Union
+
+if TYPE_CHECKING:
+    import matplotlib.figure
 
 import numpy as np
 import pandas as pd
@@ -157,7 +160,7 @@ def _evaluate_policy(
     k_arr = np.asarray(asset_grid, dtype=np.float64)
     N_k = len(k_arr)
     has_shocks = shock_transition is not None
-    n_z = shock_transition.shape[0] if has_shocks else (len(shock_grid) if shock_grid is not None else 1)
+    n_z = shock_transition.shape[0] if shock_transition is not None else (len(shock_grid) if shock_grid is not None else 1)
     z_arr = np.asarray(shock_grid, dtype=np.float64) if shock_grid is not None else np.arange(n_z, dtype=np.float64)
 
     # Case 1: Raw array
@@ -187,6 +190,8 @@ def _evaluate_policy(
         cols = []
         for fn in pol_fn:
             f = getattr(fn, "policy", fn)
+            if not callable(f):
+                raise TypeError(f"Policy element {fn} must be callable or have .policy method")
             val = np.asarray(f(k_arr), dtype=np.float64)
             cols.append(val)
         res = np.column_stack(cols)
@@ -1157,7 +1162,7 @@ AiyagariContinuousModel = _AiyagariContinuousModel
 
 def continuous_stationary_equilibrium(
     build_problem: Callable[[float], Any],
-    market_residual: Callable[[float, Any, ContinuousStationaryDistribution, Any], float],
+    market_residual: Callable[..., float],
     price_bracket: Tuple[float, float],
     asset_grid: Optional[np.ndarray] = None,
     shock_transition: Optional[np.ndarray] = None,
@@ -1369,7 +1374,7 @@ def _caller_stacklevel() -> int:
     and ``continuous_transition`` forward to ``solve_aiyagari_continuous``, so a
     fixed ``stacklevel=2`` would attribute the warning to library code.
     """
-    frame = sys._getframe(1)  # the function calling warnings.warn: stacklevel 1
+    frame: Any = sys._getframe(1)  # the function calling warnings.warn: stacklevel 1
     level = 1
     while frame is not None:
         if not os.path.abspath(frame.f_code.co_filename).startswith(_PUREMACRO_DIR):

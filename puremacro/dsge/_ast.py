@@ -533,9 +533,9 @@ class BinOp(Node):
             if dr_is_zero:
                 return BinOp("/", dl, self.right).simplify()
             if dl_is_zero:
-                num = UnaryOp("-", BinOp("*", self.left, dr))
+                num_unary = UnaryOp("-", BinOp("*", self.left, dr))
                 den = BinOp("^", self.right, Const(2))
-                return BinOp("/", num, den).simplify()
+                return BinOp("/", num_unary, den).simplify()
             num = BinOp("-", BinOp("*", dl, self.right), BinOp("*", self.left, dr))
             den = BinOp("^", self.right, Const(2))
             return BinOp("/", num, den).simplify()
@@ -724,7 +724,7 @@ class Call(Node):
         if fn in ("log", "ln"):
             return BinOp("/", du, u).simplify()
         if fn == "log10":
-            den = BinOp("*", u, Const(math.log(10.0)))
+            den: Node = BinOp("*", u, Const(math.log(10.0)))
             return BinOp("/", du, den).simplify()
         if fn == "sqrt":
             den = BinOp("*", Const(2), Call("sqrt", (u,)))
@@ -835,7 +835,7 @@ class Call(Node):
         fn = self.func.lower()
         if fn == "steady_state":
             # For STEADY_STATE(expr), evaluate with coordinates mapped to lead=0 (steady-state values)
-            ss_var_values = {}
+            ss_var_values: dict[tuple[str, int] | str, float] = {}
             for k, v in var_values.items():
                 if isinstance(k, tuple):
                     ss_var_values[(k[0], 0)] = v

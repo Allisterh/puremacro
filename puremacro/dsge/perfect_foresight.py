@@ -703,6 +703,7 @@ def solve_perfect_foresight(
 
         # Shocks
         raw_shocks = shocks if shocks is not None else exogenous_path
+        exo_sim: np.ndarray
         if raw_shocks is None:
             exo_sim = np.zeros((eff_periods, len(s_names_list)), dtype=float)
         else:
@@ -1124,19 +1125,23 @@ def solve_perfect_foresight(
             for t in range(eff_periods):
                 val = Y[t, v_idx]
                 if kind == "PINNED":
+                    assert lb_val is not None
                     Y[t, v_idx] = lb_val
                     bound_periods.append(t + 1)
                 elif kind == "LOWER":
+                    assert lb_val is not None
                     if val <= lb_val + 1e-6:
                         bound_periods.append(t + 1)
                     if val < lb_val:
                         Y[t, v_idx] = lb_val
                 elif kind == "UPPER":
+                    assert ub_val is not None
                     if val >= ub_val - 1e-6:
                         bound_periods.append(t + 1)
                     if val > ub_val:
                         Y[t, v_idx] = ub_val
                 elif kind == "TWO_SIDED":
+                    assert lb_val is not None and ub_val is not None
                     if val <= lb_val + 1e-6 or val >= ub_val - 1e-6:
                         bound_periods.append(t + 1)
                     if val < lb_val:

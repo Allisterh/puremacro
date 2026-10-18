@@ -312,8 +312,8 @@ m.local("y = w * exp(z)", "c = (1 + r)*a + y - tax(y) - a(+1)")
 
 ## Puente HANK en el espacio de secuencias
 
-Cualquier `dp.Model` de horizonte infinito con un estado (o `DPSolution`
-resuelta) se conecta directamente con el motor en el espacio de secuencias de
+Un `dp.Model` de horizonte infinito con un estado, compatible con EGM y sin
+elección discreta (o su `DPSolution`), se conecta con el motor en el espacio de secuencias de
 Auclert, Bardóczy, Rognlie y Straub (2021) mediante
 `dp_sequence_jacobian(model_or_sol, inputs, outputs=None, T=300, dx=1e-4)` y
 `dp_nonlinear_transition(model_or_sol, input_paths, outputs=None)` en
@@ -321,6 +321,65 @@ Auclert, Bardóczy, Rognlie y Straub (2021) mediante
 `HANKModel`, `load_hank_mod` y `solve_hank_bridge` en `puremacro.dsge.hank`.
 Véase [Transiciones HANK No Lineales y Límite Inferior Efectivo](hank_nonlinear.md)
 para más detalles.
+
+### Hogares con dos activos (5.4)
+
+Con dos estados, `method="egm"` resuelve un hogar estacionario CRRA con bonos
+líquidos `b`, activos ilíquidos `a` y costos convexos de ajuste de cartera.
+El compilador comprueba el presupuesto, la utilidad y el conjunto factible;
+rechaza ecuaciones incompatibles en lugar de resolver otro problema. Ejemplo:
+
+```python
+import numpy as np
+from puremacro import dp
+
+m = dp.Model("two_asset")
+m.state("a", 40 * np.linspace(0, 1, 20)**2)
+m.state("b", 10 * np.linspace(0, 1, 20)**1.5)
+m.exogenous("z", dp.Markov(np.array([0.5, 1.5]),
+                           np.array([[0.95, 0.05], [0.10, 0.90]])))
+m.parameters(beta=0.98, gamma=1.0, r_b=0.005, r_a=0.0125,
+             w=1.0, chi_0=1.0, chi_1=1.0, a_bar=0.25)
+m.local("d = a(+1) - (1+r_a)*a")
+m.local("chi = chi_0/(1+chi_1)*abs(d)*(abs(d)/(a+a_bar))^chi_1")
+m.local("c = (1+r_b)*b + (1+r_a)*a + w*z - a(+1) - b(+1) - chi")
+m.reward("crra(c, gamma)")
+m.subject_to("c > 0")
+m.aggregate(C="c", A="a", B="b", COST="chi")
+sol = m.solve(method="egm", tol=1e-8)
+```
+
+Se admite horizonte infinito, sin elección discreta ni precio de equilibrio
+endógeno, como máximo un choque de productividad Markov y al menos dos nodos
+por activo. Se requiere riqueza ilíquida no negativa, `0 < beta < 1`, valores
+positivos de `gamma`, `w`, `chi_0`, `a_bar`, `chi_1 >= 1` y rendimientos brutos
+positivos. El consumo debe ser una variable local `c`, `cons` o `consumption`;
+la utilidad es `crra(consumo, gamma)` o `log(consumo)` si `gamma=1`. Los nombres
+de parámetros del ejemplo especifican la calibración. Se rechazan términos
+adicionales del presupuesto, restricciones distintas, ciclos de vida y
+elecciones discretas.
+
+Los arreglos siguen el orden `(activo ilíquido, activo líquido, productividad)`.
+`policy("a")` devuelve activos actuales y `policy("a(+1)")` la política de
+ahorro. Revisa `sol.raw.converged` y `sol.raw.sup_norm`: agotar las iteraciones
+genera una advertencia; un piso de consumo que viola el presupuesto produce
+un error. Amplía y refina las mallas para comprobar la precisión y la masa en
+su extremo superior.
+`converged` también exige un residuo de estacionariedad de la distribución
+menor que `1e-10`; una masa finita y normalizada no basta.
+
+`dp_sequence_jacobian(sol, inputs=["r_b", "r_a", "w"], outputs=["C", "COST"], T=24)`
+y `dp_nonlinear_transition` evalúan los agregados declarados, incluidas
+funciones registradas y su dependencia directa de los precios. Los agregados
+conservan su fecha: `A="a"` mide riqueza actual y `A="a(+1)"` mide ahorro.
+Los alias `A` y `B` sin declaración explícita representan tenencias al final
+del periodo. **Migración desde 5.3:** el puente de un activo interpretaba un
+agregado declarado `A="a"` como ahorro; escribe `A="a(+1)"` para mantener esa
+convención. Con distribución inicial fija, la riqueza actual tiene respuesta
+de impacto nula. `HANKModel(..., household_model=m)` admite
+dinámica lineal de equilibrio general. La simulación de paneles con dos activos
+y el equilibrio general no lineal con hogares declarativos todavía no están
+implementados y generan `NotImplementedError`.
 
 ## Comprobar una especificación
 
@@ -332,7 +391,8 @@ lanzan el mismo error ante una restricción presupuestaria que no tiene la forma
 
 ## Lo que `dp` todavía no hace
 
-- EGM con más de un activo (use `method="vfi"`, que admite varios estados);
+- EGM con varios activos fuera del contrato especializado de dos activos
+  anterior (use `method="vfi"`, que admite varios estados);
 - más de un precio en tiempo continuo;
 - reglas de pronóstico de Krusell-Smith con más de un momento.
 

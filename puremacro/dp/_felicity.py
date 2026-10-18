@@ -79,6 +79,7 @@ class Felicity:
                 return np.broadcast_to(self._u_prime(c, d, *pv, xp=np), np.shape(c))
 
         if self._inv_kind == "crra":
+            assert self._inv_fn is not None
             g = float(self._inv_fn(0.0, d, *pv, xp=np))
 
             def u_prime_inv(x):

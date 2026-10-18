@@ -435,11 +435,13 @@ class NarrativeCorpus:
         Returns one row per manifest document with ``status``: ``match`` (same
         text), ``changed`` (same ``doc_id``, different text) or ``missing``.
         """
-        if not isinstance(manifest, dict):
-            manifest = json.loads(Path(manifest).read_text(encoding="utf-8"))
+        manifest_dict: dict[str, Any] = (
+            manifest if isinstance(manifest, dict)
+            else json.loads(Path(manifest).read_text(encoding="utf-8"))
+        )
         have = {d.doc_id: d.content_hash for d in self.docs}
         rows = []
-        for e in manifest.get("documents", []):
+        for e in manifest_dict.get("documents", []):
             h = have.get(e["doc_id"])
             status = "missing" if h is None else ("match" if h == e["content_hash"] else "changed")
             rows.append({"doc_id": e["doc_id"], "source": e["source"], "date": e["date"],
@@ -622,7 +624,7 @@ def _manifest_path(path: Path) -> Path:
 def _records_to_docs(
     records: Iterable[Any],
     src_name: str,
-    defaults: tuple[str, str, str, str],
+    defaults: Sequence[str],
     *,
     max_docs: int | None,
     clean_html_bodies: bool,
@@ -754,8 +756,8 @@ def _harvest_source(
         docs, n_invalid = [], 0
     report.update(n_docs=len(docs), n_invalid=n_invalid)
     if failure:
-        exc = failure[0]
-        report.update(status="error", error=f"{type(exc).__name__}: {exc}")
+        err = failure[0]
+        report.update(status="error", error=f"{type(err).__name__}: {err}")
     elif not docs:
         report["status"] = "empty"
     return docs, report

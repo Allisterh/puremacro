@@ -558,11 +558,15 @@ def _numerical_gradient(
         return np.zeros(0, dtype=float)
 
     eps = float(eps)
+    if not math.isfinite(eps) or eps <= 0:
+        raise ValueError("eps must be finite and strictly positive")
     h = eps * np.maximum(np.abs(x_arr), 1.0)
     method_norm = method.lower()
+    if method_norm not in ("forward", "central", "complex"):
+        raise ValueError("method must be 'forward', 'central', or 'complex'")
 
     def _scalar_eval(pt: np.ndarray) -> float:
-        res = f(pt)
+        res = f(pt[None, :]) if vectorized else f(pt)
         if isinstance(res, tuple):
             return float(res[0])
         return float(np.asarray(res, dtype=float).item())
@@ -586,11 +590,17 @@ def _numerical_gradient(
     lb = np.full(d, -np.inf, dtype=float)
     ub = np.full(d, np.inf, dtype=float)
     if bounds is not None:
+        if len(bounds) != d:
+            raise ValueError("bounds must have one pair per parameter")
         for i, (lo, hi) in enumerate(bounds):
             if lo is not None:
                 lb[i] = float(lo)
             if hi is not None:
                 ub[i] = float(hi)
+        if np.any(lb >= ub) or np.any(x_arr < lb) or np.any(x_arr > ub):
+            raise ValueError("bounds must be nonempty intervals containing x")
+        # Keep at least one stencil point inside even for very narrow priors.
+        h = np.minimum(h, np.maximum(x_arr - lb, ub - x_arr))
 
     if method_norm == "forward":
         f0 = float(fx) if fx is not None else _scalar_eval(x_arr)
@@ -628,7 +638,9 @@ def _numerical_gradient(
 
     if vectorized:
         X_both = np.vstack([X_plus, X_minus])
-        f_both = np.asarray(f(X_both), dtype=float).ravel()
+        valid = np.r_[x_arr + h <= ub, x_arr - h >= lb]
+        f_both = np.full(2 * d, -math.inf)
+        f_both[valid] = np.asarray(f(X_both[valid]), dtype=float).ravel()
         f_plus = f_both[:d]
         f_minus = f_both[d:]
     else:
@@ -847,7 +859,8 @@ def nuts_sample(
 
         accept_rates_list.append(float(np.mean(alphas_retained)))
 
-    lp_mode_val = float(mode.get("log_post_mode")) if (mode and "log_post_mode" in mode) else None
+    lp_mode_raw = mode.get("log_post_mode") if mode else None
+    lp_mode_val = float(lp_mode_raw) if lp_mode_raw is not None else None
 
     return NUTSResult(
         draws=draws_all,

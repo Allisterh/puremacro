@@ -318,10 +318,12 @@ def one_sided_hp_filter(
     ycycle = arr - ytrend
 
     if is_series:
+        assert isinstance(orig, pd.Series)
         c_out = pd.Series(ycycle[:, 0], index=orig.index, name=orig.name)
         t_out = pd.Series(ytrend[:, 0], index=orig.index, name=orig.name)
         return c_out, t_out
     elif is_df:
+        assert isinstance(orig, pd.DataFrame)
         c_out = pd.DataFrame(ycycle, index=orig.index, columns=orig.columns)
         t_out = pd.DataFrame(ytrend, index=orig.index, columns=orig.columns)
         return c_out, t_out
@@ -525,8 +527,8 @@ def conditional_fevd(
         seen.add(label)
         labels.append(label)
 
-    finite = [h for h in labels if h != "Infinity"]
-    max_h = max(finite, default=0)  # type: ignore[type-var]
+    finite: list[int] = [int(h) for h in labels if h != "Infinity"]
+    max_h: int = max(finite, default=0)
 
     if "Infinity" in seen and A.shape[0] > 0:
         eigs = np.abs(scipy.linalg.eigvals(A))

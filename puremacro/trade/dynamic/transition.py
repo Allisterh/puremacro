@@ -74,6 +74,9 @@ class TransitionStack:
     ``terminal`` the lead of date ``T-1`` (held under the last policy).
     """
 
+    _x: np.ndarray | None
+    states: list[dict[str, Any]] | None
+
     def __init__(self, model: DynamicEconomy, policies: Sequence[DynamicTariff],
                  initial: np.ndarray, terminal: np.ndarray):
         self.model, self.policies = model, tuple(policies)
@@ -90,6 +93,7 @@ class TransitionStack:
                                             np.vstack((self.initial, path)),
                                             self.policies + (self.policies[-1],))
             self._x = np.array(flat, copy=True)
+        assert self.states is not None
         return np.asarray([self.model.residual_from_states(self.states[t], self.states[t + 1])
                            for t in range(self.horizon)]).ravel()
 
@@ -97,6 +101,7 @@ class TransitionStack:
         """Exact matrix-free Jacobian-vector product of :meth:`evaluate` at ``flat`` (batched JVPs)."""
         self.evaluate(flat)
         path = np.asarray(flat).reshape(self.horizon, self.model.n_vars).copy()
+        assert self.states is not None
         states = self.states
         zero = np.zeros(self.model.n_vars)
 
@@ -222,7 +227,7 @@ def _capital_preconditioner(model: DynamicEconomy) -> CapitalBlockPreconditioner
     cached = getattr(model, "_capital_preconditioner", None)
     if cached is None:
         cached = CapitalBlockPreconditioner(model)
-        model._capital_preconditioner = cached
+        setattr(model, "_capital_preconditioner", cached)
     return cached
 
 
@@ -303,7 +308,7 @@ def _newton(fun: Callable, start: np.ndarray, *, tol: float, max_iter: int,
         full_step = step
         merit = float(f @ f)
         fc = None
-        rejections = {"domain": 0, "merit": 0, "first_domain_error": None, "smallest_trial_merit_ratio": np.inf}
+        rejections: dict[str, Any] = {"domain": 0, "merit": 0, "first_domain_error": None, "smallest_trial_merit_ratio": np.inf}
         for _ in range(24):
             candidate = x + step * direction
             try:
@@ -329,6 +334,7 @@ def _newton(fun: Callable, start: np.ndarray, *, tol: float, max_iter: int,
             raise DynamicSolveError(
                 f"Newton line search failed at residual {error:.3g}; Krylov status {info}.{detail}",
                 residual=error, iterate=x, location=location, history=history)
+        assert fc is not None
         item = dict(iteration=iteration + 1, residual_before=error, residual=_norm(fc),
                     step=step, krylov_status=int(info), krylov_outer_iterations=count[0],
                     linear_method=linear_method)
@@ -401,7 +407,7 @@ def _economy_fingerprint(economy: DynamicEconomy) -> str:
             else:
                 h.update(repr(value).encode())
         digest = h.hexdigest()
-        economy._calibration_digest = digest
+        setattr(economy, "_calibration_digest", digest)
     closure = repr((digest, economy.adjustment_cost, economy.risk_aversion, economy.numeraire_index))
     return hashlib.sha256(closure.encode()).hexdigest()
 
@@ -883,8 +889,8 @@ def compare_horizons(short: DynamicTransitionResult, long: DynamicTransitionResu
             raise ValueError(f"{name} must be finite and positive.")
     if terminal_check not in _TERMINAL_CHECKS:
         raise ValueError(f"terminal_check must be one of {_TERMINAL_CHECKS}")
-    for name, value in (("short", short), ("long", long)):
-        if not isinstance(value, DynamicTransitionResult):
+    for name, result_obj in (("short", short), ("long", long)):
+        if not isinstance(result_obj, DynamicTransitionResult):
             raise TypeError(f"{name} must be a DynamicTransitionResult")
     if periods < 1 or periods > min(len(short.path), len(long.path)):
         raise ValueError("Comparison periods must lie within both trajectories.")

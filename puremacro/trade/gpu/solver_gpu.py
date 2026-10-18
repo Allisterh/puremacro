@@ -263,6 +263,7 @@ def solve_trade_equilibrium_gpu(
                 and it < _COARSE_MAX_ITER
             )
             if use_coarse:
+                assert evaluator_coarse is not None and coarse is not None
                 J = evaluator_coarse.evaluate_batched_jacobian(
                     xm, f_base=f_m, ad_mode=ad_mode, stream=coarse_stream
                 )

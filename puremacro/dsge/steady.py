@@ -776,7 +776,14 @@ def _resolve_incomplete_matching(
             # structural can be said, keep the solver's own error.
             assert fb_error is not None
             raise fb_error
-        report, diagnosis = _singularity_report(*structure_at_guess, variables, eq_names)
+        report, diagnosis = _singularity_report(
+            structure_at_guess[0],
+            structure_at_guess[1],
+            structure_at_guess[2],
+            structure_at_guess[3],
+            variables,
+            eq_names,
+        )
         raise StructuralSingularityError(
             diagnosis
             + "\n(A full-system hybr solve from the guess did not converge either.)",
@@ -894,7 +901,7 @@ def _solve_block_system(
         )
 
     # 4. Dependency graph on variables: variable j depends on variable k if k enters pair_v[j]
-    dep_graph = [[] for _ in range(n_vars)]
+    dep_graph: list[list[int]] = [[] for _ in range(n_vars)]
     for j in range(n_vars):
         eq_idx = pair_v[j]
         assert eq_idx is not None
@@ -1183,7 +1190,7 @@ def steady(
         # (the user's steady()/build()/load_mod() call), so the default filter
         # shows it once per call site rather than once per library line.
         if info.get("structurally_singular"):
-            frame = sys._getframe(0)
+            frame: Any = sys._getframe(0)
             level = 1
             while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
                 frame = frame.f_back

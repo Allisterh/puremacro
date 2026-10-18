@@ -48,7 +48,7 @@ def _national_columns(values: np.ndarray, countries: np.ndarray, count: int) -> 
 def _require_certificate(certificate: dict[str, float], tol: float) -> None:
     values = np.asarray(list(certificate.values()), dtype=float)
     if not np.isfinite(values).all() or float(np.max(np.abs(values), initial=0.0)) > max(1e-8, tol):
-        worst = max(certificate, key=certificate.get)
+        worst = max(certificate, key=lambda k: certificate[k])
         raise DynamicSolveError(
             f"Independent economic certificate failed: {worst}={certificate[worst]:.3g} "
             f"exceeds {max(1e-8, tol):.3g}", certificate=certificate)
@@ -57,6 +57,19 @@ def _require_certificate(certificate: dict[str, float], tol: float) -> None:
 class StationaryProblem:
     """The ``2C`` condensed stationary problem with exact batched derivatives."""
 
+    _u: np.ndarray | None
+    _residual: np.ndarray | None
+    _jacobian: np.ndarray | None
+    state: dict[str, Any] | None
+    z: np.ndarray | None
+    w: np.ndarray | None
+    PIguess: np.ndarray | None
+    va: np.ndarray | None
+    R: np.ndarray | None
+    hK: np.ndarray | None
+    hL: np.ndarray | None
+    quantity_factor: Any
+
     def __init__(self, model: Any, policy: Any):
         self.model, self.policy = model, policy
         self.d = model.p
@@ -64,11 +77,14 @@ class StationaryProblem:
         self.nc = model.nc
         self._u = self._residual = self._jacobian = None
         self.state = self.z = None
+        self.w = self.PIguess = self.va = self.R = None
+        self.hK = self.hL = self.quantity_factor = None
 
     def evaluate(self, u: np.ndarray) -> np.ndarray:
         """Condensed residual ``(log PI_implied/PI_guess, budgets with numeraire)`` at ``u`` (cached)."""
         u = np.asarray(u, dtype=float)
         if self._u is not None and np.array_equal(u, self._u):
+            assert self._residual is not None
             return self._residual
         d, m, nc = self.d, self.model, self.nc
         if u.shape != (2 * nc,) or not np.all(np.isfinite(u)) or np.max(np.abs(u)) > 200:
@@ -117,6 +133,9 @@ class StationaryProblem:
         self.evaluate(u)
         if self._jacobian is not None:
             return self._jacobian
+        assert self.state is not None
+        assert self.hK is not None and self.hL is not None and self.va is not None
+        assert self.w is not None and self.R is not None
         d, m, s, nc = self.d, self.model, self.state, self.nc
         eye = np.eye(nc)
         wlog = np.c_[eye, np.zeros_like(eye)]
@@ -249,6 +268,7 @@ def solve_condensed_steady(model: Any, policy: Any = None, *, start: np.ndarray 
             raise DynamicSolveError(f"Condensed stationary line search failed at residual {error:.3g}. "
                                     f"{location['message']}", residual=error, iterate=u,
                                     location=location, history=history)
+        assert trial is not None
         item = dict(method="exact_stationary_condensation", iteration=iteration + 1,
                     residual_before=error, residual=float(np.max(np.abs(trial))), step=step,
                     nonlinear_unknowns=2 * model.nc, capital_stocks=model.n)
@@ -258,6 +278,7 @@ def solve_condensed_steady(model: Any, policy: Any = None, *, start: np.ndarray 
         u = candidate
     problem.evaluate(u)
     z, state = problem.z, problem.state
+    assert z is not None and state is not None
     full_residual = model.residual_from_states(state, state)
     full_error = float(np.max(np.abs(full_residual)))
     if not np.isfinite(full_error) or full_error > tol:

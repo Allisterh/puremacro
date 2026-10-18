@@ -311,8 +311,9 @@ class InteractiveIRFResult:
         for line in self.lines.values():
             line.set_ydata(nan_data)
             ax = line.axes
-            ax.relim()
-            ax.autoscale_view(scalex=False, scaley=True)
+            if ax is not None:
+                ax.relim()
+                ax.autoscale_view(scalex=False, scaley=True)
 
     def _on_slider_change(self, val=None) -> None:
         """Callback invoked instantaneously when any slider is moved."""
@@ -345,8 +346,9 @@ class InteractiveIRFResult:
                             line = self.lines[key]
                             line.set_ydata(df[var].to_numpy())
                             ax = line.axes
-                            ax.relim()
-                            ax.autoscale_view(scalex=False, scaley=True)
+                            if ax is not None:
+                                ax.relim()
+                                ax.autoscale_view(scalex=False, scaley=True)
         except (BlanchardKahnError, ModelError) as err:
             self._set_status(f"[WARNING] Blanchard-Kahn violation: {err}")
             self._set_lines_nan()
@@ -454,8 +456,9 @@ def interactive_irf(
 
     # Variables validation
     if variables is None:
-        if getattr(model, "_varobs", None):
-            variables_list = [v for v in model._varobs if v in model.variables]
+        varobs = getattr(model, "_varobs", None)
+        if varobs is not None:
+            variables_list = [v for v in varobs if v in model.variables]
         else:
             variables_list = list(model.variables)[:6]
     elif isinstance(variables, str):
@@ -489,7 +492,7 @@ def interactive_irf(
 
     if isinstance(param_specs, Mapping):
         for raw_p, spec in param_specs.items():
-            actual_p = alias_map.get(raw_p, raw_p)
+            actual_p: str = str(alias_map.get(raw_p, raw_p))
             if actual_p not in model_params:
                 raise ValueError(f"Unknown parameter '{raw_p}'; declared: {sorted(model_params.keys())}")
             base_val = float(model_params[actual_p])
@@ -533,7 +536,7 @@ def interactive_irf(
 
     else:
         for raw_p in param_specs:
-            actual_p = alias_map.get(raw_p, raw_p)
+            actual_p = str(alias_map.get(raw_p, raw_p))
             if actual_p not in model_params:
                 raise ValueError(f"Unknown parameter '{raw_p}'; declared: {sorted(model_params.keys())}")
             base_val = float(model_params[actual_p])
@@ -685,13 +688,13 @@ def interactive_irf(
         actual_p, valmin, valmax, valinit, valstep = slider_configs[raw_p]
         if slider_cols == 1:
             y_pos = slider_area_top - (i + 1) * row_slot + (row_slot - bar_h) / 2
-            ax_s = fig.add_axes([0.22, y_pos, 0.58, bar_h])
+            ax_s = fig.add_axes((0.22, float(y_pos), 0.58, float(bar_h)))
         else:
             r = i // 2
             c = i % 2
             y_pos = slider_area_top - (r + 1) * row_slot + (row_slot - bar_h) / 2
             x_pos = 0.12 if c == 0 else 0.58
-            ax_s = fig.add_axes([x_pos, y_pos, 0.35, bar_h])
+            ax_s = fig.add_axes((float(x_pos), float(y_pos), 0.35, float(bar_h)))
 
         s_kwargs: dict[str, Any] = {
             "ax": ax_s,
@@ -713,7 +716,7 @@ def interactive_irf(
         btn_y = slider_area_bottom
         btn_x = 0.44 if slider_cols == 2 else 0.82
         btn_w = 0.12 if slider_cols == 2 else 0.10
-        ax_btn = fig.add_axes([btn_x, btn_y, btn_w, max(0.028, reset_h)])
+        ax_btn = fig.add_axes((float(btn_x), float(btn_y), float(btn_w), float(max(0.028, reset_h))))
         reset_btn = Button(ax_btn, "Reset", color="0.95", hovercolor="0.85")
 
     # Status Banner and Figure Title

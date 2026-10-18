@@ -373,9 +373,9 @@ class ConsumptionEquivalentResult(_ReportMixin):
         n = len(self.consumption_equivalent_ratio)
         index = pd.Index(list(self.country_codes) if len(self.country_codes) == n
                          else [str(i) for i in range(n)], name="country")
-        data = {"consumption_equivalent_ratio": self.consumption_equivalent_ratio,
-                "consumption_equivalent_pct": self.consumption_equivalent_pct,
-                "normalized_lifetime_utility": self.normalized_lifetime_utility}
+        data: dict[str, Any] = {"consumption_equivalent_ratio": self.consumption_equivalent_ratio,
+                                "consumption_equivalent_pct": self.consumption_equivalent_pct,
+                                "normalized_lifetime_utility": self.normalized_lifetime_utility}
         if self.equivalent_annual_expenditure is not None:
             data["equivalent_annual_expenditure"] = self.equivalent_annual_expenditure
             data["equivalent_present_value_expenditure"] = self.equivalent_present_value_expenditure
@@ -519,7 +519,7 @@ class DynamicSteadyStateResult(_ReportMixin):
 
     def summary(self) -> str:
         """One line with method, iterations, residual and the worst certificate entry."""
-        worst = max(self.certificate, key=self.certificate.get) if self.certificate else "none"
+        worst = max(self.certificate, key=lambda k: self.certificate[k]) if self.certificate else "none"
         return (f"Dynamic steady state [{getattr(self.policy, 'label', 'policy')}] via {self.method}: "
                 f"{self.iterations} iterations, residual {self.max_residual:.3g}, certificate max "
                 f"{max(self.certificate.values()) if self.certificate else float('nan'):.3g} ({worst}), "
@@ -591,6 +591,7 @@ class DynamicTransitionResult(_ReportMixin):
         Default country variables: C, w, Inational, PC, PI. Default cell
         variables: K, I, y, p, q. Any field of the date state is accepted.
         """
+        allowed: tuple[str, ...]
         if level == "country":
             names = tuple(variables) if variables is not None else ("C", "w", "Inational", "PC", "PI")
             labels = self.country_codes
@@ -612,7 +613,7 @@ class DynamicTransitionResult(_ReportMixin):
 
     def summary(self) -> str:
         """One line with iterations, residual, certificate, terminal gap and the five largest |CE|."""
-        worst = max(self.certificate, key=self.certificate.get) if self.certificate else "none"
+        worst = max(self.certificate, key=lambda k: self.certificate[k]) if self.certificate else "none"
         welfare = ""
         if self.welfare is not None:
             welfare = " CE pct: " + _ce_listing(self.country_codes, self.welfare.consumption_equivalent_pct,
@@ -635,11 +636,12 @@ class DynamicTransitionResult(_ReportMixin):
         base = {"C": "C0", "Inational": "Inational0", "PC": "PC0", "PI": "PI0", "w": None}
         if variable not in base:
             raise ValueError("variable must be one of C, w, Inational, PC, PI")
-        values = np.asarray([s[variable] for s in self.states])
-        if base[variable] is not None:
-            values = 100.0 * (values / self.benchmark[base[variable]][None, :] - 1.0)
+        raw_values = np.asarray([s[variable] for s in self.states])
+        base_var = base[variable]
+        if base_var is not None:
+            values = 100.0 * (raw_values / self.benchmark[base_var][None, :] - 1.0)
         else:
-            values = 100.0 * (values - 1.0)
+            values = 100.0 * (raw_values - 1.0)
         chosen = list(countries) if countries is not None else list(self.country_codes)
         fig = None
         if ax is None:

@@ -34,6 +34,7 @@ class DPSolution:
         self.prices = dict(prices or {})
         self.equilibrium = equilibrium
         self.elapsed = float(elapsed)
+        self._ks_mu0: np.ndarray | None = None
 
     @property
     def V(self) -> np.ndarray:

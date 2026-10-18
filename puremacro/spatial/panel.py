@@ -1218,7 +1218,7 @@ def spatial_panel(
     wy_dd = _demean(WY).ravel(order="F")
     X_dd = np.column_stack([_demean(a).ravel(order="F") for a in reg_raw])
     WX_dd = (np.column_stack([_demean(a).ravel(order="F") for a in reg_lag_raw])
-             if model == "sem" else None)
+             if (model == "sem" and reg_lag_raw is not None) else None)
 
     n_star = n - 1 if tim else n
     T_star = T - 1 if ent else T
@@ -1356,6 +1356,7 @@ def spatial_panel(
         inv_xtx(X_dd, name=func)
 
         def _sem_fit(lam: float):
+            assert WX_dd is not None
             ys = y_dd - lam * wy_dd
             Xs = X_dd - lam * WX_dd
             XtX = Xs.T @ Xs
@@ -1457,6 +1458,7 @@ def spatial_panel(
     def _information(r: float, bet: np.ndarray, s2: float, pc: dict) -> np.ndarray:
         I = np.zeros((k + 2, k + 2))
         if model == "sem":
+            assert WX_dd is not None
             Xf = X_dd - r * WX_dd
             I[:k, :k] = Xf.T @ Xf / s2
             I[k, k] = T_star * (pc["tr_A2"] + pc["tr_AtA"])
@@ -1519,6 +1521,7 @@ def spatial_panel(
     # ---------------- robust covariance (beta block only) -----------------
     if vcov != "oim":
         if model == "sem":
+            assert WX_dd is not None
             e_f = (y_dd - rho_f * wy_dd) - (X_dd - rho_f * WX_dd) @ beta_f
             Xscore = X_dd - rho_f * WX_dd
             lag_score = (wy_dd - WX_dd @ beta_f)
@@ -1538,6 +1541,7 @@ def spatial_panel(
             from ..inference.dk import driscoll_kraay
             S_meat = driscoll_kraay(scores, time_keys, lags=L)
         else:
+            assert cutoff_km is not None
             S_meat = _hac_meat_from_scores(
                 scores, entity_keys, time_keys, coords, float(cutoff_km), L,
                 kernel=kernel, metric=metric,

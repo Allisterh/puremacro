@@ -139,7 +139,7 @@ def calibrate_dynamic(accounts: Any, *, beta: float = .96, delta: float = .08,
     if any(not np.all(np.isfinite(x)) for x in finals):
         raise ValueError("Nonfinite final deliveries")
     observed = np.asarray(data.output, dtype=float)
-    all_final = sum(finals)
+    all_final = np.sum(finals, axis=0)
     raw_goods_output = np.asarray(Zraw.sum(axis=1)).ravel() + all_final.sum(axis=1)
     threshold = max(float(np.max(np.abs(raw_goods_output), initial=0.0)), 1.) * 1e-13
     active = np.flatnonzero(raw_goods_output > 0.)

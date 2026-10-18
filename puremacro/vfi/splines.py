@@ -409,6 +409,10 @@ class SchumakerSpline:
        quadratic polynomials with continuous C^1 gradient matching.
     """
 
+    knots: np.ndarray
+    inserted_knots: np.ndarray
+    d_slopes: np.ndarray
+
     def __init__(
         self,
         x: Union[np.ndarray, Sequence[float]],
@@ -693,11 +697,12 @@ class SplineCollocationSolution:
         if isinstance(self.basis, CubicBSplineBasis):
             vals = self.basis.interpolate(self.coefficients, s_arr, deriv=0, backend=self.backend)
         elif isinstance(self.basis, SchumakerSpline):
-            vals = self.basis.eval(s_arr)
+            vals = np.asarray(self.basis.eval(s_arr), dtype=np.float64)
         else:
             raise TypeError(f"Unsupported basis type: {type(self.basis)}")
 
-        return float(vals[0]) if is_scalar else vals
+        vals_arr = np.atleast_1d(vals)
+        return float(vals_arr[0]) if is_scalar else vals_arr
 
     def marginal_policy(self, s: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
         r"""Evaluate continuous policy derivative g'(s) = \partial g / \partial s."""
@@ -707,11 +712,12 @@ class SplineCollocationSolution:
         if isinstance(self.basis, CubicBSplineBasis):
             vals = self.basis.interpolate(self.coefficients, s_arr, deriv=1, backend=self.backend)
         elif isinstance(self.basis, SchumakerSpline):
-            vals = self.basis.derivative(s_arr, order=1)
+            vals = np.asarray(self.basis.derivative(s_arr, order=1), dtype=np.float64)
         else:
             raise TypeError(f"Unsupported basis type: {type(self.basis)}")
 
-        return float(vals[0]) if is_scalar else vals
+        vals_arr = np.atleast_1d(vals)
+        return float(vals_arr[0]) if is_scalar else vals_arr
 
     def value(self, s: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
         """Evaluate continuous value function V(s)."""
@@ -725,15 +731,17 @@ class SplineCollocationSolution:
             if isinstance(val_basis, CubicBSplineBasis):
                 vals = val_basis.interpolate(val_coefs, s_arr, deriv=0, backend=self.backend)
             else:
-                vals = val_basis.eval(s_arr)
-            return float(vals[0]) if is_scalar else vals
+                vals = np.asarray(val_basis.eval(s_arr), dtype=np.float64)
+            vals_arr = np.atleast_1d(vals)
+            return float(vals_arr[0]) if is_scalar else vals_arr
 
         if self.metadata.get("method") == "bellman":
             if isinstance(self.basis, CubicBSplineBasis):
                 vals = self.basis.interpolate(self.coefficients, s_arr, deriv=0, backend=self.backend)
             else:
-                vals = self.basis.eval(s_arr)
-            return float(vals[0]) if is_scalar else vals
+                vals = np.asarray(self.basis.eval(s_arr), dtype=np.float64)
+            vals_arr = np.atleast_1d(vals)
+            return float(vals_arr[0]) if is_scalar else vals_arr
 
         raise ValueError(
             "Value function was not solved or not available in this solution (method='euler')."
@@ -958,13 +966,14 @@ class SplineCollocationProblem:
         object.__setattr__(self, "method", m)
 
         # Normalize domain bounds
+        d_any: Any = self.domain
         if isinstance(self.domain, (tuple, list)):
-            if len(self.domain) == 2 and not isinstance(self.domain[0], (tuple, list)):
-                a, b = float(self.domain[0]), float(self.domain[1])
-            elif len(self.domain) == 1 and isinstance(self.domain[0], (tuple, list)):
-                a, b = float(self.domain[0][0]), float(self.domain[0][1])
+            if len(self.domain) == 2 and not isinstance(d_any[0], (tuple, list)):
+                a, b = float(d_any[0]), float(d_any[1])
+            elif len(self.domain) == 1 and isinstance(d_any[0], (tuple, list)):
+                a, b = float(d_any[0][0]), float(d_any[0][1])
             else:
-                a, b = float(self.domain[0]), float(self.domain[1])
+                a, b = float(d_any[0]), float(d_any[1])
         else:
             raise ValueError(f"Invalid domain {self.domain!r}")
 
@@ -1109,14 +1118,16 @@ def _solve_spline_euler(
     max_iter: int,
 ) -> SplineCollocationSolution:
     """Solve continuous Euler equation projection with spline basis."""
-    a, b = problem.domain
+    d_any: Any = problem.domain
+    domain_pair: Tuple[float, float] = (float(d_any[0]), float(d_any[1]))
+    a, b = domain_pair
     alpha = problem.params.get("alpha", 0.36)
     delta = problem.params.get("delta", 1.0)
     z = float(problem.params.get("z", problem.params.get("A", 1.0)))
 
     if problem.spline_type == "cubic":
         basis = CubicBSplineBasis(
-            domain=problem.domain,
+            domain=domain_pair,
             n_knots=problem.n_knots,
             degree=3,
             bc_type=problem.bc_type,
@@ -1223,7 +1234,9 @@ def _solve_spline_bellman(
     max_iter: int,
 ) -> SplineCollocationSolution:
     """Solve Bellman equation value collocation using splines."""
-    a, b = problem.domain
+    d_any: Any = problem.domain
+    domain_pair: Tuple[float, float] = (float(d_any[0]), float(d_any[1]))
+    a, b = domain_pair
     alpha = problem.params.get("alpha", 0.36)
     delta = problem.params.get("delta", 1.0)
     # CRRA curvature (``sigma``, alias ``gamma``); 4.4.0 and earlier used log
@@ -1233,7 +1246,7 @@ def _solve_spline_bellman(
 
     if problem.spline_type == "cubic":
         basis = CubicBSplineBasis(
-            domain=problem.domain,
+            domain=domain_pair,
             n_knots=problem.n_knots,
             degree=3,
             bc_type=problem.bc_type,
@@ -1256,6 +1269,7 @@ def _solve_spline_bellman(
 
     for it in range(1, max_iter + 1):
         if problem.spline_type == "cubic":
+            assert basis is not None
             coef_v = basis.fit(v_curr, backend=backend)
             def v_func(s):
                 return basis.interpolate(coef_v, s, deriv=0, backend=backend)
@@ -1286,8 +1300,13 @@ def _solve_spline_bellman(
             converged = True
             break
 
-    final_basis = basis if problem.spline_type == "cubic" else SchumakerSpline(nodes, policy_vals)
-    final_coefs = basis.fit(policy_vals, backend=backend) if problem.spline_type == "cubic" else policy_vals
+    if problem.spline_type == "cubic":
+        assert basis is not None
+        final_basis: Union[CubicBSplineBasis, SchumakerSpline] = basis
+        final_coefs = basis.fit(policy_vals, backend=backend)
+    else:
+        final_basis = SchumakerSpline(nodes, policy_vals)
+        final_coefs = policy_vals
 
     return SplineCollocationSolution(
         coefficients=final_coefs,

@@ -1196,6 +1196,10 @@ class SmootherResult:
     _model: Any = None
     _data: Any = None
 
+    @property
+    def log_likelihood(self) -> float:
+        return self.loglik
+
     def shock_decomposition(self, **kwargs):
         """Historical shock decomposition for the same model and data.
 
@@ -3105,15 +3109,16 @@ class ConditionalForecastResult:
         )
 
         n_plots = len(plot_vars)
+        axes: Sequence[Any]
         if ax is None:
             if n_plots == 1:
-                fig, ax_arr = plt.subplots(figsize=figsize or (8, 4.5))
-                axes = [ax_arr]
+                fig, ax_single = plt.subplots(figsize=figsize or (8, 4.5))
+                axes = [ax_single]
             else:
                 ncols = 2 if n_plots > 1 else 1
                 nrows = (n_plots + ncols - 1) // ncols
-                fig, ax_arr = plt.subplots(nrows, ncols, figsize=figsize or (10, 3.5 * nrows), squeeze=False)
-                axes = ax_arr.flatten()
+                fig, ax_grid = plt.subplots(nrows, ncols, figsize=figsize or (10, 3.5 * nrows), squeeze=False)
+                axes = list(ax_grid.flatten())
         else:
             fig = ax.figure
             axes = [ax] * n_plots
@@ -3210,7 +3215,7 @@ class ShockDecompositionResult:
             object.__setattr__(self, "initial_state", init_df)
 
         if not self.shock_names:
-            all_s = []
+            all_s: list[str] = []
             for s_tuple in norm_groups.values():
                 all_s.extend(s_tuple)
             object.__setattr__(self, "shock_names", tuple(dict.fromkeys(all_s)))
@@ -3460,15 +3465,16 @@ class BayesianIRFResult:
         plot_vars = list(variables) if variables is not None else list(med_df.columns[:min(6, len(med_df.columns))])
         n_plots = len(plot_vars)
 
+        axes: Sequence[Any]
         if ax is None:
             if n_plots == 1:
-                fig, ax_arr = plt.subplots(figsize=figsize or (8, 4.5))
-                axes = [ax_arr]
+                fig, ax_single = plt.subplots(figsize=figsize or (8, 4.5))
+                axes = [ax_single]
             else:
                 ncols = 2 if n_plots > 1 else 1
                 nrows = (n_plots + ncols - 1) // ncols
-                fig, ax_arr = plt.subplots(nrows, ncols, figsize=figsize or (10, 3.2 * nrows), squeeze=False)
-                axes = ax_arr.flatten()
+                fig, ax_grid = plt.subplots(nrows, ncols, figsize=figsize or (10, 3.2 * nrows), squeeze=False)
+                axes = list(ax_grid.flatten())
         else:
             fig = ax.figure
             axes = [ax] * n_plots
@@ -3606,15 +3612,16 @@ class PriorPredictiveResult:
         plot_vars = list(variables) if variables is not None else list(df.index[:min(6, len(df.index))])
         n_plots = len(plot_vars)
 
+        axes: Sequence[Any]
         if ax is None:
             if n_plots == 1:
-                fig, ax_arr = plt.subplots(figsize=figsize or (8, 4.5))
-                axes = [ax_arr]
+                fig, ax_single = plt.subplots(figsize=figsize or (8, 4.5))
+                axes = [ax_single]
             else:
                 ncols = 2 if n_plots > 1 else 1
                 nrows = (n_plots + ncols - 1) // ncols
-                fig, ax_arr = plt.subplots(nrows, ncols, figsize=figsize or (10, 3.2 * nrows), squeeze=False)
-                axes = ax_arr.flatten()
+                fig, ax_grid = plt.subplots(nrows, ncols, figsize=figsize or (10, 3.2 * nrows), squeeze=False)
+                axes = list(ax_grid.flatten())
         else:
             fig = ax.figure
             axes = [ax] * n_plots

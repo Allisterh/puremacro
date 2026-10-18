@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Mapping, Sequence
+from typing import Any
 
 import numpy as np
 
@@ -266,7 +267,7 @@ def _default_record(sol) -> list[str]:
     return list(dict.fromkeys(out))
 
 
-def _compile_record(sol, record) -> list[tuple[str, object]]:
+def _compile_record(sol, record) -> list[tuple[str, Any]]:
     """Validate and compile the recorded expressions; nothing is drawn yet."""
     c = sol._c
     if record is None:
@@ -446,16 +447,16 @@ def _simulate_ks(sol, n_agents: int, periods: int, *, rng: np.random.Generator,
             for k, (name, g) in enumerate(zip(c.shock_names[:n_idio_shocks], c.z_grids[:n_idio_shocks])):
                 if name in init:
                     v = values(name)
-                    j = _nearest(g, v)
-                    if not np.allclose(g[j], v, rtol=1e-9, atol=1e-12):
+                    j_arr = _nearest(g, v)
+                    if not np.allclose(g[j_arr], v, rtol=1e-9, atol=1e-12):
                         raise ValueError(f"init[{name!r}] must take values on the shock grid {g.tolist()}")
-                    comps[k] = j
+                    comps[k] = j_arr
             z_idio = np.ravel_multi_index(tuple(comps), idio_shape)
 
         iZ = int(_draw_cells(rng, markov_stationary(P_Z), 1)[0])
         agg_shape = tuple(g.size for g in c.z_grids[n_idio_shocks:-1]) or (1,)
         if any(s in init for s in c.shock_names[n_idio_shocks:-1]):
-            comps_z = list(np.unravel_index(iZ, agg_shape))
+            comps_z: list[Any] = list(np.unravel_index(iZ, agg_shape))
             for k, (name, g) in enumerate(zip(c.shock_names[n_idio_shocks:-1], c.z_grids[n_idio_shocks:-1])):
                 if name in init:
                     v = float(np.asarray(init[name], dtype=float).ravel()[0])
@@ -485,13 +486,13 @@ def _simulate_ks(sol, n_agents: int, periods: int, *, rng: np.random.Generator,
         a_vals = state if egm else a_grid[state]
         K_t = float(K_init) if (t == 0 and K_init is not None) else float(np.mean(a_vals))
         Kc = float(np.clip(K_t, K_grid[0], K_grid[-1]))
-        j = int(np.clip(np.searchsorted(K_grid, Kc) - 1, 0, n_K - 2))
-        w = (K_grid[j + 1] - Kc) / (K_grid[j + 1] - K_grid[j])
+        j_k = int(np.clip(np.searchsorted(K_grid, Kc) - 1, 0, n_K - 2))
+        w = (K_grid[j_k + 1] - Kc) / (K_grid[j_k + 1] - K_grid[j_k])
         if egm:
-            ap_table = w * pol4[:, :, iZ, j] + (1.0 - w) * pol4[:, :, iZ, j + 1]
+            ap_table = w * pol4[:, :, iZ, j_k] + (1.0 - w) * pol4[:, :, iZ, j_k + 1]
             nxt = _step_egm(ap_table, a_grid, state, z_idio)
         else:
-            ap_val = w * pol4_val[state, z_idio, iZ, j] + (1.0 - w) * pol4_val[state, z_idio, iZ, j + 1]
+            ap_val = w * pol4_val[state, z_idio, iZ, j_k] + (1.0 - w) * pol4_val[state, z_idio, iZ, j_k + 1]
             nxt = _nearest(a_grid, ap_val)
         if k >= 0:
             S[:, k], Z_idio[:, k], Z_agg[k], K_rec[k] = state, z_idio, iZ, K_t
@@ -504,7 +505,7 @@ def _simulate_ks(sol, n_agents: int, periods: int, *, rng: np.random.Generator,
     S[:, periods] = state
 
     cur = [S[:, :-1]] if egm else [a_grid[S[:, :-1]]]
-    nxt = [S[:, 1:]] if egm else [a_grid[S[:, 1:]]]
+    nxt_arrs = [S[:, 1:]] if egm else [a_grid[S[:, 1:]]]
     zs = []
     if n_idio_shocks > 0:
         idio_shape = tuple(g.size for g in c.z_grids[:n_idio_shocks])
@@ -514,7 +515,7 @@ def _simulate_ks(sol, n_agents: int, periods: int, *, rng: np.random.Generator,
         zs += [np.broadcast_to(g[i][None, :], (n_agents, periods))
                for g, i in zip(c.z_grids[n_idio_shocks:-1], np.unravel_index(Z_agg, agg_shape))]
     zs.append(np.broadcast_to(K_rec[None, :], (n_agents, periods)))
-    args = nxt + cur + zs + list(sol.params.values())
+    args = nxt_arrs + cur + zs + list(sol.params.values())
     arrays = {}
     for name, fn in compiled:
         val = np.asarray(fn(*args, xp=np), dtype=float)
@@ -529,36 +530,38 @@ def simulate(sol, n_agents: int, periods: int | None, *, seed, init, burn_in: in
              record: Sequence[str] | None) -> Panel:
     """Body of ``DPSolution.simulate``; see its docstring."""
     c = sol._c
-    J = int(sol.raw.horizon) if c.finite else None
-    if periods is None:
-        periods = J if c.finite else 200
-    for name, v, lo in (("n_agents", n_agents, 1), ("periods", periods, 1), ("burn_in", burn_in, 0)):
+    J = int(sol.raw.horizon) if c.finite else 0
+    periods_int: int = (J if c.finite else 200) if periods is None else int(periods)
+    for name, v, lo in (("n_agents", n_agents, 1), ("periods", periods_int, 1), ("burn_in", burn_in, 0)):
         if isinstance(v, bool) or not isinstance(v, (int, np.integer)) or v < lo:
             raise ValueError(f"{name} must be an integer >= {lo}, got {v!r}")
-    n_agents, periods, burn_in = int(n_agents), int(periods), int(burn_in)
+    n_agents, periods_int, burn_in = int(n_agents), int(periods_int), int(burn_in)
     if init is None:
         init = "newborn" if c.finite else "stationary"
     if c.finite:
         if burn_in:
             raise ValueError("burn_in applies to infinite-horizon solutions only; "
                              "a life cycle starts with newborns")
-        if periods != J:
-            warnings.warn(f"periods={periods} is ignored in a life cycle: the panel runs over "
+        if periods_int != J:
+            warnings.warn(f"periods={periods_int} is ignored in a life cycle: the panel runs over "
                           f"the {J} ages of the horizon", UserWarning, stacklevel=3)
-            periods = J
+            periods_int = J
 
+    if sol.method == "egm" and len(c.state_names) == 2:
+        raise NotImplementedError("two-asset EGM panel simulation is not implemented; "
+                                  "use policy(), distribution, or dp_nonlinear_transition()")
     compiled = _compile_record(sol, record)
-    if n_agents * periods > MAX_CELLS:
-        nbytes = 8 * n_agents * periods * len(compiled)
-        raise ValueError(f"n_agents * periods = {n_agents * periods:.3g} exceeds {MAX_CELLS:.0e}: "
+    if n_agents * periods_int > MAX_CELLS:
+        nbytes = 8 * n_agents * periods_int * len(compiled)
+        raise ValueError(f"n_agents * periods = {n_agents * periods_int:.3g} exceeds {MAX_CELLS:.0e}: "
                          f"{len(compiled)} recorded arrays would need {nbytes:,} bytes "
                          f"({nbytes / 1e9:.1f} GB); simulate fewer agents or periods")
 
     rng = np.random.Generator(np.random.PCG64(seed))
-    if hasattr(c, "policy_values") or sol.method == "hjb":
-        return _simulate_hjb(sol, n_agents, periods, rng=rng, init=init, burn_in=burn_in, compiled=compiled)
+    if sol.method == "hjb":
+        return _simulate_hjb(sol, n_agents, periods_int, rng=rng, init=init, burn_in=burn_in, compiled=compiled)
     if sol.method.endswith("+ks"):
-        return _simulate_ks(sol, n_agents, periods, rng=rng, init=init, burn_in=burn_in, compiled=compiled)
+        return _simulate_ks(sol, n_agents, periods_int, rng=rng, init=init, burn_in=burn_in, compiled=compiled)
 
     state, z = _initial_state(sol, rng, n_agents, init)
     P = np.asarray(sol.P, dtype=float)
@@ -568,12 +571,12 @@ def simulate(sol, n_agents: int, periods: int | None, *, seed, init, burn_in: in
     alive = None
     if survival is not None:
         survival = np.asarray(survival, dtype=float)
-        alive = np.ones((n_agents, periods), dtype=bool)
+        alive = np.ones((n_agents, periods_int), dtype=bool)
 
-    S = np.empty((n_agents, periods + 1), dtype=state.dtype)     # state at t, plus t = periods
-    Z = np.empty((n_agents, periods), dtype=np.intp)
-    D = np.empty((n_agents, periods), dtype=np.intp) if c.model._discrete is not None else None
-    total = burn_in + periods
+    S = np.empty((n_agents, periods_int + 1), dtype=state.dtype)     # state at t, plus t = periods
+    Z = np.empty((n_agents, periods_int), dtype=np.intp)
+    D = np.empty((n_agents, periods_int), dtype=np.intp) if c.model._discrete is not None else None
+    total = burn_in + periods_int
     for t in range(total):
         k = t - burn_in                                          # period (age in a life cycle)
         nxt, d = step(state, z, k)
@@ -583,30 +586,30 @@ def simulate(sol, n_agents: int, periods: int | None, *, seed, init, burn_in: in
                 D[:, k] = d
         if t < total - 1:
             z = _draw_markov(rng, P, z)
-            if alive is not None:
+            if alive is not None and survival is not None:
                 alive[:, k + 1] = alive[:, k] & (rng.random(n_agents) < survival[k])
         state = nxt
-    S[:, periods] = state
+    S[:, periods_int] = state
 
     # values for the household-function arguments, each (n_agents, periods)
     if egm:
         cur, nxt = [S[:, :-1]], [S[:, 1:]]
     else:
         shape = _state_shape(sol)
-        cur = [g[i] for g, i in zip(c.state_grids, np.unravel_index(S[:, :-1], shape))]
-        nxt = [g[i] for g, i in zip(c.state_grids, np.unravel_index(S[:, 1:], shape))]
+        cur = [g[i] for g, i in zip(c.state_grids, np.unravel_index(np.asarray(S[:, :-1], dtype=np.intp), shape))]
+        nxt = [g[i] for g, i in zip(c.state_grids, np.unravel_index(np.asarray(S[:, 1:], dtype=np.intp), shape))]
     if c.z_grids:
         zs = [g[i] for g, i in zip(c.z_grids, np.unravel_index(Z, _shock_shape(sol)))]
     else:
-        zs = [np.zeros((n_agents, periods))]
-    age = np.arange(periods) if c.finite else None
-    ages = [np.broadcast_to(age, (n_agents, periods))] if c.finite else []
+        zs = [np.zeros((n_agents, periods_int))]
+    age = np.arange(periods_int) if c.finite else None
+    ages = [np.broadcast_to(age, (n_agents, periods_int))] if (c.finite and age is not None) else []
     ds = [np.asarray(c.model._discrete[1], dtype=float)[D]] if D is not None else []
     args = ds + nxt + cur + zs + ages + list(sol.params.values())
     arrays = {}
     for name, fn in compiled:
         val = np.asarray(fn(*args, xp=np), dtype=float)
-        arrays[name] = np.array(np.broadcast_to(val, (n_agents, periods)))
+        arrays[name] = np.array(np.broadcast_to(val, (n_agents, periods_int)))
     return Panel(arrays, age=age, alive=alive,
                  source=f"puremacro.dp simulation of {sol.model_name!r} ({sol.method})",
                  functions=c.model._functions)

@@ -298,7 +298,8 @@ m.local("y = w * exp(z)", "c = (1 + r)*a + y - tax(y) - a(+1)")
 
 ## Sequence-space HANK bridge
 
-Any infinite-horizon single-state `dp.Model` (or solved `DPSolution`) connects
+An infinite-horizon single-state `dp.Model` supported by EGM, without a discrete
+choice (or its solved `DPSolution`), connects
 directly to the Auclert, Bardóczy, Rognlie & Straub (2021) sequence-space engine
 via `dp_sequence_jacobian(model_or_sol, inputs, outputs=None, T=300, dx=1e-4)`
 and `dp_nonlinear_transition(model_or_sol, input_paths, outputs=None)` in
@@ -306,6 +307,63 @@ and `dp_nonlinear_transition(model_or_sol, input_paths, outputs=None)` in
 `HANKModel`, `load_hank_mod`, and `solve_hank_bridge` in `puremacro.dsge.hank`.
 See [Non-Linear HANK Transitions & Effective Lower Bound](hank_nonlinear.md) for
 details.
+
+### Two-asset households (5.4)
+
+Two-state `method="egm"` supports a stationary CRRA household with liquid bonds
+`b`, illiquid assets `a`, and convex portfolio adjustment costs. The compiler
+checks the declared budget, utility and feasible set against this specialized
+problem; it rejects unsupported equations instead of substituting a different
+household problem. For example:
+
+```python
+import numpy as np
+from puremacro import dp
+
+m = dp.Model("two_asset")
+m.state("a", 40 * np.linspace(0, 1, 20)**2)
+m.state("b", 10 * np.linspace(0, 1, 20)**1.5)
+m.exogenous("z", dp.Markov(np.array([0.5, 1.5]),
+                           np.array([[0.95, 0.05], [0.10, 0.90]])))
+m.parameters(beta=0.98, gamma=1.0, r_b=0.005, r_a=0.0125,
+             w=1.0, chi_0=1.0, chi_1=1.0, a_bar=0.25)
+m.local("d = a(+1) - (1+r_a)*a")
+m.local("chi = chi_0/(1+chi_1)*abs(d)*(abs(d)/(a+a_bar))^chi_1")
+m.local("c = (1+r_b)*b + (1+r_a)*a + w*z - a(+1) - b(+1) - chi")
+m.reward("crra(c, gamma)")
+m.subject_to("c > 0")
+m.aggregate(C="c", A="a", B="b", COST="chi")
+sol = m.solve(method="egm", tol=1e-8)
+```
+
+The supported contract has an infinite horizon, no discrete choice or
+endogenous equilibrium price, at most one Markov productivity shock, at least
+two nodes per asset, nonnegative illiquid holdings, `0 < beta < 1`, positive
+`gamma`, `w`, `chi_0`, `a_bar`, `chi_1 >= 1`, and positive gross returns.
+Consumption must be a local named `c`, `cons`, or `consumption`; utility is
+`crra(consumption, gamma)` or `log(consumption)` when `gamma=1`. Parameter names
+in the example specify the calibration. Extra budget terms, constraints,
+life cycles, and discrete choices are rejected.
+
+Arrays use `(illiquid asset, liquid asset, productivity)` order. `policy("a")`
+returns current assets; `policy("a(+1)")` returns the saving policy. Inspect
+`sol.raw.converged` and `sol.raw.sup_norm`: exhaustion of the iteration budget
+warns, and an infeasible consumption floor raises an error. Refine and enlarge
+asset grids to check numerical accuracy and top-grid mass.
+`converged` also requires the distribution's stationarity residual to be below
+`1e-10`; finite, normalized mass alone is insufficient.
+
+`dp_sequence_jacobian(sol, inputs=["r_b", "r_a", "w"], outputs=["C", "COST"], T=24)`
+and `dp_nonlinear_transition` evaluate declared aggregates, including registered
+functions and their direct price dependence. Declared aggregate expressions
+preserve their timing: `A="a"` is current wealth, while `A="a(+1)"` is saving.
+Undeclared uppercase aliases `A` and `B` denote end-of-period holdings.
+**Migration from 5.3:** the one-asset bridge previously interpreted a declared
+`A="a"` as saving. Use `A="a(+1)"` explicitly to retain that timing; current
+wealth has zero impact response under a fixed initial distribution.
+`HANKModel(..., household_model=m)` supports linear general-equilibrium dynamics.
+Two-asset panel simulation and nonlinear general-equilibrium simulation of a
+declarative household are not implemented and raise `NotImplementedError`.
 
 ## Checking a specification
 
@@ -317,7 +375,8 @@ not linear in the control.
 
 ## What `dp` does not do yet
 
-- EGM with more than one asset (use `method="vfi"`, which takes several states);
+- EGM with multiple assets outside the specialized two-asset contract above
+  (use `method="vfi"`, which takes several states);
 - more than one price in continuous time;
 - Krusell-Smith forecast rules with more than one moment.
 

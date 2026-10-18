@@ -573,7 +573,7 @@ def realtime_nowcast(
         # Check if fetch is possible
         try:
             from ..fetch.realtime import vintage_panel
-            vp = vintage_panel([country_clean], progress=False)
+            vp = vintage_panel([country_clean])
         except Exception as exc:
             raise ValueError(
                 f"No panel or cartridge provided and real-time fetch failed for "
@@ -749,7 +749,7 @@ def realtime_nowcast(
         news_decomposition=news_decomp,
         news_vs_noise_test=news_noise_res,
         vintage_history=df_v_history,
-        palette=default_palette,
+        palette=str(default_palette),
         previous_vintage=prev_v_stamp if news_decomp is not None else None,
         model_result=fitted_model,
         observed_panel=df_wide.copy(),

@@ -47,7 +47,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from puremacro.dsge.dynare import load_mod
+from puremacro.dsge.dynare import LinearModel, load_mod
 from puremacro.dsge.particle_filter import (
     ParticleFilterResult,
     StochasticVolatilitySpec,
@@ -101,6 +101,7 @@ def main() -> tuple[ParticleFilterResult, ParticleFilterResult]:
     # 1. Compile and solve 2nd-order pruned perturbation system
     print("1. Compiling DSGE model and solving 2nd-order pruned perturbation...")
     model = load_mod(RBC_MOD)
+    assert isinstance(model, LinearModel)
     sol2 = model.solve(order=2)
     print(f"   Model variables    : {list(model.variables)}")
     print(f"   Pruned solution    : {type(sol2).__name__}")

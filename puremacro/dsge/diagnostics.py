@@ -571,21 +571,21 @@ def model_diagnostics(
 
     # 4. Dynamic pencil regularity
     is_pencil_regular = True
-    A_mat = getattr(model, "A", None)
-    B_mat = getattr(model, "B", None)
+    p_A = getattr(model, "A", None)
+    p_B = getattr(model, "B", None)
     if (
         n_vars > 0
-        and A_mat is not None
-        and B_mat is not None
-        and np.asarray(A_mat).ndim == 2
-        and np.asarray(B_mat).ndim == 2
-        and np.asarray(A_mat).shape == np.asarray(B_mat).shape
-        and np.asarray(A_mat).shape[0] == np.asarray(A_mat).shape[1]
-        and np.asarray(A_mat).shape[0] > 0
+        and p_A is not None
+        and p_B is not None
+        and np.asarray(p_A).ndim == 2
+        and np.asarray(p_B).ndim == 2
+        and np.asarray(p_A).shape == np.asarray(p_B).shape
+        and np.asarray(p_A).shape[0] == np.asarray(p_A).shape[1]
+        and np.asarray(p_A).shape[0] > 0
     ):
         try:
             S, T, alpha, beta, Q, Z = ordqz_sorted(
-                A_mat, B_mat, lambda a, b: abs(b) < (1.0 + 1e-6) * abs(a)
+                p_A, p_B, lambda a, b: abs(b) < (1.0 + 1e-6) * abs(a)
             )
             _check_regular(S, T, where="model_diagnostics", tol=tol)
         except SingularPencilError as exc:

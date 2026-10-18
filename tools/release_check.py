@@ -164,6 +164,7 @@ def run_pytest_collect_failures(repo_root: Path) -> set[str]:
         "-m", "not network and not slow",
         "--tb=no", "-q",
         "--no-header",
+        "--color=no",
     ]
     proc = subprocess.run(
         cmd, cwd=repo_root, capture_output=True, text=True, encoding="utf-8",
@@ -185,6 +186,13 @@ def run_pytest_collect_failures(repo_root: Path) -> set[str]:
             if line.startswith(prefix):
                 nid = line[len(prefix):].split(" ", 1)[0]
                 failures.add(nid)
+    if proc.returncode == 1 and not failures:
+        raise RuntimeError(
+            "pytest reported failing tests (exit code 1), but no FAILED/ERROR "
+            "node ids could be parsed; the release gate cannot verify the failure baseline. "
+            "Last stdout lines:\n" + "\n".join(proc.stdout.splitlines()[-20:])
+            + "\nLast stderr lines:\n" + "\n".join(proc.stderr.splitlines()[-20:])
+        )
     return failures
 
 

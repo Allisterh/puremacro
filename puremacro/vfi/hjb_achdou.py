@@ -5,7 +5,7 @@ import time
 import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 import pandas as pd
@@ -74,11 +74,26 @@ class HJBSolution(Mapping):
             raise KeyError(key)
         return getattr(self, key)
 
+    _LEGACY_KEYS: ClassVar[tuple[str, ...]] = (
+        "V",
+        "c_policy",
+        "s_drift",
+        "a_grid",
+        "e_grid",
+        "n_iter",
+        "elapsed",
+        "r_rate",
+        "w_rate",
+        "rho_val",
+        "gamma_r",
+        "converged",
+    )
+
     def __iter__(self):
-        return iter(self.keys())
+        return iter(self._LEGACY_KEYS)
 
     def __len__(self) -> int:
-        return len(self.keys())
+        return len(self._LEGACY_KEYS)
 
     def __contains__(self, key: object) -> bool:
         return isinstance(key, str) and key in type(self).__dataclass_fields__
@@ -89,28 +104,6 @@ class HJBSolution(Mapping):
         return _result_fields_equal(self, other)
 
     __hash__ = None  # type: ignore[assignment]
-
-    def keys(self) -> list[str]:
-        return [
-            "V",
-            "c_policy",
-            "s_drift",
-            "a_grid",
-            "e_grid",
-            "n_iter",
-            "elapsed",
-            "r_rate",
-            "w_rate",
-            "rho_val",
-            "gamma_r",
-            "converged",
-        ]
-
-    def values(self) -> list[Any]:
-        return [getattr(self, k) for k in self.keys()]
-
-    def items(self) -> list[tuple[str, Any]]:
-        return [(k, getattr(self, k)) for k in self.keys()]
 
     def get(self, key: str, default: Any = None) -> Any:
         return getattr(self, key) if key in self else default
@@ -259,11 +252,27 @@ class AiyagariContinuousHJBResult(Mapping):
             raise KeyError(key)
         return getattr(self, key)
 
+    _LEGACY_KEYS: ClassVar[tuple[str, ...]] = (
+        "r_star",
+        "w_star",
+        "K_star",
+        "Kd_star",
+        "Ks_star",
+        "L_star",
+        "Y_star",
+        "excess_capital",
+        "hjb_solution",
+        "g_dist",
+        "converged",
+        "n_iter_ge",
+        "elapsed",
+    )
+
     def __iter__(self):
-        return iter(self.keys())
+        return iter(self._LEGACY_KEYS)
 
     def __len__(self) -> int:
-        return len(self.keys())
+        return len(self._LEGACY_KEYS)
 
     def __contains__(self, key: object) -> bool:
         return isinstance(key, str) and key in type(self).__dataclass_fields__
@@ -274,29 +283,6 @@ class AiyagariContinuousHJBResult(Mapping):
         return _result_fields_equal(self, other)
 
     __hash__ = None  # type: ignore[assignment]
-
-    def keys(self) -> list[str]:
-        return [
-            "r_star",
-            "w_star",
-            "K_star",
-            "Kd_star",
-            "Ks_star",
-            "L_star",
-            "Y_star",
-            "excess_capital",
-            "hjb_solution",
-            "g_dist",
-            "converged",
-            "n_iter_ge",
-            "elapsed",
-        ]
-
-    def values(self) -> list[Any]:
-        return [getattr(self, k) for k in self.keys()]
-
-    def items(self) -> list[tuple[str, Any]]:
-        return [(k, getattr(self, k)) for k in self.keys()]
 
     def get(self, key: str, default: Any = None) -> Any:
         return getattr(self, key) if key in self else default

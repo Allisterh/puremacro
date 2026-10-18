@@ -625,7 +625,8 @@ def ilostat_panel(
                 "survey": part["SOURCE"].values if "SOURCE" in part else "",
                 "unit_mult": part["UNIT_MULT"].values if "UNIT_MULT" in part else "",
             })
-            info["rows"] += len(long)
+            current_rows = info["rows"] if isinstance(info["rows"], int) else 0
+            info["rows"] = current_rows + len(long)
             longs.append(long)
 
     fetched_at = _now()

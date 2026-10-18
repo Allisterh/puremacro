@@ -200,6 +200,7 @@ def compute_hicksian_welfare(
     before, factor0 = _checked_state(base_result, calib, tol)
     after, factor1 = _checked_state(eq_result, calib, tol)
     idx = list(categories)
+    assert calib.theta is not None
     weights = calib.theta[0, idx, country]
     share = float(weights.sum())
     if share <= 0:

@@ -2082,6 +2082,8 @@ def verify_accounting_invariants(calib: TradeCalibrationResult) -> dict[str, Any
     nc = calib.nc
     ns = calib.ns
     n_ind = nc * ns
+    if data is None or calib.theta is None:
+        raise ValueError("calib must have data_calibra and theta populated")
 
     # Outlays vs Sales
     col_outlays = np.sum(data[:, :n_ind], axis=0)

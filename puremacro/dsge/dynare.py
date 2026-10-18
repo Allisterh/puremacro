@@ -269,7 +269,7 @@ def build_dynare(
     strict: bool = True,
     qz_criterium: float = 1.0 + 1e-8,
     allow_singular: bool | None = None,
-) -> LinearModel | PrunedDSGESolution:
+) -> LinearModel | PrunedDSGESolution | Order3PrunedSolution:
     """Solve a DSGE model written in Dynare canonical lead-lag form.
 
     The model ``E_t f(y_{t+1}, y_t, y_{t-1}, u_t) = 0`` is linearised in
@@ -971,7 +971,7 @@ def solve_dynare_2nd_order(
         warnings.warn(
             f"solve_dynare_2nd_order: the lag of {missed_states} enters the "
             "model through a second-order term but these names are not in the "
-            f"states={list(states)!r} you passed. Their curvature contribution "
+            f"states={list(states_list)!r} you passed. Their curvature contribution "
             "to ghxx, ghxu and the risk correction ghs2 is dropped, so those "
             "coefficients and the ergodic mean are wrong. Add them to states=.",
             UserWarning,
@@ -2222,6 +2222,7 @@ def _resolve_parsed_dag_model(
         allow_singular=allow_singular,
         **kw,
     )
+    assert isinstance(model, LinearModel)
     return model
 
 

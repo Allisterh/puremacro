@@ -92,8 +92,9 @@ class FEMMesh:
         self.degree = int(degree)
 
         # Normalize domain
-        if isinstance(domain, (tuple, list)) and len(domain) == 2 and not isinstance(domain[0], (tuple, list)):
-            s_min, s_max = float(domain[0]), float(domain[1])
+        d_any: Any = domain
+        if isinstance(domain, (tuple, list)) and len(domain) == 2 and not isinstance(d_any[0], (tuple, list)):
+            s_min, s_max = float(d_any[0]), float(d_any[1])
             if s_min >= s_max:
                 raise ValueError(f"Invalid domain bounds: min ({s_min}) >= max ({s_max})")
             self.domain: tuple[tuple[float, float], ...] = ((s_min, s_max),)
@@ -655,8 +656,9 @@ class FEMProblem:
             raise ValueError(f"Invalid projection {self.projection!r}; must be 'galerkin' or 'collocation'")
 
         # Validate domain bounds
-        if isinstance(self.domain, (tuple, list)) and len(self.domain) == 2 and not isinstance(self.domain[0], (tuple, list)):
-            s_min, s_max = float(self.domain[0]), float(self.domain[1])
+        d_any: Any = self.domain
+        if isinstance(self.domain, (tuple, list)) and len(self.domain) == 2 and not isinstance(d_any[0], (tuple, list)):
+            s_min, s_max = float(d_any[0]), float(d_any[1])
             if s_min >= s_max:
                 raise ValueError(f"Domain min {s_min} must be strictly less than max {s_max}")
         elif isinstance(self.domain, (tuple, list)):
@@ -747,23 +749,25 @@ class FEMProblem:
             return self.options["mesh"]
 
         kinks = self.options.get("kinks")
-        if kinks is None and self.borrowing_constraint is not None:
-            # Check if domain is 1D
-            if (isinstance(self.domain, (tuple, list)) and len(self.domain) == 2 and not isinstance(self.domain[0], (tuple, list))) or len(self.domain) == 1:
-                # If borrowing constraint is inside domain, place node at constraint or estimate kink
-                b = float(self.borrowing_constraint)
-                d_min = float(self.domain[0] if not isinstance(self.domain[0], (tuple, list)) else self.domain[0][0])
-                d_max = float(self.domain[1] if not isinstance(self.domain[0], (tuple, list)) else self.domain[0][1])
-                if d_min < b < d_max:
-                    kinks = [b]
+        d_any: Any = self.domain
+        is_1d = (isinstance(self.domain, (tuple, list)) and len(self.domain) == 2 and not isinstance(d_any[0], (tuple, list))) or len(self.domain) == 1
+        dom_1d: tuple[float, float] | None = None
+        if is_1d:
+            raw_1d = d_any if not isinstance(d_any[0], (tuple, list)) else d_any[0]
+            dom_1d = (float(raw_1d[0]), float(raw_1d[1]))
 
-        if kinks is not None and (isinstance(self.domain, (tuple, list)) and (len(self.domain) == 2 and not isinstance(self.domain[0], (tuple, list))) or len(self.domain) == 1):
-            dom_1d = self.domain if not isinstance(self.domain[0], (tuple, list)) else self.domain[0]
+        if kinks is None and self.borrowing_constraint is not None and dom_1d is not None:
+            # If borrowing constraint is inside domain, place node at constraint or estimate kink
+            b = float(self.borrowing_constraint)
+            d_min, d_max = dom_1d
+            if d_min < b < d_max:
+                kinks = [b]
+
+        if kinks is not None and dom_1d is not None:
             n_elem = self.elements if isinstance(self.elements, int) else self.elements[0]
             return FEMMesh.from_kinks(domain=dom_1d, n_elements=n_elem, kinks=kinks)
 
-        if "clustering" in self.options:
-            dom_1d = self.domain if not isinstance(self.domain[0], (tuple, list)) else self.domain[0]
+        if "clustering" in self.options and dom_1d is not None:
             n_elem = self.elements if isinstance(self.elements, int) else self.elements[0]
             return FEMMesh.create_clustered(
                 domain=dom_1d,
@@ -772,10 +776,8 @@ class FEMProblem:
             )
 
         # Handle domains with small lower bounds gracefully via adaptive clustering
-        if (isinstance(self.domain, (tuple, list)) and len(self.domain) == 2 and not isinstance(self.domain[0], (tuple, list))) or len(self.domain) == 1:
-            dom_1d = self.domain if not isinstance(self.domain[0], (tuple, list)) else self.domain[0]
-            d_min = float(dom_1d[0])
-            d_max = float(dom_1d[1])
+        if dom_1d is not None:
+            d_min, d_max = dom_1d
             if 0.0 <= d_min < 0.02 * d_max and d_max > 0:
                 n_elem = self.elements if isinstance(self.elements, int) else self.elements[0]
                 return FEMMesh.create_clustered(
@@ -805,6 +807,7 @@ class FEMProblem:
 
         # Derived from return_fn (utility) and transition_fn
         ret_fn = self.return_fn
+        assert self.transition_fn is not None
         trans_fn = self.transition_fn
         beta = float(self.beta)
         gamma = float(self.params.get("gamma", 1.0))
@@ -1045,7 +1048,9 @@ class FEMProblem:
                 if abs(gamma - 1.0) < 1e-9:
                     return float(np.log(c))
                 return float((c ** (1.0 - gamma) - 1.0) / (1.0 - gamma))
-            return float(self.return_fn(s_val, sp_val))
+            if self.return_fn is not None:
+                return float(self.return_fn(s_val, sp_val))
+            raise ValueError("Either transition_fn or return_fn must be provided")
 
         converged = False
         n_iter = 0

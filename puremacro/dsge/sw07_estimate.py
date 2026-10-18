@@ -124,7 +124,7 @@ def estimate_sw07(
     """
     df = _load_bundled_data(dataset) if data is None else data.copy()
     _validate_data(df)
-    return estimate_dsge(
+    res = estimate_dsge(
         df,
         observation_eq=make_state_space,
         priors=PRIORS,
@@ -135,6 +135,8 @@ def estimate_sw07(
         n_draws=n_draws, n_chains=n_chains, burn_in=burn_in, seed=seed,
         presample=presample, lik_init=lik_init,
     )
+    assert isinstance(res, DSGEPosteriorResult)
+    return res
 
 
 __all__ = ["estimate_sw07"]

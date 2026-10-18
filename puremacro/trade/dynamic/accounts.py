@@ -116,7 +116,7 @@ def _calibration_cx_category(calib: Any, cx_category: str | None = None, *,
                          f"the OECD DPABR column nor inventories and valuables; {remedy}")
     category = "V" if "V" in targets else "VAL"
     meaning = {frozenset({"V"}): "signed changes in inventories", frozenset({"VAL"}): "valuables",
-               frozenset({"V", "VAL"}): "signed changes in inventories and valuables"}[frozenset(targets)]
+               frozenset({"V", "VAL"}): "signed changes in inventories and valuables"}[frozenset(t for t in targets if t is not None)]
     record.update(cx_category=category, rule=f"Cx = {'+'.join(codes)} ({meaning}) mapped to {category}")
     return category, record
 
@@ -298,7 +298,7 @@ class DynamicAccounts(_ReportMixin):
     @property
     def capital_share_available(self) -> np.ndarray:
         """Cells whose observed factor detail yields a capital share (positive factor VA, nonnegative parts)."""
-        if self.operating_surplus is None:
+        if self.operating_surplus is None or self.labor_compensation is None:
             return np.zeros(self.n_cells, dtype=bool)
         return (self.factor_VA > 0) & (self.labor_compensation >= 0) & (self.operating_surplus >= 0)
 
@@ -499,6 +499,9 @@ class DynamicAccounts(_ReportMixin):
         from puremacro.trade.data import ICIOData, RawIOData
 
         meta: dict[str, Any] = {}
+        labor: np.ndarray | None
+        capital: np.ndarray | None
+        production: np.ndarray | None
         mask_rule = _MERCHANDISE_RULE if isinstance(merchandise_sectors, str) else "explicit sector list"
         if isinstance(icio, ICIOData):
             countries, sectors = tuple(icio.country_codes), tuple(icio.sector_codes)

@@ -943,7 +943,7 @@ def _newton(model: _Model, x0, *, tol, max_iter, certificate_tol, max_backtracks
                            f"step reduces the residual further ({counts}). Either the level bound is below the "
                            f"rounding floor of the current flows (loosen tol) or the implied rows are structurally "
                            f"nonzero (Walras' law fails). Macro condition {condition:.3g}")
-            elif armijo == 0:
+            elif armijo == 0 and binding is not None:
                 message = (f"CES Newton line search failed: all {inadmissible} trial steps left the admissible "
                            f"domain (at the smallest trial step {binding[0]:.2e}: {binding[1]}); scaled "
                            f"residual={res:.3e}, macro condition "

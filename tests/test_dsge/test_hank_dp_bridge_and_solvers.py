@@ -54,14 +54,14 @@ def _make_household_dp_model(with_equilibrium_price: bool = False) -> DPModel:
         m.local("c = (1 + r) * a + w * exp(z) - a(+1)")
         m.reward("crra(c, gamma)")
         m.subject_to("c > 0")
-        m.aggregate(C="c", A="a", L="exp(z)")
+        m.aggregate(C="c", A="a(+1)", L="exp(z)")
         m.clear("A - L * (alpha / (r + delta))^(1 / (1 - alpha))")
     else:
         m.parameters(beta=0.96, gamma=2.0, r=0.02, w=1.0)
         m.local("c = (1 + r) * a + w * exp(z) - a(+1)")
         m.reward("crra(c, gamma)")
         m.subject_to("c > 0")
-        m.aggregate(C="c", A="a")
+        m.aggregate(C="c", A="a(+1)")
     return m
 
 

@@ -45,6 +45,7 @@ from puremacro.dsge.mode import find_mode as _find_mode
 from puremacro.dsge._results import DSGEPosteriorResult
 if TYPE_CHECKING:
     from puremacro.dsge._results import NUTSResult
+    from puremacro.dsge.smc import SMCResult
 from puremacro.dsge.priors import (
     log_prior, prior_stds, param_bounds, param_names, _validate_priors,
 )
@@ -125,7 +126,8 @@ def _stationary_init(model: StateSpaceModel) -> tuple[np.ndarray, np.ndarray] | 
     if not np.isfinite(rho) or rho > 1.0 - _STATIONARITY_TOL:
         return None, None
 
-    RQR = np.asarray(model.R @ model.Q @ model.R.T, dtype=float)
+    rqr_mat = model.Q if model.R is None else model.R @ model.Q @ model.R.T
+    RQR = np.asarray(rqr_mat, dtype=float)
     if not np.all(np.isfinite(RQR)):
         return None, None
     try:
@@ -334,6 +336,7 @@ def _make_piecewise_neg_log_posterior(
             # Every constrained regime is linearised at the reference's steady
             # state at this draw (OccBin's single linearisation point), never
             # at the calibration's.
+            cons_dict: Any
             if isinstance(m_constrained_dict, Mapping):
                 cons_dict = {
                     k: _constrained_regime_at(m_k, ref_m, draw, base_params)
@@ -768,7 +771,8 @@ def _check_stochastic_singularity(
     try:
         ssm = observation_eq(params)
         Z = np.asarray(ssm.Z, dtype=float)
-        RQR = np.asarray(ssm.R @ ssm.Q @ ssm.R.T, dtype=float)
+        rqr_mat = ssm.Q if ssm.R is None else ssm.R @ ssm.Q @ ssm.R.T
+        RQR = np.asarray(rqr_mat, dtype=float)
         H = np.asarray(ssm.H, dtype=float)
         F_gen = Z @ RQR @ Z.T + H
         if not np.all(np.isfinite(F_gen)):
@@ -816,7 +820,7 @@ def estimate_dsge(
     presample: int = 0,
     lik_init: str = "stationary",
     **kwargs,
-) -> DSGEPosteriorResult | NUTSResult:
+) -> DSGEPosteriorResult | NUTSResult | SMCResult:
     """Bayesian DSGE estimation via Random-Walk Metropolis-Hastings or NUTS.
 
     ``presample`` and ``lik_init`` (``"stationary"`` or ``"diffuse"``) are
@@ -1195,7 +1199,8 @@ def estimate_dsge(
                 if not np.isfinite(lp):
                     return -np.inf, np.zeros(len(v))
                 return lp, np.asarray(custom_grad_fn(v), dtype=float)
-        elif model_template is not None:
+        elif (model_template is not None
+              and all(name in (getattr(model_template, "_params", None) or {}) for name in names)):
             from puremacro.dsge._gradients import log_posterior_and_gradient
 
             def target_fn(v):
@@ -1297,9 +1302,8 @@ def estimate_dsge(
     # The log posterior at the reported mode, for the Laplace marginal
     # likelihood. Taken from the +inf target, not the penalised one the
     # optimiser saw: a finite penalty is a device for the search, not a value.
-    lp_mode = -float(neg_log_post(mode_vec))
-    if not np.isfinite(lp_mode):
-        lp_mode = None
+    raw_lp_mode = -float(neg_log_post(mode_vec))
+    lp_mode: float | None = raw_lp_mode if np.isfinite(raw_lp_mode) else None
 
     return DSGEPosteriorResult(
         draws=chains_arr,
@@ -1477,7 +1481,7 @@ def estimate(
     burn_in: int = 500,
     seed: int = 0,
     **kwargs,
-) -> DSGEPosteriorResult | NUTSResult:
+) -> DSGEPosteriorResult | NUTSResult | SMCResult:
     """High-level DSGE estimation interface supporting NUTS with ZLB constraints.
 
     Parameters
@@ -1571,7 +1575,7 @@ def estimate(
     )
 
 
-LinearModel.estimate = _linear_model_estimate_with_method
+setattr(LinearModel, "estimate", _linear_model_estimate_with_method)
 
 
 __all__ = [

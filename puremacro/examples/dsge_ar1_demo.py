@@ -54,6 +54,7 @@ def main() -> None:
         n_chains=1, n_draws=2000, burn_in=500, seed=0,
     )
     summary = res.summary()
+    assert isinstance(summary, pd.DataFrame)
     print(summary)
     print(f"\ntrue rho={rho_true:.3f}, posterior mean={summary.loc['rho', 'mean']:.3f}")
     print(f"true sigma={sigma_true:.3f}, posterior mean={summary.loc['sigma', 'mean']:.3f}")

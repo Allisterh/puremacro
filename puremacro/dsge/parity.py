@@ -73,6 +73,7 @@ def _call_theoretical_moments(model: Any, lags: int, pruning: bool = False) -> A
     """
     import inspect
 
+    params: Mapping[str, inspect.Parameter]
     try:
         params = inspect.signature(model.theoretical_moments).parameters
     except (TypeError, ValueError):  # builtins or callables without a signature
@@ -349,13 +350,13 @@ def verify_dynare_parity(
         except (AttributeError, KeyError, TypeError, ValueError) as exc:
             return unavailable(str(exc), order2_missing=order == 2 and not hasattr(dyn_dr, "ghxx"))
 
-    rows = {f"dev_{k}": v for k, v in deviations.items()}
+    rows: dict[str, Any] = {f"dev_{k}": v for k, v in deviations.items()}
     rows.update({f"tol_{k}": tolerances[k] for k in fields})
     flags = np.column_stack([deviations[k] <= tolerances[k] for k in fields])
     rows["status"] = np.where(np.all(flags, axis=1), "PASS", "FAIL")
     df_dr = pd.DataFrame(rows, index=pm_vars)
     passed_checks, total_checks = int(flags.sum()), flags.size
-    moment_rows = []
+    moment_rows: list[dict[str, Any]] = []
     unavailable_moments = False
     excluded: dict[str, list[str]] = {}
     if dyn_moments:
@@ -420,8 +421,8 @@ def verify_dynare_parity(
             a, b = np.asarray(pm_cov, dtype=float), np.asarray(dyn_cov, dtype=float)
             perm = [list(dyn_dr.shock_names).index(v) for v in pm_dr.shock_names]
             b = b.reshape(n_u, n_u)[np.ix_(perm, perm)]
-            ok = (a.shape == b.shape and np.all(np.isfinite(a)) and np.all(np.isfinite(b))
-                  and np.max(np.abs(a - b), initial=0.0) <= tolerances["shock_cov"])
+            ok = bool(a.shape == b.shape and np.all(np.isfinite(a)) and np.all(np.isfinite(b))
+                      and np.max(np.abs(a - b), initial=0.0) <= tolerances["shock_cov"])
         except (ValueError, TypeError):
             ok = False
         passed_checks += int(ok)
@@ -429,13 +430,15 @@ def verify_dynare_parity(
         covariance_status = "PASS" if ok else "FAIL"
     passed = passed_checks == total_checks and not unavailable_moments
     maxima = {k: float(np.max(v, initial=0.0)) for k, v in deviations.items()}
+    dev_mom_list: list[float] = [float(r["deviation"]) for r in moment_rows]
+    max_dev_m = float("nan") if unavailable_moments else (max(dev_mom_list) if dev_mom_list else 0.0)
     return ParityDashboardResult(
         passed=passed, score=100.0 * passed_checks / total_checks, dr_diff=df_dr,
         moments_diff=pd.DataFrame(moment_rows), tolerances=tolerances, model_name=model_name,
         total_models=1, passed_models=int(passed), failed_models=int(not passed),
         max_dev_ghx=maxima["ghx"], max_dev_ghu=maxima["ghu"],
         max_dev_ghxx=maxima.get("ghxx", 0.0), max_dev_ghs2=maxima.get("ghs2", 0.0),
-        max_dev_moments=float("nan") if unavailable_moments else max([r["deviation"] for r in moment_rows] or [0.0]),
+        max_dev_moments=max_dev_m,
         max_dev_dr=max(maxima.values()),
         details={"order": order, "status": "UNAVAILABLE" if unavailable_moments else ("PASS" if passed else "FAIL"),
                  "runtime_sec": time.perf_counter() - t0, "n_vars": n_v, "n_states": n_x, "n_shocks": n_u,
@@ -447,7 +450,7 @@ def verify_dynare_parity(
 
 def compare_model_to_dynare(
     mod_path: str | Path,
-    mat_path: str | Path,
+    mat_path: str | Path | Mapping[str, Any],
     *,
     order: int = 1,
     tol_dr: float | None = None,

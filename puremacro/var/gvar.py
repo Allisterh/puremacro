@@ -530,8 +530,8 @@ def _singular_G_message(
         countries[i]: float(np.sum(right[offs[i]:offs[i + 1]] ** 2))
         for i in range(len(countries))
     }
-    top_rows = sorted(row_load, key=row_load.get, reverse=True)[:3]
-    top_cols = sorted(col_load, key=col_load.get, reverse=True)[:3]
+    top_rows = sorted(row_load, key=lambda k: row_load[k], reverse=True)[:3]
+    top_cols = sorted(col_load, key=lambda k: col_load[k], reverse=True)[:3]
     return (
         f"solve_gvar: the contemporaneous link matrix G is singular or "
         f"ill-conditioned (equilibrated cond(G) = {cond_eq:.3e}, tolerance "
@@ -686,10 +686,13 @@ def solve_gvar(
                 )
             H[l, off:off + ki] = Ail @ Wi
         if a0_stack is not None:
+            assert a0 is not None
             a0_stack[off:off + ki] = np.asarray(a0[c], dtype=float).ravel()
         if a1_stack is not None:
+            assert a1 is not None
             a1_stack[off:off + ki] = np.asarray(a1[c], dtype=float).ravel()
         if Ups_stack is not None:
+            assert Upsilon is not None
             for l, M in enumerate(Upsilon[c]):
                 Ups_stack[l, off:off + ki] = np.asarray(M, dtype=float)
         off += ki
@@ -710,6 +713,7 @@ def solve_gvar(
     a0_solved = sla.lu_solve((lu, piv), a0_stack) if a0_stack is not None else None
     a1_solved = sla.lu_solve((lu, piv), a1_stack) if a1_stack is not None else None
     if Ups_stack is not None:
+        assert q_d is not None
         Ups_solved = np.stack([sla.lu_solve((lu, piv), Ups_stack[l]) for l in range(q_d)])
     else:
         Ups_solved = None
@@ -985,7 +989,7 @@ def _coerce_weights(weights: Any, countries: Sequence[str], caller: str) -> pd.D
             "be non-negative."
         )
     if np.abs(np.diag(Wc)).max() > 0:
-        bad = [countries[i] for i in np.flatnonzero(np.abs(np.diag(Wc)) > 0)]
+        bad = [countries[int(i)] for i in np.flatnonzero(np.abs(np.diag(Wc)) > 0)]
         raise ValueError(
             f"{caller}: the weight matrix has a non-zero diagonal at {bad}. Set "
             "the diagonal of the trade matrix to zero; "
@@ -1686,7 +1690,7 @@ class GVARGIRFResult:
         for j, nm in enumerate(self.names):
             h = int(peak_h[j])
             excl = np.nan
-            if self.lower is not None:
+            if self.lower is not None and self.upper is not None:
                 excl = bool(self.lower[h, j] > 0.0 or self.upper[h, j] < 0.0)
             rows.append(
                 {
@@ -1835,7 +1839,7 @@ class GVARGIRFResult:
         for a, nm in enumerate(picks):
             j = name_to_j[nm]
             ax = axes[a // ncols, a % ncols]
-            if self.lower is not None:
+            if self.lower is not None and self.upper is not None:
                 ax.fill_between(h, self.lower[:, j], self.upper[:, j],
                                 color="lightsteelblue", alpha=0.7)
             ax.plot(h, self.irf[:, j], color="darkblue", linewidth=1.3)
@@ -2397,7 +2401,7 @@ class GVARResult:
                 causes["non-finite GIRF"] = causes.get("non-finite GIRF", 0) + 1
                 continue
             draws.append(pathb)
-        cause = max(causes, key=causes.get) if causes else "none"
+        cause = max(causes, key=lambda k: causes[k]) if causes else "none"
         return draws, n_failed, cause
 
     # -- forecast -----------------------------------------------------------
@@ -2449,6 +2453,7 @@ class GVARResult:
             )
         D_future = None
         if has_exog:
+            assert exog_future is not None and self.Upsilon is not None and spec.exog is not None
             if list(exog_future.columns) != list(self.exog_names):
                 raise ValueError(
                     f"GVARResult.forecast: exog_future has columns "
@@ -2472,6 +2477,7 @@ class GVARResult:
                 prev = out[lagpos - 1] if lagpos >= 1 else hist[self.s + lagpos - 1]
                 val = val + self.F[l] @ prev
             if has_exog:
+                assert D_future is not None and self.Upsilon is not None and spec.exog is not None
                 for jj in range(self.Upsilon.shape[0]):
                     pos = h - jj
                     if pos >= 1:

@@ -473,7 +473,7 @@ class _Requests:
         self.last_status: str = ""
 
     def get(self, flow: str, dims: Sequence[str], chunk: Sequence[str],
-            block: str, **pins: str) -> pd.DataFrame:
+            block: str, **pins: str | Sequence[str]) -> pd.DataFrame:
         agency_flow = ANA_FLOWS[flow]
         key = oecd_key(dims, FREQ="A", REF_AREA="+".join(chunk), **pins)
         if agency_flow not in self.flows:
