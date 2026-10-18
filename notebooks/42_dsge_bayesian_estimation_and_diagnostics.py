@@ -343,6 +343,128 @@ ax5.legend(loc="upper left", frameon=True)
 # 4. **Historical Shock Decomposition**: Cumulative shock contributions verify the additive accounting identity against observed GDP growth (`dy`) to machine precision. Critical historical business cycle episodes are clearly identified: productivity slowdowns and supply shocks explain the mid-1970s recessions, while investment technology improvements ($\varepsilon_{qs}$) and monetary policy shocks powered the late-1990s expansion.
 # 5. **Forecast Cones and Model Selection**: The 12-quarter out-of-sample projection exhibits smooth convergence of GDP growth toward its long-run steady-state rate of approximately $0.43\%$ per quarter, with a 90% confidence cone widening systematically with forecast horizon. Finally, Laplace marginal data density provides an objective quantitative criterion for Bayesian model comparison and Bayes factor calculation.
 
+# %% [markdown]
+# ## Tempered Particle Filter (Herbst & Schorfheide 2019) & Native `.mod` Command Execution
+#
+# When measurement error variance is small or state transitions are nonlinear, standard bootstrap particle filters suffer from severe weight degeneracy. The **Tempered Particle Filter** (Herbst & Schorfheide 2019) overcomes this by introducing an adaptive bridge sequence $0 < \phi_{t,1} < \dots < \phi_{t,M_t} = 1$ chosen by bisection so that the inefficiency ratio $N / \text{ESS}_t(\phi)$ matches `target_ineff`, followed by Random-Walk Metropolis-Hastings mutation steps. In addition, `model.execute_mod_commands()` natively executes `.mod` command blocks (`steady_state_model;`, `optim_weights;`, `osr_params`, `osr;`, `stoch_simul;`) and returns a structured `DynareCommandResults` object.
+
+# %%
+import scipy.linalg
+from puremacro.dsge.build import DynareCommandResults
+from puremacro.dsge.particle_filter import tempered_particle_filter
+from puremacro.state_space import StateSpaceModel, kalman_filter
+
+# 1. Tempered Particle Filter vs Exact Kalman Filter Log-Likelihood
+rng_tpf = np.random.default_rng(42)
+T_tpf = 25
+G_tpf = np.array([[0.75, 0.0], [0.0, 0.65]])
+N_tpf = np.eye(2)
+Q_tpf = np.diag([0.04**2, 0.03**2])
+meas_sd = 0.015
+H_tpf = np.eye(2) * (meas_sd**2)
+
+x_state = np.zeros(2)
+rows_tpf = []
+for _ in range(T_tpf):
+    x_state = G_tpf @ x_state + rng_tpf.multivariate_normal(np.zeros(2), Q_tpf)
+    rows_tpf.append(x_state + rng_tpf.multivariate_normal(np.zeros(2), H_tpf))
+y_tpf = pd.DataFrame(rows_tpf, columns=["x1", "x2"])
+
+P_stat = scipy.linalg.solve_discrete_lyapunov(G_tpf, Q_tpf)
+P0_tpf = G_tpf @ P_stat @ G_tpf.T + Q_tpf
+ssm_tpf = StateSpaceModel(T=G_tpf, R=N_tpf, Q=Q_tpf, Z=np.eye(2), H=H_tpf)
+ll_kalman = float(kalman_filter(y_tpf.to_numpy(), ssm_tpf, a0=np.zeros(2), P0=P0_tpf)["loglik"])
+
+tpf_mod = """
+var x1 x2;
+varexo e1 e2;
+parameters rho1 rho2;
+rho1 = 0.75;
+rho2 = 0.65;
+model;
+  x1 = rho1 * x1(-1) + e1;
+  x2 = rho2 * x2(-1) + e2;
+end;
+steady_state_model;
+  x1 = 0;
+  x2 = 0;
+end;
+shocks;
+  var e1; stderr 0.04;
+  var e2; stderr 0.03;
+end;
+"""
+m_tpf = load_mod(tpf_mod)
+res_tpf = tempered_particle_filter(
+    m_tpf,
+    y_tpf,
+    observed_vars=["x1", "x2"],
+    n_particles=250,
+    target_ineff=2.0,
+    n_mh_steps=1,
+    measurement_error={"x1": meas_sd, "x2": meas_sd},
+    seed=42,
+)
+
+print(f"Exact Kalman Log-Likelihood: {ll_kalman:.4f}")
+print(f"Tempered PF Log-Likelihood : {res_tpf.log_likelihood:.4f}")
+print(f"Mean Tempering Stages      : {float(res_tpf.n_tempering_stages.mean()):.2f} (Max: {int(res_tpf.n_tempering_stages.max())})")
+print(f"Mean Effective Sample Size : {float(res_tpf.effective_sample_size.mean()):.1f} / {res_tpf.n_particles}")
+
+assert abs(res_tpf.log_likelihood - ll_kalman) / abs(ll_kalman) < 0.05
+assert int(res_tpf.n_tempering_stages.max()) >= 2
+assert float(res_tpf.effective_sample_size.mean()) > 100.0
+
+# 2. Native .mod Command Block Execution (steady_state_model + OSR + stoch_simul)
+nk_osr_mod = """
+var pi x i;
+varexo u_c u_p;
+parameters beta kappa sigma phi_pi phi_x;
+beta = 0.99;
+kappa = 0.15;
+sigma = 1.0;
+phi_pi = 1.5;
+phi_x = 0.125;
+
+model;
+  pi = 0.5 * beta * pi(+1) + 0.5 * pi(-1) + kappa * x + u_c;
+  x = x(+1) - (1 / sigma) * (i - pi(+1)) + u_p;
+  i = phi_pi * pi + phi_x * x;
+end;
+
+steady_state_model;
+  pi = 0;
+  x = 0;
+  i = 0;
+end;
+
+shocks;
+  var u_c; stderr 0.015;
+  var u_p; stderr 0.020;
+end;
+
+optim_weights;
+  pi 1.0;
+  x 0.25;
+  i 0.10;
+end;
+
+osr_params phi_pi phi_x;
+osr_params_bounds;
+  phi_pi, 1.05, 3.0;
+  phi_x, 0.0, 1.5;
+end;
+osr;
+stoch_simul(order = 1, irf = 16);
+"""
+m_nk_cmd = load_mod(nk_osr_mod)
+cmd_res = m_nk_cmd.execute_mod_commands()
+print("\n" + cmd_res.summary())
+
+assert isinstance(cmd_res, DynareCommandResults)
+assert cmd_res.osr is not None and cmd_res.osr.converged
+assert cmd_res.stoch_simul is not None
+
 # %%
 # Your turn: customize forecast horizon and confidence coverage
 # ← change this: try horizon=8, 16, or 24 quarters

@@ -143,6 +143,38 @@ ax.set_title("A simulated panel converges to the stationary distribution")
 ax.legend(loc="lower right", frameon=True, facecolor=_nbstyle.FONDO, edgecolor=_nbstyle.SPINE)
 
 # %% [markdown]
+# ## Custom callable functions and continuous-time HJB simulation
+#
+# User-defined array functions can be registered directly in `dp.Model` via `m.functions(tax=...)` and invoked inside any `local`, `drift`, `reward`, or `aggregate` expression—such as a progressive Heathcote-Storesletten-Violante (HSV) tax-and-transfer schedule $T(y) = y - (1 - \lambda) y^{1 - \tau}$. Continuous-time models solved by `method="hjb"` also support Euler-Maruyama / Poisson-jump panel simulation via `sol_hjb.simulate(...)`, with seamless conversion to `MicroFrame` via `.to_microframe()`.
+
+# %%
+m_hjb = dp.Model("Continuous-Time HJB with HSV Tax")
+m_hjb.parameters(rho=0.05, gamma=2.0, r=0.03, w=1.0)
+m_hjb.functions(tax=lambda y: y - 0.85 * (y ** 0.82))
+m_hjb.exogenous("e", dp.Jump([0.4, 1.2], [[-0.2, 0.2], [0.2, -0.2]]))
+m_hjb.state("a", np.linspace(0.0, 20.0, 120))
+m_hjb.control("c")
+m_hjb.local("gross_y = w*e")
+m_hjb.drift("a", "r*a + gross_y - tax(gross_y) - c")
+m_hjb.reward("crra(c, gamma)")
+m_hjb.aggregate(T="tax(gross_y)")
+
+sol_hjb = m_hjb.solve(method="hjb")
+panel_hjb = sol_hjb.simulate(
+    n_agents=500, periods=40, seed=42, record=["a", "e", "c", "tax(gross_y)"]
+)
+mf_hjb = panel_hjb.to_microframe(t=39)
+
+print(sol_hjb)
+print(panel_hjb.summary().round(4))
+print(f"Simulated MicroFrame mean assets (t = 39): {float(mf_hjb.mean('a')['estimate'].iloc[0]):.4f}")
+print(f"Exact KFE MicroFrame Gini of assets:       {float(sol_hjb.to_microframe().gini('a')['estimate'].iloc[0]):.4f}")
+
+assert sol_hjb.aggregates["T"] > 0.0
+assert panel_hjb["a"].shape == (500, 40)
+assert (panel_hjb["c"] > 0.0).all()
+
+# %% [markdown]
 # ## Your turn — precautionary savings under higher risk aversion
 #
 # **Prompts.**

@@ -225,6 +225,46 @@ assert len(c_agg) == 16, "Transition horizon must match 16 quarters"
 assert c_agg[0] > 0, "An expansionary monetary shock must raise consumption on impact"
 
 # %% [markdown]
+# ### Declarative `puremacro.dp.Model` $\leftrightarrow$ Sequence-Space Jacobian Bridge (`dp_sequence_jacobian`)
+#
+# Any one-asset heterogeneous-agent problem declared symbolically with `puremacro.dp.Model` can be compiled directly into Sequence-Space Fake-News Jacobians $\mathcal{J}^{Y, X}_{t, s} = \partial Y_t / \partial X_s$ (Auclert, Bardóczy, Rognlie & Straub 2021) via `dp_sequence_jacobian()`. Below we declare a precautionary-savings household block solved by the Endogenous Grid Method (`method="egm"`), extract $\mathcal{J}^{C, w}$, $\mathcal{J}^{C, r}$, and $\mathcal{J}^{A, w}$ over horizon $T = 50$, and inspect the impact and cumulative intertemporal Marginal Propensities to Consume (iMPCs):
+
+# %%
+from puremacro import dp
+from puremacro.dsge.hank import dp_sequence_jacobian
+
+m_hh = dp.Model("hank_hh")
+m_hh.parameters(beta=0.96, gamma=2.0, r=0.02, w=1.0)
+m_hh.exogenous("z", dp.AR1(rho=0.90, sigma=0.20, n=5))
+m_hh.state("a", np.linspace(0.0, 40.0, 100))
+m_hh.local("c = (1 + r)*a + w*exp(z) - a(+1)")
+m_hh.reward("crra(c, gamma)")
+m_hh.subject_to("c > 0")
+m_hh.aggregate(C="c", A="a")
+
+sol_hh = m_hh.solve(method="egm")
+J = dp_sequence_jacobian(sol_hh, inputs=["r", "w"], outputs=["c", "a"], T=50)
+
+impc_0 = float(J["c"]["w"][0, 0])
+cum_mpc_4 = float(np.sum(J["c"]["w"][:4, 0]))
+col_sum_c_w = float(np.sum(J["c"]["w"][:, 0]))
+jac_c_r_0 = float(J["c"]["r"][0, 0])
+jac_a_w_0 = float(J["a"]["w"][0, 0])
+
+print("--- Declarative dp.Model Sequence-Space Jacobians (T = 50) ---")
+print(f"Stationary Aggregate Consumption (C*) : {sol_hh.aggregates['C']:.4f}")
+print(f"Stationary Aggregate Assets      (A*) : {sol_hh.aggregates['A']:.4f}")
+print(f"Impact MPC J['c']['w'][0, 0]          : {impc_0:.4f}")
+print(f"4-Quarter Cumulative MPC              : {cum_mpc_4:.4f}")
+print(f"Horizon Column Sum sum(J['c']['w'][:,0]): {col_sum_c_w:.4f}")
+print(f"Impact Rate Sensitivity J['c']['r'][0,0]: {jac_c_r_0:+.4f}")
+print(f"Impact Saving Response  J['a']['w'][0,0]: {jac_a_w_0:+.4f}")
+
+assert J["c"]["w"].shape == (50, 50) and J["a"]["w"].shape == (50, 50)
+assert 0.05 < impc_0 < 0.50
+assert cum_mpc_4 > impc_0
+
+# %% [markdown]
 # ## 2. Markov-Switching DSGE Perturbation (Foerster et al. 2016)
 #
 # We now explore discrete structural policy changes using the perturbation methods of Foerster, Rubio-Ramírez, Waggoner & Zha (2016).

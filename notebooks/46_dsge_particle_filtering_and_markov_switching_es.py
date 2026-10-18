@@ -223,6 +223,46 @@ assert len(c_agg) == 16, "El horizonte de transición debe ser de 16 trimestres"
 assert c_agg[0] > 0, "Un choque monetario expansivo debe elevar el consumo en el impacto"
 
 # %% [markdown]
+# ### Puente Declarativo `puremacro.dp.Model` $\leftrightarrow$ Jacobianos en Espacio de Secuencias (`dp_sequence_jacobian`)
+#
+# Cualquier problema de agentes heterogéneos con un activo declarado simbólicamente mediante `puremacro.dp.Model` puede compilarse directamente en Jacobianos de Fake-News en espacio de secuencias $\mathcal{J}^{Y, X}_{t, s} = \partial Y_t / \partial X_s$ (Auclert, Bardóczy, Rognlie & Straub 2021) a través de `dp_sequence_jacobian()`. A continuación declaramos un bloque de hogares con ahorro precautorio resuelto mediante el Método de Malla Endógena (`method="egm"`), extraemos $\mathcal{J}^{C, w}$, $\mathcal{J}^{C, r}$ y $\mathcal{J}^{A, w}$ en un horizonte $T = 50$, e inspeccionamos las Propensiones Marginales al Consumo intertemporales (iMPCs) en impacto y acumuladas:
+
+# %%
+from puremacro import dp
+from puremacro.dsge.hank import dp_sequence_jacobian
+
+m_hh = dp.Model("hank_hh")
+m_hh.parameters(beta=0.96, gamma=2.0, r=0.02, w=1.0)
+m_hh.exogenous("z", dp.AR1(rho=0.90, sigma=0.20, n=5))
+m_hh.state("a", np.linspace(0.0, 40.0, 100))
+m_hh.local("c = (1 + r)*a + w*exp(z) - a(+1)")
+m_hh.reward("crra(c, gamma)")
+m_hh.subject_to("c > 0")
+m_hh.aggregate(C="c", A="a")
+
+sol_hh = m_hh.solve(method="egm")
+J = dp_sequence_jacobian(sol_hh, inputs=["r", "w"], outputs=["c", "a"], T=50)
+
+impc_0 = float(J["c"]["w"][0, 0])
+cum_mpc_4 = float(np.sum(J["c"]["w"][:4, 0]))
+col_sum_c_w = float(np.sum(J["c"]["w"][:, 0]))
+jac_c_r_0 = float(J["c"]["r"][0, 0])
+jac_a_w_0 = float(J["a"]["w"][0, 0])
+
+print("--- Jacobianos en Espacio de Secuencias con dp.Model (T = 50) ---")
+print(f"Consumo Agregado Estacionario (C*)       : {sol_hh.aggregates['C']:.4f}")
+print(f"Activos Agregados Estacionarios (A*)     : {sol_hh.aggregates['A']:.4f}")
+print(f"MPC en impacto J['c']['w'][0, 0]         : {impc_0:.4f}")
+print(f"MPC acumulada a 4 trimestres             : {cum_mpc_4:.4f}")
+print(f"Suma de columna sum(J['c']['w'][:,0])    : {col_sum_c_w:.4f}")
+print(f"Sensibilidad a la tasa J['c']['r'][0,0]  : {jac_c_r_0:+.4f}")
+print(f"Respuesta del ahorro   J['a']['w'][0,0]  : {jac_a_w_0:+.4f}")
+
+assert J["c"]["w"].shape == (50, 50) and J["a"]["w"].shape == (50, 50)
+assert 0.05 < impc_0 < 0.50
+assert cum_mpc_4 > impc_0
+
+# %% [markdown]
 # ## 2. Perturbación DSGE con Cambio de Régimen de Markov (Foerster et al. 2016)
 #
 # Exploramos ahora los cambios discretos en los regímenes de política monetaria mediante la metodología de perturbación de Foerster, Rubio-Ramírez, Waggoner & Zha (2016).

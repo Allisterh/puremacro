@@ -343,6 +343,128 @@ ax5.legend(loc="upper left", frameon=True)
 # 4. **Descomposición Histórica de Choques**: Las contribuciones acumuladas verifican con precisión de máquina la identidad contable aditiva frente al crecimiento observado del PIB (`dy`). Se identifican claramente los episodios históricos críticos: la desaceleración de la productividad y los choques de oferta petrolera explican las contracciones de mediados de los años setenta, mientras que las mejoras tecnológicas en la inversión ($\varepsilon_{qs}$) y los choques de política monetaria impulsaron la expansión de finales de los noventa.
 # 5. **Conos de Pronóstico y Selección de Modelos**: La proyección a 12 trimestres muestra una convergencia suave del crecimiento hacia su tasa de estado estacionario de largo plazo de aproximadamente $0.43\%$ trimestral, con un cono de incertidumbre al 90% que se amplía en función de la volatilidad estructural. Finalmente, la densidad marginal de datos vía Laplace proporciona un criterio cuantitativo objetivo para la selección de modelos y cálculo de factores de Bayes.
 
+# %% [markdown]
+# ## Filtro de Partículas Temperado (Herbst y Schorfheide 2019) y Ejecución Nativa de Bloques `.mod`
+#
+# Cuando la varianza del error de medición es reducida o las ecuaciones de transición son no lineales, los filtros de partículas *bootstrap* convencionales sufren degeneración de ponderaciones. El **Filtro de Partículas Temperado** (Herbst y Schorfheide 2019) resuelve este problema construyendo una secuencia adaptativa de distribuciones puente $0 < \phi_{t,1} < \dots < \phi_{t,M_t} = 1$ mediante bisección para igualar la razón de ineficiencia $N / \text{ESS}_t(\phi)$ a `target_ineff`, seguida de pasos de mutación Metropolis-Hastings de paseo aleatorio. Asimismo, `model.execute_mod_commands()` ejecuta de forma nativa bloques de comandos `.mod` (`steady_state_model;`, `optim_weights;`, `osr_params`, `osr;`, `stoch_simul;`) y devuelve un contenedor estructurado `DynareCommandResults`.
+
+# %%
+import scipy.linalg
+from puremacro.dsge.build import DynareCommandResults
+from puremacro.dsge.particle_filter import tempered_particle_filter
+from puremacro.state_space import StateSpaceModel, kalman_filter
+
+# 1. Filtro de Partículas Temperado vs. Log-Verosimilitud Exacta de Kalman
+rng_tpf = np.random.default_rng(42)
+T_tpf = 25
+G_tpf = np.array([[0.75, 0.0], [0.0, 0.65]])
+N_tpf = np.eye(2)
+Q_tpf = np.diag([0.04**2, 0.03**2])
+meas_sd = 0.015
+H_tpf = np.eye(2) * (meas_sd**2)
+
+x_state = np.zeros(2)
+rows_tpf = []
+for _ in range(T_tpf):
+    x_state = G_tpf @ x_state + rng_tpf.multivariate_normal(np.zeros(2), Q_tpf)
+    rows_tpf.append(x_state + rng_tpf.multivariate_normal(np.zeros(2), H_tpf))
+y_tpf = pd.DataFrame(rows_tpf, columns=["x1", "x2"])
+
+P_stat = scipy.linalg.solve_discrete_lyapunov(G_tpf, Q_tpf)
+P0_tpf = G_tpf @ P_stat @ G_tpf.T + Q_tpf
+ssm_tpf = StateSpaceModel(T=G_tpf, R=N_tpf, Q=Q_tpf, Z=np.eye(2), H=H_tpf)
+ll_kalman = float(kalman_filter(y_tpf.to_numpy(), ssm_tpf, a0=np.zeros(2), P0=P0_tpf)["loglik"])
+
+tpf_mod = """
+var x1 x2;
+varexo e1 e2;
+parameters rho1 rho2;
+rho1 = 0.75;
+rho2 = 0.65;
+model;
+  x1 = rho1 * x1(-1) + e1;
+  x2 = rho2 * x2(-1) + e2;
+end;
+steady_state_model;
+  x1 = 0;
+  x2 = 0;
+end;
+shocks;
+  var e1; stderr 0.04;
+  var e2; stderr 0.03;
+end;
+"""
+m_tpf = load_mod(tpf_mod)
+res_tpf = tempered_particle_filter(
+    m_tpf,
+    y_tpf,
+    observed_vars=["x1", "x2"],
+    n_particles=250,
+    target_ineff=2.0,
+    n_mh_steps=1,
+    measurement_error={"x1": meas_sd, "x2": meas_sd},
+    seed=42,
+)
+
+print(f"Exact Kalman Log-Likelihood: {ll_kalman:.4f}")
+print(f"Tempered PF Log-Likelihood : {res_tpf.log_likelihood:.4f}")
+print(f"Mean Tempering Stages      : {float(res_tpf.n_tempering_stages.mean()):.2f} (Max: {int(res_tpf.n_tempering_stages.max())})")
+print(f"Mean Effective Sample Size : {float(res_tpf.effective_sample_size.mean()):.1f} / {res_tpf.n_particles}")
+
+assert abs(res_tpf.log_likelihood - ll_kalman) / abs(ll_kalman) < 0.05
+assert int(res_tpf.n_tempering_stages.max()) >= 2
+assert float(res_tpf.effective_sample_size.mean()) > 100.0
+
+# 2. Ejecución Nativa de Bloques .mod (steady_state_model + OSR + stoch_simul)
+nk_osr_mod = """
+var pi x i;
+varexo u_c u_p;
+parameters beta kappa sigma phi_pi phi_x;
+beta = 0.99;
+kappa = 0.15;
+sigma = 1.0;
+phi_pi = 1.5;
+phi_x = 0.125;
+
+model;
+  pi = 0.5 * beta * pi(+1) + 0.5 * pi(-1) + kappa * x + u_c;
+  x = x(+1) - (1 / sigma) * (i - pi(+1)) + u_p;
+  i = phi_pi * pi + phi_x * x;
+end;
+
+steady_state_model;
+  pi = 0;
+  x = 0;
+  i = 0;
+end;
+
+shocks;
+  var u_c; stderr 0.015;
+  var u_p; stderr 0.020;
+end;
+
+optim_weights;
+  pi 1.0;
+  x 0.25;
+  i 0.10;
+end;
+
+osr_params phi_pi phi_x;
+osr_params_bounds;
+  phi_pi, 1.05, 3.0;
+  phi_x, 0.0, 1.5;
+end;
+osr;
+stoch_simul(order = 1, irf = 16);
+"""
+m_nk_cmd = load_mod(nk_osr_mod)
+cmd_res = m_nk_cmd.execute_mod_commands()
+print("\n" + cmd_res.summary())
+
+assert isinstance(cmd_res, DynareCommandResults)
+assert cmd_res.osr is not None and cmd_res.osr.converged
+assert cmd_res.stoch_simul is not None
+
 # %%
 # Tu turno: personalice el horizonte de pronóstico y la cobertura de confianza
 # ← change this: pruebe horizon=8, 16, o 24 trimestres
