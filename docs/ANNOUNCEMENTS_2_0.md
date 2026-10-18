@@ -1,3 +1,5 @@
+> 🇬🇧 English · 🇪🇸 [Español](es/ANNOUNCEMENTS_2_0.md)
+
 # puremacro 2.0.0 Release Announcements & Community Outreach Kit
 
 This document provides ready-to-publish release announcement templates for **puremacro 2.0.0**, tailored for different academic, social, and developer communities.

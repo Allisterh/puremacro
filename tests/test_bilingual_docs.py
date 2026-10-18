@@ -93,6 +93,8 @@ _USER_DOCS = [
     "monetary_transmission.md",
     # Local language models (puremacro.llm), added with the package.
     "local_llm.md",
+    # Release announcements kit (2.0.0).
+    "ANNOUNCEMENTS_2_0.md",
 ]
 
 

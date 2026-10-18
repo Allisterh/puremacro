@@ -238,7 +238,7 @@ def load_banxico_stance() -> pd.DataFrame:
     Returns
     -------
     pd.DataFrame
-        Monthly PeriodIndex ('2000M01' to '2024M12').
+        Monthly PeriodIndex ('2000M01' to '2026M04').
     """
     path = _resolve("banxico_stance_monthly.csv")
     df = pd.read_csv(path)
