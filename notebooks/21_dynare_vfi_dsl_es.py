@@ -71,16 +71,22 @@ a_grid = sol.grids["a"]
 policy_a = sol.policy("a(+1)")
 mean_assets = sol.mean("a")
 gini_coef = sol.gini("a")
+top10_share = sol.top_share("a", 0.10)
+median_assets = sol.quantile("a", 0.50)
+mf = sol.to_microframe()
 top_mass = sol.distribution[-1].sum()
 
 print(f"Modelo: {sol.model_name} (método: {sol.method})")
 print(f"Activos Medios Estacionarios: {mean_assets:.4f}")
+print(f"Activos Medianos Estacionarios: {median_assets:.4f}")
 print(f"Coeficiente de Gini de Riqueza: {gini_coef:.4f}")
+print(f"Participación del Top 10% en la Riqueza: {top10_share:.4f}")
 print(f"Masa en el punto superior de la malla a = 15: {top_mass:.4f}")
 
 # Afirmaciones clave
 assert abs(mean_assets - 6.5733) < 1e-3, f"Los activos medios cambiaron: {mean_assets}"
 assert abs(gini_coef - 0.3494) < 1e-3, f"El coeficiente de Gini cambió: {gini_coef}"
+assert abs(float(mf.gini("a")["estimate"].iloc[0]) - gini_coef) < 1e-12
 
 # %% [markdown]
 # Los activos medios son 6.5733 y el Gini es 0.3494. Versiones anteriores de este cuaderno imprimían 6.6767 y 0.3924. Esos valores venían de una simulación de 2000 hogares y 100 periodos, y ese Gini se calculaba después de restar la tenencia mínima de activos, así que no era el Gini estándar. Alrededor del 8% de la masa está en el punto superior de la malla, así que el extremo superior de la malla es una restricción activa: amplía la malla antes de interpretar la parte alta de la distribución.

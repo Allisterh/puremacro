@@ -190,13 +190,20 @@ def test_record_unknown_name_raises_before_simulating(aiyagari_egm, monkeypatch,
     assert "record" in str(exc.value)
 
 
-def test_hjb_and_ks_refuse(hjb_sol, ks_sol):
-    with pytest.raises(NotImplementedError, match=r"^continuous-time solutions are not simulated; "
-                                                  r"sol\.distribution holds the KFE density$"):
-        hjb_sol.simulate()
-    with pytest.raises(NotImplementedError, match=r"^aggregate-risk solutions are not simulated; "
-                                                  r"sol\.aggregates holds the capital path$"):
-        ks_sol.simulate()
+def test_hjb_and_ks_simulate(hjb_sol, ks_sol):
+    p_hjb = hjb_sol.simulate(n_agents=2000, periods=50, seed=11, burn_in=20)
+    assert isinstance(p_hjb, Panel)
+    assert p_hjb.names == ["a", "e", "c"]
+    assert p_hjb["a"].shape == (2000, 50)
+    assert (p_hjb["c"] > 0).all()
+    assert abs(p_hjb["a"][:, -1].mean() - hjb_sol.mean("a")) < 0.25
+
+    p_ks = ks_sol.simulate(n_agents=500, periods=30, seed=12, burn_in=5)
+    assert isinstance(p_ks, Panel)
+    assert p_ks.names == ["a", "e", "Z", "K", "c"]
+    assert p_ks["a"].shape == (500, 30)
+    assert (p_ks["c"] > 0).all()
+    np.testing.assert_allclose(p_ks["K"][0, :], p_ks["a"].mean(axis=0), rtol=1e-12)
 
 
 def test_size_guard(aiyagari_egm):
@@ -237,3 +244,52 @@ def test_init_fixes_a_shock_on_an_unsorted_markov_grid():
             assert np.all(p["y"][:, 0] == val)
         with pytest.raises(ValueError, match="shock grid"):
             sol.simulate(20, 3, seed=0, init={"a": sol.grids["a"][5], "y": 0.75})
+
+
+def test_to_microframe_and_elapsed(aiyagari_egm, lc_sol, hjb_sol):
+    assert aiyagari_egm.elapsed > 0.0
+    assert lc_sol.elapsed > 0.0
+    assert hjb_sol.elapsed > 0.0
+    for sol in (aiyagari_egm, lc_sol, hjb_sol):
+        mf = sol.to_microframe()
+        assert np.isclose(float(mf.gini("a")["estimate"].iloc[0]), sol.gini("a"), rtol=1e-12)
+        assert np.isclose(float(mf.top_share("a", 0.10)["estimate"].iloc[0]),
+                          sol.top_share("a", 0.10), rtol=1e-12)
+        assert np.isclose(float(mf.quantile("a", 0.50)["estimate"].iloc[0]),
+                          sol.quantile("a", 0.50), rtol=1e-12)
+    mf_age = lc_sol.to_microframe(age=3)
+    assert np.isclose(float(mf_age.gini("a")["estimate"].iloc[0]), lc_sol.gini("a", age=3), rtol=1e-12)
+
+
+def test_custom_functions_in_dp_model():
+    m = dp.Model("progressive tax")
+    m.parameters(beta=0.96, gamma=2.0, r=0.03, w=1.0)
+    m.functions(
+        tax=lambda y, xp=np: 0.15 * y + 0.10 * xp.maximum(y - 1.0, 0.0),
+        bonus=lambda z: 0.05 * np.exp(z),
+    )
+    m.exogenous("z", dp.AR1(rho=0.9, sigma=0.2, n=5))
+    m.state("a", np.linspace(0.0, 40.0, 80))
+    m.local("gross_y = w*exp(z) + bonus(z)")
+    m.local("c = (1 + r)*a + gross_y - tax(gross_y) - a(+1)")
+    m.reward("crra(c, gamma)")
+    m.subject_to("c > 0")
+    m.aggregate(T="tax(gross_y)")
+    sol_vfi = m.solve("vfi")
+    sol_egm = m.solve("egm")
+    assert sol_vfi.aggregates["T"] > 0.0
+    assert abs(sol_vfi.aggregates["T"] - sol_egm.aggregates["T"]) < 0.02
+    panel = sol_egm.simulate(200, 10, seed=3, record=["a", "c", "tax(gross_y)"])
+    assert (panel["tax(gross_y)"] > 0).all()
+
+    # Custom function in reward cannot be symbolically differentiated in EGM/HJB
+    m_bad = dp.Model("custom u")
+    m_bad.parameters(beta=0.96, r=0.03)
+    m_bad.functions(u_fn=lambda c: np.log(c))
+    m_bad.state("a", np.linspace(0.1, 10.0, 30))
+    m_bad.local("c = (1 + r)*a - a(+1)")
+    m_bad.reward("u_fn(c)")
+    m_bad.subject_to("c > 0")
+    assert m_bad.solve("vfi").V.shape == (30, 1)
+    with pytest.raises(ModelSpecError, match="cannot differentiate"):
+        m_bad.solve("egm")

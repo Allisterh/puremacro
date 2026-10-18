@@ -21,6 +21,8 @@ density times the grid's quadrature weights, i.e. the mass at each node.
 """
 from __future__ import annotations
 
+import time
+
 import numpy as np
 from scipy.optimize import brentq
 
@@ -71,6 +73,7 @@ class HJBPlan:
         self.a = self.state_grids[0]
         self.shock_names = [s for s, _ in m._shocks]
         self.cname = m._controls[0]
+        self.local_names = [n for n, _ in m._locals]
         self.param_names = list(m._params) + list(m._prices)
         names = self.state_names + self.shock_names + [self.cname]
         if len(set(names)) != len(names):
@@ -93,12 +96,14 @@ class HJBPlan:
         self.n_z = self.P.shape[0]
 
         timed = self.state_names + self.shock_names
+        fns = m._functions
         inl: dict = {}
         for name, expr in m._locals:
-            inl[name] = substitute(parse(expr, timed), inl)
+            inl[name] = substitute(parse(expr, timed, functions=fns), inl)
+        self._inl = inl
 
         def node(text):
-            n = substitute(parse(text, timed), inl)
+            n = substitute(parse(text, timed, functions=fns), inl)
             for name, lead in n.variables():
                 if lead != 0:
                     raise ModelSpecError(f"continuous-time models have no timing: {name}({lead:+d}) in {text!r}")
@@ -106,13 +111,13 @@ class HJBPlan:
 
         self._drift_node = node(m._drift[self.state_names[0]])
         reward = node(m._reward)
-        self.felicity = Felicity(reward, self.cname, None, self.param_names, "method='hjb'")
+        self.felicity = Felicity(reward, self.cname, None, self.param_names, "method='hjb'", functions=fns)
         self._drift = self._fn("_dp_drift", self._drift_node)
         self._drift_c = self._fn("_dp_drift_c", diff(self._drift_node, self.cname))
         self._agg = {k: self._fn(f"_dp_agg_{k}", node(e)) for k, e in m._aggregates.items()}
         self._clear = None
         if m._clear is not None:
-            cl = substitute(parse(m._clear, []), inl)
+            cl = substitute(parse(m._clear, [], functions=fns), inl)
             ok = set(m._aggregates) | set(self.param_names)
             bad = {n for n, _ in symbols(cl)} - ok
             if bad:
@@ -122,12 +127,14 @@ class HJBPlan:
                 return f"g_{name}" if name in m._aggregates else f"p_{name}"
 
             self._clear = compile_function("_dp_clear", [f"g_{k}" for k in m._aggregates]
-                                           + [f"p_{p}" for p in self.param_names], [], emit(cl, res))
+                                           + [f"p_{p}" for p in self.param_names], [],
+                                           emit(cl, res, functions=fns), functions=fns)
 
     # ------------------------------------------------------------------ codegen
     def _fn(self, fname, node):
         states, shocks = set(self.state_names), set(self.shock_names)
         params = set(self.param_names)
+        fns = self.model._functions
 
         def resolve(name, lead):
             if name == self.cname:
@@ -141,7 +148,15 @@ class HJBPlan:
             raise ModelSpecError(f"{fname.replace('_dp_', '')}: unknown name {name!r}")
 
         args = ["c", f"s_{self.state_names[0]}"] + ([f"x_{s}" for s in self.shock_names] or ["_x_none"])
-        return compile_function(fname, args + [f"p_{p}" for p in self.param_names], [], emit(node, resolve))
+        return compile_function(fname, args + [f"p_{p}" for p in self.param_names], [],
+                                emit(node, resolve, functions=fns), functions=fns)
+
+    def _household_function(self, fname: str, node):
+        n = substitute(node, self._inl)
+        for name, lead in n.variables():
+            if lead != 0:
+                raise ModelSpecError(f"continuous-time models have no timing: {name}({lead:+d})")
+        return self._fn(fname, n)
 
     def _call(self, fn, c, params: dict):
         zs = [z[None, :] for z in self._zs] or [np.zeros((1, 1))]
@@ -180,7 +195,8 @@ class HJBPlan:
 
     def policy_values(self, expr: str, raw, params: dict) -> np.ndarray:
         timed = self.state_names + self.shock_names
-        return np.array(self._call(self._fn("_dp_policy", parse(expr, timed)), raw.c_policy, params))
+        fn = self._household_function("_dp_policy", parse(expr, timed, functions=self.model._functions))
+        return np.array(self._call(fn, raw.c_policy, params))
 
     def aggregate_values(self, raw, mass, params: dict) -> dict:
         return {k: float(np.sum(mass * self._call(fn, raw.c_policy, params))) for k, fn in self._agg.items()}
@@ -188,13 +204,15 @@ class HJBPlan:
     def solve(self, *, tol, max_iter, distribution, xtol, max_evals):
         from puremacro.dp._results import DPSolution
 
+        t0 = time.perf_counter()
         m = self.model
         if not m._prices:
             params = self.param_values()
             raw = self.solve_household(params, tol=tol, max_iter=max_iter, kfe=distribution)
             mass = self.mass(raw) if distribution else None
             aggs = self.aggregate_values(raw, mass, params) if mass is not None else {}
-            return DPSolution(self, raw, params=params, distribution=mass, aggregates=aggs, method="hjb")
+            return DPSolution(self, raw, params=params, distribution=mass, aggregates=aggs, method="hjb",
+                              elapsed=time.perf_counter() - t0)
         (pname, (lo, hi)), = m._prices.items()
         count = {"n": 0}
 
@@ -214,4 +232,5 @@ class HJBPlan:
         eq = EquilibriumResult(price=p_star, residual=res, solution=raw, distribution=mass,
                                problem=None, n_evals=count["n"])
         return DPSolution(self, raw, params=params, distribution=mass, aggregates=aggs,
-                          prices={pname: p_star}, equilibrium=eq, method="hjb")
+                          prices={pname: p_star}, equilibrium=eq, method="hjb",
+                          elapsed=time.perf_counter() - t0)

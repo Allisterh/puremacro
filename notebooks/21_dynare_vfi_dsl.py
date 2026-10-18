@@ -71,16 +71,22 @@ a_grid = sol.grids["a"]
 policy_a = sol.policy("a(+1)")
 mean_assets = sol.mean("a")
 gini_coef = sol.gini("a")
+top10_share = sol.top_share("a", 0.10)
+median_assets = sol.quantile("a", 0.50)
+mf = sol.to_microframe()
 top_mass = sol.distribution[-1].sum()
 
 print(f"Model: {sol.model_name} (method: {sol.method})")
 print(f"Stationary Mean Assets: {mean_assets:.4f}")
+print(f"Stationary Median Assets: {median_assets:.4f}")
 print(f"Wealth Gini Coefficient: {gini_coef:.4f}")
+print(f"Top 10% Wealth Share: {top10_share:.4f}")
 print(f"Mass at the top grid point a = 15: {top_mass:.4f}")
 
 # Headline assertions
 assert abs(mean_assets - 6.5733) < 1e-3, f"Mean assets moved: {mean_assets}"
 assert abs(gini_coef - 0.3494) < 1e-3, f"Gini coefficient moved: {gini_coef}"
+assert abs(float(mf.gini("a")["estimate"].iloc[0]) - gini_coef) < 1e-12
 
 # %% [markdown]
 # Mean assets are 6.5733 and the Gini is 0.3494. Earlier versions of this notebook printed 6.6767 and 0.3924. Those came from a 2000-household, 100-period simulation, and that Gini was computed after subtracting the minimum asset holding, so it was not the standard Gini. About 8% of the mass sits at the top grid point, so the upper end of the grid binds: widen it before reading the top of the distribution.

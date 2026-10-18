@@ -10,8 +10,8 @@ Verifies Milestone 2: Exact Analytic Gradients via the Implicit Function Theorem
    - Schumaker (1983) shape-preserving quadratic splines (SchumakerSpline).
 4. Continuous policy gradient consistency: \nabla_\theta g(s) = \Phi(s) \nabla_\theta c^*.
 5. Macroeconomic aggregate sensitivities \nabla_\theta K*, \nabla_\theta C*, \nabla_\theta r*, \nabla_\theta w*.
-6. Heterogeneous-agent distribution/GE sensitivities are not implemented and must raise
-   NotImplementedError (no adjoint stationary-distribution derivatives are claimed).
+6. Heterogeneous-agent distribution and general equilibrium sensitivities via coupled
+   household-IFT, tangent-KFE, and market-clearing IFT (AiyagariContinuousEquilibrium).
 7. Robust fallbacks: condition number tracking, Tikhonov regularization, and Truncated SVD.
 8. High-level entry points: policy_parameter_jacobian, equilibrium_parameter_jacobian, gmm_objective_and_gradient.
 9. Full puremacro presentation contract (.summary(), .plot(), .to_frame(), .to_markdown(), .to_latex(), .to_typst()).
@@ -550,3 +550,43 @@ class TestCustomResidualFunction:
         assert np.isclose(res.grad_coefficients[1, 0], 0.0, atol=1e-5)
         assert np.isclose(res.grad_coefficients[0, 1], 0.0, atol=1e-5)
         assert np.isclose(res.grad_coefficients[1, 1], 1.0 / 3.0, atol=1e-5)
+
+
+# ===========================================================================
+# 8. Heterogeneous-Agent General Equilibrium Sensitivities
+# ===========================================================================
+
+class TestHeterogeneousAgentGESensitivities:
+    """Verifies coupled household-IFT, tangent-KFE, and GE sensitivities on AiyagariContinuousEquilibrium."""
+
+    def test_aiyagari_continuous_ge_sensitivities_parity(self):
+        """Verify Aiyagari continuous GE sensitivities match central finite differences of equilibrium."""
+        from puremacro.vfi.continuous_distribution import solve_aiyagari_continuous
+
+        base_kw = dict(
+            beta=0.95, gamma=2.0, alpha=0.36, delta=0.08,
+            rho_z=0.90, sigma_z=0.20, n_z=3, n_a=80, N_k=300, a_max=30.0,
+            xtol=1e-11, egm_tol=1e-11,
+        )
+        eq = solve_aiyagari_continuous(**base_kw)
+        res = compute_ift_gradients(eq, params=["alpha", "beta"])
+        deq = equilibrium_parameter_jacobian(eq, params=["alpha", "beta"], ift_result=res)
+
+        assert "K" in deq and "r" in deq and "w" in deq and "C" in deq and "mu" in deq
+        assert deq["mu"].shape == (300, 3, 2)
+        # Stationary distribution sensitivity must conserve total mass (sum dmu/dtheta = 0)
+        assert np.allclose(np.sum(deq["mu"], axis=(0, 1)), 0.0, atol=1e-10)
+
+        pol_grad = policy_parameter_jacobian(eq, s=np.array([1.0, 5.0]), params=["alpha", "beta"], ift_result=res)
+        assert pol_grad.shape == (2, 2)
+        assert np.all(np.isfinite(pol_grad))
+
+        h_fd = 1e-4
+        eq_p = solve_aiyagari_continuous(**{**base_kw, "beta": base_kw["beta"] + h_fd})
+        eq_m = solve_aiyagari_continuous(**{**base_kw, "beta": base_kw["beta"] - h_fd})
+        dr_db_fd = (eq_p.r - eq_m.r) / (2.0 * h_fd)
+        dK_db_fd = (eq_p.K - eq_m.K) / (2.0 * h_fd)
+
+        assert abs(deq["r"][1] - dr_db_fd) / abs(dr_db_fd) < 1e-4
+        assert abs(deq["K"][1] - dK_db_fd) / abs(dK_db_fd) < 1e-4
+

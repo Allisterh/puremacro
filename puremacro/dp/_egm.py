@@ -103,7 +103,7 @@ class EGMPlan:
             if name != self.cname:
                 inl[name] = substitute(node, inl)
         self.felicity = Felicity(substitute(comp.reward, inl), self.cname, self.dname, comp.param_names,
-                                 "method='egm'")
+                                 "method='egm'", functions=m._functions)
         self._c_fn = comp._household_function("_dp_c", Param(self.cname))
 
     # ------------------------------------------------------------ structure

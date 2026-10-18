@@ -23,7 +23,7 @@ class DPSolution:
 
     def __init__(self, compiled, raw, *, params: dict, distribution=None,
                  aggregates: dict | None = None, prices: dict | None = None,
-                 equilibrium=None, method: str | None = None):
+                 equilibrium=None, method: str | None = None, elapsed: float = 0.0):
         self._c = compiled
         self.raw = raw
         self.model_name = compiled.model.name
@@ -33,6 +33,7 @@ class DPSolution:
         self.aggregates = dict(aggregates or {})
         self.prices = dict(prices or {})
         self.equilibrium = equilibrium
+        self.elapsed = float(elapsed)
 
     @property
     def V(self) -> np.ndarray:
@@ -59,7 +60,7 @@ class DPSolution:
         if hasattr(c, "policy_values"):
             return c.policy_values(expr, self.raw, self.params)
         timed = c.state_names + c.shock_names + ([c.model._discrete[0]] if c.model._discrete else [])
-        fn = c._household_function("_dp_policy", parse(expr, timed))
+        fn = c._household_function("_dp_policy", parse(expr, timed, functions=c.model._functions))
         if not c.finite:
             return c.evaluate(fn, self.raw, self.params)
         return np.stack([c.evaluate(fn, self.raw, self.params, age=j)
@@ -263,6 +264,69 @@ class DPSolution:
                 df.insert(0, "age", key)
             frames.append(df)
         return frames[0] if len(frames) == 1 else pd.concat(frames, ignore_index=True)
+
+    def to_microframe(self, columns: Sequence[str] | None = None, *, age: int | None = None):
+        """Convert the stationary or life-cycle distribution on grid nodes into a :class:`MicroFrame`.
+
+        Returns a :class:`~puremacro.fetch.micro.MicroFrame` with ``SurveyDesign.weights_only("weight")``,
+        ``unit="node"``, ``source=self.model_name`` and ``vintage=self.method``, containing all nodes
+        with positive probability mass (``weight > 0``). Includes state columns, shock columns,
+        and ``columns`` (defaulting to all model locals, controls and discrete choices), plus
+        ``"age"`` for finite-horizon solutions when ``age is None``.
+        """
+        from puremacro.fetch.micro._design import MicroFrame, SurveyDesign
+
+        if self.method.endswith("+ks"):
+            raise ValueError("no stationary distribution: Krusell-Smith solutions have none")
+        if self.distribution is None:
+            raise ValueError("no distribution: solve with distribution=True")
+
+        c = self._c
+        m = c.model
+        if columns is None:
+            local_names = getattr(c, "local_names", [n for n, _ in m._locals])
+            expr_cols = list(dict.fromkeys(
+                list(local_names) + list(m._controls) + ([m._discrete[0]] if m._discrete else [])
+            ))
+        elif isinstance(columns, str):
+            expr_cols = [columns]
+        else:
+            expr_cols = list(columns)
+
+        all_cols = list(dict.fromkeys(list(c.state_names) + list(c.shock_names) + expr_cols))
+        dist = np.asarray(self.distribution, dtype=float)
+        data: dict[str, np.ndarray] = {}
+
+        if not c.finite:
+            if age is not None:
+                raise ValueError("age applies to life-cycle (finite-horizon) solutions only")
+            w = dist.ravel()
+            keep = w > 0
+            for col in all_cols:
+                data[col] = np.asarray(self.policy(col), dtype=float).ravel()[keep]
+            data["weight"] = w[keep]
+        else:
+            J = int(self.raw.horizon)
+            if age is None:
+                w = (self.population_shares()[:, None, None] * dist).ravel()
+                keep = w > 0
+                ages = np.broadcast_to(np.arange(J)[:, None, None], dist.shape).ravel()
+                data["age"] = ages[keep]
+                for col in all_cols:
+                    data[col] = np.asarray(self.policy(col), dtype=float).ravel()[keep]
+                data["weight"] = w[keep]
+            else:
+                if isinstance(age, str) or int(age) != age or not 0 <= int(age) < J:
+                    raise ValueError(f"age must be None or an integer in 0..{J - 1}, got {age!r}")
+                j = int(age)
+                w = dist[j].ravel()
+                keep = w > 0
+                for col in all_cols:
+                    data[col] = np.asarray(self.policy(col), dtype=float)[j].ravel()[keep]
+                data["weight"] = w[keep]
+
+        return MicroFrame(pd.DataFrame(data), SurveyDesign.weights_only("weight"),
+                          unit="node", source=self.model_name, vintage=self.method)
 
     def summary(self) -> pd.DataFrame:
         rec = [("Model", self.model_name), ("Method", self.method),

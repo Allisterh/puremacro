@@ -126,5 +126,7 @@ def solve_ks(comp, *, method="vfi", backend="numpy", options=None, T: int = 3000
                      K_path=K_path, Z_path=Z_path, nZ=nZ, burn_in=int(burn_in), hint=hint)
     eq = KSEquilibrium(b0=b0, b1=b1, r_squared=R2, K_path=K_path, mean_K=float(np.mean(K_path[burn_in:])),
                        no_agg_risk_K=float("nan"), n_outer=n_outer, converged=converged)
-    return DPSolution(comp, sol, params=params, aggregates={comp.shock_names[-1]: eq.mean_K},
-                      equilibrium=eq, method=f"{method}+ks")
+    res = DPSolution(comp, sol, params=params, aggregates={comp.shock_names[-1]: eq.mean_K},
+                     equilibrium=eq, method=f"{method}+ks")
+    res._ks_mu0 = np.asarray(mu0, dtype=float) / np.sum(mu0)
+    return res

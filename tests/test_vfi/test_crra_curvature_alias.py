@@ -88,12 +88,12 @@ def test_smolyak_euler_honours_gamma():
 
 
 @pytest.mark.parametrize("extra", [{"sigma": G}, {"gamma": G}, {"delta": 0.1}])
-def test_smolyak_bellman_refuses_models_it_does_not_solve(extra):
-    # 4.4.0 returned converged=True with the log-utility, full-depreciation policy
-    # (hand-written Euler residual 0.0345 at sigma=2).
+def test_smolyak_bellman_solves_crra_and_partial_depreciation(extra):
     params = {"alphas": list(ALPHAS), "z": Z2, "beta": BETA, **extra}
-    with pytest.raises(NotImplementedError, match="method='euler'"):
-        solve_smolyak(domain=((0.8, 1.2), (0.8, 1.2)), mu=2, method="bellman", params=params)
+    sol_bellman = solve_smolyak(domain=((0.8, 1.2), (0.8, 1.2)), mu=2, method="bellman", params=params)
+    sol_euler = solve_smolyak(domain=((0.8, 1.2), (0.8, 1.2)), mu=2, method="euler", params=params)
+    assert sol_bellman.converged
+    assert np.max(np.abs(sol_bellman.policy(S_TEST) - sol_euler.policy(S_TEST))) < 1e-3
 
 
 def test_smolyak_bellman_log_full_depreciation_is_unchanged():

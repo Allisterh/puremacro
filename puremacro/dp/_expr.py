@@ -12,8 +12,9 @@ each symbol mapped to a positional argument the compiler controls.
 """
 from __future__ import annotations
 
+import inspect
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 
 import numpy as np
 
@@ -39,6 +40,30 @@ class ModelSpecError(ValueError):
     """A dp model is incomplete, inconsistent, or uses an unsupported construct."""
 
 
+class _DPParser(Parser):
+    """Expression parser that always parses registered custom function names as Call nodes."""
+
+    custom_functions: set[str] = set()
+
+    def _parse_primary(self) -> Node:
+        t = self._curr()
+        if (
+            t.type in ("IDENT", "KEYWORD")
+            and str(t.value) in self.custom_functions
+            and self._peek_token(1).type == "LPAREN"
+        ):
+            ident = str(self._advance().value)
+            self._advance()  # (
+            args = []
+            if self._curr().type != "RPAREN":
+                args.append(self.parse_expression())
+                while self._match("COMMA"):
+                    args.append(self.parse_expression())
+            self._expect("RPAREN")
+            return Call(ident, tuple(args))
+        return super()._parse_primary()
+
+
 def crra(c, gamma, xp=np):
     """CRRA felicity ``(c^(1-gamma) - 1) / (1 - gamma)``, equal to ``log(c)`` at gamma = 1.
 
@@ -54,18 +79,20 @@ def crra(c, gamma, xp=np):
     return xp.where(c > 0, u, -np.inf)
 
 
-def parse(text: str, variables=()) -> Node:
+def parse(text: str, variables=(), functions: Collection[str] = ()) -> Node:
     """Parse one expression into a ``dsge._ast`` node.
 
     ``variables`` are the names that may carry a timing index (states, shocks,
-    choices); every other identifier parses as a ``Param`` and is resolved by the
-    compiler (parameter, price, local, aggregate or ``age``).
+    choices); ``functions`` are registered custom function names; every other
+    identifier parses as a ``Param`` and is resolved by the compiler (parameter,
+    price, local, aggregate or ``age``).
     """
     src = str(text).replace("**", "^")
     try:
         tokens = Tokenizer(src).tokenize()
-        parser = Parser(tokens, src)
+        parser = _DPParser(tokens, src)
         parser.variables = list(variables)
+        parser.custom_functions = set(functions)
         node = parser.parse_expression()
         if parser._curr().type != "EOF":
             tok = parser._curr()
@@ -92,7 +119,8 @@ def symbols(node: Node) -> set[tuple[str, int]]:
     return set(node.variables()) | {(p, 0) for p in node.parameters()}
 
 
-def emit(node: Node, resolve: Callable[[str, int], str]) -> str:
+def emit(node: Node, resolve: Callable[[str, int], str],
+         functions: Collection[str] | Mapping[str, Callable] = ()) -> str:
     """Python source for ``node``; ``resolve(name, lead)`` gives each symbol's identifier."""
     if isinstance(node, Const):
         return repr(float(node.value))
@@ -101,22 +129,27 @@ def emit(node: Node, resolve: Callable[[str, int], str]) -> str:
     if isinstance(node, Var):
         return resolve(node.name, node.lead)
     if isinstance(node, UnaryOp):
-        return f"({node.op}{emit(node.expr, resolve)})"
+        return f"({node.op}{emit(node.expr, resolve, functions=functions)})"
     if isinstance(node, BinOp):
         if node.op not in _BINOPS:
             raise ModelSpecError(f"unsupported operator {node.op!r}")
-        return f"({emit(node.left, resolve)} {_BINOPS[node.op]} {emit(node.right, resolve)})"
+        return (f"({emit(node.left, resolve, functions=functions)} {_BINOPS[node.op]} "
+                f"{emit(node.right, resolve, functions=functions)})")
     if isinstance(node, Call):
+        args = [emit(a, resolve, functions=functions) for a in node.args]
+        if node.func in functions:
+            arg_str = f"{', '.join(args)}, xp=xp" if args else "xp=xp"
+            return f"_fn_{node.func}({arg_str})"
         fn = node.func.lower()
-        args = [emit(a, resolve) for a in node.args]
         if fn == "crra":
             if len(args) != 2:
                 raise ModelSpecError("crra(c, gamma) takes two arguments")
             return f"_crra({args[0]}, {args[1]}, xp)"
         if fn not in _FUNCS:
+            supported = sorted(set(_FUNCS) | {"crra"} | set(functions))
             raise ModelSpecError(
                 f"function {node.func!r} is not supported in dp models; "
-                f"use one of {sorted(_FUNCS) + ['crra']}"
+                f"use one of {supported} or register it with m.functions()"
             )
         if fn in ("max", "min"):
             if len(args) != 2:
@@ -174,7 +207,7 @@ def diff(node: Node, name: str) -> Node:
             return BinOp("*", node, inner)
     if isinstance(node, Call):
         fn = node.func.lower()
-        x = node.args[0]
+        x = node.args[0] if node.args else Const(0.0)
         if fn == "exp":
             return BinOp("*", node, diff(x, name))
         if fn in ("log", "ln"):
@@ -183,11 +216,34 @@ def diff(node: Node, name: str) -> Node:
             return BinOp("/", diff(x, name), BinOp("*", Const(2.0), node))
         if fn == "crra" and len(node.args) == 2 and not dep(node.args[1]):
             return BinOp("*", BinOp("^", x, UnaryOp("-", node.args[1])), diff(x, name))
+        if fn not in _FUNCS and fn != "crra":
+            raise ModelSpecError(
+                f"cannot differentiate custom function {node.func!r} ({node!r}) with respect to {name!r}; "
+                "custom functions cannot be symbolically differentiated in method='egm' or method='hjb' "
+                "(use method='vfi')"
+            )
     raise ModelSpecError(f"cannot differentiate {node!r} with respect to {name!r}")
 
 
+def _wrap_custom_function(fn: Callable) -> Callable:
+    """Wrap a user callable so generated code can always call ``_fn_name(*args, xp=xp)``."""
+    takes_xp = False
+    try:
+        sig = inspect.signature(fn)
+        takes_xp = (
+            "xp" in sig.parameters
+            or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+        )
+    except (ValueError, TypeError):
+        takes_xp = False
+    if takes_xp:
+        return lambda *args, xp=np: fn(*args, xp=xp)
+    return lambda *args, xp=np: fn(*args)
+
+
 def compile_function(name: str, args: list[str], body: list[str], ret: str,
-                     namespace: Mapping | None = None) -> Callable:
+                     namespace: Mapping | None = None,
+                     functions: Mapping[str, Callable] | None = None) -> Callable:
     """Build ``def name(*args, xp=np): body; return ret`` with numpy warnings silenced.
 
     Infeasible grid points routinely hit ``log`` of a negative number before the
@@ -199,7 +255,10 @@ def compile_function(name: str, args: list[str], body: list[str], ret: str,
     lines += [f"        {b}" for b in body]
     lines.append(f"        return {ret}")
     src = "\n".join(lines)
-    glb = {"np": np, "_crra": crra, "_inf": np.inf}
+    glb: dict = {"np": np, "_crra": crra, "_inf": np.inf}
+    if functions:
+        for k, f in functions.items():
+            glb[f"_fn_{k}"] = _wrap_custom_function(f)
     if namespace:
         glb.update(namespace)
     loc: dict = {}

@@ -118,7 +118,16 @@ def _draw_cells(rng: np.random.Generator, mass: np.ndarray, n: int) -> np.ndarra
 
 # ----------------------------------------------------------------------------- set-up
 def _is_egm(sol) -> bool:
-    return hasattr(sol.raw, "aprime")
+    return hasattr(sol.raw, "aprime") or hasattr(sol.raw, "c_policy")
+
+
+def _expm_transition(A: np.ndarray, dt: float) -> np.ndarray:
+    """Discrete transition matrix exp(A * dt) for continuous-time generator A."""
+    from scipy.linalg import expm
+
+    P = np.clip(expm(np.asarray(A, dtype=float) * float(dt)), 0.0, None)
+    row_sums = P.sum(axis=1, keepdims=True)
+    return np.where(row_sums > 0, P / row_sums, 1.0 / P.shape[1])
 
 
 def _state_shape(sol) -> tuple[int, ...]:
@@ -161,8 +170,8 @@ def _newborn_mass(sol) -> np.ndarray:
     return mu0 / mu0.sum()
 
 
-def _initial_state(sol, rng: np.random.Generator, n_agents: int, init):
-    """Initial state (flat index for VFI, value for EGM) and shock index per agent."""
+def _initial_state(sol, rng: np.random.Generator, n_agents: int, init, *, P_ergodic=None):
+    """Initial state (flat index for VFI, value for EGM/HJB) and shock index per agent."""
     c = sol._c
     egm = _is_egm(sol)
     n_z = int(np.prod(_shock_shape(sol)))
@@ -227,7 +236,8 @@ def _initial_state(sol, rng: np.random.Generator, n_agents: int, init):
         state = np.ravel_multi_index(tuple(idx), _state_shape(sol))
 
     # shocks: given ones must lie on their grid; the rest are drawn from the ergodic chain
-    z_idx = _draw_cells(rng, markov_stationary(c.P), n_agents)
+    P_stat = P_ergodic if P_ergodic is not None else c.P
+    z_idx = _draw_cells(rng, markov_stationary(P_stat), n_agents)
     given = [s for s in c.shock_names if s in init]
     if given:
         comps = list(np.unravel_index(z_idx, _shock_shape(sol)))
@@ -279,7 +289,7 @@ def _compile_record(sol, record) -> list[tuple[str, object]]:
     out = []
     for expr in record:
         try:
-            fn = c._household_function("_dp_record", parse(expr, timed))
+            fn = c._household_function("_dp_record", parse(expr, timed, functions=c.model._functions))
         except ModelSpecError as exc:
             raise ModelSpecError(f"record {expr!r}: {exc}") from None
         out.append((expr, fn))
@@ -332,15 +342,193 @@ def _stepper(sol, rng: np.random.Generator):
     return step_taste
 
 
+def _simulate_hjb(sol, n_agents: int, periods: int, *, rng: np.random.Generator,
+                  init, burn_in: int, compiled) -> Panel:
+    """Continuous-time Euler-Maruyama / Poisson-jump simulation for HJB solutions."""
+    c = sol._c
+    a_grid = c.state_grids[0]
+    P_1 = _expm_transition(sol.P, 1.0)
+    n_sub = 10
+    dt = 1.0 / n_sub
+    P_sub = _expm_transition(sol.P, dt)
+    state, z = _initial_state(sol, rng, n_agents, init, P_ergodic=P_1)
+    s_drift = np.asarray(sol.raw.s_drift, dtype=float)
+    c_policy = np.asarray(sol.raw.c_policy, dtype=float)
+
+    S = np.empty((n_agents, periods), dtype=float)
+    Z = np.empty((n_agents, periods), dtype=np.intp)
+    total = burn_in + periods
+    for t in range(total):
+        k = t - burn_in
+        if k >= 0:
+            S[:, k], Z[:, k] = state, z
+        for s_idx in range(n_sub):
+            drift = _interp_by_shock(s_drift, a_grid, state, z)
+            state = np.clip(state + drift * dt, a_grid[0], a_grid[-1])
+            if P_sub.shape[0] > 1 and not (t == total - 1 and s_idx == n_sub - 1):
+                z = _draw_markov(rng, P_sub, z)
+
+    c_val = _interp_by_shock(c_policy, a_grid, S.ravel(), Z.ravel()).reshape(n_agents, periods)
+    if c.z_grids:
+        zs = [g[i] for g, i in zip(c.z_grids, np.unravel_index(Z, _shock_shape(sol)))]
+    else:
+        zs = [np.zeros((n_agents, periods))]
+    args = [c_val, S] + zs + list(sol.params.values())
+    arrays = {}
+    for name, fn in compiled:
+        val = np.asarray(fn(*args, xp=np), dtype=float)
+        arrays[name] = np.array(np.broadcast_to(val, (n_agents, periods)))
+    return Panel(arrays, age=None, alive=None,
+                 source=f"puremacro.dp simulation of {sol.model_name!r} ({sol.method})",
+                 functions=c.model._functions)
+
+
+def _simulate_ks(sol, n_agents: int, periods: int, *, rng: np.random.Generator,
+                 init, burn_in: int, compiled) -> Panel:
+    """Panel simulation for Krusell-Smith solutions (vfi+ks and egm+ks)."""
+    c = sol._c
+    egm = _is_egm(sol)
+    a_grid = c.state_grids[0]
+    n_a = a_grid.size
+    P_idio = np.asarray(c.P_idio, dtype=float)
+    P_Z = np.asarray(c.P_agg, dtype=float)
+    K_grid = np.asarray(c.z_grids[-1], dtype=float)
+    n_idio, n_Z, n_K = P_idio.shape[0], P_Z.shape[0], K_grid.size
+    n_idio_shocks = len(c.model._shocks)
+    n_agg_shocks = len(c.model._agg_shocks)
+
+    if isinstance(init, str):
+        if init != "stationary":
+            raise ValueError(f"init must be 'stationary' or a dict {{state: value}} in an infinite horizon, got {init!r}")
+        mu0 = getattr(sol, "_ks_mu0", None)
+        if mu0 is None:
+            mu0 = np.full((n_a, n_idio), 1.0 / (n_a * n_idio))
+        cells = _draw_cells(rng, np.asarray(mu0, dtype=float).ravel(), n_agents)
+        a_idx, z_idio = np.divmod(cells, n_idio)
+        state = a_grid[a_idx].astype(float) if egm else a_idx
+        iZ = int(_draw_cells(rng, markov_stationary(P_Z), 1)[0])
+        K_init = None
+    elif isinstance(init, Mapping):
+        unknown = [k for k in init if k not in c.state_names and k not in c.shock_names]
+        if unknown:
+            raise ValueError(f"init names {unknown} are neither states {c.state_names} nor shocks {c.shock_names}")
+        missing = [s for s in c.state_names if s not in init]
+        if missing:
+            raise ValueError(f"init must give every state; missing {missing}")
+
+        def values(name):
+            v = np.asarray(init[name], dtype=float)
+            if v.ndim == 0:
+                v = np.full(n_agents, float(v))
+            if v.shape != (n_agents,):
+                raise ValueError(f"init[{name!r}] must be a scalar or have shape ({n_agents},), got {v.shape}")
+            if not np.all(np.isfinite(v)):
+                raise ValueError(f"init[{name!r}] must be finite")
+            return v
+
+        v_a = values(c.state_names[0])
+        if egm:
+            state = np.clip(v_a, a_grid[0], a_grid[-1])
+            if np.any(state != v_a):
+                warnings.warn(f"init: values of {c.state_names[0]!r} outside the grid "
+                              f"[{a_grid[0]:g}, {a_grid[-1]:g}] were clipped to it", UserWarning, stacklevel=4)
+        else:
+            j_a = _nearest(a_grid, v_a)
+            if not np.allclose(a_grid[j_a], v_a, rtol=1e-12, atol=1e-12):
+                warnings.warn(f"init: values of {[c.state_names[0]]} are off the grid; VFI states live on grid "
+                              "nodes, so they were snapped to the nearest node", UserWarning, stacklevel=4)
+            state = j_a
+
+        z_idio = _draw_cells(rng, markov_stationary(P_idio), n_agents)
+        idio_shape = tuple(g.size for g in c.z_grids[:n_idio_shocks]) or (1,)
+        if any(s in init for s in c.shock_names[:n_idio_shocks]):
+            comps = list(np.unravel_index(z_idio, idio_shape))
+            for k, (name, g) in enumerate(zip(c.shock_names[:n_idio_shocks], c.z_grids[:n_idio_shocks])):
+                if name in init:
+                    v = values(name)
+                    j = _nearest(g, v)
+                    if not np.allclose(g[j], v, rtol=1e-9, atol=1e-12):
+                        raise ValueError(f"init[{name!r}] must take values on the shock grid {g.tolist()}")
+                    comps[k] = j
+            z_idio = np.ravel_multi_index(tuple(comps), idio_shape)
+
+        iZ = int(_draw_cells(rng, markov_stationary(P_Z), 1)[0])
+        agg_shape = tuple(g.size for g in c.z_grids[n_idio_shocks:-1]) or (1,)
+        if any(s in init for s in c.shock_names[n_idio_shocks:-1]):
+            comps_z = list(np.unravel_index(iZ, agg_shape))
+            for k, (name, g) in enumerate(zip(c.shock_names[n_idio_shocks:-1], c.z_grids[n_idio_shocks:-1])):
+                if name in init:
+                    v = float(np.asarray(init[name], dtype=float).ravel()[0])
+                    j = int(_nearest(g, np.array([v]))[0])
+                    if not np.isclose(g[j], v, rtol=1e-9, atol=1e-12):
+                        raise ValueError(f"init[{name!r}] must take values on the shock grid {g.tolist()}")
+                    comps_z[k] = j
+            iZ = int(np.ravel_multi_index(tuple(comps_z), agg_shape))
+
+        kname = c.shock_names[-1]
+        K_init = float(np.mean(np.asarray(init[kname], dtype=float))) if kname in init else None
+    else:
+        raise ValueError(f"init must be a string or a dict {{state: value}}, got {type(init).__name__}")
+
+    if egm:
+        pol4 = np.asarray(sol.raw.aprime, dtype=float).reshape(n_a, n_idio, n_Z, n_K)
+    else:
+        pol4_val = a_grid[np.asarray(sol.raw.policy_aprime).reshape(n_a, n_idio, n_Z, n_K)]
+
+    S = np.empty((n_agents, periods + 1), dtype=state.dtype)
+    Z_idio = np.empty((n_agents, periods), dtype=np.intp)
+    Z_agg = np.empty(periods, dtype=np.intp)
+    K_rec = np.empty(periods, dtype=float)
+    total = burn_in + periods
+    for t in range(total):
+        k = t - burn_in
+        a_vals = state if egm else a_grid[state]
+        K_t = float(K_init) if (t == 0 and K_init is not None) else float(np.mean(a_vals))
+        Kc = float(np.clip(K_t, K_grid[0], K_grid[-1]))
+        j = int(np.clip(np.searchsorted(K_grid, Kc) - 1, 0, n_K - 2))
+        w = (K_grid[j + 1] - Kc) / (K_grid[j + 1] - K_grid[j])
+        if egm:
+            ap_table = w * pol4[:, :, iZ, j] + (1.0 - w) * pol4[:, :, iZ, j + 1]
+            nxt = _step_egm(ap_table, a_grid, state, z_idio)
+        else:
+            ap_val = w * pol4_val[state, z_idio, iZ, j] + (1.0 - w) * pol4_val[state, z_idio, iZ, j + 1]
+            nxt = _nearest(a_grid, ap_val)
+        if k >= 0:
+            S[:, k], Z_idio[:, k], Z_agg[k], K_rec[k] = state, z_idio, iZ, K_t
+        if t < total - 1:
+            if n_idio > 1:
+                z_idio = _draw_markov(rng, P_idio, z_idio)
+            if n_Z > 1:
+                iZ = int(_draw_markov(rng, P_Z, np.array([iZ]))[0])
+        state = nxt
+    S[:, periods] = state
+
+    cur = [S[:, :-1]] if egm else [a_grid[S[:, :-1]]]
+    nxt = [S[:, 1:]] if egm else [a_grid[S[:, 1:]]]
+    zs = []
+    if n_idio_shocks > 0:
+        idio_shape = tuple(g.size for g in c.z_grids[:n_idio_shocks])
+        zs += [g[i] for g, i in zip(c.z_grids[:n_idio_shocks], np.unravel_index(Z_idio, idio_shape))]
+    if n_agg_shocks > 0:
+        agg_shape = tuple(g.size for g in c.z_grids[n_idio_shocks:-1])
+        zs += [np.broadcast_to(g[i][None, :], (n_agents, periods))
+               for g, i in zip(c.z_grids[n_idio_shocks:-1], np.unravel_index(Z_agg, agg_shape))]
+    zs.append(np.broadcast_to(K_rec[None, :], (n_agents, periods)))
+    args = nxt + cur + zs + list(sol.params.values())
+    arrays = {}
+    for name, fn in compiled:
+        val = np.asarray(fn(*args, xp=np), dtype=float)
+        arrays[name] = np.array(np.broadcast_to(val, (n_agents, periods)))
+    return Panel(arrays, age=None, alive=None,
+                 source=f"puremacro.dp simulation of {sol.model_name!r} ({sol.method})",
+                 functions=c.model._functions)
+
+
 # ----------------------------------------------------------------------------- driver
 def simulate(sol, n_agents: int, periods: int | None, *, seed, init, burn_in: int,
              record: Sequence[str] | None) -> Panel:
     """Body of ``DPSolution.simulate``; see its docstring."""
     c = sol._c
-    if hasattr(c, "policy_values") or sol.method == "hjb":
-        raise NotImplementedError(HJB_REFUSAL)
-    if sol.method.endswith("+ks"):
-        raise NotImplementedError(KS_REFUSAL)
     J = int(sol.raw.horizon) if c.finite else None
     if periods is None:
         periods = J if c.finite else 200
@@ -367,6 +555,11 @@ def simulate(sol, n_agents: int, periods: int | None, *, seed, init, burn_in: in
                          f"({nbytes / 1e9:.1f} GB); simulate fewer agents or periods")
 
     rng = np.random.Generator(np.random.PCG64(seed))
+    if hasattr(c, "policy_values") or sol.method == "hjb":
+        return _simulate_hjb(sol, n_agents, periods, rng=rng, init=init, burn_in=burn_in, compiled=compiled)
+    if sol.method.endswith("+ks"):
+        return _simulate_ks(sol, n_agents, periods, rng=rng, init=init, burn_in=burn_in, compiled=compiled)
+
     state, z = _initial_state(sol, rng, n_agents, init)
     P = np.asarray(sol.P, dtype=float)
     egm = _is_egm(sol)
@@ -415,4 +608,5 @@ def simulate(sol, n_agents: int, periods: int | None, *, seed, init, burn_in: in
         val = np.asarray(fn(*args, xp=np), dtype=float)
         arrays[name] = np.array(np.broadcast_to(val, (n_agents, periods)))
     return Panel(arrays, age=age, alive=alive,
-                 source=f"puremacro.dp simulation of {sol.model_name!r} ({sol.method})")
+                 source=f"puremacro.dp simulation of {sol.model_name!r} ({sol.method})",
+                 functions=c.model._functions)

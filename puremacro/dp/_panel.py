@@ -34,7 +34,7 @@ class Panel:
     """
 
     def __init__(self, arrays: Mapping[str, np.ndarray], *, age: np.ndarray | None,
-                 alive: np.ndarray | None, source: str):
+                 alive: np.ndarray | None, source: str, functions: Mapping | None = None):
         if not arrays:
             raise ValueError("a Panel needs at least one recorded column")
         arrays = {str(k): np.asarray(v) for k, v in arrays.items()}
@@ -59,6 +59,7 @@ class Panel:
         self._age = age
         self._alive = alive
         self.source = str(source)
+        self._functions = dict(functions or {})
 
     # ----- access ----------------------------------------------------------
     @property
@@ -212,7 +213,7 @@ class Panel:
         env.setdefault("t", np.broadcast_to(np.arange(self.periods), shape))
         if self._age is not None:
             env.setdefault("age", np.broadcast_to(self._age, shape))
-        node = parse(expr, variables=list(env))
+        node = parse(expr, variables=list(env), functions=self._functions)
         used = sorted(symbols(node))
         unknown = [n for n, _ in used if n not in env]
         if unknown:
@@ -225,7 +226,8 @@ class Panel:
         args = sorted({n for n, _ in used})
         ident = {n: f"_v{k}" for k, n in enumerate(args)}
         fn = compile_function("_panel_expr", [ident[n] for n in args], [],
-                              emit(node, lambda n, lead: ident[n]))
+                              emit(node, lambda n, lead: ident[n], functions=self._functions),
+                              functions=self._functions)
         out = np.asarray(fn(*(env[n] for n in args)), dtype=float)
         return np.broadcast_to(out, shape)
 

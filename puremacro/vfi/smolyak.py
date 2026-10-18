@@ -1173,10 +1173,13 @@ def _solve_smolyak_bellman(
     problem: SmolyakProblem, basis: SmolyakBasis, backend: str
 ) -> SmolyakSolution:
     """Solve multi-dimensional Bellman equation via value function iteration on Smolyak grid."""
+    from scipy.optimize import minimize, root
+
     d = basis.d
     N = basis.n_basis
     nodes = basis.grid.physical_nodes
     Phi_nodes = basis.collocation_matrix
+    Phi_nodes_inv = np.linalg.inv(Phi_nodes)
     tol = float(problem.options.get("tol", 1e-7))
     max_iter = int(problem.options.get("max_iter", 500))
 
@@ -1185,16 +1188,6 @@ def _solve_smolyak_bellman(
     delta = float(params.get("delta", 1.0))
     sigma = _crra_curvature(params)
     z = float(params.get("z", params.get("A", 1.0)))
-    if sigma != 1.0 or delta != 1.0 or problem.return_fn is not None:
-        # The iteration below evaluates the closed-form policy
-        # k'_m = alpha_m beta Y of log utility with full depreciation; it does
-        # not maximise. 4.4.0 and earlier returned that policy (converged=True)
-        # for any curvature or depreciation (docs/ADVISORY.md).
-        raise NotImplementedError(
-            "solve_smolyak(method='bellman') implements only the built-in model with log utility "
-            f"and full depreciation (got sigma={sigma!r}, delta={delta!r}"
-            f"{', a return_fn' if problem.return_fn is not None else ''}); use method='euler'."
-        )
 
     if "alphas" in params:
         alphas = np.asarray(params["alphas"], dtype=np.float64)
@@ -1202,45 +1195,159 @@ def _solve_smolyak_bellman(
         alpha_tot = float(params.get("alpha", 0.36))
         alphas = np.full(d, alpha_tot / d, dtype=np.float64)
 
-    # Initial guess for value function
     prod_k = np.ones(N, dtype=np.float64)
     for k in range(d):
         prod_k *= np.maximum(nodes[:, k], 1e-12) ** alphas[k]
     Y_nodes = z * prod_k + (1.0 - delta) * np.sum(nodes, axis=1)
-    C_guess = 0.5 * Y_nodes
-    u_init = np.log(C_guess) if sigma == 1.0 else (C_guess ** (1.0 - sigma) - 1.0) / (1.0 - sigma)
+
+    if problem.return_fn is not None:
+        kp_opt = nodes.copy()
+        u_init = np.asarray(problem.return_fn(kp_opt, nodes, **params), dtype=np.float64).ravel()
+        u_init = np.where(np.isfinite(u_init), u_init, -1e6)
+    else:
+        C_guess = np.maximum((1.0 - np.sum(alphas) * beta) * Y_nodes, 1e-6)
+        u_init = np.log(C_guess) if sigma == 1.0 else (C_guess ** (1.0 - sigma) - 1.0) / (1.0 - sigma)
+        kp_opt = np.zeros((N, d), dtype=np.float64)
+        for k in range(d):
+            kp_opt[:, k] = np.clip((alphas[k] * beta) * Y_nodes, 1e-6, Y_nodes - 1e-6)
+
     V_nodes = u_init / (1.0 - beta)
-    c_v = np.linalg.solve(Phi_nodes, V_nodes)
+    c_v = Phi_nodes_inv @ V_nodes
+    policy_coefficients = Phi_nodes_inv @ kp_opt
 
     converged = False
     it = 0
     sup_diff = 1.0
-    kp_opt = np.zeros((N, d), dtype=np.float64)
+    bounds = [(float(basis.grid.domain[k][0]), float(basis.grid.domain[k][1])) for k in range(d)]
 
     for it in range(1, max_iter + 1):
         V_prev = V_nodes.copy()
-        # Analytical / FOC continuous step for optimal investment
-        # In Cobb-Douglas with log utility:
-        # kp_m = alphas[m] * beta * Y
-        # Compute Bellman update
-        for k in range(d):
-            kp_opt[:, k] = np.clip((alphas[k] * beta) * Y_nodes, 1e-6, Y_nodes - 1e-6)
 
-        C = np.maximum(Y_nodes - np.sum(kp_opt, axis=1), 1e-12)
-        u = np.log(C) if sigma == 1.0 else (C ** (1.0 - sigma) - 1.0) / (1.0 - sigma)
+        if problem.return_fn is not None:
+            for i in range(N):
+                s_i = nodes[i : i + 1, :]
 
-        x_kp = basis.grid.to_canonical(kp_opt)
-        Phi_next = basis._evaluate_canonical(x_kp, backend=backend)
-        V_cont = Phi_next @ c_v
-        V_new = u + beta * V_cont
+                def neg_bellman(kp_vec, _s=s_i):
+                    kp_arr = np.asarray(kp_vec, dtype=np.float64).reshape(1, d)
+                    u_val = float(np.asarray(problem.return_fn(kp_arr, _s, **params)).ravel()[0])
+                    if not np.isfinite(u_val):
+                        return 1e12
+                    x_c = basis.grid.to_canonical(kp_arr)
+                    v_next = float((basis._evaluate_canonical(x_c, backend="numpy") @ c_v)[0])
+                    return -(u_val + beta * v_next)
 
-        c_v = np.linalg.solve(Phi_nodes, V_new)
-        V_nodes = V_new
+                res_opt = minimize(neg_bellman, kp_opt[i], method="L-BFGS-B", bounds=bounds)
+                kp_opt[i] = res_opt.x
 
-        sup_diff = float(np.max(np.abs(V_nodes - V_prev)))
+            u = np.asarray(problem.return_fn(kp_opt, nodes, **params), dtype=np.float64).ravel()
+            x_kp = basis.grid.to_canonical(kp_opt)
+            Phi_next = basis._evaluate_canonical(x_kp, backend=backend)
+            V_bellman = u + beta * (Phi_next @ c_v)
+            sup_diff = float(np.max(np.abs(V_bellman - V_prev)))
+            try:
+                A_mat = np.eye(N) - beta * (Phi_next @ Phi_nodes_inv)
+                V_new = np.linalg.solve(A_mat, u)
+            except np.linalg.LinAlgError:
+                V_new = V_bellman
+            V_nodes = V_new
+            c_v = Phi_nodes_inv @ V_nodes
+        elif sigma == 1.0 and delta == 1.0:
+            for k in range(d):
+                kp_opt[:, k] = np.clip((alphas[k] * beta) * Y_nodes, 1e-6, Y_nodes - 1e-6)
+            C = np.maximum(Y_nodes - np.sum(kp_opt, axis=1), 1e-12)
+            u = np.log(C)
+            x_kp = basis.grid.to_canonical(kp_opt)
+            Phi_next = basis._evaluate_canonical(x_kp, backend=backend)
+            V_cont = Phi_next @ c_v
+            V_new = u + beta * V_cont
+            c_v = np.linalg.solve(Phi_nodes, V_new)
+            V_nodes = V_new
+            sup_diff = float(np.max(np.abs(V_nodes - V_prev)))
+        else:
+            # General CRRA curvature sigma != 1 or partial depreciation delta != 1:
+            # Bellman-Envelope policy improvement + Howard policy evaluation
+            x_kp = basis.grid.to_canonical(kp_opt)
+            Phi_next = basis._evaluate_canonical(x_kp, backend=backend)
+            kpp = Phi_next @ policy_coefficients
+            prod_kp = np.ones(N, dtype=np.float64)
+            for k in range(d):
+                prod_kp *= np.maximum(kp_opt[:, k], 1e-12) ** alphas[k]
+            Yp = z * prod_kp + (1.0 - delta) * np.sum(kp_opt, axis=1)
+            for k in range(d):
+                kpp[:, k] = np.clip(kpp[:, k], 1e-6, Yp - 1e-6)
+            Cp = np.maximum(Yp - np.sum(kpp, axis=1), 1e-12)
+            ucp = 1.0 / Cp if sigma == 1.0 else Cp ** (-sigma)
+            C_curr = np.maximum(Y_nodes - np.sum(kp_opt, axis=1), 1e-12)
+            uc_curr = 1.0 / C_curr if sigma == 1.0 else C_curr ** (-sigma)
+
+            rhs = np.zeros((N, d), dtype=np.float64)
+            for k in range(d):
+                R_k = alphas[k] * (z * prod_kp) / np.maximum(kp_opt[:, k], 1e-12) + 1.0 - delta
+                rhs[:, k] = beta * (ucp / uc_curr) * R_k * kp_opt[:, k]
+            C_new = Y_nodes / (1.0 + np.sum(rhs, axis=1))
+            kp_cand = np.zeros((N, d), dtype=np.float64)
+            for k in range(d):
+                kp_cand[:, k] = np.clip(rhs[:, k] * C_new, 1e-6, Y_nodes - 1e-6)
+            kp_opt = 0.5 * kp_opt + 0.5 * kp_cand
+            policy_coefficients = Phi_nodes_inv @ kp_opt
+
+            C = np.maximum(Y_nodes - np.sum(kp_opt, axis=1), 1e-12)
+            u = np.log(C) if sigma == 1.0 else (C ** (1.0 - sigma) - 1.0) / (1.0 - sigma)
+            x_kp = basis.grid.to_canonical(kp_opt)
+            Phi_next = basis._evaluate_canonical(x_kp, backend=backend)
+            V_bellman = u + beta * (Phi_next @ c_v)
+            pol_diff = float(np.max(np.abs(kp_cand - kp_opt)))
+            try:
+                A_mat = np.eye(N) - beta * (Phi_next @ Phi_nodes_inv)
+                V_nodes = np.linalg.solve(A_mat, u)
+            except np.linalg.LinAlgError:
+                V_nodes = V_bellman
+            c_v = Phi_nodes_inv @ V_nodes
+            sup_diff = max(float(np.max(np.abs(V_nodes - V_prev))), pol_diff)
+
         if sup_diff < tol:
             converged = True
             break
+
+    if problem.return_fn is None and (sigma != 1.0 or delta != 1.0):
+        # Polish policy on the Bellman-Envelope FOC system via Powell hybrid root-finding
+        def foc_res(th_flat: np.ndarray) -> np.ndarray:
+            th_m = th_flat.reshape(N, d)
+            kp_m = Phi_nodes @ th_m
+            for k in range(d):
+                kp_m[:, k] = np.clip(kp_m[:, k], 1e-6, Y_nodes - 1e-6)
+            C_m = np.maximum(Y_nodes - np.sum(kp_m, axis=1), 1e-12)
+            uc_m = 1.0 / C_m if sigma == 1.0 else C_m ** (-sigma)
+            Phi_n = basis._evaluate_canonical(basis.grid.to_canonical(kp_m), backend=backend)
+            kpp_m = Phi_n @ th_m
+            pk_m = np.ones(N, dtype=np.float64)
+            for k in range(d):
+                pk_m *= np.maximum(kp_m[:, k], 1e-12) ** alphas[k]
+            Yp_m = z * pk_m + (1.0 - delta) * np.sum(kp_m, axis=1)
+            for k in range(d):
+                kpp_m[:, k] = np.clip(kpp_m[:, k], 1e-6, Yp_m - 1e-6)
+            Cp_m = np.maximum(Yp_m - np.sum(kpp_m, axis=1), 1e-12)
+            ucp_m = 1.0 / Cp_m if sigma == 1.0 else Cp_m ** (-sigma)
+            res_m = np.zeros((N, d), dtype=np.float64)
+            for k in range(d):
+                R_k = alphas[k] * (z * pk_m) / np.maximum(kp_m[:, k], 1e-12) + 1.0 - delta
+                res_m[:, k] = 1.0 - beta * (ucp_m / uc_m) * R_k
+            return res_m.ravel()
+
+        res_polish = root(foc_res, policy_coefficients.ravel(), method="hybr", tol=tol * 1e-3)
+        if float(np.max(np.abs(foc_res(res_polish.x)))) < float(np.max(np.abs(foc_res(policy_coefficients.ravel())))):
+            policy_coefficients = res_polish.x.reshape(N, d)
+            kp_opt = Phi_nodes @ policy_coefficients
+            for k in range(d):
+                kp_opt[:, k] = np.clip(kp_opt[:, k], 1e-6, Y_nodes - 1e-6)
+            C = np.maximum(Y_nodes - np.sum(kp_opt, axis=1), 1e-12)
+            u = np.log(C) if sigma == 1.0 else (C ** (1.0 - sigma) - 1.0) / (1.0 - sigma)
+            Phi_next = basis._evaluate_canonical(basis.grid.to_canonical(kp_opt), backend=backend)
+            A_mat = np.eye(N) - beta * (Phi_next @ Phi_nodes_inv)
+            V_nodes = np.linalg.solve(A_mat, u)
+            c_v = Phi_nodes_inv @ V_nodes
+            sup_diff = float(np.max(np.abs(foc_res(policy_coefficients.ravel()))))
+            converged = bool(np.isfinite(sup_diff) and sup_diff <= max(tol, 1e-5))
 
     policy_coefficients = np.zeros((N, d), dtype=np.float64)
     for k in range(d):

@@ -32,6 +32,7 @@ finite-horizon models).
 """
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import numpy as np
@@ -85,6 +86,7 @@ class Model:
         self._rate = "rho"
         self._agg_shocks: list[tuple[str, Any]] = []
         self._agg_state: tuple[str, np.ndarray, str] | None = None
+        self._functions: dict[str, Any] = {}
 
     # ------------------------------------------------------------------ declarations
     def parameters(self, **values) -> Model:
@@ -93,6 +95,14 @@ class Model:
         for k, v in values.items():
             arr = np.asarray(v, dtype=float)
             self._params[k] = float(arr) if arr.ndim == 0 else arr
+        return self
+
+    def functions(self, **callables) -> Model:
+        """Register custom array-compatible functions usable in model expressions."""
+        for k, fn in callables.items():
+            if not callable(fn):
+                raise ModelSpecError(f"function {k!r} must be callable; got {type(fn).__name__}")
+            self._functions[str(k)] = fn
         return self
 
     def prices(self, **brackets) -> Model:
@@ -268,6 +278,7 @@ class Model:
         ``seed``, ``damping``, ``tol``, ``max_outer``, initial ``mu0``, ``b0``,
         ``b1``), see ``puremacro.dp._ks.solve_ks``.
         """
+        t0 = time.perf_counter()
         if method is None:
             method = "hjb" if self._drift else "vfi"
         if method not in _METHODS:
@@ -275,12 +286,16 @@ class Model:
         if method == "hjb":
             from puremacro.dp._hjb import HJBPlan
 
-            return HJBPlan(self).solve(tol=tol, max_iter=max_iter, distribution=distribution,
-                                       xtol=xtol, max_evals=max_evals)
+            sol = HJBPlan(self).solve(tol=tol, max_iter=max_iter, distribution=distribution,
+                                      xtol=xtol, max_evals=max_evals)
+            sol.elapsed = time.perf_counter() - t0
+            return sol
         if self._drift or self._controls:
             raise ModelSpecError("a model with drift() or control() is continuous-time; use method='hjb'")
-        return self.check().solve(method=method, backend=backend, tol=tol, howard=howard, max_iter=max_iter,
-                                  distribution=distribution, xtol=xtol, max_evals=max_evals, ks=ks)
+        sol = self.check().solve(method=method, backend=backend, tol=tol, howard=howard, max_iter=max_iter,
+                                 distribution=distribution, xtol=xtol, max_evals=max_evals, ks=ks)
+        sol.elapsed = time.perf_counter() - t0
+        return sol
 
     def __repr__(self) -> str:
         return (f"Model({self.name!r}, states={[s for s, _ in self._states]}, "
@@ -288,11 +303,12 @@ class Model:
 
 
 def _check_distinct_kinds(m: Model) -> None:
-    """A name is at most one of parameter, price, local and aggregate; otherwise one
+    """A name is at most one of parameter, price, local, aggregate and function; otherwise one
     meaning would silently shadow the other."""
     kind_of: dict[str, str] = {}
     for kind, keys in (("a parameter", m._params), ("a price", m._prices),
-                       ("a local", [n for n, _ in m._locals]), ("an aggregate", m._aggregates)):
+                       ("a local", [n for n, _ in m._locals]), ("an aggregate", m._aggregates),
+                       ("a function", m._functions)):
         for k in keys:
             if kind_of.setdefault(k, kind) != kind:
                 raise ModelSpecError(f"{k!r} is declared as both {kind_of[k]} and {kind}")
@@ -342,7 +358,7 @@ class _Compiled:
         if len(set(names)) != len(names):
             raise ModelSpecError(f"state, shock and choice names must be distinct; got {names}")
         reserved = set(names) | {"age"}
-        for k in list(m._params) + list(m._prices) + [n for n, _ in m._locals] + list(m._aggregates):
+        for k in list(m._params) + list(m._prices) + [n for n, _ in m._locals] + list(m._aggregates) + list(m._functions):
             if k in reserved:
                 raise ModelSpecError(f"name {k!r} is already a state, shock, choice or 'age'")
         _check_distinct_kinds(m)
@@ -411,18 +427,19 @@ class _Compiled:
 
         # parse
         timed = self.state_names + self.shock_names + ([m._discrete[0]] if m._discrete else [])
-        self.locals = [(n, parse(e, timed)) for n, e in m._locals]
+        fns = m._functions
+        self.locals = [(n, parse(e, timed, functions=fns)) for n, e in m._locals]
         self.local_names = [n for n, _ in self.locals]
         if len(set(self.local_names)) != len(self.local_names):
             raise ModelSpecError(f"local names must be unique; got {self.local_names}")
-        self.reward = parse(m._reward, timed)
+        self.reward = parse(m._reward, timed, functions=fns)
         if is_relational(self.reward):
             raise ModelSpecError("reward() must be an expression, not a condition")
-        self.constraints = [parse(c, timed) for c in m._constraints]
+        self.constraints = [parse(c, timed, functions=fns) for c in m._constraints]
         for c, txt in zip(self.constraints, m._constraints):
             if not is_relational(c):
                 raise ModelSpecError(f"constraint {txt!r} must be a comparison such as 'c > 0'")
-        self.aggregates = {k: parse(e, timed) for k, e in m._aggregates.items()}
+        self.aggregates = {k: parse(e, timed, functions=fns) for k, e in m._aggregates.items()}
 
         self._local_deps = self._resolve_local_deps()
         self.household = self._household_function("_dp_reward", self.reward, mask=True)
@@ -500,21 +517,23 @@ class _Compiled:
         return args
 
     def _household_function(self, fname: str, node, *, mask: bool = False):
+        fns = self.model._functions
         body = []
         for k, v in self.model._params.items():
             if np.ndim(v):
                 body.append(f"p_{k} = p_{k}[age]")
         for name, lnode in self.locals:
-            body.append(f"l_{name} = {emit(lnode, self._resolver(f'local {name!r}'))}")
-        expr = emit(node, self._resolver(fname.replace('_dp_', '')))
+            body.append(f"l_{name} = {emit(lnode, self._resolver(f'local {name!r}'), functions=fns)}")
+        expr = emit(node, self._resolver(fname.replace('_dp_', '')), functions=fns)
         if not mask:
-            return compile_function(fname, self._household_args(), body, expr)
+            return compile_function(fname, self._household_args(), body, expr, functions=fns)
         body.append(f"_R = {expr}")
-        ok = ["(_R == _R)"] + [f"({emit(c, self._resolver('constraint'))})" for c in self.constraints]
+        ok = ["(_R == _R)"] + [f"({emit(c, self._resolver('constraint'), functions=fns)})" for c in self.constraints]
         body.append(f"_ok = {' & '.join(ok)}")
-        return compile_function(fname, self._household_args(), body, "xp.where(_ok, _R, -_inf)")
+        return compile_function(fname, self._household_args(), body, "xp.where(_ok, _R, -_inf)", functions=fns)
 
     def _clear_function(self):
+        fns = self.model._functions
         scalar_locals = [
             (n, node) for n, node in self.locals
             if not (self._local_deps[n] & (self._endogenous_syms() | {(s, 0) for s in self.shock_names}))
@@ -528,9 +547,9 @@ class _Compiled:
                 raise ModelSpecError(f"clear: local {name!r} depends on states or shocks; use an aggregate")
             return resolve(name, lead)
 
-        body = [f"l_{n} = {emit(node, resolve_clear)}" for n, node in scalar_locals]
-        node = parse(self.model._clear, [])
-        return compile_function("_dp_clear", args, body, emit(node, resolve_clear))
+        body = [f"l_{n} = {emit(node, resolve_clear, functions=fns)}" for n, node in scalar_locals]
+        node = parse(self.model._clear, [], functions=fns)
+        return compile_function("_dp_clear", args, body, emit(node, resolve_clear, functions=fns), functions=fns)
 
     # ------------------------------------------------------------------ parameters
     def param_values(self, prices: dict | None = None) -> dict:
@@ -610,6 +629,7 @@ class _Compiled:
 
     def solve(self, *, method="vfi", backend, tol, howard, max_iter, distribution, xtol,
               max_evals, ks=None) -> DPSolution:
+        t0 = time.perf_counter()
         m = self.model
         if m._agg_state is not None:
             if method not in ("vfi", "egm"):
@@ -617,26 +637,35 @@ class _Compiled:
             from puremacro.dp._ks import solve_ks
 
             options = dict(tol=tol, n_howard=int(howard), howard=int(howard) > 0, max_iter=max_iter)
-            return solve_ks(self, method=method, backend=backend, options=options, **(ks or {}))
+            res = solve_ks(self, method=method, backend=backend, options=options, **(ks or {}))
+            res.elapsed = time.perf_counter() - t0
+            return res
         if ks:
             raise ModelSpecError("ks= options need an aggregate_state()")
         if method == "egm":
-            return self._solve_egm(tol, max_iter, distribution, xtol, max_evals)
+            res = self._solve_egm(tol, max_iter, distribution, xtol, max_evals)
+            res.elapsed = time.perf_counter() - t0
+            return res
         if m._taste is not None:
             raise ModelSpecError("taste shocks are solved by method='egm' only")
         options = dict(tol=tol, n_howard=int(howard), howard=int(howard) > 0, max_iter=max_iter)
         if self.finite:
             if m._prices:
                 raise ModelSpecError("equilibrium with a finite horizon (OLG) is not in phase 1")
-            return self._solve_finite(backend)
+            res = self._solve_finite(backend)
+            res.elapsed = time.perf_counter() - t0
+            return res
         if m._prices:
-            return self._solve_equilibrium(backend, options, xtol, max_evals)
+            res = self._solve_equilibrium(backend, options, xtol, max_evals)
+            res.elapsed = time.perf_counter() - t0
+            return res
         params = self.param_values()
         prob = self._vfi_problem(params, options)
         sol = prob.solve(backend)
         mu = prob.stationary_distribution(sol) if distribution else None
         aggs = self.aggregate_values(sol, mu, params) if (mu is not None and self.aggregates) else {}
-        return DPSolution(self, sol, params=params, distribution=mu, aggregates=aggs)
+        return DPSolution(self, sol, params=params, distribution=mu, aggregates=aggs,
+                          elapsed=time.perf_counter() - t0)
 
     def _solve_egm(self, tol, max_iter, distribution, xtol, max_evals) -> DPSolution:
         from puremacro.dp._egm import EGMPlan

@@ -21,8 +21,10 @@ class Felicity:
     solver in error messages.
     """
 
-    def __init__(self, u_node, cname: str, dname: str | None, param_names, label: str):
+    def __init__(self, u_node, cname: str, dname: str | None, param_names, label: str,
+                 functions=None):
         self.cname, self.dname, self.label = cname, dname, label
+        fns = dict(functions or {})
         allowed = {(p, 0) for p in param_names} | ({(dname, 0)} if dname else set())
         bad = symbols(u_node) - allowed - {(cname, 0)}
         if bad:
@@ -34,15 +36,17 @@ class Felicity:
             return "c" if name == cname else "dv" if name == dname else f"p_{name}"
 
         args = ["c", "dv"] + [f"p_{p}" for p in param_names]
-        self._u = compile_function("_dp_u", args, [], emit(u_node, resolve))
-        self._u_prime = compile_function("_dp_u_prime", args, [], emit(diff(u_node, cname), resolve))
+        du_node = diff(u_node, cname)
+        self._u = compile_function("_dp_u", args, [], emit(u_node, resolve, functions=fns), functions=fns)
+        self._u_prime = compile_function("_dp_u_prime", args, [], emit(du_node, resolve, functions=fns), functions=fns)
         self._inv_kind, self._inv_fn = "numeric", None
         core = self._c_part(u_node)
         if isinstance(core, Call) and core.args and core.args[0] == Param(cname):
             fn = core.func.lower()
             if fn == "crra" and not ({(cname, 0), (dname, 0)} & symbols(core.args[1])):
                 self._inv_kind = "crra"
-                self._inv_fn = compile_function("_dp_gamma", args, [], emit(core.args[1], resolve))
+                self._inv_fn = compile_function("_dp_gamma", args, [], emit(core.args[1], resolve, functions=fns),
+                                                functions=fns)
             elif fn in ("log", "ln"):
                 self._inv_kind = "log"
 
