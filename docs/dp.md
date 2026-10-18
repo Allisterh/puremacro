@@ -66,6 +66,11 @@ grid, in about 8 s against about 1 s for EGM). The two differ because VFI puts
 - `sol.mean(expr)`: its population mean under the stationary distribution, one
   value per age in a life cycle;
 - `sol.prices`, `sol.aggregates`, `sol.equilibrium`, `sol.grids`, `sol.P`;
+- `sol.elapsed`: wall-clock solve time in seconds (`float`);
+- `sol.to_microframe(columns=None, *, age=None)`: converts the stationary or
+  life-cycle grid-node distribution (`sol.dist > 0`) into a `MicroFrame` with
+  `SurveyDesign.weights_only("weight")` (`unit="node"`), attaching state, shock,
+  policy, value, and `local` columns;
 - `sol.raw`: the underlying engine's result.
 
 ```python
@@ -260,11 +265,47 @@ print(lp.alive[:, -1].mean())       # about 0.55 reach age 59
 print(lp.mean("a", by="age")[45])   # about 7.7; life.mean("a")[45] is 7.68
 ```
 
-Continuous-time (HJB) solutions are not simulated: `sol.distribution` holds the
-Kolmogorov forward density, and the exact statistics work on it. Krusell-Smith
-solutions are neither simulated nor summarised (they have no stationary
-distribution); `agg.aggregates` holds the simulated capital path. Both cases
-raise an error that says so.
+Continuous-time (HJB) and Krusell–Smith solutions are simulated with the same
+`sol.simulate(...)` call:
+
+- For continuous-time (`method="hjb"`), `sol.simulate(..., dt=1.0)` advances the
+  endogenous state by $\dot{a}\,\Delta t$ interpolated on the state grid, draws
+  Markov jump transitions from the matrix exponential $\exp(Q\,\Delta t)$
+  (`process_type="poisson"`), or steps continuous diffusions by Euler–Maruyama
+  with boundary reflection (`process_type="diffusion"`).
+- For Krusell–Smith (`"vfi+ks"`, `"egm+ks"`), `sol.simulate(...)` evolves the
+  aggregate state path $(Z_t, K_t)$ under the converged forecast rule
+  (`sol.forecast`) and interpolates the 4D policy `pol[i_Z, i_e, i_a, i_K]`
+  across agents in every period. Exact stationary-distribution methods
+  (`sol.mean`, `sol.gini`, `sol.quantile`, `sol.top_share`, `sol.to_microframe`)
+  raise `ValueError` on Krusell–Smith solutions because there is no single
+  stationary distribution; compute cross-sectional moments on the simulated
+  `Panel` instead.
+
+## User-registered functions
+
+`m.functions(**callables)` registers vectorised Python/NumPy callables so model
+expressions in `local`, `subject_to`, `aggregate`, `clear`, and `Panel`
+evaluation can call custom schedules (such as piecewise tax-and-transfer rules)
+across VFI, EGM, and HJB (`reward` also accepts registered functions under
+`method="vfi"`). If a callable accepts an `xp` keyword argument, `dp` passes the
+active array backend (`numpy`, `jax.numpy`, or `cupy`):
+
+```text
+m.functions(tax=lambda y, xp=np: 0.15 * y + 0.10 * xp.maximum(y - 1.0, 0.0))
+m.local("y = w * exp(z)", "c = (1 + r)*a + y - tax(y) - a(+1)")
+```
+
+## Sequence-space HANK bridge
+
+Any infinite-horizon single-state `dp.Model` (or solved `DPSolution`) connects
+directly to the Auclert, Bardóczy, Rognlie & Straub (2021) sequence-space engine
+via `dp_sequence_jacobian(model_or_sol, inputs, outputs=None, T=300, dx=1e-4)`
+and `dp_nonlinear_transition(model_or_sol, input_paths, outputs=None)` in
+`puremacro.models.hank_sequence_space`, or by passing `household_model=m` to
+`HANKModel`, `load_hank_mod`, and `solve_hank_bridge` in `puremacro.dsge.hank`.
+See [Non-Linear HANK Transitions & Effective Lower Bound](hank_nonlinear.md) for
+details.
 
 ## Checking a specification
 

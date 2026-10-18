@@ -70,6 +70,11 @@ EGM no.
 - `sol.mean(expr)`: su media poblacional bajo la distribución estacionaria, un
   valor por edad en un ciclo de vida;
 - `sol.prices`, `sol.aggregates`, `sol.equilibrium`, `sol.grids`, `sol.P`;
+- `sol.elapsed`: tiempo de resolución de reloj en segundos (`float`);
+- `sol.to_microframe(columns=None, *, age=None)`: convierte la distribución
+  estacionaria o de ciclo de vida sobre los nodos de la malla (`sol.dist > 0`)
+  en un `MicroFrame` con `SurveyDesign.weights_only("weight")` (`unit="node"`),
+  incluyendo estados, choques, políticas, función de valor y columnas `local`;
 - `sol.raw`: el resultado del motor subyacente.
 
 ```python
@@ -272,11 +277,50 @@ print(lp.alive[:, -1].mean())       # alrededor de 0.55 llegan a la edad 59
 print(lp.mean("a", by="age")[45])   # alrededor de 7.7; life.mean("a")[45] es 7.68
 ```
 
-Las soluciones en tiempo continuo (HJB) no se simulan: `sol.distribution`
-contiene la densidad de Kolmogorov hacia adelante, y las estadísticas exactas
-funcionan sobre ella. Las soluciones de Krusell-Smith no se simulan ni se
-resumen (no tienen distribución estacionaria); `agg.aggregates` contiene la
-trayectoria simulada del capital. Ambos casos lanzan un error que lo indica.
+Las soluciones en tiempo continuo (HJB) y las de Krusell–Smith se simulan con la
+misma llamada `sol.simulate(...)`:
+
+- En tiempo continuo (`method="hjb"`), `sol.simulate(..., dt=1.0)` avanza el
+  estado endógeno mediante $\dot{a}\,\Delta t$ interpolado sobre la malla de
+  estados, extrae transiciones de salto de Markov a partir de la exponencial
+  matricial $\exp(Q\,\Delta t)$ (`process_type="poisson"`), o avanza difusiones
+  continuas mediante Euler–Maruyama con reflexión en las fronteras
+  (`process_type="diffusion"`).
+- En Krusell–Smith (`"vfi+ks"`, `"egm+ks"`), `sol.simulate(...)` evoluciona la
+  trayectoria del estado agregado $(Z_t, K_t)$ bajo la regla de pronóstico
+  convergida (`sol.forecast`) e interpola la política 4D `pol[i_Z, i_e, i_a, i_K]`
+  entre los agentes en cada periodo. Los métodos de distribución estacionaria
+  exacta (`sol.mean`, `sol.gini`, `sol.quantile`, `sol.top_share`,
+  `sol.to_microframe`) lanzan `ValueError` en soluciones de Krusell–Smith porque
+  no existe una única distribución estacionaria; calcule los momentos de corte
+  transversal sobre el `Panel` simulado.
+
+## Funciones registradas por el usuario
+
+`m.functions(**callables)` registra funciones vectorizadas de Python/NumPy para
+que las expresiones del modelo en `local`, `subject_to`, `aggregate`, `clear` y
+la evaluación de `Panel` puedan invocar reglas personalizadas (como esquemas de
+impuestos y transferencias por tramos) tanto en VFI como en EGM y HJB (`reward`
+también admite funciones registradas con `method="vfi"`). Si la función acepta
+un argumento por palabra clave `xp`, `dp` le pasa el backend de arreglos activo
+(`numpy`, `jax.numpy` o `cupy`):
+
+```text
+m.functions(tax=lambda y, xp=np: 0.15 * y + 0.10 * xp.maximum(y - 1.0, 0.0))
+m.local("y = w * exp(z)", "c = (1 + r)*a + y - tax(y) - a(+1)")
+```
+
+## Puente HANK en el espacio de secuencias
+
+Cualquier `dp.Model` de horizonte infinito con un estado (o `DPSolution`
+resuelta) se conecta directamente con el motor en el espacio de secuencias de
+Auclert, Bardóczy, Rognlie y Straub (2021) mediante
+`dp_sequence_jacobian(model_or_sol, inputs, outputs=None, T=300, dx=1e-4)` y
+`dp_nonlinear_transition(model_or_sol, input_paths, outputs=None)` en
+`puremacro.models.hank_sequence_space`, o pasando `household_model=m` a
+`HANKModel`, `load_hank_mod` y `solve_hank_bridge` en `puremacro.dsge.hank`.
+Véase [Transiciones HANK No Lineales y Límite Inferior Efectivo](hank_nonlinear.md)
+para más detalles.
 
 ## Comprobar una especificación
 

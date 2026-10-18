@@ -184,3 +184,38 @@ La clase `NonlinearHANKResult` organiza las trayectorias de equilibrio y suminis
   - `.plot()`: Gráfico comparativo en Matplotlib con subpaneles para producto, consumo, tasa de interés e inflación.
   - `.summary()`: Informe técnico con los parámetros del choque, métricas de convergencia y comparación de picos de respuesta.
   - `.to_markdown()`, `.to_latex()`, `.to_typst()`: Tablas tipográficas comparativas listas para su publicación.
+
+---
+
+## 6. Puente declarativo `dp.Model` hacia jacobianos en el espacio de secuencias
+
+Cualquier `puremacro.dp.Model` de horizonte infinito con un estado (o `DPSolution` previamente resuelta) se conecta directamente con el motor en el espacio de secuencias de Auclert, Bardóczy, Rognlie y Straub (2021) sin necesidad de programar a mano un bloque de hogares:
+
+- **`dp_sequence_jacobian(model_or_sol, inputs, outputs=None, T=300, dx=1e-4)`**: calcula los jacobianos de noticias falsas (*Fake-News*) `J[Y][X]` de dimensión `(T, T)` para cualquier parámetro o precio de equilibrio `X` y salida agregada, política, estado o variable local `Y` (`"A"`, `"C"`, etc.).
+- **`dp_nonlinear_transition(model_or_sol, input_paths, outputs=None)`**: evalúa trayectorias de transición no lineales exactas ante choques MIT `Y_t - Y*` mediante iteración hacia atrás del método de mallas endógenas (EGM) en $t = T-1, \dots, 0$ seguida de propagación hacia adelante de la distribución por loterías en $t = 0, \dots, T-1$.
+- **`HANKModel(..., household_model=dp_model)`**, **`load_hank_mod(mod_text, household_model=dp_model)`** y **`solve_hank_bridge(mod_text, ..., household_model=dp_model)`**: aceptan directamente un `dp.Model` declarativo o una `DPSolution` en `puremacro.dsge.hank`.
+
+```python
+from puremacro import dp
+from puremacro.models.hank_sequence_space import (
+    dp_nonlinear_transition,
+    dp_sequence_jacobian,
+)
+
+hh = dp.Model("One-Asset HANK Household")
+hh.parameters(beta=0.96, gamma=2.0, r=0.03, w=1.0)
+hh.exogenous("e", dp.AR1(rho=0.9, sigma=0.2, n=3, method="rouwenhorst"))
+hh.state("a", np.linspace(1e-4, 30.0, 50))
+hh.local("c = (1 + r)*a + w*exp(e) - a(+1)")
+hh.reward("crra(c, gamma)")
+hh.subject_to("c > 0")
+
+J = dp_sequence_jacobian(hh, inputs=["r", "w"], outputs=["A", "C"], T=24)
+d_paths = dp_nonlinear_transition(
+    hh,
+    input_paths={"r": 0.005 * (0.8 ** np.arange(24))},
+    outputs=["A", "C"],
+)
+print(J["C"]["r"].shape, d_paths["C"].shape)
+```
+

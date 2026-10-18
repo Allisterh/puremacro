@@ -423,6 +423,65 @@ print("Multiplicadores:", commit_res.multipliers)
 fig = commit_res.plot(periods=16)
 ```
 
+## Filtro de partículas temperado y gradientes rápidos del score para NUTS
+
+### Filtro de partículas temperado (Herbst y Schorfheide 2019)
+
+Para modelos en espacio de estados no lineales —incluidas las soluciones de perturbación podadas de segundo orden (`PrunedDSGESolution`) y de tercer orden (`Order3PrunedSolution`)—, `tempered_particle_filter` (y `particle_filter(..., method="tempered")`) en `puremacro.dsge.particle_filter` implementa el filtro de partículas temperado adaptativo de Herbst y Schorfheide (2019, *Journal of Econometrics*). En lugar de ponderar las partículas en un único salto bootstrap, cada periodo $t$ conecta la densidad de transición a priori con la verosimilitud de observación $p(y_t \mid s_t) = \mathcal{N}(y_t; \mu(s_t), H)$ mediante una secuencia adaptativa de etapas de temperado $0 = \phi_0 < \phi_1 < \dots < \phi_{M_t} = 1$:
+
+1. **Bisección adaptativa de $\phi$**: elige $\phi_m \in (\phi_{m-1}, 1]$ de modo que la razón de ineficiencia de los pesos de la etapa $N \sum_i W_i(\phi_m)^2$ iguale `target_ineff` (`2.0` por defecto), con un máximo de `max_stages` etapas por periodo.
+2. **Remuestreo**: remuestrea las partículas mediante selección `"systematic"` (por defecto), `"stratified"`, `"residual"` o `"multinomial"`.
+3. **Mutación RWMH vectorizada**: rejuvenece las innovaciones de los choques estructurales $u_t^{(i)} \sim \mathcal{N}(0, \Sigma_u)$ mediante `n_mh_steps` pasos de Metropolis–Hastings de paseo aleatorio dirigidos a la densidad condicional temperada en $\phi_m$.
+
+`ParticleFilterResult` devuelve `log_likelihood`, `log_lik_increments`, `filtered_means`, `filtered_stds`, `ess_history` y `n_tempering_stages` (el número de etapas de temperado $M_t$ empleadas en cada periodo $t$).
+
+```python
+# requires: standalone snippet
+from puremacro.dsge import particle_filter, tempered_particle_filter
+
+pf_res = tempered_particle_filter(
+    sol_order2,
+    data=Y_obs,
+    observed_vars=["y", "pi", "i"],
+    n_particles=2000,
+    target_ineff=2.0,
+    max_stages=10,
+    n_mh_steps=1,
+    resampling="systematic",
+    seed=42,
+)
+print(pf_res.summary())
+```
+
+### Gradientes rápidos del score para NUTS (`nuts_sample` y `estimate_dsge`)
+
+Tanto `nuts_sample` (`puremacro.dsge.nuts`) como `estimate_dsge(..., method="nuts")` (`puremacro.dsge.estimate`) admiten gradientes analíticos o personalizados del score y evaluaciones rápidas por diferencias finitas con caché en cada paso *leapfrog* hamiltoniano:
+
+- **`grad_log_post_fn`**: función opcional `grad_log_post_fn(theta) -> np.ndarray` que devuelve el gradiente exacto $\nabla_\theta \log p(\theta \mid y)$ de forma `(n_params,)` (o `(log_post, grad)`).
+- **`grad_method`**: esquema de diferencias finitas cuando `grad_log_post_fn` es `None`:
+  - `"forward"` (por defecto): reutiliza la evaluación en caché del log-posteriori base $f(\theta)$ en el punto *leapfrog* actual, requiriendo solo $d$ evaluaciones adicionales de la verosimilitud por paso en lugar de $2d$, y refleja automáticamente el paso hacia el interior (`theta - eps_i`) cuando `theta + eps_i` cruza una cota de la distribución a priori (`-inf`).
+  - `"central"`: diferencias simétricas bilaterales ($2d$ evaluaciones por paso *leapfrog*) con respaldo unilateral hacia el interior cerca de las cotas a priori.
+  - `"complex"`: diferenciación de paso complejo $\text{Im}(f(\theta + i h e_j))/h$ para objetivos analíticos complejos, recurriendo a `"central"` si el objetivo rechaza entradas complejas.
+- **`grad_eps`** y **`vectorized_grad`**: tamaño de paso personalizado ($\varepsilon^{1/2}$ por defecto para `"forward"` y $\varepsilon^{1/3}$ para `"central"`) y evaluación por lotes `(d, d)` de las coordenadas perturbadas (`vectorized_grad=True`).
+
+```python
+# requires: standalone snippet
+from puremacro.dsge import estimate_dsge
+
+est_nuts = estimate_dsge(
+    model,
+    data=Y_obs,
+    observed_vars=["y", "pi"],
+    priors=priors,
+    method="nuts",
+    n_draws=500,
+    burn_in=250,
+    grad_method="forward",
+    vectorized_grad=True,
+    seed=0,
+)
+```
+
 ## Contrato unificado de presentación de resultados
 
 Todos los objetos de resultados DSGE (`EigenvalueTable`, `ModelDiagnosticsResult`, `IdentificationResult`, `OSRResult`, `PolicyResult`) cumplen el contrato uniforme de presentación de puremacro:
@@ -440,7 +499,7 @@ Todos los objetos de resultados DSGE (`EigenvalueTable`, `ModelDiagnosticsResult
 
 - **Las directivas de macro se expanden, nunca se ignoran.** Desde la 2.7.0, el preprocesador propio de puremacro expande `@#define`, `@#for`, `@#if`, `@#include` y `@{...}` antes de analizar el archivo ([Cuaderno de bocetos DSGE, §4b](dsge_build.md)). En la 2.6.0 lanzaban `DynareFeatureError`; antes se ignoraban, con lo que el archivo se cargaba limpio y se resolvía un *modelo distinto*.
 - **Los parámetros se vuelven a leer solo donde Dynare los vuelve a leer.** El lector de `.mod` analiza `STEADY_STATE()`, `normcdf` y las variables locales `#` del modelo, definidas sobre parámetros o sobre variables endógenas. Las locales se sustituyen simbólicamente y nunca se congelan en la calibración, de modo que un parámetro estimado que solo entra en el modelo a través de ellas (el `constebeta` de SW07, vía `cbeta`, `cbetabar`, `cr`, `conster`, ...) mueve la verosimilitud en cada extracción; hasta la 4.3.0 inclusive esas locales se reducían a números al cargar el archivo y la verosimilitud de `constebeta` era exactamente plana. Las asignaciones de primer nivel como `cbeta = 1/(1+constebeta/100);`, fuera del bloque del modelo, se evalúan una sola vez al leer el archivo y **no** siguen a las extracciones —igual que en Dynare—, así que escribe una cantidad derivada de parámetros como una local `#`. `EXPECTATION(k)(...)` se analiza sintácticamente, pero su residuo compilado lanza `NameError`.
-- **Solo primer orden.** Una solución de segundo orden se rechaza en lugar de linealizarse en silencio; el filtro de partículas correspondiente queda para una versión posterior.
+- **Primer orden en el filtro de Kalman; los modelos de orden superior usan el filtro de partículas.** `estimate_dsge` y `kalman_loglik` rechazan una solución de segundo o tercer orden en lugar de linealizarla en silencio; pase las soluciones de orden superior (`PrunedDSGESolution`, `Order3PrunedSolution`) a `particle_filter` o `tempered_particle_filter`.
 - **El muestreador adapta un escalar, no una matriz de covarianzas**, y su adaptación solo actúa cada 100 iteraciones, así que un `burn_in` inferior a 100 no adapta nunca y puede dejar la cadena atascada con una tasa de aceptación del 0 %. Dale al menos unos cientos.
 - **`mode_compute` vale `"lbfgs"` por defecto**, y no el mejor `csminwel`, porque cambiarlo cambia todas las posterioris obtenidas hasta ahora.
 - **observation_trends se aplica quitando la tendencia a los datos**, porque el espacio de estados es invariante en el tiempo por construcción.

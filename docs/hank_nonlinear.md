@@ -184,3 +184,38 @@ solve_nonlinear_transition(
   - `.plot()`: Multi-panel Matplotlib figure comparing linear vs non-linear paths across output, consumption, real rate, and inflation.
   - `.summary()`: Detailed diagnostic report of convergence, shock characteristics, and peak response comparisons.
   - `.to_markdown()`, `.to_latex()`, `.to_typst()`: Formatted comparison tables for publications.
+
+---
+
+## 6. Declarative `dp.Model` Sequence-Space Jacobian Bridge
+
+Any infinite-horizon single-state `puremacro.dp.Model` (or pre-solved `DPSolution`) can be wired directly into the Auclert, Bardóczy, Rognlie & Straub (2021) sequence-space engine without hand-writing a custom household block:
+
+- **`dp_sequence_jacobian(model_or_sol, inputs, outputs=None, T=300, dx=1e-4)`**: computes Fake-News sequence-space Jacobians `J[Y][X]` of shape `(T, T)` for any declared parameter or equilibrium price `X` and aggregate/policy/state/local output `Y` (`"A"`, `"C"`, etc.).
+- **`dp_nonlinear_transition(model_or_sol, input_paths, outputs=None)`**: evaluates exact non-linear MIT-shock transition paths `Y_t - Y*` by backward Endogenous Grid Method (EGM) iteration over $t = T-1, \dots, 0$ followed by forward lottery distribution propagation over $t = 0, \dots, T-1$.
+- **`HANKModel(..., household_model=dp_model)`**, **`load_hank_mod(mod_text, household_model=dp_model)`**, and **`solve_hank_bridge(mod_text, ..., household_model=dp_model)`**: accept a declarative `dp.Model` or `DPSolution` directly in `puremacro.dsge.hank`.
+
+```python
+from puremacro import dp
+from puremacro.models.hank_sequence_space import (
+    dp_nonlinear_transition,
+    dp_sequence_jacobian,
+)
+
+hh = dp.Model("One-Asset HANK Household")
+hh.parameters(beta=0.96, gamma=2.0, r=0.03, w=1.0)
+hh.exogenous("e", dp.AR1(rho=0.9, sigma=0.2, n=3, method="rouwenhorst"))
+hh.state("a", np.linspace(1e-4, 30.0, 50))
+hh.local("c = (1 + r)*a + w*exp(e) - a(+1)")
+hh.reward("crra(c, gamma)")
+hh.subject_to("c > 0")
+
+J = dp_sequence_jacobian(hh, inputs=["r", "w"], outputs=["A", "C"], T=24)
+d_paths = dp_nonlinear_transition(
+    hh,
+    input_paths={"r": 0.005 * (0.8 ** np.arange(24))},
+    outputs=["A", "C"],
+)
+print(J["C"]["r"].shape, d_paths["C"].shape)
+```
+

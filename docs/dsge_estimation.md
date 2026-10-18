@@ -423,6 +423,65 @@ print("Multipliers:", commit_res.multipliers)
 fig = commit_res.plot(periods=16)
 ```
 
+## Tempered Particle Filter & Fast NUTS Score Gradients
+
+### Tempered Particle Filter (Herbst & Schorfheide 2019)
+
+For non-linear state-space models—including second-order (`PrunedDSGESolution`) and third-order (`Order3PrunedSolution`) pruned perturbation solutions—`tempered_particle_filter` (and `particle_filter(..., method="tempered")`) in `puremacro.dsge.particle_filter` implements the adaptive Tempered Particle Filter of Herbst & Schorfheide (2019, *Journal of Econometrics*). Rather than weighting particles in a single bootstrap jump, each period $t$ bridges the prior transition density and the observation likelihood $p(y_t \mid s_t) = \mathcal{N}(y_t; \mu(s_t), H)$ through an adaptive sequence of tempering stages $0 = \phi_0 < \phi_1 < \dots < \phi_{M_t} = 1$:
+
+1. **Adaptive $\phi$-bisection**: chooses $\phi_m \in (\phi_{m-1}, 1]$ so the stage weight inefficiency ratio $N \sum_i W_i(\phi_m)^2$ matches `target_ineff` (default `2.0`), up to `max_stages` stages per period.
+2. **Resampling**: resamples particles using `"systematic"` (default), `"stratified"`, `"residual"`, or `"multinomial"` selection.
+3. **Vectorised RWMH mutation**: rejuvenates particle shock innovations $u_t^{(i)} \sim \mathcal{N}(0, \Sigma_u)$ via `n_mh_steps` Random-Walk Metropolis–Hastings steps targeting the tempered conditional density at $\phi_m$.
+
+`ParticleFilterResult` reports `log_likelihood`, `log_lik_increments`, `filtered_means`, `filtered_stds`, `ess_history`, and `n_tempering_stages` (the number of tempering stages $M_t$ used in each period $t$).
+
+```python
+# requires: standalone snippet
+from puremacro.dsge import particle_filter, tempered_particle_filter
+
+pf_res = tempered_particle_filter(
+    sol_order2,
+    data=Y_obs,
+    observed_vars=["y", "pi", "i"],
+    n_particles=2000,
+    target_ineff=2.0,
+    max_stages=10,
+    n_mh_steps=1,
+    resampling="systematic",
+    seed=42,
+)
+print(pf_res.summary())
+```
+
+### Fast Score Gradients for NUTS (`nuts_sample` & `estimate_dsge`)
+
+Both `nuts_sample` (`puremacro.dsge.nuts`) and `estimate_dsge(..., method="nuts")` (`puremacro.dsge.estimate`) support custom or analytic score gradients and fast cached finite-difference evaluations at every Hamiltonian leapfrog step:
+
+- **`grad_log_post_fn`**: optional callable `grad_log_post_fn(theta) -> np.ndarray` returning the exact gradient $\nabla_\theta \log p(\theta \mid y)$ of shape `(n_params,)` (or `(log_post, grad)`).
+- **`grad_method`**: finite-difference scheme when `grad_log_post_fn` is `None`:
+  - `"forward"` (default): reuses the cached baseline log-posterior evaluation $f(\theta)$ at the current leapfrog point, requiring only $d$ extra likelihood evaluations per step instead of $2d$, and automatically reflects the step into the interior (`theta - eps_i`) when `theta + eps_i` crosses a prior boundary (`-inf`).
+  - `"central"`: symmetric two-sided differences ($2d$ evaluations per leapfrog step) with interior one-sided fallback near prior bounds.
+  - `"complex"`: complex-step differentiation $\text{Im}(f(\theta + i h e_j))/h$ for complex-analytic objectives, falling back to `"central"` if the objective rejects complex inputs.
+- **`grad_eps`** and **`vectorized_grad`**: custom step size (default $\varepsilon^{1/2}$ for `"forward"` and $\varepsilon^{1/3}$ for `"central"`) and batched `(d, d)` coordinate evaluation (`vectorized_grad=True`).
+
+```python
+# requires: standalone snippet
+from puremacro.dsge import estimate_dsge
+
+est_nuts = estimate_dsge(
+    model,
+    data=Y_obs,
+    observed_vars=["y", "pi"],
+    priors=priors,
+    method="nuts",
+    n_draws=500,
+    burn_in=250,
+    grad_method="forward",
+    vectorized_grad=True,
+    seed=0,
+)
+```
+
 ## Standard Presentation Contract
 
 All DSGE result objects (`EigenvalueTable`, `ModelDiagnosticsResult`, `IdentificationResult`, `OSRResult`, `PolicyResult`) adhere to puremacro's unified presentation contract:
@@ -440,7 +499,7 @@ All DSGE result objects (`EigenvalueTable`, `ModelDiagnosticsResult`, `Identific
 
 - **Macro directives are expanded, never ignored.** Since 2.7.0, `@#define`, `@#for`, `@#if`, `@#include` and `@{...}` are expanded by puremacro's own preprocessor before the file is parsed ([DSGE sketchpad, §4b](dsge_build.md)). In 2.6.0 they raised `DynareFeatureError`; before that they were ignored, which meant a file loaded clean and a *different model* was solved.
 - **Parameters are re-read only where Dynare re-reads them.** The `.mod` reader parses `STEADY_STATE()`, `normcdf` and model-local `#` variables, over parameters or over endogenous variables. Locals are substituted symbolically, never frozen at the calibration, so an estimated parameter that enters the model only through them (SW07's `constebeta`, via `cbeta`, `cbetabar`, `cr`, `conster`, ...) moves the likelihood at every draw; up to and including 4.3.0 such locals were folded to numbers at load time and `constebeta`'s likelihood was exactly flat. Top-level assignments such as `cbeta = 1/(1+constebeta/100);` outside the model block are evaluated once when the file is read and do **not** follow the draws — the same as in Dynare — so write a parameter-derived quantity as a `#` local. `EXPECTATION(k)(...)` is parsed but its compiled residual raises `NameError`.
-- **First order only.** A second-order solution is refused rather than silently linearised; a particle filter for it is a later release.
+- **First order in the Kalman filter; higher-order models use the particle filter.** `estimate_dsge` and `kalman_loglik` refuse a second- or third-order solution rather than silently linearising it; pass higher-order solutions (`PrunedDSGESolution`, `Order3PrunedSolution`) to `particle_filter` or `tempered_particle_filter` instead.
 - **The sampler adapts a scalar, not a covariance** — and its adaptation fires only every 100 iterations, so a `burn_in` below 100 never adapts at all and can leave the chain stuck with a 0% acceptance rate. Give it at least a few hundred.
 - **`mode_compute` defaults to `"lbfgs"`**, not to the better `csminwel`, because changing it changes every posterior previously produced.
 - **`observation_trends` is applied by detrending the data**, since the state space is time-invariant by construction.

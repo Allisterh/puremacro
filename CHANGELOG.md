@@ -2,6 +2,33 @@
 
 This file records user-visible changes per release. Internal refactors that don't change behaviour are listed under "Internal" so a returning user can see what shifted under the hood without surprise.
 
+## 5.3.0 (2026-10-17)
+
+This release extends `puremacro.dp`, `puremacro.dsge`, and the heterogeneous-agent sequence-space bridge with continuous-time and Krusell–Smith simulation, user-registered functions, declarative `dp.Model` Fake-News Jacobians, dated exogenous shocks and native policy/decomposition commands in `.mod` files, Real Schur Sylvester solvers up to 3rd order, a Tempered Particle Filter, and fast score gradients for NUTS.
+
+### Added
+
+- `puremacro.dp`:
+  - `DPSolution.simulate()` now supports continuous-time HJB solutions (`method="hjb"`, using exact matrix-exponential transitions $\exp(Q\,\Delta t)$ for `"poisson"` jump processes and Euler–Maruyama steps with boundary reflection for `"diffusion"` processes) and Krusell–Smith aggregate-uncertainty solutions (`"vfi+ks"`, `"egm+ks"`, evolving aggregate state paths $(Z_t, K_t)$ under the converged log-linear forecast rule and interpolating the 4D policy `pol[i_Z, i_e, i_a, i_K]`).
+  - `DPSolution.elapsed`: wall-clock solve time in seconds (`float`) recorded across all solver backends (`vfi`, `egm`, `hjb`, `vfi+ks`, `egm+ks`, and finite-horizon life-cycle backward induction).
+  - `DPSolution.to_microframe(columns=None, *, age=None)`: converts the stationary or life-cycle grid-node distribution (`sol.dist > 0`) directly into a `puremacro.micro.MicroFrame` with `SurveyDesign.weights_only("weight")` (`unit="node"`), attaching states, policies, value function, and model `local` expressions (`local_grids`).
+  - `Model.functions(**callables)`: registers user-defined vectorised Python/NumPy callables (`f(x, ..., xp=np)`) usable inside `local`, `subject_to`, `aggregate`, `clear`, and `Panel` evaluation across VFI, EGM, and HJB (and in `reward` for `method="vfi"`), with automatic routing to the active array backend (`xp`).
+- `puremacro.models.hank_sequence_space` & `puremacro.dsge.hank`:
+  - `dp_sequence_jacobian(model_or_sol, inputs, outputs=None, T=300, dx=1e-4)` and `dp_nonlinear_transition(model_or_sol, input_paths, outputs=None)` compute Auclert, Bardóczy, Rognlie & Straub (2021) Fake-News sequence-space Jacobians `J[Y][X]` of shape `(T, T)` and exact non-linear MIT-shock transition paths directly from a declarative `puremacro.dp.Model` or solved `DPSolution`.
+  - `HANKModel`, `load_hank_mod`, and `solve_hank_bridge` accept `household_model=dp_model` to wire any declarative 1-state `dp.Model` into general-equilibrium HANK DAGs and `.mod` bridges without hand-writing a custom household class.
+- `puremacro.dsge`:
+  - Dated exogenous shocks (`e(-k)` lags for $k \ge 1$ and `e(+k)` news leads for $k \ge 1$) are supported in both `#` model-local variables and dynamic equations via automatic auxiliary state and lead expansion (`AUX_EXO_LAG_*`, `AUX_EXO_LEAD_*`) in `puremacro.dsge.parser`.
+  - Analytical $O(1)$ compilation and evaluation of `steady_state_model; ... end;` blocks (supporting sequential local helper assignments even when a helper shares a name with a `#` model-local expression), with automatic validation against dynamic residuals and fallback to nonlinear root-finding / homotopy continuation (`solve_algo`, `homotopy`) when residuals exceed `tol`.
+  - Native execution of Dynare `.mod` command blocks (`planner_objective;`, `ramsey_policy;`, `optim_weights;`, `osr_params;`, `osr_params_bounds;`, `osr;`, `histval;`, `endval;`, `calib_smoother;`, `shock_decomposition;`) via `DSGEModel.execute_mod_commands(data=...)` returning `DynareCommandResults` (`.ramsey`, `.osr`, `.smoother`, `.decomposition`, `.perfect_foresight`, `.commands_executed`).
+  - Recursive Real Schur (Bartels–Stewart) generalized Sylvester solvers for 2nd- and 3rd-order perturbation tensors (`solve_generalized_sylvester_schur` and `solve_order3_sylvester_schur` in `puremacro.dsge._sylvester`), solving $(I_{n_x^k} \otimes \hat{A}) X + (h_x^\top)^{\otimes k} \otimes (A_+ F_{x+}) X = -R$ in pure real arithmetic via $1 \times 1$ and $2 \times 2$ quasi-upper-triangular blocks with bounded LU caching.
+  - Tempered Particle Filter (`tempered_particle_filter` and `particle_filter(..., method="tempered")` in `puremacro.dsge.particle_filter`, following Herbst & Schorfheide 2019) for 1st-, 2nd- (`PrunedDSGESolution`), and 3rd-order (`Order3PrunedSolution`) DSGE state-space models, with adaptive $\phi$-bisection bridging to match `target_ineff`, systematic/stratified/residual/multinomial resampling, and vectorised RWMH mutation steps (`ParticleFilterResult.n_tempering_stages`).
+  - Fast score gradients in `nuts_sample` and `estimate_dsge(..., method="nuts")` (`puremacro.dsge.nuts`, `puremacro.dsge.estimate`): `grad_log_post_fn` for custom/analytic score gradients, plus `grad_method` (`"forward"`, `"central"`, `"complex"`), `grad_eps`, and `vectorized_grad=True` reusing cached baseline evaluations ($d$ extra evaluations per leapfrog step under `"forward"` vs $2d$ under `"central"`) with automatic interior step reflection near prior bounds.
+
+### Fixed
+
+- `puremacro.dp`: Fixed life-cycle (`T=N`) policy and value indexing when `DPSolution.local(...)` or `DPSolution.simulate()` evaluates expressions referencing endogenous choices (`sol.policy[name][t]` and `sol.V[t]` instead of indexing along the exogenous shock axis), and routed `Panel` derived-column evaluation through the model's registered `functions`.
+- `puremacro.dsge`: Fixed `steady_state_model;` local helper assignments that shadow `#` model-local expression names so analytical steady-state evaluation preserves local assignments before evaluating dynamic equations.
+
 ## 5.2.0 (2026-10-16)
 
 `puremacro.trade` is back. 5.0 and 5.1 shipped without it; this release brings the multi-country, multi-sector trade library back with consistent producer/purchaser accounting as its only accounting, a new bundled OECD table built by a script that ships with it, and no built-in defaults for the table: every dimension, country and sector comes from the table or from an argument. Code written for the 4.x trade API needs the changes listed under "Removed relative to 4.8.1" and "Changed relative to 4.8.1".

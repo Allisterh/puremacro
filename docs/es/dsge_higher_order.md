@@ -55,24 +55,24 @@ sobre el vector extendido $z = (y_{t+1}, y_t, y_{t-1}, u_t)$ exigiría evaluar $
 - Eliminación de subexpresiones comunes (CSE, *Common Subexpression Elimination*).
 - Vectorización directa en funciones ejecutables compiladas en Python puro.
 
-### 2.2 Solucionador Schur Sylvester generalizado para tensores de orden 3
+### 2.2 Solucionadores recursivos Schur reales (Bartels–Stewart) de Sylvester generalizado
 
-El tensor de curvatura de tercer orden respecto a los estados, $g_{xxx}$, satisface la ecuación matricial generalizada de Sylvester:
+En el orden $k \in \{2, 3\}$, el tensor de curvatura respecto a los estados $g_{x^k}$ ($g_{xx}$ en $k=2$, $g_{xxx}$ en $k=3$) satisface la ecuación matricial generalizada de Sylvester:
 
-$$\hat{A} g_{xxx} + A_+ g_{xxx} (h_x \otimes h_x \otimes h_x) = - K_{xxx}$$
+$$\hat{A} g_{x^k} + A_+ g_{x^k} h_x^{\otimes k} = - K_{x^k}$$
 
 donde $\hat{A} = A_0 + A_+ g_x P_s$ y $h_x = P_s g_x$ constituye la matriz de transición del bloque de estados estables.
 
-Construir explícitamente la matriz densa de Kronecker $(h_x \otimes h_x \otimes h_x)$ de orden $n_x^3 \times n_x^3$ requeriría cientos de gigabytes de memoria en modelos de mediana escala (como Smets y Wouters 2007 con $n_x = 14$, donde $14^3 = 2.744$, generando un sistema de $11 \times 10^7$ entradas).
+Construir explícitamente la matriz densa de Kronecker $h_x^{\otimes 3} = (h_x \otimes h_x \otimes h_x)$ de orden $n_x^3 \times n_x^3$ requeriría cientos de gigabytes de memoria en modelos de mediana escala (como Smets y Wouters 2007 con $n_x = 14$, donde $14^3 = 2.744$, generando un sistema de $11 \times 10^7$ entradas).
 
-Puremacro implementa el **solucionador desacoplado Schur Sylvester tridimensional** (`puremacro.dsge._sylvester`):
-1. Obtiene la descomposición de Schur compleja $h_x = U_h T_h U_h^H$ con factor triangular superior $T_h$.
-2. Transforma el tensor inhomogéneo a coordenadas de Schur: $\tilde{K} = K_{xxx} (U_h \otimes U_h \otimes U_h)$.
-3. Resuelve columna a columna mediante sustitución regresiva triangular con almacenamiento en caché de factores LU:
-
-$$\left( \hat{A} + T_h(i, i) T_h(j, j) T_h(k, k) A_+ \right) \tilde{g}_{i,j,k} = - \tilde{K}_{i,j,k} - \text{términos de sustitución previa}$$
-
-4. Rota la solución al espacio original: $g_{xxx} = \tilde{g}_{xxx} (U_h^H \otimes U_h^H \otimes U_h^H)$.
+Puremacro implementa **solucionadores recursivos de Schur real (Bartels–Stewart) para ecuaciones de Sylvester generalizadas** (`solve_generalized_sylvester_schur` para $k=2$ y `solve_order3_sylvester_schur` para $k=3$, además de `solve_order1_sylvester` para $k=1$, en `puremacro.dsge._sylvester`):
+1. Obtiene la **descomposición de Schur real** $h_x = U_h T_h U_h^\top$ (`scipy.linalg.schur(h_x, output="real")`), donde $U_h$ es ortogonal y $T_h$ es cuasi-triangular superior con bloques de $1 \times 1$ (autovalores reales) y de $2 \times 2$ (pares de autovalores complejos conjugados), evitando la sobrecarga de la aritmética compleja.
+2. Transforma el miembro derecho a coordenadas de Schur a lo largo de los $k$ modos tensoriales: $\tilde{K} = K_{x^k} U_h^{\otimes k}$.
+3. Desacopla recursivamente el modo tensorial externo mediante sustitución regresiva por bloques sobre los bloques diagonales $B_p$ de $T_h$:
+   - Para un bloque de $1 \times 1$, $B_p = [\lambda]$, resuelve el subproblema de Sylvester de orden $(k-1)$ con la matriz escalada $\lambda A_+$.
+   - Para un bloque de $2 \times 2$, $B_p = \begin{pmatrix} t_{00} & t_{01} \\ t_{10} & t_{11} \end{pmatrix}$, resuelve el sistema acoplado de dimensión $2 n_y$ y orden $(k-1)$ directamente en aritmética real, empleando caché acotada de factorizaciones LU (`solve_order1_sylvester`) en el nivel base.
+   - Propaga los acoplamientos estrictamente triangulares superiores $T_h[i, b]$ hacia las columnas anteriores antes de resolver el bloque $i$.
+4. Rota la solución de vuelta al espacio de estados en aritmética real: $g_{x^k} = \tilde{g}_{x^k} (U_h^\top)^{\otimes k}$.
 
 En el modelo canónico de Smets y Wouters (2007), este solucionador converge en tan sólo **0,034 segundos** consumiendo **menos de 1 MB de memoria**, evitando por completo el ensamblado de tensores densos.
 

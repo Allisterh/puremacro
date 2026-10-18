@@ -55,26 +55,26 @@ over $z = (y_{t+1}, y_t, y_{t-1}, u_t)$ requires evaluating $O((3n_y + n_u)^3)$ 
 - Common Subexpression Elimination (CSE) across partial derivatives.
 - Direct vectorization into compiled Python callables.
 
-### 2.2 Generalized Schur Sylvester Solver for 3rd-Order Tensors
+### 2.2 Recursive Real Schur (Bartels–Stewart) Generalized Sylvester Solvers
 
-The third-order state curvature tensor $g_{xxx}$ satisfies the generalized matrix Sylvester equation:
+At order $k \in \{2, 3\}$, the state curvature tensor $g_{x^k}$ ($g_{xx}$ at $k=2$, $g_{xxx}$ at $k=3$) satisfies the generalized matrix Sylvester equation:
 
-$$\hat{A} g_{xxx} + A_+ g_{xxx} (h_x \otimes h_x \otimes h_x) = - K_{xxx}$$
+$$\hat{A} g_{x^k} + A_+ g_{x^k} h_x^{\otimes k} = - K_{x^k}$$
 
-where $\hat{A} = A_0 + A_+ g_x P_s$ and $h_x = P_s g_x$ is the stable state transition companion matrix. 
+where $\hat{A} = A_0 + A_+ g_x P_s$ and $h_x = P_s g_x$ is the stable state transition companion matrix.
 
-Assembling the dense Kronecker matrix $(h_x \otimes h_x \otimes h_x)$ of dimension $n_x^3 \times n_x^3$ would require hundreds of gigabytes of RAM for standard medium-scale DSGE models (such as Smets-Wouters 2007 with $n_x = 14$, where $14^3 = 2,744$, creating an $11 \times 10^7$ element system).
+Assembling the dense Kronecker matrix $h_x^{\otimes 3} = (h_x \otimes h_x \otimes h_x)$ of dimension $n_x^3 \times n_x^3$ would require hundreds of gigabytes of RAM for standard medium-scale DSGE models (such as Smets-Wouters 2007 with $n_x = 14$, where $14^3 = 2,744$, creating an $11 \times 10^7$ element system).
 
-Puremacro implements the decoupled **3-Fold Generalized Schur Sylvester Solver** (`puremacro.dsge._sylvester`):
-1. Computes the complex Schur decomposition $h_x = U_h T_h U_h^H$ with upper-triangular factor $T_h$.
-2. Transforms $K_{xxx}$ into Schur coordinates: $\tilde{K} = K_{xxx} (U_h \otimes U_h \otimes U_h)$.
-3. Solves vector-by-vector via triangular back-substitution with LU caching:
+Puremacro implements recursive **Real Schur (Bartels–Stewart) Generalized Sylvester Solvers** (`solve_generalized_sylvester_schur` for $k=2$ and `solve_order3_sylvester_schur` for $k=3$, plus `solve_order1_sylvester` for $k=1$, in `puremacro.dsge._sylvester`):
+1. Computes the **Real Schur decomposition** $h_x = U_h T_h U_h^\top$ (`scipy.linalg.schur(h_x, output="real")`), where $U_h$ is orthogonal and $T_h$ is quasi-upper-triangular with $1 \times 1$ blocks (real eigenvalues) and $2 \times 2$ blocks (complex-conjugate eigenvalue pairs), avoiding complex-arithmetic overhead.
+2. Transforms the right-hand side into Schur coordinates along all $k$ tensor modes: $\tilde{K} = K_{x^k} U_h^{\otimes k}$.
+3. Recursively decouples the outermost tensor mode via block back-substitution over the diagonal blocks $B_p$ of $T_h$:
+   - For a $1 \times 1$ block $B_p = [\lambda]$, solves the order-$(k-1)$ Sylvester subproblem with scaled matrix $\lambda A_+$.
+   - For a $2 \times 2$ block $B_p = \begin{pmatrix} t_{00} & t_{01} \\ t_{10} & t_{11} \end{pmatrix}$, solves the coupled $2 n_y$-dimensional order-$(k-1)$ system directly in real arithmetic, using bounded LU caching (`solve_order1_sylvester`) at the base level.
+   - Pushes strictly upper-triangular couplings $T_h[i, b]$ forward into earlier columns before solving block $i$.
+4. Rotates the solution back to state coordinates in real arithmetic: $g_{x^k} = \tilde{g}_{x^k} (U_h^\top)^{\otimes k}$.
 
-$$\left( \hat{A} + T_h(i, i) T_h(j, j) T_h(k, k) A_+ \right) \tilde{g}_{i,j,k} = - \tilde{K}_{i,j,k} - \text{back-substitution terms}$$
-
-4. Rotates the solution back: $g_{xxx} = \tilde{g}_{xxx} (U_h^H \otimes U_h^H \otimes U_h^H)$.
-
-On the benchmark Smets-Wouters (2007) model, this solver executes in **0.034 seconds** with **< 1 MB memory overhead**, completely bypassing dense tensor assembly.
+On the benchmark Smets-Wouters (2007) model, this solver executes in **0.034 seconds** with **< 1 MB memory overhead**, completely bypassing dense Kronecker assembly.
 
 ### 2.3 The Andreasen et al. (2018) Pruning Algorithm
 
