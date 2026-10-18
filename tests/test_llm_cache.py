@@ -908,3 +908,125 @@ def test_the_score_kernel_creates_the_directory_of_its_cache_file(tmp_path, monk
     monkeypatch.setenv("PUREMACRO_LLM_SCORES_CACHE", str(scores))
     assert len(_score_one_document()) == 1
     assert scores.is_file() and _tables(scores) == ["llm_scores"]
+
+
+# ---------------------------------------------------------------------------
+# Two-tier cache: open_cache([student_cache, course_cache])
+# ---------------------------------------------------------------------------
+
+def test_open_cache_two_tier_reads_fallback_and_writes_only_primary(tmp_path):
+    from puremacro.llm.cache import open_cache
+
+    course_path = tmp_path / "course.sqlite"
+    course = CompletionCache(course_path)
+    course.set(_row(_k("course_q"), text="from_course"))
+    course_bytes = course_path.read_bytes()
+
+    student_path = tmp_path / "student.sqlite"
+    two_tier = open_cache([student_path, course_path])
+    assert two_tier.path == student_path.absolute()
+    assert two_tier.fallback_paths == (course_path.absolute(),)
+    assert "fallback_paths=" in repr(two_tier)
+
+    # Hit from fallback without modifying fallback
+    assert two_tier.get(_k("course_q")) == "from_course"
+    assert two_tier.get(_k("absent_q")) is None
+    assert course_path.read_bytes() == course_bytes
+
+    # Write goes only to student_path, never to course_path
+    two_tier.set(_row(_k("student_q"), text="from_student"))
+    assert two_tier.get(_k("student_q")) == "from_student"
+    assert CompletionCache(student_path).get(_k("student_q")) == "from_student"
+    assert CompletionCache(student_path).get(_k("course_q")) is None
+    assert course_path.read_bytes() == course_bytes
+
+    stats = two_tier.stats()
+    assert stats["rows"] == 2
+    assert stats["by_model"] == {"qwen3-4b": 2}
+    assert stats["path"] == str(student_path.absolute())
+    assert stats["fallback_paths"] == [str(course_path.absolute())]
+
+
+def test_two_tier_primary_wins_when_both_have_same_key(tmp_path):
+    from puremacro.llm.cache import open_cache
+
+    course_path = tmp_path / "course.sqlite"
+    CompletionCache(course_path).set(_row(_k("shared"), text="course_val"))
+    student_path = tmp_path / "student.sqlite"
+    CompletionCache(student_path).set(_row(_k("shared"), text="student_val"))
+
+    two_tier = open_cache([student_path, course_path])
+    assert two_tier.get(_k("shared")) == "student_val"
+    assert two_tier.stats()["rows"] == 1
+
+
+def test_open_cache_empty_sequence_raises_value_error():
+    from puremacro.llm.cache import open_cache
+
+    with pytest.raises(ValueError, match="at least one path"):
+        open_cache([])
+    with pytest.raises(ValueError, match="at least one path"):
+        CompletionCache(())
+
+
+def test_two_tier_deduplicates_fallback_paths_and_env_var(tmp_path, monkeypatch):
+    from puremacro.llm.cache import open_cache
+
+    s = tmp_path / "s.sqlite"
+    c1 = tmp_path / "c1.sqlite"
+    c2 = tmp_path / "c2.sqlite"
+    cache = open_cache([s, s, c1, c1], fallback_paths=[c1, c2, s])
+    assert cache.fallback_paths == (c1.absolute(), c2.absolute())
+
+    monkeypatch.setenv("PUREMACRO_LLM_FALLBACK_CACHE", f"{c1}{os.pathsep}{c2}{os.pathsep}{s}")
+    env_cache = CompletionCache(s)
+    assert env_cache.fallback_paths == (c1.absolute(), c2.absolute())
+
+
+def test_two_tier_corrupt_fallback_surfaces_read_error_on_miss_but_not_on_primary_hit(tmp_path):
+    from puremacro.llm.cache import open_cache
+
+    corrupt = tmp_path / "corrupt.sqlite"
+    corrupt.write_bytes(_LFS_POINTER)
+    student = tmp_path / "student.sqlite"
+    two_tier = open_cache([student, corrupt])
+    two_tier.set(_row(_k("hit"), text="ok"))
+
+    assert two_tier.get(_k("hit")) == "ok"
+    assert two_tier.readable is True
+    assert two_tier.get(_k("miss")) is None
+    assert two_tier.readable is False
+    assert "file is not a database" in (two_tier.reason or "")
+    assert corrupt.read_bytes() == _LFS_POINTER
+
+
+def test_curso_llm_helper_two_tier_open_cache(tmp_path, monkeypatch):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "_curso_llm_test",
+        Path(__file__).resolve().parents[1] / "curso" / "notebooks" / "_llm.py",
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    course_path = tmp_path / "course.sqlite"
+    CompletionCache(course_path).set(_row(_k("curso_q"), text="respuesta_curso"))
+    course_bytes = course_path.read_bytes()
+
+    student_path = tmp_path / "student.sqlite"
+    fb = mod._FallbackCache([student_path, course_path])
+    assert fb.get(_k("curso_q")) == "respuesta_curso"
+    assert fb.set(_k("alumno_q"), "qwen3-4b", prompt_sha256("alumno_q"), 8, 0.0, False, "respuesta_alumno")
+    assert fb.get(_k("alumno_q")) == "respuesta_alumno"
+    assert course_path.read_bytes() == course_bytes
+    assert fb.stats()["rows"] == 2
+
+    llm_obj = mod.get_llm(mode="cache", model="qwen3-4b", cache=[student_path, course_path])
+    assert llm_obj.complete("curso_q", max_tokens=8) == "respuesta_curso"
+    assert llm_obj.complete("alumno_q", max_tokens=8) == "respuesta_alumno"
+    assert course_path.read_bytes() == course_bytes
+
+    monkeypatch.setenv("MAV_LLM_USER_CACHE", str(student_path))
+    assert mod.user_cache_path() == student_path.absolute()
+

@@ -461,3 +461,30 @@ def test_report_surfaces_unreadable_cache_reason(monkeypatch, fake, tmp_path):
     cache_field = _fields(L.report(probe_servers=False))["cache"]
     assert "unreadable:" in cache_field and "file is not a database" in cache_field
 
+
+def test_complete_and_chat_with_two_tier_cache_sequence_and_open_cache(monkeypatch, fake, tmp_path):
+    course_path = tmp_path / "course.sqlite"
+    key = L.cache_key("qwen3-4b", "from_course", max_tokens=8, temperature=0.0, json_mode=False)
+    L.CompletionCache(course_path).set(
+        L.CacheRow(key, "qwen3-4b", prompt_sha256("from_course", None), 8, 0.0, False,
+                   "course_answer", "mlx", "qwen3-4b")
+    )
+    course_bytes = course_path.read_bytes()
+
+    student_path = tmp_path / "student.sqlite"
+    # Hit from fallback in cache mode using a sequence of paths directly in cache=
+    assert L.complete("from_course", max_tokens=8, mode="cache",
+                      cache=[student_path, course_path]) == "course_answer"
+    assert fake.calls == []
+    assert course_path.read_bytes() == course_bytes
+
+    # Miss in both tiers in auto mode runs the engine and stores only in student_path
+    two_tier = L.open_cache([student_path, course_path])
+    assert L.complete("new_prompt", max_tokens=8, cache=two_tier) == "0.7"
+    assert len(fake.calls) == 1
+    assert course_path.read_bytes() == course_bytes
+    assert L.CompletionCache(student_path).stats()["rows"] == 1
+    assert L.CompletionCache(course_path).stats()["rows"] == 1
+    assert two_tier.stats()["rows"] == 2
+
+

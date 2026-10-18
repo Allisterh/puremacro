@@ -46,6 +46,7 @@ def _isolated_llm_cache(monkeypatch, tmp_path_factory):
     base = tmp_path_factory.getbasetemp() / "llm_cache"
     monkeypatch.setenv("PUREMACRO_LLM_CACHE", str(base / f"{uuid.uuid4().hex}.sqlite"))
     monkeypatch.setenv("PUREMACRO_LLM_SCORES_CACHE", str(base / f"{uuid.uuid4().hex}_scores.sqlite"))
+    monkeypatch.delenv("PUREMACRO_LLM_FALLBACK_CACHE", raising=False)
     monkeypatch.delenv("PUREMACRO_LLM_MODE", raising=False)
     monkeypatch.delenv("PUREMACRO_LLM_MODEL", raising=False)
     monkeypatch.delenv("PUREMACRO_LLM_BASE_URL", raising=False)

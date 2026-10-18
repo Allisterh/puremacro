@@ -56,6 +56,7 @@ Las copias de ``notebooks/`` y ``colab_es/`` deben ser idénticas byte a byte.
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
 import contextlib
 import hashlib
 import importlib
@@ -72,16 +73,22 @@ __all__ = [
     "MODES",
     "MISSES",
     "REFERENCE_MODEL",
+    "USER_CACHE_ENV",
     "CacheMiss",
     "CourseBackend",
     "CourseProvider",
     "LLM",
     "cache_path",
     "get_llm",
+    "open_cache",
+    "user_cache_path",
 ]
 
 MODE_ENV = "MAV_LLM_MODE"
 """Variable del curso que fija el modo; gana sobre ``PUREMACRO_LLM_MODE``."""
+
+USER_CACHE_ENV = "MAV_LLM_USER_CACHE"
+"""Variable del curso para la caché escribible del alumno delante de la caché del curso."""
 
 MODES = ("auto", "cache", "off")
 
@@ -100,6 +107,7 @@ El sha256 es ``_prompt_sha256(prompt, system)``; con él se localiza la petició
 al reconstruir la caché del curso."""
 
 _CACHE_ENV = "PUREMACRO_LLM_CACHE"
+_FALLBACK_CACHE_ENV = "PUREMACRO_LLM_FALLBACK_CACHE"
 _SCORES_CACHE_ENV = "PUREMACRO_LLM_SCORES_CACHE"        # 5.0's narrative score cache
 _LIBRARY_MODE_ENV = "PUREMACRO_LLM_MODE"
 _MODEL_ENV = "PUREMACRO_LLM_MODEL"
@@ -129,6 +137,17 @@ _COURSE_DIR = _HERE.parent
 def cache_path() -> Path:
     """La caché del curso: ``data_curso/llm_cache.sqlite`` junto a este archivo."""
     return _HERE / "data_curso" / "llm_cache.sqlite"
+
+
+def user_cache_path() -> Path:
+    """La caché escribible del alumno: ``$MAV_LLM_USER_CACHE`` o ``~/.cache/puremacro/llm_cache.sqlite``."""
+    env = os.environ.get(USER_CACHE_ENV, "").strip()
+    if env:
+        return Path(env).expanduser().absolute()
+    try:
+        return (Path.home() / ".cache" / "puremacro" / "llm_cache.sqlite").absolute()
+    except (RuntimeError, KeyError, OSError):
+        return (_HERE / "data_curso" / "llm_user_cache.sqlite").absolute()
 
 
 def _shown(path) -> str:
@@ -202,39 +221,79 @@ _CREATE_INDEX = "CREATE INDEX IF NOT EXISTS completions_model ON completions(mod
 _UNWRITABLE_REPORTED: set[str] = set()
 
 
+def _dedup_fallback_paths(primary: Path, candidates) -> tuple[Path, ...]:
+    out: list[Path] = []
+    seen: set[Path] = {primary}
+    for item in candidates:
+        p = Path(item).expanduser().absolute()
+        if p not in seen:
+            seen.add(p)
+            out.append(p)
+    return tuple(out)
+
+
 class _FallbackCache:
     """Un archivo de caché con el formato ``v1`` de ``puremacro.llm.cache``.
 
-    ``get`` y ``stats`` abren el archivo en sólo lectura: nunca lo crean ni lo
-    modifican, y sirven en un volumen de sólo lectura. ``set`` crea la carpeta,
-    el archivo, la tabla y el índice la primera vez. Ningún método lanza por
-    culpa de la caché: un archivo ausente o corrupto, o un Python sin
+    ``get`` y ``stats`` abren el archivo (y cualquier ``fallback_paths``) en
+    sólo lectura: nunca los crean ni los modifican, y sirven en un volumen de
+    sólo lectura. ``set`` crea la carpeta, el archivo, la tabla y el índice de
+    ``self.path`` la primera vez y nunca toca ``fallback_paths``. Ningún método
+    lanza por culpa de la caché: un archivo ausente o corrupto, o un Python sin
     ``sqlite3``, es una caché vacía.
     """
 
-    def __init__(self, path) -> None:
-        self.path = Path(path).expanduser().absolute()
+    def __init__(self, path=None, fallback_paths=()) -> None:
+        if isinstance(path, Sequence) and not isinstance(path, (str, bytes, bytearray, os.PathLike)):
+            if len(path) == 0:
+                raise ValueError("CompletionCache requires at least one path when a sequence is given")
+            self.path = Path(path[0]).expanduser().absolute()
+            combined = list(path[1:])
+            if fallback_paths:
+                if isinstance(fallback_paths, (str, bytes, os.PathLike)):
+                    combined.append(fallback_paths)
+                else:
+                    combined.extend(fallback_paths)
+            self.fallback_paths = _dedup_fallback_paths(self.path, combined)
+        else:
+            chosen = cache_path() if path is None else path
+            self.path = Path(chosen).expanduser().absolute()
+            if fallback_paths:
+                raw_fb = (fallback_paths,) if isinstance(fallback_paths, (str, bytes, os.PathLike)) else fallback_paths
+            else:
+                env_fb = os.environ.get(_FALLBACK_CACHE_ENV, "").strip()
+                raw_fb = [p.strip() for p in env_fb.split(os.pathsep) if p.strip()] if env_fb else ()
+            self.fallback_paths = _dedup_fallback_paths(self.path, raw_fb)
 
     def __repr__(self) -> str:
+        if self.fallback_paths:
+            fbs = [_shown(p) for p in self.fallback_paths]
+            return f"_FallbackCache({_shown(self.path)!r}, fallback_paths={fbs!r})"
         return f"_FallbackCache({_shown(self.path)!r})"
 
-    def _read_only(self):
+    def _read_only(self, target: Path | None = None):
         import sqlite3
-        return sqlite3.connect(self.path.as_uri() + "?mode=ro", uri=True)
+        p = self.path if target is None else target
+        return sqlite3.connect(p.as_uri() + "?mode=ro", uri=True)
 
     def get(self, key: str) -> str | None:
         """La respuesta guardada para ``key``, o ``None``."""
-        try:
-            conn = self._read_only()
-        except Exception:
-            return None
-        try:
-            row = conn.execute("SELECT completion FROM completions WHERE key = ?", (key,)).fetchone()
-        except Exception:
-            return None
-        finally:
-            conn.close()
-        return None if row is None else row[0]
+        for tier in (self.path, *self.fallback_paths):
+            try:
+                conn = self._read_only(tier)
+            except Exception:
+                continue
+            try:
+                row = conn.execute(
+                    "SELECT completion FROM completions WHERE key = ?", (key,)
+                ).fetchone()
+            except Exception:
+                row = None
+            finally:
+                conn.close()
+            if row is not None:
+                return row[0]
+        return None
 
     def set(self, key: str, model: str, prompt_sha256: str, max_tokens: int,
             temperature: float, json_mode: bool, completion: str,
@@ -279,24 +338,46 @@ class _FallbackCache:
         Claves ``rows``, ``by_model`` (alias -> filas), ``bytes`` y ``path``, como
         ``puremacro.llm.CompletionCache.stats``."""
         by_model: dict[str, int] = {}
-        try:
-            conn = self._read_only()
-        except Exception:
-            conn = None
-        if conn is not None:
+        if not self.fallback_paths:
             try:
-                by_model = dict(conn.execute(
-                    "SELECT model, COUNT(*) FROM completions GROUP BY model ORDER BY model").fetchall())
+                conn = self._read_only()
             except Exception:
-                pass
-            finally:
-                conn.close()
+                conn = None
+            if conn is not None:
+                try:
+                    by_model = dict(conn.execute(
+                        "SELECT model, COUNT(*) FROM completions GROUP BY model ORDER BY model").fetchall())
+                except Exception:
+                    pass
+                finally:
+                    conn.close()
+        else:
+            seen_keys: set[str] = set()
+            counts_by_model: dict[str, int] = {}
+            for tier in (self.path, *self.fallback_paths):
+                try:
+                    conn = self._read_only(tier)
+                except Exception:
+                    continue
+                try:
+                    for key, model in conn.execute("SELECT key, model FROM completions"):
+                        if key not in seen_keys:
+                            seen_keys.add(key)
+                            counts_by_model[model] = counts_by_model.get(model, 0) + 1
+                except Exception:
+                    pass
+                finally:
+                    conn.close()
+            by_model = dict(sorted(counts_by_model.items()))
         try:
             size = self.path.stat().st_size
         except OSError:
             size = 0
-        return {"rows": sum(by_model.values()), "by_model": by_model, "bytes": size,
-                "path": str(self.path)}
+        out = {"rows": sum(by_model.values()), "by_model": by_model, "bytes": size,
+               "path": str(self.path)}
+        if self.fallback_paths:
+            out["fallback_paths"] = [str(p) for p in self.fallback_paths]
+        return out
 
 
 class CacheMiss(LookupError):
@@ -897,7 +978,7 @@ class LLM:
     """
 
     def __init__(self, mode: str | None = None, model: str | None = None,
-                 lang: str | None = None) -> None:
+                 lang: str | None = None, *, cache=None) -> None:
         self.lang = _resolve_lang(lang)
         self.mode = _resolve_mode(mode, self.lang)
         self._library = _LIBRARY
@@ -907,8 +988,36 @@ class LLM:
         # What the library's complete() receives: "default" when no model was given, as
         # before, so the library applies its own default; the canonical alias otherwise.
         self._library_model = self.model_alias if model else "default"
-        env = os.environ.get(_CACHE_ENV, "").strip()
-        self.cache_path = Path(env).expanduser().absolute() if env else cache_path()
+        self._explicit_cache = cache is not None
+        if cache is not None:
+            if hasattr(cache, "path"):
+                self.cache_path = Path(cache.path).expanduser().absolute()
+                self.fallback_paths: tuple[Path, ...] = _dedup_fallback_paths(
+                    self.cache_path, getattr(cache, "fallback_paths", ())
+                )
+            elif isinstance(cache, Sequence) and not isinstance(
+                cache, (str, bytes, bytearray, os.PathLike)
+            ):
+                resolved = _FallbackCache(cache)
+                self.cache_path = resolved.path
+                self.fallback_paths = resolved.fallback_paths
+            else:
+                self.cache_path = Path(cache).expanduser().absolute()
+                self.fallback_paths = _dedup_fallback_paths(self.cache_path, (cache_path(),))
+        else:
+            env_user = os.environ.get(USER_CACHE_ENV, "").strip()
+            env_cache = os.environ.get(_CACHE_ENV, "").strip()
+            if env_user:
+                self.cache_path = Path(env_user).expanduser().absolute()
+                self.fallback_paths = _dedup_fallback_paths(
+                    self.cache_path,
+                    (Path(env_cache).expanduser().absolute() if env_cache else cache_path(),),
+                )
+            else:
+                self.cache_path = Path(env_cache).expanduser().absolute() if env_cache else cache_path()
+                env_fb = os.environ.get(_FALLBACK_CACHE_ENV, "").strip()
+                raw_fb = [p.strip() for p in env_fb.split(os.pathsep) if p.strip()] if env_fb else ()
+                self.fallback_paths = _dedup_fallback_paths(self.cache_path, raw_fb)
 
     def __repr__(self) -> str:
         return (f"LLM(mode={self.mode!r}, model_alias={self.model_alias!r}, "
@@ -929,7 +1038,7 @@ class LLM:
         if self._library is not None:
             return self._complete_with_library(prompt, key, system=system, max_tokens=max_tokens,
                                                temperature=temperature, json_mode=json_mode)
-        cache = _FallbackCache(self.cache_path)
+        cache = _FallbackCache(self.cache_path, fallback_paths=self.fallback_paths)
         if self.mode != "off":
             hit = cache.get(key)
             if hit is not None:
@@ -997,7 +1106,7 @@ class LLM:
         def label(es: str, en: str) -> str:         # two spaces, the label, padded to 10
             return f"  {_say(lang, es, en):<10}"
 
-        stats = _FallbackCache(self.cache_path).stats()
+        stats = _FallbackCache(self.cache_path, fallback_paths=self.fallback_paths).stats()
         rows = stats["rows"]
         state = (_say(lang, f"{rows} fila", f"{rows} row") if rows == 1
                  else _say(lang, f"{rows} filas", f"{rows} rows"))
@@ -1102,8 +1211,11 @@ class LLM:
 
     def _complete_with_library(self, prompt: str, key: str, **kw) -> str:
         library = self._library
+        call_kw = dict(kw)
+        if self.fallback_paths or self._explicit_cache:
+            call_kw["cache"] = open_cache(self.cache_path, fallback_paths=self.fallback_paths)
         try:
-            return library.complete(prompt, model=self._library_model, mode=self.mode, **kw)
+            return library.complete(prompt, model=self._library_model, mode=self.mode, **call_kw)
         except library.CacheMiss as exc:
             # CacheUnavailable included: it keeps its ``reason``, and try_complete reports it as
             # an unreadable cache instead of a missing answer.
@@ -1141,13 +1253,32 @@ class LLM:
         return _strip_thinking(raw), engine.name, model_id
 
 
-def get_llm(mode: str | None = None, model: str | None = None, lang: str | None = None) -> LLM:
+def open_cache(paths=None, *, fallback_paths=None):
+    """Abre una caché de uno o dos niveles (primero la del alumno, luego la del curso en sólo lectura).
+
+    Con ``open_cache([student_cache, cache_path()])`` las consultas miran primero ``student_cache``
+    y después ``cache_path()`` sin crearla ni modificarla; las respuestas nuevas se guardan sólo
+    en ``student_cache``."""
+    if paths is None:
+        env_user = os.environ.get(USER_CACHE_ENV, "").strip()
+        if env_user and fallback_paths is None:
+            paths = [user_cache_path(), cache_path()]
+        else:
+            paths = cache_path()
+    if _LIBRARY is not None and callable(getattr(_LIBRARY, "open_cache", None)):
+        return _LIBRARY.open_cache(paths, fallback_paths=fallback_paths)
+    return _FallbackCache(paths, fallback_paths=fallback_paths or ())
+
+
+def get_llm(mode: str | None = None, model: str | None = None, lang: str | None = None,
+            *, cache=None) -> LLM:
     """El modelo del curso en ``mode`` (si no, ``MAV_LLM_MODE``, ``PUREMACRO_LLM_MODE`` o ``auto``).
 
     ``model`` (``"default"``, ``"small"``, ``"large"`` o un alias, como :data:`REFERENCE_MODEL`)
     cambia el modelo de este objeto, y sólo de este; sin él es ``qwen3-4b``, o el que diga
     ``PUREMACRO_LLM_MODEL``. ``lang`` es el idioma de sus notas, ``"es"`` (sin él) o ``"en"``;
-    cualquier otro valor lanza ``ValueError``.
+    cualquier otro valor lanza ``ValueError``. ``cache`` permite pasar una caché de dos niveles
+    (como ``open_cache([student_cache, cache_path()])``).
 
     Uso en una lección::
 
@@ -1156,7 +1287,7 @@ def get_llm(mode: str | None = None, model: str | None = None, lang: str | None 
         referencia = _llm.get_llm(mode="cache", model=_llm.REFERENCE_MODEL).try_complete(
             "¿Qué mide el PIB?", max_tokens=64)
     """
-    return LLM(mode, model=model, lang=lang)
+    return LLM(mode, model=model, lang=lang, cache=cache)
 
 
 # ---------------------------------------------------------------------------

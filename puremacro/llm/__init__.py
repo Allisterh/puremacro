@@ -55,9 +55,11 @@ the one that answers. Pyodide 0.28 adds ``sqlite3`` only on request: run
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
 import math
 import numbers
 import os
+from pathlib import Path
 from typing import Any
 
 from . import cache as _cache
@@ -70,6 +72,7 @@ from .cache import (
     CompletionCache,
     cache_key,
     default_cache_path,
+    open_cache,
 )
 from .engines import (
     BackendUnavailable,
@@ -116,6 +119,7 @@ __all__ = [
     "default_cache_path",
     "device_budget_gb",
     "get_engine",
+    "open_cache",
     "pick_model",
     "report",
     "resolve_model_id",
@@ -187,7 +191,8 @@ def _check_temperature(temperature: Any) -> Any:
 def complete(prompt: str, *, model: str = "default", engine: str = "auto",
              mode: str | None = None, system: str | None = None, max_tokens: int = 256,
              temperature: float = 0.0, json_mode: bool = False, timeout: float = 120.0,
-             base_url: str | None = None, cache: CompletionCache | None = None) -> str:
+             base_url: str | None = None,
+             cache: CompletionCache | str | Path | Sequence[str | Path] | None = None) -> str:
     """A local model's answer to ``prompt``, from the cache when it has one.
 
     In ``auto`` mode the cache is read first. On a miss, a model of the registry is checked
@@ -223,8 +228,9 @@ def complete(prompt: str, *, model: str = "default", engine: str = "auto",
         Seconds an HTTP engine waits for the answer.
     base_url : str, optional
         One server to use instead of the default local ones; else ``PUREMACRO_LLM_BASE_URL``.
-    cache : CompletionCache, optional
-        The cache to read and write. Defaults to ``CompletionCache()``: the file named by
+    cache : CompletionCache, str, Path, or Sequence of (str or Path), optional
+        The cache to read and write, or a path / sequence ``[student_cache, course_cache]``
+        passed to :func:`open_cache`. Defaults to ``CompletionCache()``: the file named by
         ``PUREMACRO_LLM_CACHE``, else ``~/.cache/puremacro/llm_cache.sqlite``. ``off`` mode
         neither opens it nor creates it.
 
@@ -266,7 +272,12 @@ def complete(prompt: str, *, model: str = "default", engine: str = "auto",
     # directory, the file and the table) and leaves one passed as ``cache`` untouched.
     store: CompletionCache | None = None
     if mode != "off":
-        store = cache if cache is not None else _cache.CompletionCache()
+        if cache is None:
+            store = _cache.CompletionCache()
+        elif isinstance(cache, (str, bytes, os.PathLike, Sequence)):
+            store = _cache.open_cache(cache)
+        else:
+            store = cache
         hit = store.get(key)
         if hit is not None:
             return hit

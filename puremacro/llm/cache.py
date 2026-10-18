@@ -53,7 +53,7 @@ import contextlib
 import hashlib
 import os
 import warnings
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -69,6 +69,7 @@ __all__ = [
     "CompletionCache",
     "cache_key",
     "default_cache_path",
+    "open_cache",
     "prompt_sha256",
 ]
 
@@ -76,6 +77,7 @@ CACHE_FORMAT = "v1"
 """Version of the key function and of the table layout; it is part of every key."""
 
 _ENV_PATH = "PUREMACRO_LLM_CACHE"
+_ENV_FALLBACK_PATH = "PUREMACRO_LLM_FALLBACK_CACHE"
 
 _CREATE_TABLE = """\
 CREATE TABLE IF NOT EXISTS completions (
@@ -359,20 +361,42 @@ def _copy_rows(src: Path, dst: Path, *, model: str | None = None, since: str | N
 # The cache
 # ---------------------------------------------------------------------------
 
+def _dedup_paths(primary: Path, candidates: Sequence[str | Path]) -> tuple[Path, ...]:
+    """Deduplicate fallback paths in order, excluding ``primary``."""
+    out: list[Path] = []
+    seen: set[Path] = {primary}
+    for item in candidates:
+        p = Path(item).expanduser().absolute()
+        if p not in seen:
+            seen.add(p)
+            out.append(p)
+    return tuple(out)
+
+
 class CompletionCache:
-    """A file of cached completions (see the module docstring).
+    """A file of cached completions, optionally backed by read-only fallback tiers.
 
     Parameters
     ----------
-    path : str or Path, optional
-        The SQLite file. Defaults to :func:`default_cache_path`. The parent
-        directory, the file and the table are created if they do not exist; a
-        relative path is anchored at the current directory once, here.
+    path : str, Path, or Sequence of (str or Path), optional
+        The writable SQLite file, or a sequence ``[primary, fallback_1, ...]``
+        where ``primary`` is the writable cache and the remaining paths are
+        read-only fallback caches (such as a shipped course cache). Defaults to
+        :func:`default_cache_path`. The parent directory, the file and the table
+        of ``primary`` are created if they do not exist; a relative path is
+        anchored at the current directory once, here.
+    fallback_paths : Sequence of (str or Path), optional
+        Additional read-only fallback SQLite files consulted in order when a key
+        is absent from :attr:`path`. When omitted and ``path`` is not a sequence,
+        ``$PUREMACRO_LLM_FALLBACK_CACHE`` (separated by :data:`os.pathsep`) is
+        used if set. Fallback files are never created or modified.
 
     Attributes
     ----------
     path : Path
-        Absolute path of the cache file.
+        Absolute path of the primary cache file.
+    fallback_paths : tuple of Path
+        Read-only fallback cache paths in lookup order, excluding :attr:`path`.
     writable : bool
         Whether writes are expected to work: ``False`` when the file could not
         be prepared (unwritable directory, corrupt file, no ``sqlite3``), and
@@ -391,14 +415,44 @@ class CompletionCache:
         written (read-only property).
     """
 
-    def __init__(self, path: str | Path | None = None) -> None:
-        chosen = default_cache_path() if path is None else Path(path).expanduser()
-        self.path: Path = chosen.absolute()
+    def __init__(
+        self,
+        path: str | Path | Sequence[str | Path] | None = None,
+        *,
+        fallback_paths: Sequence[str | Path] | str | Path | None = None,
+    ) -> None:
+        if isinstance(path, Sequence) and not isinstance(path, (str, bytes, bytearray, os.PathLike)):
+            if len(path) == 0:
+                raise ValueError("CompletionCache requires at least one path when a sequence is given")
+            chosen = Path(path[0]).expanduser()
+            self.path: Path = chosen.absolute()
+            combined: list[str | Path] = list(path[1:])
+            if fallback_paths is not None:
+                if isinstance(fallback_paths, (str, bytes, os.PathLike)):
+                    combined.append(fallback_paths)
+                else:
+                    combined.extend(fallback_paths)
+            self.fallback_paths: tuple[Path, ...] = _dedup_paths(self.path, combined)
+        else:
+            chosen = default_cache_path() if path is None else Path(path).expanduser()
+            self.path = chosen.absolute()
+            if fallback_paths is not None:
+                if isinstance(fallback_paths, (str, bytes, os.PathLike)):
+                    raw_fb: Sequence[str | Path] = (fallback_paths,)
+                else:
+                    raw_fb = fallback_paths
+            else:
+                env_fb = os.environ.get(_ENV_FALLBACK_PATH, "").strip()
+                raw_fb = [p.strip() for p in env_fb.split(os.pathsep) if p.strip()] if env_fb else ()
+            self.fallback_paths = _dedup_paths(self.path, raw_fb)
         self._reason = ""            # why the file could not be prepared, or a write failed
         self._read_error = ""        # why the last lookup could not read the file
         self.writable: bool = self._prepare()
 
     def __repr__(self) -> str:
+        if self.fallback_paths:
+            fbs = [str(p) for p in self.fallback_paths]
+            return f"CompletionCache({str(self.path)!r}, fallback_paths={fbs!r}, writable={self.writable})"
         return f"CompletionCache({str(self.path)!r}, writable={self.writable})"
 
     @property
@@ -447,9 +501,9 @@ class CompletionCache:
             "a writable file to keep them.",
             UserWarning, stacklevel=3)
 
-    def _read_failure(self, exc: BaseException) -> str:
-        """Why a lookup that raised ``exc`` could not read the file, or ``""`` when there is
-        simply no file yet.
+    def _read_failure(self, exc: BaseException, path: Path | None = None) -> str:
+        """Why a lookup that raised ``exc`` could not read ``path`` (default ``self.path``),
+        or ``""`` when there is simply no file yet.
 
         Only a path that could hold a file but does not (``os.stat`` raises
         ``FileNotFoundError``) is an empty cache. A file that is there and that
@@ -458,15 +512,16 @@ class CompletionCache:
         other ``OSError``, which is added to the text) and a missing ``sqlite3``
         all mean that no lookup was made.
         """
+        target = self.path if path is None else path
         text = f"{type(exc).__name__}: {exc}"
         if isinstance(exc, ImportError):
             return text
         try:
-            os.stat(self.path)
+            os.stat(target)
         except FileNotFoundError:
             # Windows reports a path that runs through a file as missing (ENOENT), where POSIX
             # raises NotADirectoryError: look at the nearest ancestor that exists.
-            if _runs_through_a_file(self.path):
+            if _runs_through_a_file(target):
                 return f"{text} (NotADirectoryError: a component of the path is a file)"
             return ""
         except OSError as problem:
@@ -476,21 +531,46 @@ class CompletionCache:
     def get(self, key: str) -> str | None:
         """The cached completion for ``key``, or ``None`` (also when the cache is unusable).
 
+        Consults :attr:`path` first, then each path in :attr:`fallback_paths` in
+        read-only mode without creating or modifying any fallback file.
         Sets :attr:`readable`: ``False`` when the lookup could not read the file,
         with the error in :attr:`reason`; ``True`` when it could, or found no file.
         """
+        primary_error = ""
         try:
             with _connect(self.path, write=False) as conn:
                 row = conn.execute(
                     "SELECT completion FROM completions WHERE key = ?", (key,)).fetchone()
         except _unusable() as exc:
-            self._read_error = self._read_failure(exc)
+            primary_error = self._read_failure(exc, self.path)
+            if not self.fallback_paths:
+                self._read_error = primary_error
+                return None
+            row = None
+        if row is not None:
+            self._read_error = ""
+            return row[0]
+        if not self.fallback_paths:
+            self._read_error = primary_error
             return None
-        self._read_error = ""
-        return None if row is None else row[0]
+        fallback_error = ""
+        for fb in self.fallback_paths:
+            try:
+                with _connect(fb, write=False) as conn:
+                    fb_row = conn.execute(
+                        "SELECT completion FROM completions WHERE key = ?", (key,)).fetchone()
+            except _unusable() as exc:
+                if not fallback_error:
+                    fallback_error = self._read_failure(exc, fb)
+                continue
+            if fb_row is not None:
+                self._read_error = ""
+                return fb_row[0]
+        self._read_error = primary_error or fallback_error
+        return None
 
     def set(self, row: CacheRow) -> None:
-        """Store ``row``; the first completion stored for a key is kept (``INSERT OR IGNORE``).
+        """Store ``row`` in :attr:`path` only (``INSERT OR IGNORE``); fallback caches are never written.
 
         Never raises because of the cache: when the write cannot be done, the
         cache stops writing (``writable`` becomes ``False``) and one warning per
@@ -570,20 +650,69 @@ class CompletionCache:
         -------
         dict
             ``rows`` (int), ``by_model`` (canonical alias -> row count, sorted by
-            alias; ``completions`` only), ``bytes`` (size of the whole file,
-            whatever else it holds; 0 if absent) and ``path`` (str).
+            alias; ``completions`` only), ``bytes`` (size of the primary file,
+            whatever else it holds; 0 if absent), ``path`` (str), and when
+            :attr:`fallback_paths` is non-empty, ``fallback_paths`` (list of str).
         """
         by_model: dict[str, int] = {}
-        try:
-            with _connect(self.path, write=False) as conn:
-                counts = conn.execute(
-                    "SELECT model, COUNT(*) FROM completions GROUP BY model ORDER BY model")
-                by_model = dict(counts.fetchall())
-        except _unusable():
-            pass
+        if not self.fallback_paths:
+            try:
+                with _connect(self.path, write=False) as conn:
+                    counts = conn.execute(
+                        "SELECT model, COUNT(*) FROM completions GROUP BY model ORDER BY model")
+                    by_model = dict(counts.fetchall())
+            except _unusable():
+                pass
+        else:
+            seen_keys: set[str] = set()
+            counts_by_model: dict[str, int] = {}
+            for tier in (self.path, *self.fallback_paths):
+                try:
+                    with _connect(tier, write=False) as conn:
+                        for key, model in conn.execute("SELECT key, model FROM completions"):
+                            if key not in seen_keys:
+                                seen_keys.add(key)
+                                counts_by_model[model] = counts_by_model.get(model, 0) + 1
+                except _unusable():
+                    pass
+            by_model = dict(sorted(counts_by_model.items()))
         try:
             size = self.path.stat().st_size
         except OSError:
             size = 0
-        return {"rows": sum(by_model.values()), "by_model": by_model,
-                "bytes": size, "path": str(self.path)}
+        out: dict[str, Any] = {
+            "rows": sum(by_model.values()),
+            "by_model": by_model,
+            "bytes": size,
+            "path": str(self.path),
+        }
+        if self.fallback_paths:
+            out["fallback_paths"] = [str(p) for p in self.fallback_paths]
+        return out
+
+
+def open_cache(
+    path: str | Path | Sequence[str | Path] | None = None,
+    *,
+    fallback_paths: Sequence[str | Path] | str | Path | None = None,
+) -> CompletionCache:
+    """Open a single-file or multi-tier :class:`CompletionCache`.
+
+    When ``path`` is a sequence ``[student_cache, course_cache, ...]``, lookups
+    check ``student_cache`` first and then each fallback cache in read-only mode
+    without creating or modifying any fallback file, while new completions are
+    written only to ``student_cache``.
+
+    Parameters
+    ----------
+    path : str, Path, or Sequence of (str or Path), optional
+        Primary writable cache path, or ``[primary, fallback_1, ...]``.
+    fallback_paths : Sequence of (str or Path), optional
+        Additional read-only fallback cache paths.
+
+    Returns
+    -------
+    CompletionCache
+    """
+    return CompletionCache(path, fallback_paths=fallback_paths)
+

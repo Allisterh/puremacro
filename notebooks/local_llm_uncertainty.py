@@ -77,3 +77,26 @@ for date, p in series:
 # With a real engine installed, the April "uncertain" document scores higher
 # than the March "investment" document. Swap models via the `model=` argument
 # (e.g. `"gemma2-2b"` for Google's Gemma, `"llama3.2-3b"` for Meta's Llama).
+#
+# ## 4. Two-tier cache: read a shipped course cache, write locally
+# `open_cache([student_cache, course_cache])` checks `student_cache` first,
+# falls back to `course_cache` in read-only mode on a miss, and writes any new
+# completions only to `student_cache` (leaving `course_cache` untouched).
+
+# %%
+import tempfile
+from puremacro.llm import complete, open_cache
+
+_prompt = (
+    "Score how strongly this paragraph expresses 'economic uncertainty' "
+    "on a scale from 0.0 (not at all) to 1.0 (strongly). "
+    "Reply with ONLY a single decimal number.\n\n"
+    f"Paragraph: {CORPUS[1][1]}"
+)
+with tempfile.TemporaryDirectory() as _tmp:
+    _student_cache = Path(_tmp) / "student_cache.sqlite"
+    two_tier = open_cache([_student_cache, _cache_file])
+    cached_score = complete(_prompt, model="qwen3-4b", max_tokens=8,
+                            mode="cache", cache=two_tier)
+    print("two-tier cache hit:", cached_score, "total rows:", two_tier.stats()["rows"])
+

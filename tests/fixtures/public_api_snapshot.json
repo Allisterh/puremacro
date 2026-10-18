@@ -1763,6 +1763,7 @@
       "default_cache_path",
       "device_budget_gb",
       "get_engine",
+      "open_cache",
       "pick_model",
       "report",
       "resolve_model_id",
@@ -1777,6 +1778,7 @@
       "CompletionCache",
       "cache_key",
       "default_cache_path",
+      "open_cache",
       "prompt_sha256"
     ],
     "puremacro.llm.engines": [

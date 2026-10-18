@@ -233,7 +233,7 @@ modelo de referencia, exporte las filas y entregue el archivo. Del lado receptor
 Una caché en un volumen de solo lectura sigue sirviendo respuestas.
 
 ```python
-from puremacro.llm import CacheMiss, CacheRow, CompletionCache, cache_key, complete
+from puremacro.llm import CacheMiss, CacheRow, CompletionCache, cache_key, complete, open_cache
 from puremacro.llm.cache import prompt_sha256
 
 # A stand-in for a cache built on a machine that runs the model: one row written by hand
@@ -255,15 +255,20 @@ except CacheMiss as exc:
     print(type(exc).__name__, exc.model)                        # CacheMiss qwen3-4b
 print(shipped.stats()["by_model"])                              # {'qwen3-4b': 1}
 
+# Two-tier cache: check student_cache first, fall back to course_cache (read-only), write only to student_cache
+two_tier = open_cache(["student_cache.sqlite", "course_cache.sqlite"])
+print(complete(prompt, model="qwen3-4b", max_tokens=8, mode="cache", cache=two_tier))  # yes
+
 # Or add the shipped rows to a cache of your own (rows it already has are kept)
 print(CompletionCache("my_cache.sqlite").merge("course_cache.sqlite"))   # 1
 ```
 
+- `open_cache([student_cache, course_cache])` (o `CompletionCache(student_cache, fallback_paths=[course_cache])`) abre una caché de dos niveles: las consultas buscan primero en `student_cache` y después en `course_cache` en modo de solo lectura sin crear ni modificar `course_cache`, mientras que los completados nuevos se escriben únicamente en `student_cache`.
 - `export(dest, *, model=None, since=None)` copia filas a otro archivo y lo crea si hace falta;
   `since="2026-10-01"` conserva las filas creadas en esa fecha o después (UTC). `merge(src)`
   añade las filas de otro archivo que a este le faltan. Ambos devuelven el número de filas
   añadidas y lanzan una excepción si no pueden hacer su trabajo; `stats()` da `rows`,
-  `by_model`, `bytes` y `path`.
+  `by_model`, `bytes` y `path` (además de `fallback_paths` cuando se configuran niveles de respaldo).
 - Una respuesta en caché exige la misma llamada: el mismo alias, el mismo prompt, `max_tokens`,
   `temperature` y `json_mode`. `PUREMACRO_LLM_MODEL` cambia el alias que representa `default`, y
   una etiqueta explícita de Ollama indexa las filas por la etiqueta.
@@ -281,6 +286,7 @@ print(CompletionCache("my_cache.sqlite").merge("course_cache.sqlite"))   # 1
 | `PUREMACRO_LLM_MODE` | `auto`, `cache` u `off` cuando no se pasa `mode=`; vacía cuenta como no fijada, cualquier otro valor lanza `ValueError` |
 | `PUREMACRO_LLM_MODEL` | lo que significa `default`: un nivel, un alias o el identificador propio de un motor; no afecta a `small`, `large` ni a los alias explícitos |
 | `PUREMACRO_LLM_CACHE` | el archivo de la caché de completados (por defecto `~/.cache/puremacro/llm_cache.sqlite`) |
+| `PUREMACRO_LLM_FALLBACK_CACHE` | archivo(s) de caché de completados de respaldo en solo lectura consultados cuando falta una clave en `PUREMACRO_LLM_CACHE` |
 | `PUREMACRO_LLM_BASE_URL` | un servidor que sustituye a los tres servidores locales por defecto; se prueba como Ollama y luego como compatible con OpenAI |
 | `PUREMACRO_LLM_SCORES_CACHE` | la caché de puntuaciones de `llm_prob_kernel` (por defecto `~/.cache/puremacro/llm_scores.sqlite`) |
 | `PUREMACRO_LLM_BUDGET` | `spend` elimina el tope de llamadas (`max_calls`) de `llm_prob_kernel` |

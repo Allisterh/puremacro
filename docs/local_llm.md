@@ -224,7 +224,7 @@ model, export the rows, and hand over the file. On the receiving side, point
 A cache on a read-only volume still serves hits.
 
 ```python
-from puremacro.llm import CacheMiss, CacheRow, CompletionCache, cache_key, complete
+from puremacro.llm import CacheMiss, CacheRow, CompletionCache, cache_key, complete, open_cache
 from puremacro.llm.cache import prompt_sha256
 
 # A stand-in for a cache built on a machine that runs the model: one row written by hand
@@ -246,14 +246,19 @@ except CacheMiss as exc:
     print(type(exc).__name__, exc.model)                        # CacheMiss qwen3-4b
 print(shipped.stats()["by_model"])                              # {'qwen3-4b': 1}
 
+# Two-tier cache: check student_cache first, fall back to course_cache (read-only), write only to student_cache
+two_tier = open_cache(["student_cache.sqlite", "course_cache.sqlite"])
+print(complete(prompt, model="qwen3-4b", max_tokens=8, mode="cache", cache=two_tier))  # yes
+
 # Or add the shipped rows to a cache of your own (rows it already has are kept)
 print(CompletionCache("my_cache.sqlite").merge("course_cache.sqlite"))   # 1
 ```
 
+- `open_cache([student_cache, course_cache])` (or `CompletionCache(student_cache, fallback_paths=[course_cache])`) opens a two-tier cache: lookups check `student_cache` first and then `course_cache` in read-only mode without creating or modifying `course_cache`, while new completions are written only to `student_cache`.
 - `export(dest, *, model=None, since=None)` copies rows into another file, creating it;
   `since="2026-10-01"` keeps rows created on or after that date (UTC). `merge(src)` adds the rows
   of another file that this one lacks. Both return the number of rows added and raise if they
-  cannot do their work; `stats()` gives `rows`, `by_model`, `bytes` and `path`.
+  cannot do their work; `stats()` gives `rows`, `by_model`, `bytes` and `path` (plus `fallback_paths` when fallback tiers are configured).
 - A cache hit needs the same call: the same alias, the same prompt, `max_tokens`, `temperature`
   and `json_mode`. `PUREMACRO_LLM_MODEL` changes the alias that `default` stands for, and an
   explicit Ollama tag keys rows under the tag.
@@ -270,6 +275,7 @@ print(CompletionCache("my_cache.sqlite").merge("course_cache.sqlite"))   # 1
 | `PUREMACRO_LLM_MODE` | `auto`, `cache` or `off` when no `mode=` is given; blank counts as unset, anything else raises `ValueError` |
 | `PUREMACRO_LLM_MODEL` | what `default` means: a tier name, an alias or an engine's own id; `small`, `large` and explicit aliases are not affected |
 | `PUREMACRO_LLM_CACHE` | the completion cache file (default `~/.cache/puremacro/llm_cache.sqlite`) |
+| `PUREMACRO_LLM_FALLBACK_CACHE` | read-only fallback completion cache path(s) consulted when a key is missing in `PUREMACRO_LLM_CACHE` |
 | `PUREMACRO_LLM_BASE_URL` | one server to use instead of the three default local ones, tried as Ollama and then as OpenAI-compatible |
 | `PUREMACRO_LLM_SCORES_CACHE` | the score cache of `llm_prob_kernel` (default `~/.cache/puremacro/llm_scores.sqlite`) |
 | `PUREMACRO_LLM_BUDGET` | `spend` removes the call cap (`max_calls`) of `llm_prob_kernel` |

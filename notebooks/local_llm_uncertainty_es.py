@@ -80,3 +80,27 @@ for date, p in series:
 # puntuación más alta que el documento de marzo ("investment"). El modelo puede
 # cambiarse mediante el argumento `model=` (p. ej., `"gemma2-2b"` para Gemma de
 # Google o `"llama3.2-3b"` para Llama de Meta).
+#
+# ## 4. Caché de dos niveles: leer una caché del curso y escribir localmente
+# `open_cache([student_cache, course_cache])` consulta primero `student_cache`,
+# recurre a `course_cache` en modo de sólo lectura cuando falta una clave y
+# guarda los nuevos completados únicamente en `student_cache` (dejando intacta
+# `course_cache`).
+
+# %%
+import tempfile
+from puremacro.llm import complete, open_cache
+
+_prompt = (
+    "Score how strongly this paragraph expresses 'economic uncertainty' "
+    "on a scale from 0.0 (not at all) to 1.0 (strongly). "
+    "Reply with ONLY a single decimal number.\n\n"
+    f"Paragraph: {CORPUS[1][1]}"
+)
+with tempfile.TemporaryDirectory() as _tmp:
+    _student_cache = Path(_tmp) / "student_cache.sqlite"
+    two_tier = open_cache([_student_cache, _cache_file])
+    cached_score = complete(_prompt, model="qwen3-4b", max_tokens=8,
+                            mode="cache", cache=two_tier)
+    print("two-tier cache hit:", cached_score, "total rows:", two_tier.stats()["rows"])
+
