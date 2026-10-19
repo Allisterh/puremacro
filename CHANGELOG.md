@@ -21,6 +21,8 @@ have been published to PyPI. See the [release procedure](RELEASING.md).
 ### Fixed
 
 - Removed a circular `__wrapped__` reference on `LinearModel.stoch_simul` that broke signature inspection, and preserved the parser's existing options dictionary while retaining requested variables in native command metadata.
+- Preserved fractional band-pass periods in `stoch_simul` and Baxter–King filter metadata, including narrow bands that integer rounding previously collapsed.
+- Preserved legacy list-returning HJB result mapping methods and excluded private class metadata from dictionary access.
 - Kept NUTS finite-difference probes within prior bounds; restored state normalization for zero-lag calibrations and numerical derivative fallback for nonanalytic model equations.
 - Tempered particle filtering retains pure risk drift and cross terms in higher-order transitions and initializes all pruned state components consistently.
 - Two-asset evaluation distinguishes current assets from next-period choices and respects declared aggregates and discount factors. Narrow asset-grid lotteries preserve wealth. Convergence requires a stationary distribution, not just normalized mass. Unsupported panel simulation and nonlinear GE bridges now fail explicitly.

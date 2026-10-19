@@ -69,6 +69,38 @@ def test_hjb_solution_mapping_protocol():
     assert len(keys_list) == len(sol)
 
 
+@pytest.mark.parametrize("kind", ["household", "equilibrium"])
+def test_hjb_mapping_legacy_lists_and_private_fields(kind):
+    """List methods retain legacy types while class metadata stays inaccessible."""
+    household = solve_hjb_achdou(Na=10, max_iter=30)
+    result = household if kind == "household" else AiyagariContinuousHJBResult(
+        r_star=0.03, w_star=1.0, K_star=1.0, Kd_star=1.0, Ks_star=1.0,
+        L_star=1.0, Y_star=1.0, excess_capital=0.0, hjb_solution=household,
+        g_dist=household.g_dist, converged=True, elapsed=1.25,
+    )
+    keys = result.keys()
+    assert isinstance(keys, list)
+    assert isinstance(result.values(), list)
+    assert isinstance(result.items(), list)
+    assert keys == list(result)
+    assert len(keys) == (12 if kind == "household" else 13)
+    assert len(result.values()) == len(result.items()) == len(keys)
+    for (key, value), expected in zip(result.items(), keys):
+        assert key == expected
+        assert value is result[key]
+    assert "elapsed" in keys
+    assert dict(result)["elapsed"] == result.elapsed
+    assert result.get("elapsed") == result.elapsed
+    assert np.isfinite(result.elapsed) and result.elapsed >= 0.0
+    keys.clear()
+    assert len(result.keys()) == len(result)  # Returned lists are independent.
+    for key in ("_LEGACY_KEYS", "__dataclass_fields__", "keys", "summary"):
+        assert key not in result
+        assert result.get(key, "missing") == "missing"
+        with pytest.raises(KeyError):
+            result[key]
+
+
 def test_hjb_presentation_methods():
     """Verify HJBSolution presentation methods: summary, to_frame, to_markdown, to_latex, to_typst, plot."""
     sol = solve_hjb_achdou(Na=30, max_iter=30)

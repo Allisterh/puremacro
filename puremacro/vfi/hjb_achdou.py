@@ -4,7 +4,7 @@ from __future__ import annotations
 import time
 import warnings
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import Any, ClassVar
 
 import numpy as np
@@ -19,9 +19,9 @@ from puremacro.reports import df_to_latex, df_to_markdown, df_to_typst
 
 def _result_fields_equal(left: Any, right: Any) -> bool:
     """Array-aware field-by-field equality for the frozen result containers."""
-    for name in type(left).__dataclass_fields__:
-        a = getattr(left, name)
-        b = getattr(right, name)
+    for field in fields(left):
+        a = getattr(left, field.name)
+        b = getattr(right, field.name)
         if a is b:
             continue
         if sp.issparse(a) or sp.issparse(b):
@@ -96,7 +96,7 @@ class HJBSolution(Mapping):
         return len(self._LEGACY_KEYS)
 
     def __contains__(self, key: object) -> bool:
-        return isinstance(key, str) and key in type(self).__dataclass_fields__
+        return isinstance(key, str) and any(field.name == key for field in fields(self))
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, HJBSolution):
@@ -104,6 +104,16 @@ class HJBSolution(Mapping):
         return _result_fields_equal(self, other)
 
     __hash__ = None  # type: ignore[assignment]
+
+    # Preserve the historical list-returning API rather than Mapping's views.
+    def keys(self) -> list[str]:  # type: ignore[override]
+        return list(self._LEGACY_KEYS)
+
+    def values(self) -> list[Any]:  # type: ignore[override]
+        return [getattr(self, key) for key in self._LEGACY_KEYS]
+
+    def items(self) -> list[tuple[str, Any]]:  # type: ignore[override]
+        return [(key, getattr(self, key)) for key in self._LEGACY_KEYS]
 
     def get(self, key: str, default: Any = None) -> Any:
         return getattr(self, key) if key in self else default
@@ -275,7 +285,7 @@ class AiyagariContinuousHJBResult(Mapping):
         return len(self._LEGACY_KEYS)
 
     def __contains__(self, key: object) -> bool:
-        return isinstance(key, str) and key in type(self).__dataclass_fields__
+        return isinstance(key, str) and any(field.name == key for field in fields(self))
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, AiyagariContinuousHJBResult):
@@ -283,6 +293,16 @@ class AiyagariContinuousHJBResult(Mapping):
         return _result_fields_equal(self, other)
 
     __hash__ = None  # type: ignore[assignment]
+
+    # Preserve the historical list-returning API rather than Mapping's views.
+    def keys(self) -> list[str]:  # type: ignore[override]
+        return list(self._LEGACY_KEYS)
+
+    def values(self) -> list[Any]:  # type: ignore[override]
+        return [getattr(self, key) for key in self._LEGACY_KEYS]
+
+    def items(self) -> list[tuple[str, Any]]:  # type: ignore[override]
+        return [(key, getattr(self, key)) for key in self._LEGACY_KEYS]
 
     def get(self, key: str, default: Any = None) -> Any:
         return getattr(self, key) if key in self else default

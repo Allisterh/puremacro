@@ -1714,7 +1714,7 @@ class LinearModel:
                     low, high = bandpass_filter
                     res_df = df.copy()
                     for col in res_df.columns:
-                        res_df[col] = baxter_king_filter(res_df[col], low=int(low), high=int(high)).cycle
+                        res_df[col] = baxter_king_filter(res_df[col], low=float(low), high=float(high)).cycle
                     return res_df
                 return df
 

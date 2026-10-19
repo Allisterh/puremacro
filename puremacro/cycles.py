@@ -212,8 +212,8 @@ def hamilton_filter(
 
 def baxter_king_filter(
     y,
-    low: int = 6,
-    high: int = 32,
+    low: float = 6,
+    high: float = 32,
     K: int = 12,
 ) -> CycleResult:
     """Baxter-King (1999) bandpass filter for isolating business-cycle fluctuations.
@@ -225,9 +225,10 @@ def baxter_king_filter(
     ----------
     y : array_like, shape (T,)
         Time series.
-    low : int, default 6
+    low : float, default 6
         Minimum periodicity of the cycle (e.g. 6 quarters = 1.5 years).
-    high : int, default 32
+        Fractional periods are supported without rounding.
+    high : float, default 32
         Maximum periodicity of the cycle (e.g. 32 quarters = 8 years).
     K : int, default 12
         Lead-lag truncation order (default 12 for quarterly data = 3 years).
@@ -285,7 +286,7 @@ def baxter_king_filter(
         cycle=c_out,
         trend=t_out,
         method="baxter_king",
-        params={"low": int(low), "high": int(high), "K": int(K)},
+        params={"low": float(low), "high": float(high), "K": int(K)},
     )
 
 

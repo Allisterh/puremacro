@@ -5,6 +5,35 @@ import pytest
 from puremacro.cycles import hamilton_filter
 
 
+@pytest.mark.parametrize("band", [(2.1, 2.2), (6.5, 32.7)])
+def test_baxter_king_fractional_periods_match_integrated_frequency_response(band):
+    """Real-period cutoffs retain their band and the zero-frequency correction."""
+    from scipy.integrate import quad
+    from puremacro.cycles import baxter_king_filter
+
+    low, high = band
+    K = 12
+    omega_low, omega_high = 2*np.pi/high, 2*np.pi/low
+    omega = (omega_low + omega_high)/2
+    k = np.arange(1, K+1)
+    cos_output = np.cos(k*omega)
+    dirichlet_output = 1 + 2*cos_output.sum()
+
+    # Integrate the truncated Fourier response of an ideal pass band and
+    # its DC correction; this is independent of the closed-form weights.
+    def response_integrand(frequency):
+        cos_input = np.cos(k*frequency)
+        return ((1 + 2*np.dot(cos_input, cos_output))
+                - dirichlet_output*(1 + 2*cos_input.sum())/(2*K+1))/np.pi
+
+    gain = quad(response_integrand, omega_low, omega_high, epsabs=1e-13)[0]
+    signal = np.sin(omega*np.arange(120))
+    result = baxter_king_filter(signal, low=low, high=high, K=K)
+    np.testing.assert_allclose(result.cycle[K:-K], gain*signal[K:-K], rtol=1e-11, atol=1e-12)
+    assert result.params["low"] == low
+    assert result.params["high"] == high
+
+
 @pytest.mark.pyodide_smoke
 def test_constant_series_cycle_is_zero():
     y = np.ones(60)
