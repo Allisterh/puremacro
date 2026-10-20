@@ -24,11 +24,10 @@ python -m pip install puremacro
 
 **Estado de publicación, verificado el 20 de octubre de 2026:** la última
 versión publicada en [PyPI](https://pypi.org/project/puremacro/) es **5.2.0**.
-Esta copia contiene el código de 5.3.0. La documentación también describe
-**desarrollo de 5.3/5.4**, con notas de versión cuando cambia el comportamiento.
-Las modificaciones de código de 5.4.0 no están incluidas aquí; esas notas no
-establecen su disponibilidad en esta copia ni en el paquete publicado. Véase el
-[historial de cambios](CHANGELOG.md).
+Este árbol de código y su documentación incluyen **trabajo de desarrollo de
+5.4.0**. Las adiciones registradas bajo 5.3.0 y 5.4.0 en el
+[historial de cambios](CHANGELOG.md) requieren el código fuente correspondiente;
+no están incluidas en el paquete 5.2.0 publicado.
 
 ## Inicio rápido y ejemplos desarrollados
 
@@ -861,10 +860,10 @@ verificación y la orden que reconstruye el archivo, se distribuye como
 ## Estado
 
 Según la verificación del **20 de octubre de 2026**, la versión publicada en
-PyPI es **5.2.0**, con `puremacro.trade` y sus módulos MRIO de vuelta. Esta copia
-contiene el código de 5.3.0; la documentación marcada como desarrollo de 5.4
-describe cambios que no están incluidos aquí. El
-[historial de cambios](CHANGELOG.md) distingue código fuente y publicación. La versión 4.8.1 es la última con los estudios de investigación
+PyPI es **5.2.0**, con `puremacro.trade` y sus módulos MRIO de vuelta. Este árbol
+de código incluye **trabajo de desarrollo de 5.4.0**; el
+[historial de cambios](CHANGELOG.md) detalla las adiciones posteriores al paquete
+publicado. La versión 4.8.1 es la última con los estudios de investigación
 retirados en 5.x (`pip install "puremacro<5"`). Los [niveles de estabilidad](ARCHITECTURE.md#stability-tiers)
 identifican las superficies estables, experimentales y de soporte limitado.
 Los cálculos estructurales tienen [límites de validación](docs/es/STRUCTURAL_VALIDATION_STATUS.md)

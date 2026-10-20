@@ -38,11 +38,6 @@ If you ever see two PyPI workflows again, one of them is wrong.
 
 `tools/release_check.py` is the pre-tag check. Five gates run by default, two are opt-in:
 
-This checkout retains the 5.3 source and workflows. Separate 5.4 preparation
-adds a dedicated mypy CI step and rejects unsuccessful baseline runs whose
-failure IDs cannot be parsed. Those changes are not part of this documentation
-update; follow the workflow and checker in the commit being released.
-
 | gate | what it proves | notes |
 |---|---|---|
 | 1 test baseline | pytest `FAILED` + `ERROR` node ids are a subset of `tests/known_failures.json` | Empty since 4.4.0, which resolved the eleven entries carried from 4.2.0. A new entry needs a reason, a workaround and CI evidence; prefer fixing the test or the code. CI runs plain pytest, so any entry keeps CI red on every platform. Recovered cases are reported for removal. Setup errors count. The wall-clock budget is 5400 s, overridable with `PUREMACRO_BASELINE_TIMEOUT_S`; complete runs take tens of minutes. |

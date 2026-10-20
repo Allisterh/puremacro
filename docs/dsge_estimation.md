@@ -456,10 +456,7 @@ print(pf_res.summary())
 ### Fast Score Gradients for NUTS (`nuts_sample` & `estimate_dsge`)
 
 `nuts_sample` and `estimate_dsge(..., method="nuts")` support several gradient
-routes. The following selection and boundary-handling notes describe **5.4
-development**, whose implementation changes are not included in this 5.3
-checkout. In 5.3, a model template alone selects the structural-score route.
-In the reviewed 5.4 source, the estimator selects a supplied
+routes. In the current development source, the estimator selects a supplied
 `grad_log_post_fn` first. Otherwise it selects the structural score when a
 model template is available and all estimated names are declared structural
 parameters; other targets use numerical differentiation of the ordinary

@@ -22,12 +22,10 @@ python -m pip install puremacro
 | **Learn or teach** | Choose a [notebook learning path](docs/notebooks.md) or use the [bilingual course and interactive labs](curso/README.md). The course has its own pinned package version. |
 
 **Release status, checked 20 October 2026:** the latest published
-[PyPI release](https://pypi.org/project/puremacro/) is **5.2.0**. This
-checkout contains the 5.3.0 source. Its documentation also discusses **5.3/5.4
-development**, with version-specific notes where behavior differs. The 5.4.0
-implementation changes are not included here; those notes do not establish
-availability in this checkout or in the published package. See the
-[changelog](CHANGELOG.md).
+[PyPI release](https://pypi.org/project/puremacro/) is **5.2.0**. This source tree
+and its documentation include **5.4.0 development work**. Additions recorded
+under 5.3.0 and 5.4.0 in the [changelog](CHANGELOG.md) require the matching source
+checkout; they are not included in the published 5.2.0 package.
 
 ## Quickstart and worked examples
 
@@ -1134,10 +1132,9 @@ command that rebuilds the file, ships as `puremacro/trade/_datafiles/SOURCES.md`
 ## Status
 
 As verified on **20 October 2026**, the published PyPI release is **5.2.0**,
-with `puremacro.trade` and its MRIO modules restored. This checkout contains
-5.3.0 source; documentation marked as 5.4 development describes changes not
-included here. See the [changelog](CHANGELOG.md) for the source/publication
-distinction. Release 4.8.1 is the last one with the research
+with `puremacro.trade` and its MRIO modules restored. This source tree includes
+**5.4.0 development work**; see the [changelog](CHANGELOG.md) for additions
+beyond the published package. Release 4.8.1 is the last one with the research
 studies removed in 5.x (`pip install "puremacro<5"`). The [stability tiers](ARCHITECTURE.md#stability-tiers)
 identify stable, experimental and best-effort surfaces. Structural calculations
 have additional [validation limits](docs/STRUCTURAL_VALIDATION_STATUS.md).
