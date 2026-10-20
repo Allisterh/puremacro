@@ -81,8 +81,10 @@ def _warn_stacklevel() -> int:
     """``stacklevel`` for :func:`warnings.warn` that points at the first frame
     outside this module, so a warning raised inside :meth:`DoubleMLPLR.fit` is
     attributed to the user's call whether it went through :func:`dml_plr` or not."""
+    from types import FrameType
+
     level = 1  # stacklevel=1 is the frame that calls ``warnings.warn``
-    frame = sys._getframe(1)
+    frame: FrameType | None = sys._getframe(1)
     while frame is not None and frame.f_globals.get("__name__") == __name__:
         frame = frame.f_back
         level += 1
@@ -163,7 +165,7 @@ class LassoCoordinateDescent:
 
         # Regularization path
         if self.alpha is not None:
-            alphas = [float(_check_penalties(self.alpha, "alpha")[0])]
+            alphas = np.array([float(_check_penalties(self.alpha, "alpha")[0])])
         else:
             # Maximum alpha where all coefficients are zero: max_j |X_j' y| / n
             alpha_max = float(np.max(np.abs(Xs.T @ yc)) / n)

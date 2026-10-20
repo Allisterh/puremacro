@@ -1903,14 +1903,16 @@ def _lottery_2d(
     na = len(a_grid)
     idx_a = np.clip(np.searchsorted(a_grid, a_dest), 0, na - 1)
     idx_al = np.clip(idx_a - 1, 0, na - 1)
-    span_a = np.maximum(a_grid[idx_a] - a_grid[idx_al], 1e-6)
+    span_a = a_grid[idx_a] - a_grid[idx_al]
+    span_a = np.where(span_a > 0, span_a, 1.0)
     w_ah = np.clip((a_dest - a_grid[idx_al]) / span_a, 0.0, 1.0)
     w_al = 1.0 - w_ah
 
     nb = len(b_grid)
     idx_b = np.clip(np.searchsorted(b_grid, b_dest), 0, nb - 1)
     idx_bl = np.clip(idx_b - 1, 0, nb - 1)
-    span_b = np.maximum(b_grid[idx_b] - b_grid[idx_bl], 1e-6)
+    span_b = b_grid[idx_b] - b_grid[idx_bl]
+    span_b = np.where(span_b > 0, span_b, 1.0)
     w_bh = np.clip((b_dest - b_grid[idx_bl]) / span_b, 0.0, 1.0)
     w_bl = 1.0 - w_bh
 
@@ -2037,7 +2039,7 @@ class _TwoAssetHouseholdBlock:
     ``iterations``/``residual`` report the EGM fixed point
     (sup-norm change of c, a', b' in the last iteration); ``converged`` is True
     only if that residual fell below ``tol`` and the stationary distribution
-    was solved exactly.
+    has residual ``max |Lambda D - D| < 1e-10``.
     """
     a_grid: np.ndarray
     b_grid: np.ndarray
@@ -2389,7 +2391,8 @@ def _solve_two_asset_household_block(
     ``converged`` is False, with a RuntimeWarning, if ``max_iter`` is reached
     first, if the residual stalls (no halving of the best residual within
     ``_TA_EGM_STALL_WINDOW`` iterations; the iteration then stops early) or if
-    the consumption floor binds anywhere (the budget constraint would fail).
+    the consumption floor binds anywhere (the budget constraint would fail),
+    or the distribution's stationarity residual is at least 1e-10.
     Returns are quarterly; income is in units of steady-state non-financial
     income per efficiency unit (``w_ss``).  Warns if more than 1e-8 of the mass
     sits on the top point of either grid (the grid does not contain the
@@ -2473,7 +2476,8 @@ def _solve_two_asset_household_block(
         )
     Lam = _build_transition_matrix_2d(ap, bp, a_grid, b_grid, pi_s)
     D_ss = _stationary_distribution_2d(Lam).reshape(ap.shape)
-    stat_ok = bool(np.all(np.isfinite(D_ss)) and abs(D_ss.sum() - 1.0) < 1e-10)
+    stat_ok = bool(np.all(np.isfinite(D_ss)) and abs(D_ss.sum() - 1.0) < 1e-10
+                   and np.max(np.abs(Lam @ D_ss.ravel() - D_ss.ravel())) < 1e-10)
 
     hh = _TwoAssetHouseholdBlock(
         a_grid=a_grid, b_grid=b_grid, s_grid=s_grid, pi_s=pi_s, beta=float(beta), gamma=float(gamma),
@@ -2508,6 +2512,7 @@ def _two_asset_fake_news_inputs(
     shock_input: str,
     T: int,
     h: float | None = None,
+    output_eval=None,
 ) -> tuple[dict[str, np.ndarray], np.ndarray]:
     """ABRS step 1: date-0 outcome responses dy_0^s and date-1 distribution responses dD_1^s.
 
@@ -2527,7 +2532,10 @@ def _two_asset_fake_news_inputs(
     h = _TA_FD_STEP[inp] if h is None else float(h)
     base = {"r_b": hh.r_b_ss, "r_a": hh.r_a_ss, "z": hh.w_ss}
     N = hh.c_ss.size
-    dy = {o: np.zeros((T, N)) for o in _TA_OUTPUTS}
+    output_eval = _two_asset_outputs if output_eval is None else output_eval
+    dy = {o: np.zeros((T, N)) for o in output_eval(
+        (hh.Va_ss, hh.Vb_ss, hh.c_ss, hh.a_ss, hh.b_ss, hh.d_ss, hh.chi_ss)
+    )}
     dD1 = np.zeros((T, N))
     dVa = dVb = None
     for k in range(T):
@@ -2535,15 +2543,20 @@ def _two_asset_fake_news_inputs(
             up = _two_asset_backward(hh, hh.Va_ss, hh.Vb_ss, **{inp: base[inp] + h})
             dn = _two_asset_backward(hh, hh.Va_ss, hh.Vb_ss, **{inp: base[inp] - h})
         else:
+            assert dVa is not None and dVb is not None
             up = _two_asset_backward(hh, hh.Va_ss + h * dVa, hh.Vb_ss + h * dVb)
             dn = _two_asset_backward(hh, hh.Va_ss - h * dVa, hh.Vb_ss - h * dVb)
         dVa = (up[0] - dn[0]) / (2.0 * h)
         dVb = (up[1] - dn[1]) / (2.0 * h)
-        o_up, o_dn = _two_asset_outputs(up), _two_asset_outputs(dn)
-        for o in _TA_OUTPUTS:
+        if output_eval is _two_asset_outputs or k > 0:
+            o_up, o_dn = output_eval(up), output_eval(dn)
+        else:
+            o_up = output_eval(up, {inp: base[inp] + h})
+            o_dn = output_eval(dn, {inp: base[inp] - h})
+        for o in dy:
             dy[o][k] = ((o_up[o] - o_dn[o]) / (2.0 * h)).ravel()
-        D_up = _two_asset_forward(hh.D_ss, o_up["A"], o_up["B"], hh.a_grid, hh.b_grid, hh.pi_s)
-        D_dn = _two_asset_forward(hh.D_ss, o_dn["A"], o_dn["B"], hh.a_grid, hh.b_grid, hh.pi_s)
+        D_up = _two_asset_forward(hh.D_ss, up[3], up[4], hh.a_grid, hh.b_grid, hh.pi_s)
+        D_dn = _two_asset_forward(hh.D_ss, dn[3], dn[4], hh.a_grid, hh.b_grid, hh.pi_s)
         dD1[k] = ((D_up - D_dn) / (2.0 * h)).ravel()
     return dy, dD1
 
@@ -2563,6 +2576,7 @@ def _two_asset_household_jacobians(
     inputs: Sequence[str] = _TA_INPUTS,
     outputs: Sequence[str] = _TA_OUTPUTS,
     h: float | None = None,
+    output_eval=None,
 ) -> dict[tuple[str, str], np.ndarray]:
     """Fake-News Jacobians of the household block alone, dated by the *realised* inputs.
 
@@ -2574,10 +2588,12 @@ def _two_asset_household_jacobians(
     T = int(T)
     D_flat = hh.D_ss.ravel()
     ss_outputs = {"C": hh.c_ss, "D": hh.d_ss, "A": hh.a_ss, "B": hh.b_ss, "CHI": hh.chi_ss}
+    if output_eval is not None:
+        ss_outputs = output_eval((hh.Va_ss, hh.Vb_ss, hh.c_ss, hh.a_ss, hh.b_ss, hh.d_ss, hh.chi_ss))
     E = {o: _two_asset_expectation_vectors(hh, ss_outputs[o], T) for o in outputs}
     J: dict[tuple[str, str], np.ndarray] = {}
     for x in inputs:
-        dy, dD1 = _two_asset_fake_news_inputs(hh, x, T, h)
+        dy, dD1 = _two_asset_fake_news_inputs(hh, x, T, h, output_eval=output_eval)
         for o in outputs:
             F = np.empty((T, T))
             F[0] = dy[o] @ D_flat
@@ -3171,26 +3187,112 @@ def _prepare_dp_household_block(
         m_orig = sol._c.model
     elif isinstance(model_or_sol, DPModel):
         m_orig = model_or_sol
-        try:
-            sol = m_orig.solve(method="egm")
-        except Exception:
-            sol = m_orig.solve(method="vfi")
+        sol = None
     else:
         raise TypeError(
             "model_or_sol must be a puremacro.dp.Model or DPSolution instance; "
             f"got {type(model_or_sol).__name__}"
         )
 
-    if len(m_orig._states) != 1:
+    if len(m_orig._states) not in (1, 2):
         raise ValueError(
-            f"dp_sequence_jacobian requires a one-state dp.Model; got states {[s for s, _ in m_orig._states]}"
+            f"dp_sequence_jacobian requires a one-state or two-state dp.Model; got states {[s for s, _ in m_orig._states]}"
         )
     if m_orig._horizon is not None:
         raise ValueError("dp_sequence_jacobian requires an infinite-horizon dp.Model")
+    if m_orig._discrete is not None:
+        raise ValueError("dp_sequence_jacobian does not support discrete household choices")
 
     inputs_list = [str(x) for x in inputs]
     if not inputs_list:
         raise ValueError("inputs must be a non-empty sequence of input variable names")
+    if sol is None:
+        sol = m_orig.solve(method="egm")
+
+    if len(m_orig._states) == 2:
+        from puremacro.dp._egm_two_asset import TwoAssetEGMPlan, TwoAssetHouseholdSolution
+
+        comp = getattr(sol, "_c", None) or m_orig.check()
+        plan_ta = TwoAssetEGMPlan(comp)
+        raw_sol = getattr(sol, "raw", None)
+        if isinstance(raw_sol, TwoAssetHouseholdSolution) and raw_sol.hh_block is not None:
+            hh = raw_sol.hh_block
+        else:
+            params_solve = comp.param_values()
+            ta_sol = plan_ta.solve_household(params_solve)
+            if ta_sol.hh_block is None:
+                raise ValueError("TwoAssetHouseholdSolution hh_block is None")
+            hh = ta_sol.hh_block
+        if not hh.converged:
+            raise RuntimeError("two-asset sequence-space derivatives require a converged household solution")
+
+        if outputs is None:
+            out_names = list(
+                dict.fromkeys(
+                    [*m_orig._aggregates.keys(), "C", "A", "B", "D", "CHI"]
+                )
+            )
+        else:
+            out_names = [str(y) for y in outputs]
+
+        for name in inputs_list:
+            if name not in _TA_INPUT_ALIASES:
+                raise ValueError(f"Unknown two-asset input {name!r}; supported inputs: {sorted(_TA_INPUT_ALIASES)}")
+        params_ss = dict(getattr(sol, "params", comp.param_values()))
+        output_functions = {}
+        policy_keys = {}
+        policy_aliases = {plan_ta.cname: 2, f"{plan_ta.illiquid_name}(+1)": 3,
+                          f"{plan_ta.liquid_name}(+1)": 4}
+        default_keys = {"C": 2, "A": 3, "B": 4, "D": 5, "CHI": 6}
+        for name in out_names:
+            expr = m_orig._aggregates.get(name, name).strip()
+            if expr in policy_aliases:
+                policy_keys[name] = policy_aliases[expr]
+            elif name not in m_orig._aggregates and name.upper() in default_keys:
+                policy_keys[name] = default_keys[name.upper()]
+            else:
+                node = parse(expr, comp.state_names + comp.shock_names, functions=m_orig._functions)
+                output_functions[name] = comp._household_function("_dp_two_asset_output", node)
+
+        def output_eval(step, input_values=None):
+            params_t = dict(params_ss)
+            for pname in comp.param_names:
+                alias = _TA_INPUT_ALIASES.get(pname)
+                if input_values and alias in input_values:
+                    params_t[f"p_{pname}"] = input_values[alias]
+            values = {name: step[k] for name, k in policy_keys.items()}
+            for name, fn in output_functions.items():
+                value = plan_ta._call(fn, step[3], step[4], hh.a_grid[:, None, None],
+                                     hh.b_grid[None, :, None], hh.s_grid[None, None, :], params_t)
+                values[name] = np.broadcast_to(np.asarray(value, dtype=float), hh.c_ss.shape)
+            return values
+
+        return {
+            "is_two_asset": True,
+            "comp": comp,
+            "plan": plan_ta,
+            "hh_block": hh,
+            "hh": hh,
+            "a_grid": hh.a_grid,
+            "b_grid": hh.b_grid,
+            "liquid_asset_grid": hh.b_grid,
+            "n_a": len(hh.a_grid),
+            "n_b": len(hh.b_grid),
+            "s_grid": hh.s_grid,
+            "pi_s": hh.pi_s,
+            "P": hh.pi_s,
+            "D_ss": hh.D_ss,
+            "joint_distribution": hh.joint_distribution,
+            "c_ss": hh.c_ss,
+            "aprime_ss": hh.a_ss,
+            "bprime_ss": hh.b_ss,
+            "d_ss": hh.d_ss,
+            "chi_ss": hh.chi_ss,
+            "params_ss": params_ss,
+            "inputs": inputs_list,
+            "outputs": out_names,
+            "output_eval": output_eval,
+        }
 
     # Build an isolated household-block Model with all prices and input-listed locals promoted to parameters
     import copy
@@ -3238,13 +3340,14 @@ def _prepare_dp_household_block(
     cname = plan.cname
 
     params_ss = comp.param_values()
-    beta_ss = float(params_ss["p_beta"]) if "p_beta" in params_ss else float(comp.beta)
+    beta_key = f"p_{m_hh._beta}"
+    beta_ss = float(params_ss[beta_key])
     R_ss, y_ss = plan.budget(params_ss)
     c_max_ss = float(np.max(R_ss * a_grid[-1] + y_ss) - a_grid[0])
     _, u_prime_ss, u_prime_inv_ss = plan._u_funcs(params_ss, max(c_max_ss, 1.0))
 
     def step_fn(V_a_next: np.ndarray, params_t: dict[str, Any]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        beta_t = float(params_t["p_beta"]) if "p_beta" in params_t else float(comp.beta)
+        beta_t = float(params_t[beta_key])
         R_t, y_t = plan.budget(params_t)
         c_max_t = float(np.max(R_t * a_grid[-1] + y_t) - a_grid[0])
         _, u_prime_t, u_prime_inv_t = plan._u_funcs(params_t, max(c_max_t, 1.0))
@@ -3298,7 +3401,7 @@ def _prepare_dp_household_block(
     for idx_y, y_name in enumerate(out_names):
         agg_expr = m_orig._aggregates.get(y_name)
         raw_expr = agg_expr.strip() if agg_expr is not None else y_name.strip()
-        if raw_expr in (state_name, f"{state_name}(+1)") or (
+        if raw_expr == f"{state_name}(+1)" or (
             agg_expr is None and y_name == state_name.upper() and y_name not in comp.local_names
         ):
             out_evals[y_name] = lambda ap, c_pol, _p: ap
@@ -3380,6 +3483,9 @@ def dp_sequence_jacobian(
         Output variable names (e.g., ``["C", "A"]`` or ``["c", "a"]``), or
         ``None`` to default to all declared aggregates plus consumption and
         asset policies.
+        Declared aggregate expressions preserve timing: ``A="a"`` measures
+        current assets, whereas ``A="a(+1)"`` measures saving. An undeclared
+        uppercase asset alias (``A``, and ``B`` for two assets) measures saving.
     T : int, default 300
         Truncation horizon ``T >= 1``.
     dx : float, default 1e-4
@@ -3395,10 +3501,24 @@ def dp_sequence_jacobian(
     if T < 1:
         raise ValueError(f"T must be >= 1; got {T}")
     dx = float(dx)
-    if dx <= 0.0:
+    if not np.isfinite(dx) or dx <= 0.0:
         raise ValueError(f"dx must be > 0; got {dx}")
 
     blk = _prepare_dp_household_block(model_or_sol, inputs=inputs, outputs=outputs)
+    if blk.get("is_two_asset"):
+        hh = blk["hh_block"]
+        out_names = blk["outputs"]
+        inputs_list = blk["inputs"]
+        raw_J = _two_asset_household_jacobians(
+            hh,
+            T=T,
+            inputs=inputs_list,
+            outputs=out_names,
+            h=dx,
+            output_eval=blk["output_eval"],
+        )
+        return {y: {x: raw_J[(y, _TA_INPUT_ALIASES[x])] for x in inputs_list} for y in out_names}
+
     a_grid = blk["a_grid"]
     n_a, n_z = blk["n_a"], blk["n_z"]
     N = n_a * n_z
@@ -3440,7 +3560,7 @@ def dp_sequence_jacobian(
         x_ss = float(params_ss[pkey])
         # Ensure perturbed parameter stays within valid domain (e.g., beta < 1)
         step = dx
-        if x_name == "beta" and x_ss + step >= 1.0:
+        if x_name == blk["comp"].model._beta and x_ss + step >= 1.0:
             step = min(dx, 0.5 * (1.0 - x_ss))
 
         params_p = dict(params_ss)
@@ -3519,6 +3639,32 @@ def dp_nonlinear_transition(
     T = lengths.pop()
 
     blk = _prepare_dp_household_block(model_or_sol, inputs=inputs_list, outputs=outputs)
+    if blk.get("is_two_asset"):
+        hh = blk["hh_block"]
+        out_names = blk["outputs"]
+        input_levels = {"r_b": np.full(T, hh.r_b_ss), "r_a": np.full(T, hh.r_a_ss),
+                        "z": np.full(T, hh.w_ss)}
+        for k, arr in paths_arr.items():
+            input_levels[_TA_INPUT_ALIASES[k]] += arr
+        output_eval = blk["output_eval"]
+        steady_values = output_eval((hh.Va_ss, hh.Vb_ss, hh.c_ss, hh.a_ss, hh.b_ss, hh.d_ss, hh.chi_ss))
+        steady_means = {name: float(np.sum(hh.D_ss * values)) for name, values in steady_values.items()}
+        steps: list[tuple | None] = [None] * T
+        Va_next, Vb_next = hh.Va_ss, hh.Vb_ss
+        for t in range(T - 1, -1, -1):
+            step_t = _two_asset_backward(hh, Va_next, Vb_next, **{k: arr[t] for k, arr in input_levels.items()})
+            steps[t] = step_t
+            Va_next, Vb_next = step_t[:2]
+        out_paths_ta = {name: np.empty(T) for name in out_names}
+        D_t = hh.D_ss.copy()
+        for t, step_t in enumerate(steps):
+            assert step_t is not None
+            values = output_eval(step_t, {k: arr[t] for k, arr in input_levels.items()})
+            for name in out_names:
+                out_paths_ta[name][t] = float(np.sum(D_t * values[name])) - steady_means[name]
+            D_t = _two_asset_forward(D_t, step_t[3], step_t[4], hh.a_grid, hh.b_grid, hh.pi_s)
+        return out_paths_ta
+
     a_grid = blk["a_grid"]
     n_a, n_z = blk["n_a"], blk["n_z"]
     P = blk["P"]

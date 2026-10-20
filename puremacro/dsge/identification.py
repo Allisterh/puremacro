@@ -362,10 +362,10 @@ def _format_null_combination(
     if v[nz_indices[0]] < 0:
         v = -v
 
-    terms = []
+    terms: list[str] = []
     for idx in nz_indices:
         coef = v[idx]
-        name = param_names[idx]
+        name = param_names[int(idx)]
         if len(terms) == 0:
             terms.append(f"{abs(coef):.4f} * {name}")
         else:
@@ -975,9 +975,11 @@ def _representation(
         m, list(obs), shock_cov=shock_cov, measurement_error=dict(me) or None
     )
     psi1 = _compute_state_space_psi(ssm)
-    psi2 = _compute_moments_psi(ssm.T, ssm.R, ssm.Q, ssm.Z, ssm.H, ssm.d, lags)
+    R = np.eye(ssm.T.shape[0]) if ssm.R is None else ssm.R
+    d = np.zeros(ssm.Z.shape[0]) if ssm.d is None else ssm.d
+    psi2 = _compute_moments_psi(ssm.T, R, ssm.Q, ssm.Z, ssm.H, d, lags)
     psiH, psiS, bar_H_list, H_list = _compute_frequency_representations(
-        ssm.T, ssm.R, ssm.Q, ssm.Z, ssm.H, omega
+        ssm.T, R, ssm.Q, ssm.Z, ssm.H, omega
     )
     return ssm, (psi1, psi2, psiH, psiS), bar_H_list, H_list
 
@@ -1010,10 +1012,8 @@ def _structural_derivative(
     is taken around the same theta_0. Only a failed solve (``_SOLVE_ERRORS``)
     triggers a fallback; any other exception propagates.
     """
-    has_lb = lb is not None and math.isfinite(lb)
-    has_ub = ub is not None and math.isfinite(ub)
-    below = has_lb and theta_0 - h < lb
-    above = has_ub and theta_0 + h > ub
+    below = (lb is not None and math.isfinite(lb)) and theta_0 - h < lb
+    above = (ub is not None and math.isfinite(ub)) and theta_0 + h > ub
 
     if not below and not above:
         try:
@@ -1044,7 +1044,10 @@ def _structural_derivative(
             last_exc = exc
             continue
         far = theta_0 + 2.0 * s * h
-        far_ok = not ((s > 0 and has_ub and far > ub) or (s < 0 and has_lb and far < lb))
+        far_ok = not (
+            (s > 0 and ub is not None and math.isfinite(ub) and far > ub)
+            or (s < 0 and lb is not None and math.isfinite(lb) and far < lb)
+        )
         if far_ok:
             try:
                 f2 = f(far)

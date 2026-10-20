@@ -49,7 +49,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from puremacro.dsge.dynare import build_dynare
+from puremacro.dsge.dynare import LinearModel, build_dynare
 from puremacro.dsge.policy import optimal_policy
 from puremacro.dsge._results import DiscretionaryPolicyResult, PolicyResult
 
@@ -99,6 +99,7 @@ def main() -> tuple[DiscretionaryPolicyResult, PolicyResult]:
 
     # 1. Build structural baseline model
     model = build_dynare(NK_MOD)
+    assert isinstance(model, LinearModel)
     print("Structural DSGE Model compiled successfully:")
     print(f"  Variables : {list(model.variables)}")
     print(f"  States    : {list(model.states)}")

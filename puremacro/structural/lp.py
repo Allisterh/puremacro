@@ -82,7 +82,13 @@ def lp_moment_targets(
     bw = max(horizons) + 1 if bandwidth is None else bandwidth
     if not isinstance(bw, (int, np.integer)) or isinstance(bw, (bool, np.bool_)) or bw < 0 or bw >= len(data):
         raise ValueError("bandwidth must be a nonnegative integer less than the sample length")
-    if not np.isscalar(shock_size) or np.iscomplexobj(shock_size) or not np.isfinite(shock_size) or shock_size == 0:
+    if not np.isscalar(shock_size) or np.iscomplexobj(shock_size) or isinstance(shock_size, (str, bytes)):
+        raise ValueError("shock_size must be a finite nonzero real scalar")
+    try:
+        shock_sz = float(shock_size)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError("shock_size must be a finite nonzero real scalar") from None
+    if not np.isfinite(shock_sz) or shock_sz == 0:
         raise ValueError("shock_size must be a finite nonzero real scalar")
     missing = set(names) - set(data.columns)
     if missing:
@@ -94,7 +100,10 @@ def lp_moment_targets(
         raise ValueError("LP inputs must be finite; do not silently drop or compress missing periods")
     n = len(data)
     scores = np.zeros((n, len(responses) * len(horizons)))
-    estimates, labels, units, n_obs = [], [], [], []
+    estimates: list[float] = []
+    labels: list[str] = []
+    units: list[str] = []
+    n_obs: list[int] = []
     shock_values = data[shock].to_numpy(dtype=float)
     first = max(1, lags)
     for response in responses:
@@ -112,10 +121,10 @@ def lp_moment_targets(
             fit = ols_hac(y[t + h] - y[t - 1], x, lags=int(bw))
             bread = inv_xtx(x, name="lp_moment_targets")
             j = len(estimates)
-            scores[t, j] = (x @ bread[:, 1]) * fit["residuals"] * shock_size
-            estimates.append(fit["beta"][1] * shock_size)
+            scores[t, j] = (x @ bread[:, 1]) * fit["residuals"] * shock_sz
+            estimates.append(fit["beta"][1] * shock_sz)
             labels.append(f"{response}:{shock}:h={h}")
-            units.append(f"{response_units[response]} per {shock_size:g} {shock_unit} innovation")
+            units.append(f"{response_units[response]} per {shock_sz:g} {shock_unit} innovation")
             n_obs.append(len(t))
     covariance = scores.T @ scores
     for lag in range(1, int(bw) + 1):
@@ -126,14 +135,14 @@ def lp_moment_targets(
         "estimator": "local_projection_joint_hac", "responses": responses, "shock": shock,
         "horizons": horizons, "lags": int(lags), "controls": controls,
         "bandwidth": int(bw), "kernel": "Bartlett", "small_sample_correction": False,
-        "frequency": frequency, "shock_unit": shock_unit, "shock_size": float(shock_size),
+        "frequency": frequency, "shock_unit": shock_unit, "shock_size": float(shock_sz),
         "response_units": dict(response_units), "n_observations": n_obs,
         "sample_start": str(data.index[0]), "sample_end": str(data.index[-1]),
         "dependent_variable": "y[t+h] - y[t-1]", "covariance_scale": "empirical_estimator",
         "identification_assumption": "shock exogenous conditional on the declared regressors",
         "scope": "stationary/equally-spaced time-series LP; HAC asymptotic covariance, not weak-IV or uniform-inference correction",
     })
-    return MomentTargets(estimates, covariance, labels, units=units, metadata=meta)
+    return MomentTargets(np.asarray(estimates, dtype=float), covariance, tuple(labels), units=tuple(units), metadata=meta)
 
 
 __all__ = ["lp_moment_targets"]

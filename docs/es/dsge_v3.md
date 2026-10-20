@@ -26,11 +26,10 @@ bloques de hogares en archivos `.mod` mediante jacobianos en el espacio de
 secuencias, dentro del alcance de cada [backend de hogares](hank_nonlinear.md).
 
 OccBin resuelve trayectorias restringidas lineales por partes. La función de
-desarrollo **de 5.4** `solve_pruned_occbin` admite OccBin lineal, incluidos choques
+desarrollo `solve_pruned_occbin` admite OccBin lineal, incluidos choques
 anticipados, y trayectorias de segundo orden sin restricciones activas con una
 innovación inicial. Rechaza episodios no lineales con restricciones activas e
-innovaciones futuras anticipadas no lineales. Esa función no está presente en
-esta copia de 5.3. Los métodos de perturbación existentes se describen en la
+innovaciones futuras anticipadas no lineales: véase la
 [guía de orden superior](dsge_higher_order.md).
 
 ```

@@ -339,8 +339,12 @@ def build_dtm(
     docs = docs.reset_index(drop=True)
     tok = tokenizer if tokenizer is not None else RegexTokenizer()
 
-    fixed = vocabulary is not None
-    index: dict[str, int] = ({t: j for j, t in enumerate(vocabulary)} if fixed else {})
+    if vocabulary is not None:
+        fixed = True
+        index: dict[str, int] = {t: j for j, t in enumerate(vocabulary)}
+    else:
+        fixed = False
+        index = {}
     indptr = [0]
     indices: list[int] = []
     data: list[int] = []
@@ -363,7 +367,7 @@ def build_dtm(
     X.sum_duplicates()
     vocab = list(index)
     out = DocumentTermMatrix(X=X, vocab=vocab, docs=docs, tokenizer=tok,
-                             ngram_range=tuple(ngram_range))
+                             ngram_range=(int(ngram_range[0]), int(ngram_range[1])))
     if fixed:
         return out
     # Alphabetical columns make the matrix independent of document order.

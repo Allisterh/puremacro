@@ -287,6 +287,17 @@ res_mcp.plot(title="Experimento deflacionario Nuevo Keynesiano con ZLB vinculant
 
 ## 4. OccBin multirrestricción y Filtro de Kalman por tramos
 
+`solve_pruned_occbin` admite actualmente dos límites verificados: OccBin lineal
+(con choques anticipados y regímenes activos), y una trayectoria no lineal
+podada de segundo orden con una sola innovación inicial cuya restricción
+permanece inactiva. `order=1` o `sigma=0` selecciona explícitamente OccBin lineal.
+Los episodios no lineales con restricciones activas y las innovaciones futuras
+anticipadas en modelos no lineales generan `NotImplementedError`: requieren
+reglas de decisión de segundo orden específicas de cada régimen. Sumar la
+curvatura del modelo sin restricciones a una trayectoria restringida puede
+violar las demás ecuaciones de equilibrio. Los errores del solucionador de
+segundo orden se propagan sin devolver silenciosamente un resultado lineal.
+
 ### 4.1 Arquitectura lineal por tramos multirrestricción
 
 **OccBin (Guerrieri e Iacoviello 2015)** aproxima modelos con restricciones ocasionalmente activas mediante regímenes lineales por tramos:

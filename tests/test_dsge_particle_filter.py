@@ -478,7 +478,7 @@ class TestInputValidation:
             particle_filter(nk_model_setup["m"], synthetic_nk_data, ["y"], n_particles=0)
 
     def test_invalid_method(self, nk_model_setup, synthetic_nk_data):
-        with pytest.raises(ValueError, match="method must be 'bootstrap' or 'auxiliary'"):
+        with pytest.raises(ValueError, match="method must be 'bootstrap'"):
             particle_filter(nk_model_setup["m"], synthetic_nk_data, ["y"], method="kalman_like")
 
     def test_invalid_resampling_method(self, nk_model_setup, synthetic_nk_data):

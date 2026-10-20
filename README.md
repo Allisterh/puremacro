@@ -21,13 +21,11 @@ python -m pip install puremacro
 | **Simulate policy** | Declare a household model with [dynamic programming](docs/dp.md), study [monetary transmission](docs/monetary_transmission.md), or build a [trade counterfactual](docs/trade_accounting.md). |
 | **Learn or teach** | Choose a [notebook learning path](docs/notebooks.md) or use the [bilingual course and interactive labs](curso/README.md). The course has its own pinned package version. |
 
-**Release status, checked 20 October 2026:** the latest published
-[PyPI release](https://pypi.org/project/puremacro/) is **5.2.0**. This
-checkout contains the 5.3.0 source. Its documentation also discusses **5.3/5.4
-development**, with version-specific notes where behavior differs. The 5.4.0
-implementation changes are not included here; those notes do not establish
-availability in this checkout or in the published package. See the
-[changelog](CHANGELOG.md).
+**Documentation version: 5.4.0.** These examples describe the 5.4.0 API,
+including the additions and fixes recorded under 5.3.0 and 5.4.0 in the
+[changelog](CHANGELOG.md). Check [PyPI](https://pypi.org/project/puremacro/)
+for available releases and match your installed version to the documentation.
+The course maintains its own environment and version requirements.
 
 ## Quickstart and worked examples
 
@@ -1133,11 +1131,10 @@ command that rebuilds the file, ships as `puremacro/trade/_datafiles/SOURCES.md`
 
 ## Status
 
-As verified on **20 October 2026**, the published PyPI release is **5.2.0**,
-with `puremacro.trade` and its MRIO modules restored. This checkout contains
-5.3.0 source; documentation marked as 5.4 development describes changes not
-included here. See the [changelog](CHANGELOG.md) for the source/publication
-distinction. Release 4.8.1 is the last one with the research
+Version **5.4.0** includes `puremacro.trade` and its MRIO modules, restored in
+5.2.0, plus the additions and fixes listed in the [changelog](CHANGELOG.md).
+See [PyPI](https://pypi.org/project/puremacro/) for available distributions.
+Release 4.8.1 is the last one with the research
 studies removed in 5.x (`pip install "puremacro<5"`). The [stability tiers](ARCHITECTURE.md#stability-tiers)
 identify stable, experimental and best-effort surfaces. Structural calculations
 have additional [validation limits](docs/STRUCTURAL_VALIDATION_STATUS.md).

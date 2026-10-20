@@ -202,14 +202,14 @@ class StateSpaceSensitivities(dict):
 
 def _check_sensitivity_shapes(model: StateSpaceModel, sens_list: Sequence[Any], names: Sequence[str]) -> None:
     """Raise a named ``ValueError`` when a sensitivity does not match ``model``."""
+    m = int(np.shape(model.T)[0])
     expected = {
         "dT": np.shape(model.T),
         "dZ": np.shape(model.Z),
-        "dR": np.shape(model.R),
+        "dR": np.shape(model.R) if model.R is not None else (m, m),
         "dQ": np.shape(model.Q),
         "dH": np.shape(model.H),
     }
-    m = int(np.shape(model.T)[0])
     for nm, s in zip(names, sens_list):
         for field_name, shape in expected.items():
             got = np.shape(getattr(s, field_name))
@@ -325,7 +325,7 @@ def kalman_score(
     for j, s in enumerate(sens_list):
         if s.da0 is not None:
             da_curr[j] = np.asarray(s.da0, dtype=float).copy()
-        else:
+        elif a0 is None:
             if np.any(s.dT != 0.0) or np.any(s.dc != 0.0):
                 try:
                     da_curr[j] = np.linalg.solve(
@@ -336,7 +336,7 @@ def kalman_score(
 
         if s.dP0 is not None:
             dP_curr[j] = np.asarray(s.dP0, dtype=float).copy()
-        else:
+        elif P0 is None:
             # Differentiate Lyapunov equation: dP0 - T dP0 T' = dT P0 T' + T P0 dT' + d(RQR)
             dRQR = (
                 s.dR @ Q_mat @ R_mat.T
@@ -566,13 +566,15 @@ def _steady_state_derivative(
     if not np.any(f_theta):
         return np.zeros(len(variables))
 
-    cached = [getattr(model, a, None) for a in ("_A_plus", "_A_0", "_A_minus")]
-    if dyn is not None and all(c is not None for c in cached):
-        J = np.asarray(cached[0] + cached[1] + cached[2], dtype=float)
+    c0 = getattr(model, "_A_plus", None)
+    c1 = getattr(model, "_A_0", None)
+    c2 = getattr(model, "_A_minus", None)
+    if dyn is not None and c0 is not None and c1 is not None and c2 is not None:
+        J = np.asarray(c0 + c1 + c2, dtype=np.float64)
     else:
         with np.errstate(all="ignore"):
-            J = _jacobian(lambda y: static(y, base_vals), ys, len(variables),
-                          getattr(model, "method", "complex"))
+            J = np.asarray(_jacobian(lambda y: static(y, base_vals), ys, len(variables),
+                                    getattr(model, "method", "complex")), dtype=np.float64)
     if J.shape != (len(variables), len(variables)) or not np.all(np.isfinite(J)):
         return None
     sv = np.linalg.svd(J, compute_uv=False)
@@ -585,65 +587,115 @@ def _steady_state_derivative(
 def _decision_rule_and_ss_derivatives(
     model: Any, param_name: str
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Central differences ``(dghx, dghu, dys)`` with respect to ``param_name``.
+    """Implicit decision-rule derivatives with finite-difference structural inputs.
 
-    ``dys`` is the derivative of the steady state (one entry per variable,
-    in ``model.variables`` order), which the measurement intercept ``d``
-    inherits. It comes from the implicit function theorem
-    (:func:`_steady_state_derivative`) where the static Jacobian is regular,
-    and the perturbed models at ``theta +- h`` then start their steady-state
-    solve from ``ys +- h dys``: a starting point whose residual is
-    ``O(h^2)``, so the decision rules are differentiated at the moved steady
-    state even when the parameter moves the static residual by less than the
-    re-solve's exactness tolerance (up to 4.3.0 the unmoved steady state was
-    accepted as exact there, and both ``dys`` and the steady-state effect on
-    the Jacobians were lost). A regular static Jacobian is not required: the
-    re-solved steady states are differenced otherwise.
+    Computes:
+    1. Steady-state derivative `dys` via the Implicit Function Theorem (_steady_state_derivative).
+    2. Decision rule derivatives dF = dghx and dL = dghu by solving the Generalized Sylvester equation:
+       \\hat{A} \\frac{\\partial F}{\\partial \\theta_j} + A_+ \\frac{\\partial F}{\\partial \\theta_j} G =
+           - \\left( \\frac{\\partial A_+}{\\partial \\theta_j} F G + \\frac{\\partial A_0}{\\partial \\theta_j} F + \\frac{\\partial A_{-, s}}{\\partial \\theta_j} \\right)
+       where \\hat{A} = A_0 + A_+ F P_s, and the shock loading derivative:
+       \\hat{A} \\frac{\\partial L}{\\partial \\theta_j} =
+           - \\left( \\frac{\\partial A_+}{\\partial \\theta_j} F N + A_+ \\frac{\\partial F}{\\partial \\theta_j} N + \\frac{\\partial A_0}{\\partial \\theta_j} L + \\frac{\\partial B_u}{\\partial \\theta_j} \\right)
     """
     params_dict = dict(getattr(model, "_params", {}) or getattr(model, "params", {}) or {})
+    if getattr(model, "_dynare_equations", None) is not None:
+        from puremacro.dsge.dynare import _resolve_states
+
+        if tuple(model.states) != tuple(_resolve_states(model)):
+            model = _re_solve_model(model, params_dict)
     theta_0 = float(params_dict.get(param_name, 0.0))
     h = max(1e-6, 1e-5 * abs(theta_0))
 
-    p_plus = dict(params_dict); p_plus[param_name] = theta_0 + h
-    p_minus = dict(params_dict); p_minus[param_name] = theta_0 - h
-
     variables = list(model.variables)
+    states = list(model.states)
+    shocks = list(model.shocks)
+    state_idx = [variables.index(s) for s in states]
+
+    # 1. Steady-state sensitivity via Implicit Function Theorem
     try:
         dys_ift = _steady_state_derivative(model, params_dict, param_name, h)
     except Exception:
         dys_ift = None
-    prev_plus = prev_minus = None
-    if dys_ift is not None and np.any(dys_ift):
-        ys0 = np.asarray(pd.Series(model.steady_state).reindex(variables), dtype=float)
-        prev_plus = dict(zip(variables, (ys0 + h * dys_ift).tolist()))
-        prev_minus = dict(zip(variables, (ys0 - h * dys_ift).tolist()))
+    dys = np.asarray(dys_ift, dtype=float) if dys_ift is not None else np.zeros(len(variables))
 
+    # 2. Analytical Sylvester differentiation if lead-lag equations are available
+    if (getattr(model, "_dynare_equations", None) is not None
+            and dys_ift is not None
+            and getattr(model, "method", "complex") == "complex"):
+        from puremacro.dsge.occbin import _differentiate_dynare_eqs
+
+        ys0 = np.asarray(pd.Series(model.steady_state).reindex(variables), dtype=float)
+        p_plus = dict(params_dict); p_plus[param_name] = theta_0 + h
+        p_minus = dict(params_dict); p_minus[param_name] = theta_0 - h
+        ss_plus = ys0 + h * dys
+        ss_minus = ys0 - h * dys
+
+        Ap_p, A0_p, Am_p, Bu_p, _, _, _, _ = _differentiate_dynare_eqs(
+            model._dynare_equations, variables, shocks, p_plus, ss_plus
+        )
+        Ap_m, A0_m, Am_m, Bu_m, _, _, _, _ = _differentiate_dynare_eqs(
+            model._dynare_equations, variables, shocks, p_minus, ss_minus
+        )
+
+        dA_plus = (Ap_p - Ap_m) / (2.0 * h)
+        dA_0 = (A0_p - A0_m) / (2.0 * h)
+        dA_minus = (Am_p - Am_m) / (2.0 * h)
+        dA_minus_s = dA_minus[:, state_idx]
+        dB_u = (Bu_p - Bu_m) / (2.0 * h)
+
+        A_plus = np.asarray(model._A_plus, dtype=float)
+        A_0 = np.asarray(model._A_0, dtype=float)
+
+        F = np.asarray(model.dynare_dr.ghx, dtype=float)
+        L = np.asarray(model.dynare_dr.ghu, dtype=float)
+        G = F[state_idx, :]
+        N = L[state_idx, :]
+
+        # State selector matrix P_s such that G = P_s @ F
+        P_s = np.zeros((len(states), len(variables)))
+        for i, s in enumerate(states):
+            P_s[i, variables.index(s)] = 1.0
+
+        A_hat = A_0 + A_plus @ F @ P_s
+        B = A_plus
+        C = G
+        D = - (dA_plus @ F @ G + dA_0 @ F + dA_minus_s)
+
+        # Solve Sylvester equation for dF = dghx
+        dF = solve_sylvester_generalized(A_hat, B, C, D)
+
+        # Solve linear system for dL = dghu
+        R_u = - (dA_plus @ F @ N + A_plus @ dF @ N + dA_0 @ L + dB_u)
+        try:
+            dL = np.linalg.solve(A_hat, R_u)
+        except np.linalg.LinAlgError:
+            dL = np.linalg.lstsq(A_hat, R_u, rcond=None)[0]
+
+        return dF, dL, dys
+
+    # 3. Re-solve when the static derivative is unavailable, or when the
+    # model requires finite differences (e.g. non-holomorphic equations).
+    p_plus = dict(params_dict); p_plus[param_name] = theta_0 + h
+    p_minus = dict(params_dict); p_minus[param_name] = theta_0 - h
+    prev_plus = prev_minus = None
+    if dys_ift is not None:
+        ys0 = np.asarray(pd.Series(model.steady_state).reindex(variables), dtype=float)
+        prev_plus = dict(zip(variables, ys0 + h * dys))
+        prev_minus = dict(zip(variables, ys0 - h * dys))
     m_plus = _re_solve_model(model, p_plus, previous_ss=prev_plus)
     m_minus = _re_solve_model(model, p_minus, previous_ss=prev_minus)
-
-    if dys_ift is not None:
-        dys = np.asarray(dys_ift, dtype=float)
-    else:
-        dys = np.zeros(len(variables))
-        ss_p = getattr(m_plus, "steady_state", None)
-        ss_m = getattr(m_minus, "steady_state", None)
-        if ss_p is not None and ss_m is not None:
-            try:
-                dys = (
-                    np.asarray(pd.Series(ss_p).reindex(variables), dtype=float)
-                    - np.asarray(pd.Series(ss_m).reindex(variables), dtype=float)
-                ) / (2.0 * h)
-            except Exception:
-                dys = np.zeros(len(variables))
-
+    if dys_ift is None:
+        dys = (
+            np.asarray(pd.Series(m_plus.steady_state).reindex(variables), dtype=float)
+            - np.asarray(pd.Series(m_minus.steady_state).reindex(variables), dtype=float)
+        ) / (2.0 * h)
     if hasattr(m_plus, "dynare_dr") and m_plus.dynare_dr is not None:
         ghx_p = np.asarray(m_plus.dynare_dr.ghx, dtype=float)
         ghx_m = np.asarray(m_minus.dynare_dr.ghx, dtype=float)
         ghu_p = np.asarray(m_plus.dynare_dr.ghu, dtype=float)
         ghu_m = np.asarray(m_minus.dynare_dr.ghu, dtype=float)
-        dghx = (ghx_p - ghx_m) / (2.0 * h)
-        dghu = (ghu_p - ghu_m) / (2.0 * h)
-        return dghx, dghu, dys
+        return (ghx_p - ghx_m) / (2.0 * h), (ghu_p - ghu_m) / (2.0 * h), dys
 
     if hasattr(m_plus, "solution") and hasattr(m_plus.solution, "G"):
         G_p = np.asarray(m_plus.solution.G, dtype=float)
@@ -680,9 +732,12 @@ def compute_decision_rule_derivatives(
 
     Notes
     -----
-    The perturbed models are re-solved with their steady state at
-    ``theta +- h`` and, for a ``build_dynare`` / ``load_mod`` model, with the
-    re-solve state set (:func:`puremacro.dsge.dynare._resolve_states`): the
+    For regular complex-step models the policy derivative is obtained from
+    a generalized Sylvester equation; its structural matrix derivatives
+    use central parameter differences and an implicit steady-state derivative.
+    Other models are re-solved at ``theta +- h``. A ``build_dynare`` /
+    ``load_mod`` model uses the re-solve state set
+    (:func:`puremacro.dsge.dynare._resolve_states`): the
     model's states plus every variable that enters with a lag. ``N_states``
     is the size of that set, which exceeds ``len(model.states)`` when a lag
     coefficient is 0 at the calibration; the derivative with respect to that
@@ -773,7 +828,7 @@ def build_state_space_sensitivities(
             obs_nm = name[7:]
             k = obs.index(obs_nm)
             sigma_me = float(measurement_errors.get(obs_nm, 0.0)) if measurement_errors else 0.0
-            dH[k, k] = 2.0 * sigma_me if sigma_me > 0 else 1.0
+            dH[k, k] = 2.0 * sigma_me
             sens_dict[name] = StateSpaceSensitivity(
                 dT=dT, dZ=dZ, dR=dR, dQ=dQ, dH=dH, dc=dc, dd=dd
             )
@@ -784,7 +839,7 @@ def build_state_space_sensitivities(
             sh_nm = name[7:]
             k = shocks.index(sh_nm)
             sigma_s = math.sqrt(max(base_ssm.Q[k, k], 0.0))
-            dQ[k, k] = 2.0 * sigma_s if sigma_s > 0 else 1.0
+            dQ[k, k] = 2.0 * sigma_s
             sens_dict[name] = StateSpaceSensitivity(
                 dT=dT, dZ=dZ, dR=dR, dQ=dQ, dH=dH, dc=dc, dd=dd
             )
@@ -858,7 +913,11 @@ class ScoreDiagnosticsResult:
                 p[nm] = val0 + delta
                 ssm = ssm_func(p)
                 from puremacro.state_space import kalman_filter
-                out = kalman_filter(y, ssm)
+                R = np.asarray(ssm.R, dtype=float)
+                RQR = R @ ssm.Q @ R.T
+                P0 = scipy.linalg.solve_discrete_lyapunov(ssm.T, RQR)
+                a0 = np.linalg.solve(np.eye(ssm.T.shape[0]) - ssm.T, np.asarray(ssm.c, dtype=float))
+                out = kalman_filter(y, ssm, a0=a0, P0=P0)
                 return float(out["loglik"])
 
             f_p2 = eval_ll(2 * step)
@@ -933,7 +992,9 @@ def log_posterior_and_gradient(
     vec : np.ndarray of shape (K,)
         Estimated parameter vector.
     names : Sequence[str]
-        Names corresponding to elements of vec.
+        Structural parameter names corresponding to elements of vec.
+        Noise-scale and correlation parameters require the observation-equation
+        likelihood used by ``model.estimate(..., method="nuts")`` instead.
     model_template : LinearModel or ParsedModelDAG
         Template model for re-evaluating structural matrices.
     y_data : np.ndarray of shape (T_obs, n_y)
@@ -953,6 +1014,13 @@ def log_posterior_and_gradient(
         Combined analytical gradient vector \nabla_\theta \ln p(\theta \mid Y).
     """
     param_dict = dict(getattr(model_template, "_params", {}) or {})
+    unsupported = sorted(set(names) - set(param_dict))
+    if unsupported:
+        raise ValueError(
+            "log_posterior_and_gradient supports structural parameters only; "
+            f"unsupported names: {unsupported}. Use model.estimate for noise "
+            "scale or correlation parameters."
+        )
     if fixed_params:
         param_dict.update(fixed_params)
     for nm, v in zip(names, vec):

@@ -88,6 +88,9 @@ def _row_frame(d: dict, digits: int) -> pd.DataFrame:
 class _Presentable:
     """Shared rendering for single-row results (``to_frame`` must exist)."""
 
+    def to_frame(self, digits: int = 4) -> pd.DataFrame:
+        raise NotImplementedError
+
     def to_markdown(self, digits: int = 4) -> str:
         """Render as GitHub-flavored Markdown."""
         return _render(self.to_frame(digits), "markdown")
@@ -182,7 +185,7 @@ def _tau_int(x: np.ndarray, c: float = 5.0) -> float:
     return float(max(tau, 1e-9))
 
 
-def effective_sample_size(x: Sequence[float], label: str = "") -> ESSResult:
+def effective_sample_size(x: Sequence[float] | np.ndarray, label: str = "") -> ESSResult:
     """Effective number of independent observations in a series and in its first differences.
 
     Parameters
@@ -196,20 +199,20 @@ def effective_sample_size(x: Sequence[float], label: str = "") -> ESSResult:
     -------
     ESSResult
     """
-    x = np.asarray(x, float)
-    x = x[np.isfinite(x)]
-    n = len(x)
+    arr = np.asarray(x, float)
+    arr = arr[np.isfinite(arr)]
+    n = len(arr)
     if n < 4:
         raise ValueError("effective_sample_size needs at least 4 finite values")
-    rho1 = float(np.corrcoef(x[:-1], x[1:])[0, 1])
-    ti = _tau_int(x)
-    d = np.diff(x)
+    rho1 = float(np.corrcoef(arr[:-1], arr[1:])[0, 1])
+    ti = _tau_int(arr)
+    d = np.diff(arr)
     rho1d = float(np.corrcoef(d[:-1], d[1:])[0, 1])
     tid = _tau_int(d)
     cap = lambda v, m: float(min(v, m))  # noqa: E731  over-differenced series would exceed n
     return ESSResult(label, n, rho1, ti, cap(n * (1 - rho1) / (1 + rho1), n), cap(n / ti, n),
                      rho1d, tid, cap((n - 1) * (1 - rho1d) / (1 + rho1d), n - 1), cap((n - 1) / tid, n - 1),
-                     _acf(x, min(n // 2, 200)))
+                     _acf(arr, min(n // 2, 200)))
 
 
 def smoother_df(x: np.ndarray, lam: float, eval_years: np.ndarray | None = None,
@@ -516,18 +519,20 @@ class OUFirnGP:
                                         options={"maxiter": 2000, "xatol": 1e-4, "fatol": 1e-6})
                 if best is None or res.fun < best.fun:
                     best = res
+            assert best is not None
             best.x = np.array([best.x[0], lt1, best.x[1], lt2])
         else:
             starts = [(np.log(0.25 * sd ** 2), np.log(10.0), np.log(0.5 * sd ** 2), np.log(300.0))]
             for _ in range(max(0, n_starts - 1)):
                 starts.append((np.log(sd ** 2 * rng.uniform(.05, 1)), np.log(rng.uniform(2, 40)),
                                np.log(sd ** 2 * rng.uniform(.05, 1)), np.log(rng.uniform(80, 1500))))
-            for s0 in starts:
-                res = optimize.minimize(_profile_nll, np.array(s0), args=(t, y, unc, X, self.firn_sigma, tb),
+            for s4 in starts:
+                res = optimize.minimize(_profile_nll, np.array(s4), args=(t, y, unc, X, self.firn_sigma, tb),
                                         method="Nelder-Mead",
                                         options={"maxiter": 4000, "xatol": 1e-4, "fatol": 1e-6})
                 if best is None or res.fun < best.fun:
                     best = res
+        assert best is not None
         lv1, lt1, lv2, lt2 = best.x
         Sigma = (np.exp(lv1) * ou_firn_covariance(t_all, np.exp(lt1), self.firn_sigma)
                  + np.exp(lv2) * ou_firn_covariance(t_all, np.exp(lt2), self.firn_sigma)
@@ -706,13 +711,14 @@ def matched_filter(t, y, unc, gp: GPFit, start: int, end: int, lifetime: float, 
     p_norm = 2 * stats.norm.sf(abs(tstat))
     lo, hi = onset_range if onset_range else (int(t.min()) + 50, int(t.max()) - W - 50)
     cat = np.asarray(list(catalog_onsets) + [start], float)
-    onsets, ref = [], []
+    onsets: list[int] = []
+    ref_list: list[float] = []
     for s in range(lo, hi + 1, onset_step):
         if np.all(np.abs(cat - s) > exclusion):
             a, e = fit_at(s)
             onsets.append(s)
-            ref.append(a / e)
-    ref = np.asarray(ref)
+            ref_list.append(a / e)
+    ref = np.asarray(ref_list, float)
     pr1, pr2 = _p_from_reference(tstat, ref) if len(ref) else (float("nan"), float("nan"))
     rng = np.random.default_rng(seed)
     beta0, _ = _gls(y, X0, Sinv)
@@ -912,6 +918,7 @@ def stacked_matched_filter(records: Sequence[ProxyRecord], start: int, end: int,
                                 method="Nelder-Mead", options={"maxiter": 3000, "xatol": 1e-4, "fatol": 1e-6})
         if best is None or res.fun < best.fun:
             best = res
+    assert best is not None
     v1, tau1, v2, tau2 = (float(np.exp(v)) for v in best.x)
     y = np.concatenate([r.y for r in records])
     X0 = _trend_block(records)
@@ -930,12 +937,12 @@ def stacked_matched_filter(records: Sequence[ProxyRecord], start: int, end: int,
     tmin = max(int(r.t.min()) for r in records) + 50
     tmax = min(int(r.t.max()) for r in records) - W - 50
     cat = np.asarray(list(catalog_onsets) + [start], float)
-    ref = []
+    ref_list: list[float] = []
     for s in range(tmin, tmax + 1, onset_step):
         if np.all(np.abs(cat - s) > exclusion):
             a, e, _ = fit_at(s)
-            ref.append(a / e)
-    ref = np.asarray(ref)
+            ref_list.append(a / e)
+    ref = np.asarray(ref_list, float)
     pr2 = _p_from_reference(tstat, ref)[1] if len(ref) else float("nan")
     beta0 = np.linalg.solve(X0.T @ Sinv @ X0, X0.T @ Sinv @ y)
     mu = X0 @ beta0
@@ -1043,7 +1050,9 @@ def calibrate_matched_filter(t, unc, gp: GPFit, start: int, end: int, lifetime: 
     rows = []
     for amp in amplitudes:
         rej_n = rej_r = rej_t = 0
-        A_hat, se_hat, at_bound = [], [], 0
+        A_hat_list: list[float] = []
+        se_hat_list: list[float] = []
+        at_bound = 0
         for _ in range(R):
             y = L @ rng.standard_normal(len(t)) + amp * mde * h
             g = gp
@@ -1059,9 +1068,10 @@ def calibrate_matched_filter(t, unc, gp: GPFit, start: int, end: int, lifetime: 
             rej_n += r.p_normal < alpha
             rej_r += r.p_rotation_two < alpha
             rej_t += (r.p_t < alpha) if t_df is not None else 0
-            A_hat.append(r.amplitude)
-            se_hat.append(r.se)
-        A_hat, se_hat = np.asarray(A_hat), np.asarray(se_hat)
+            A_hat_list.append(r.amplitude)
+            se_hat_list.append(r.se)
+        A_hat = np.asarray(A_hat_list, float)
+        se_hat = np.asarray(se_hat_list, float)
         rows.append(dict(amplitude_mde=float(amp), R=int(R), reject_normal=rej_n / R, reject_rotation=rej_r / R,
                          reject_t=(rej_t / R) if t_df is not None else float("nan"),
                          mean_A=float(A_hat.mean()), sd_over_se=float(A_hat.std(ddof=1) / se_hat.mean()),

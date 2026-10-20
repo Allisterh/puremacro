@@ -22,13 +22,12 @@ python -m pip install puremacro
 | **Simulate policy** | Declare a household model with [dynamic programming](dp.md), study [monetary transmission](monetary_transmission.md), or build a [trade counterfactual](trade_accounting.md). |
 | **Learn or teach** | Choose a [notebook learning path](notebooks.md) or use the [bilingual course and interactive labs](https://github.com/jalonso1979/puremacro/tree/main/curso). The course has its own pinned package version. |
 
-**Release status, checked 20 October 2026:** the latest published
-[PyPI release](https://pypi.org/project/puremacro/) is **5.2.0**. This
-checkout contains the 5.3.0 source. Its documentation also discusses **5.3/5.4
-development**, with version-specific notes where behavior differs. The 5.4.0
-implementation changes are not included here; those notes do not establish
-availability in this checkout or in the published package. See the
+**Documentation version: 5.4.0.** These examples describe the 5.4.0 API,
+including the additions and fixes recorded under 5.3.0 and 5.4.0 in the
 [changelog](https://github.com/jalonso1979/puremacro/blob/main/CHANGELOG.md).
+Check [PyPI](https://pypi.org/project/puremacro/) for available releases and
+match your installed version to the documentation. The course maintains its
+own environment and version requirements.
 
 ## What is puremacro?
 
@@ -50,7 +49,7 @@ for the scope of the evidence.
    - **DSGE-VAR Hybrid Modeling**: Del Negro & Schorfheide (2004) DSGE-VAR($\lambda$) prior optimization and structural identification.
    - **Anticipated News Shocks**: State-space companion augmentation with nilpotent shift operators preserving Blanchard-Kahn determinacy.
    - **Nonlinear Particle Filtering & MS-DSGE**: Bootstrap and auxiliary particle filters with stochastic volatility, and Foerster et al. (2016) Markov-switching rational expectations solutions with closed-form analytical GIRFs.
-   - **Perturbation and Occasionally Binding Constraints**: Pruned perturbation for unconstrained models and piecewise-linear OccBin for binding regimes ([Guide](dsge_build.md)). The 5.4 development `solve_pruned_occbin` supports linear OccBin, including anticipated shocks, and slack second-order paths with one initial innovation; nonlinear binding episodes and nonlinear anticipated innovations raise explicit errors. This entry point is not present in the 5.3 source checkout ([Development scope](dsge_v3.md)).
+   - **Perturbation and Occasionally Binding Constraints**: Pruned perturbation for unconstrained models and piecewise-linear OccBin for binding regimes ([Guide](dsge_build.md)). The development `solve_pruned_occbin` supports linear OccBin, including anticipated shocks, and slack second-order paths with one initial innovation; nonlinear binding episodes and nonlinear anticipated innovations raise explicit errors ([Supported limits](dsge_higher_order.md)).
 
 2. **Heterogeneous-Agent Models (Declarative DP & HANK)**:
    - **Household Models as Equations**: Declare states, choices, rewards and constraints with `dp.Model`, then select VFI, EGM, continuous-time HJB or a supported Krusell–Smith solve ([Guide](dp.md)).

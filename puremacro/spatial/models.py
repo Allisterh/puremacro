@@ -2959,6 +2959,7 @@ def _lag_result(
     theta = beta[kz - n_durbin:] if n_durbin else None
     cf = None
     if common_factor and n_durbin:
+        assert theta is not None
         cf = _common_factor_test(cov_full, vnames, beta[: kz - n_durbin], theta, rho,
                                  durbin_names, znames[: kz - n_durbin])
     corr = np.corrcoef(yv, fitted)[0, 1] if rho_admissible else float("nan")

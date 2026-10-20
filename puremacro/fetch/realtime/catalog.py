@@ -39,6 +39,7 @@ longer return two or more editions. That is the difference between
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Mapping
 
 import pandas as pd
 
@@ -251,7 +252,7 @@ _GAPS: dict[str, dict[str, str]] = {"alfred": ALFRED_KNOWN_GAPS}
 
 def register_catalog(
     provider: str,
-    mapping: dict[str, dict[str, SeriesSpec | str]],
+    mapping: Mapping[str, Mapping[str, SeriesSpec | str]],
     *,
     gaps: dict[str, str] | None = None,
 ) -> None:

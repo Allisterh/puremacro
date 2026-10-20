@@ -823,7 +823,11 @@ class LinearModel:
         if hp_filter is not None or bandpass_filter is not None:
             filter_type = "hp" if hp_filter is not None else "bandpass"
             hp_lambda = float(hp_filter) if hp_filter is not None else 1600.0
-            bp_tuple = tuple(bandpass_filter) if bandpass_filter is not None else None
+            bp_tuple: tuple[float, float] | None = (
+                (float(bandpass_filter[0]), float(bandpass_filter[1]))
+                if bandpass_filter is not None
+                else None
+            )
             _, gamma_0, gammas = spectral_moments(
                 G,
                 N,
@@ -1406,7 +1410,7 @@ class LinearModel:
         shocks: np.ndarray | None = None,
         *,
         sigma=None,
-        seed: int = 0,
+        seed: int | np.random.Generator | None = 0,
         burn: int = 100,
         initial_state: np.ndarray | None = None,
     ) -> pd.DataFrame:
@@ -1710,7 +1714,7 @@ class LinearModel:
                     low, high = bandpass_filter
                     res_df = df.copy()
                     for col in res_df.columns:
-                        res_df[col] = baxter_king_filter(res_df[col], low=low, high=high).cycle
+                        res_df[col] = baxter_king_filter(res_df[col], low=float(low), high=float(high)).cycle
                     return res_df
                 return df
 
@@ -2281,7 +2285,8 @@ class LinearModel:
             )
             periods_pf = int(pf_opts.get("periods", 100))
             tol_pf = float(pf_opts.get("tol", 1e-8))
-            max_iter_pf = int(pf_opts.get("maxit", pf_opts.get("max_iter", 50)))
+            max_iter_raw = pf_opts.get("maxit") or pf_opts.get("max_iter") or 50
+            max_iter_pf = int(max_iter_raw)
 
             # Construct deterministic shock path from shocks(periods=..., values=...) if present
             exo_shocks: np.ndarray | None = None
@@ -2374,9 +2379,21 @@ class LinearModel:
         """Simulate rolling unanticipated surprise shocks under perfect foresight."""
         from puremacro.dsge.perfect_foresight import simulate_surprise_shocks
 
+        s_input: np.ndarray | Sequence[Any]
+        if isinstance(surprise_shocks, Mapping):
+            max_len = max([len(v) for v in surprise_shocks.values()], default=0)
+            s_arr = np.zeros((max_len, len(self.shocks)))
+            for sh_name, sh_path in surprise_shocks.items():
+                if sh_name in self.shocks:
+                    idx = list(self.shocks).index(sh_name)
+                    s_arr[:len(sh_path), idx] = sh_path
+            s_input = s_arr
+        else:
+            s_input = surprise_shocks
+
         return simulate_surprise_shocks(
             self,
-            surprise_shocks=surprise_shocks,
+            surprise_shocks=s_input,
             horizon=horizon,
             **kwargs,
         )
@@ -2469,7 +2486,7 @@ class LinearModel:
         draws: int | None = None,
         seed: int = 0,
         moments: bool = True,
-        irf: int | None = 40,
+        irf: int | bool | None = 40,
         qz_criterium: float = 1.0 + 1e-8,
     ):
         """Perform prior predictive simulation directly from prior distributions."""
@@ -2481,7 +2498,7 @@ class LinearModel:
             draws=draws,
             seed=seed,
             moments=moments,
-            irf=irf,
+            irf=False if irf is None else irf,
             qz_criterium=qz_criterium,
         )
 
@@ -2984,6 +3001,7 @@ def _adjudicate_gap(label, f, x0, jac, d, cs, fd, gap, tol, flagged, names) -> N
             UserWarning, stacklevel=4,
         )
         return
+    assert spread is not None
     row = int(max(confirmed, key=lambda i: gap[i] / max(tol[i], np.finfo(float).tiny)))
     col = _worst_column(f, x0, jac, row)
     where = ""

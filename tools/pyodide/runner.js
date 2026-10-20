@@ -109,6 +109,14 @@ _ = puremacro.__version__  # touch the attribute to confirm import worked
     let stdout_tail = "";
 
     if (wheel_installed) {
+        // ZoneInfo cases in the test suite need the IANA timezone database.
+        // Load this test fixture only after the wheel's dependency-resolving
+        // install/import check, so it cannot conceal a missing dependency.
+        console.error("loading test-only tzdata ...");
+        await pyodide.loadPackage(
+            ["tzdata"],
+            { messageCallback: (msg) => console.error("[pkg]", msg) }
+        );
         const py_out = await pyodide.runPythonAsync(`
 import io, sys, os, glob
 import pytest

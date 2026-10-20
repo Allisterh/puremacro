@@ -1118,7 +1118,7 @@ def _stacklevel_outside_module() -> int:
     call (2) and for the forwarded one (3) alike.
     """
     level = 1
-    frame = sys._getframe(1)
+    frame: Any = sys._getframe(1)
     while frame is not None and frame.f_globals.get("__name__") == __name__:
         level += 1
         frame = frame.f_back
@@ -2229,12 +2229,12 @@ def _build_multi_regime_matrices(
         for k in range(K):
             if (r >> k) & 1:
                 Ap_k, A0_k, Am_k, Bu_k, c_k = constraint_info[k][2][:5]
-                rows = row_sets[k]
-                Ap_r[rows, :] = Ap_k[rows, :]
-                A0_r[rows, :] = A0_k[rows, :]
-                Am_r[rows, :] = Am_k[rows, :]
-                Bu_r[rows, :] = Bu_k[rows, :]
-                c_r[rows] = np.asarray(c_k, dtype=float)[rows]
+                k_rows = row_sets[k]
+                Ap_r[k_rows, :] = Ap_k[k_rows, :]
+                A0_r[k_rows, :] = A0_k[k_rows, :]
+                Am_r[k_rows, :] = Am_k[k_rows, :]
+                Bu_r[k_rows, :] = Bu_k[k_rows, :]
+                c_r[k_rows] = np.asarray(c_k, dtype=float)[k_rows]
 
         regime_matrices[r] = (Ap_r, A0_r, Am_r, Bu_r, c_r)
 
@@ -2245,7 +2245,7 @@ def solve_multiconstraint_occbin(
     m_unconstrained: Any,
     m_constrained_dict: Mapping[str, Any] | Sequence[Any],
     shock_seq: np.ndarray,
-    constraints: Mapping[str, OccBinConstraint] | Sequence[OccBinConstraint] | None = None,
+    constraints: OccBinConstraint | Mapping[str, OccBinConstraint] | Sequence[OccBinConstraint] | None = None,
     horizon: int = 40,
     max_iter: int = 50,
 ) -> OccBinResult:
@@ -2412,8 +2412,8 @@ def solve_multiconstraint_occbin(
 
     # Backward recursion engine
     def compute_decision_rules(regime_seq: np.ndarray):
-        P_seq = [None] * (horizon + 1)
-        D_seq = [None] * (horizon + 1)
+        P_seq: list[np.ndarray] = [np.zeros((n_vars, n_vars)) for _ in range(horizon + 1)]
+        D_seq: list[np.ndarray] = [np.zeros(n_vars) for _ in range(horizon + 1)]
         P_next = P_0
         D_next = np.zeros(n_vars)
         for t in range(horizon, 0, -1):
@@ -2783,9 +2783,9 @@ def piecewise_kalman_filter(
         for reg_it in range(1, max_regime_iter + 1):
             total_iters += 1
             # 1. OccBin backward recursion under conjectured_R with future shocks = 0
-            P_seq = [None] * (horizon + 1)
-            D_seq = [None] * (horizon + 1)
-            R_seq = [None] * (horizon + 1)
+            P_seq: list[np.ndarray] = [np.zeros((n_vars, n_vars)) for _ in range(horizon + 1)]
+            D_seq: list[np.ndarray] = [np.zeros(n_vars) for _ in range(horizon + 1)]
+            R_seq: list[np.ndarray] = [np.zeros((n_vars, n_shocks)) for _ in range(horizon + 1)]
             P_next = P_0
             D_next = np.zeros(n_vars)
 
@@ -2960,14 +2960,182 @@ def piecewise_kalman_filter(
     )
 
 
+# ---------------------------------------------------------------------------
+# Pruned Higher-Order OccBin (Kim et al. 2008 + Guerrieri & Iacoviello 2015)
+# ---------------------------------------------------------------------------
+
+
+def solve_pruned_occbin(
+    reference_model: Any,
+    constrained_model: Any,
+    constraint: OccBinConstraint | Mapping[str, OccBinConstraint] | Sequence[OccBinConstraint],
+    shock_sequence: np.ndarray,
+    order: int = 2,
+    sigma: float = 1.0,
+    max_iter: int = 50,
+    horizon: int = 40,
+) -> OccBinResult:
+    """Evaluate supported linear OccBin and unconstrained second-order limits.
+
+    Linear models use the perfect-foresight OccBin solver. Nonlinear models
+    support a single initial innovation when their pruned path never binds.
+    Nonlinear binding episodes and anticipated future innovations require
+    regime-specific second-order decision rules and raise
+    ``NotImplementedError``; adding unconstrained curvature to a constrained
+    first-order path does not in general satisfy the equilibrium equations.
+
+    Parameters
+    ----------
+    reference_model : LinearModel
+        The unconstrained baseline model (e.g. standard Taylor rule regime).
+    constrained_model : LinearModel | Callable | Mapping | Sequence
+        The model under the binding constraint (e.g. nominal interest rate held at floor).
+    constraint : OccBinConstraint | Mapping[str, OccBinConstraint] | Sequence[OccBinConstraint]
+        Constraint definition specifying variable, threshold, and direction.
+    shock_sequence : np.ndarray
+        Structural shocks, all anticipated at t = 1 (perfect foresight).
+        Shape (n_shocks,) or (n_periods, n_shocks).
+    order : int, default 2
+        Approximation order: 1 (linear OccBin) or 2 (pruned second-order OccBin).
+    sigma : float, default 1.0
+        Perturbation scale parameter for risk and volatility terms.
+    max_iter : int, default 50
+        Maximum number of regime-guess iterations.
+    horizon : int, default 40
+        Simulation horizon, must be >= 1.
+
+    Returns
+    -------
+    OccBinResult
+        Container holding simulated path, regime timeline, binding periods,
+        and convergence diagnostics.
+    """
+    if order not in (1, 2):
+        raise ValueError(f"solve_pruned_occbin: order must be 1 or 2, got {order!r}")
+    if not isinstance(horizon, (int, np.integer)) or int(horizon) < 1:
+        raise ValueError(f"solve_pruned_occbin: horizon must be an integer >= 1, got {horizon!r}")
+    if not isinstance(max_iter, (int, np.integer)) or int(max_iter) < 1:
+        raise ValueError(f"solve_pruned_occbin: max_iter must be an integer >= 1, got {max_iter!r}")
+    horizon = int(horizon)
+    max_iter = int(max_iter)
+    sigma = float(sigma)
+    if not np.isfinite(sigma) or sigma < 0:
+        raise ValueError("solve_pruned_occbin: sigma must be finite and nonnegative")
+
+    # Reduction 1: When order=1 or sigma=0.0, reduces bit-identically to linear solve_occbin
+    if order == 1 or float(sigma) == 0.0:
+        return solve_occbin(
+            reference_model=reference_model,
+            constrained_model=constrained_model,
+            constraint=constraint,
+            shock_sequence=shock_sequence,
+            max_iter=max_iter,
+            horizon=horizon,
+        )
+
+    # Failure to solve the requested order must not silently return order 1.
+    sol2 = reference_model.solve(order=2)
+
+    c_single: OccBinConstraint
+    if isinstance(constraint, OccBinConstraint):
+        c_single = constraint
+    elif isinstance(constraint, Mapping) and len(constraint) == 1:
+        c_val = next(iter(constraint.values()))
+        if not isinstance(c_val, OccBinConstraint):
+            raise TypeError("Expected OccBinConstraint in constraint mapping")
+        c_single = c_val
+    elif isinstance(constraint, (list, tuple)) and len(constraint) == 1:
+        c_val = constraint[0]
+        if not isinstance(c_val, OccBinConstraint):
+            raise TypeError("Expected OccBinConstraint in constraint sequence")
+        c_single = c_val
+    else:
+        raise ValueError("solve_pruned_occbin requires a single OccBinConstraint")
+
+    # 2. Extract linear system matrices
+    A_p_0, A_0_0, A_m_0, B_u_0, c_0, ss_0, variables, shocks = _extract_model_matrices(reference_model)
+    A_p_1, A_0_1, A_m_1, B_u_1, c_1, ss_1, _, _ = _extract_model_matrices(
+        constrained_model, ref_model=reference_model
+    )
+    n_vars = len(variables)
+    n_shocks = len(shocks)
+
+    sh_arr = np.asarray(shock_sequence, dtype=float)
+    if not np.all(np.isfinite(sh_arr)):
+        raise ValueError("shock_sequence must contain finite values")
+    if sh_arr.ndim == 1:
+        if len(sh_arr) != n_shocks:
+            raise ValueError(f"1D shock sequence has length {len(sh_arr)}, expected {n_shocks} shocks")
+        shocks_mat = np.zeros((horizon, n_shocks))
+        shocks_mat[0, :] = sh_arr
+    elif sh_arr.ndim == 2:
+        shocks_mat = np.zeros((horizon, n_shocks))
+        n_rows, n_cols = sh_arr.shape
+        if n_cols != n_shocks:
+            raise ValueError(f"shock sequence columns {n_cols} != model shocks {n_shocks}")
+        shocks_mat[: min(n_rows, horizon), :] = sh_arr[: min(n_rows, horizon), :]
+    else:
+        raise ValueError("shock_sequence must be 1D or 2D array")
+
+    _resolve_switching_row(
+        (A_p_0, A_0_0, A_m_0, B_u_0, c_0),
+        (A_p_1, A_0_1, A_m_1, B_u_1, c_1),
+        c_single, variables, caller="solve_pruned_occbin",
+    )
+    curvature = (sol2.H_xx, sol2.G_xx, sol2.H_xu, sol2.G_xu,
+                 sol2.H_uu, sol2.G_uu, sol2.H_sigmasigma, sol2.G_sigmasigma)
+    if not any(np.any(np.asarray(tensor) != 0.0) for tensor in curvature):
+        return solve_occbin(reference_model, constrained_model, c_single,
+                            shock_sequence, max_iter=max_iter, horizon=horizon)
+    if np.any(shocks_mat[1:] != 0.0):
+        raise NotImplementedError(
+            "solve_pruned_occbin: nonlinear anticipated future shocks require "
+            "second-order perfect-foresight decision rules; use order=1 for linear OccBin"
+        )
+
+    # Reduction 2: Check if unconstrained 2nd-order pruned path leaves constraint completely slack
+    if sol2 is not None:
+        states = list(sol2.states)
+        controls = list(sol2.controls)
+        s_idx = [variables.index(s) for s in states]
+        c_idx = [variables.index(c) for c in controls]
+        x1_slack, x2_slack, y1_slack, y2_slack = sol2._pruned_path(shocks_mat, sigma=float(sigma))
+        v_slack = np.zeros((horizon, n_vars))
+        v_slack[:, s_idx] = x1_slack + x2_slack
+        v_slack[:, c_idx] = y1_slack + y2_slack
+        idx_var = variables.index(c_single.variable)
+        binds_slack = np.any(c_single.evaluate(v_slack[:, idx_var]))
+        if not binds_slack:
+            df_sim = pd.DataFrame(v_slack, index=range(1, horizon + 1), columns=variables)
+            return OccBinResult(
+                simulated_path=df_sim,
+                regimes=[0] * horizon,
+                binding_periods=0,
+                converged=True,
+                iterations=1,
+                reference_model=reference_model,
+                constrained_model=constrained_model,
+                constraint=c_single,
+                shadow_path=pd.DataFrame(
+                    v_slack[:, idx_var], index=range(1, horizon + 1), columns=[c_single.variable]
+                ),
+            )
+
+    raise NotImplementedError(
+        "solve_pruned_occbin: nonlinear binding episodes require regime-specific "
+        "second-order decision rules; use order=1 for linear OccBin"
+    )
+
+
 __all__ = [
     "OccBinConstraint",
     "OccBinResult",
     "PiecewiseKalmanResult",
     "DifferentiableOccBinResult",
     "solve_occbin",
-    "solve_differentiable_occbin",
     "solve_multiconstraint_occbin",
+    "solve_differentiable_occbin",
+    "solve_pruned_occbin",
     "piecewise_kalman_filter",
     "smin_tau",
     "smax_tau",
@@ -2981,4 +3149,3 @@ __all__ = [
     "grad_fischer_burmeister",
     "Phi_tau",
 ]
-

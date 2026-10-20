@@ -570,15 +570,17 @@ def eurostat_codes(flow: str, *, refresh: bool = False,
 
     dims: list[tuple[int, str]] = []
     for el in dsd.iter():
-        if local(el.tag) in ("Dimension", "TimeDimension") and el.get("id"):
-            dims.append((int(el.get("position") or 999), el.get("id")))
+        dim_id = el.get("id")
+        if local(el.tag) in ("Dimension", "TimeDimension") and dim_id:
+            dims.append((int(el.get("position") or 999), dim_id))
     order = [d for _, d in sorted(dims)]
     codes: dict[str, list[str]] = {}
     for el in cc.iter():
         if local(el.tag) == "CubeRegion" and el.get("include", "true") == "true":
             for kv in el:
-                if local(kv.tag) == "KeyValue":
-                    codes.setdefault(kv.get("id"), []).extend(
+                kv_id = kv.get("id")
+                if local(kv.tag) == "KeyValue" and kv_id:
+                    codes.setdefault(kv_id, []).extend(
                         v.text for v in kv if local(v.tag) == "Value" and v.text)
     out = {d: codes.get(d, []) for d in order if d != "TIME_PERIOD"}
     out["TIME_PERIOD"] = codes.get("TIME_PERIOD", [])

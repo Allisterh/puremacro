@@ -269,7 +269,8 @@ def _sdid_ring_data(spillover: bool) -> tuple[pd.DataFrame, pd.DataFrame]:
     carries no spillover at all.
     """
     tx = np.arange(_SDID_N_TREATED) * 1600.0
-    ux, ue = [], []
+    ux: list[float] = []
+    ue: list[float] = []
     for k in range(_SDID_N_TREATED):
         for sign in (-1.0, 1.0):
             ux.extend(tx[k] + sign * _SDID_OFFSETS)

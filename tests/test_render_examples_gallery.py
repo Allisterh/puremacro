@@ -400,3 +400,15 @@ def test_emit_markdown_refreshed_line_only_when_refreshed(tmp_path):
     assert "Refreshed: 2026-02-02T00:00:00Z" in text
     assert "every status below is from the 2026-01-01T00:00:00Z run" in text
     assert "- **Description:** d" in text
+
+
+def test_run_example_retains_failure_diagnostic_from_stdout(tmp_path, monkeypatch):
+    examples_dir = tmp_path / "examples"
+    examples_dir.mkdir()
+    (examples_dir / "failed_benchmark.py").write_text("print('benchmark FAIL')\n")
+    proc = type("Result", (), {"returncode": 1, "stdout": "published benchmark FAIL\n", "stderr": ""})()
+    monkeypatch.setattr(render_examples_gallery.subprocess, "run", lambda *a, **kw: proc)
+    result = render_examples_gallery.run_example(
+        "failed_benchmark", examples_dir=examples_dir, output_dir=tmp_path / "output")
+    assert result["status"] == "FAIL"
+    assert result["reason"] == "published benchmark FAIL"

@@ -358,6 +358,29 @@ def test_adversarial_bandpass_stoch_simul_extreme_bands(ar1_model_factory):
         assert res.theoretical_moments.moments.loc["a", "Variance"] > 0.0
 
 
+@pytest.mark.parametrize("band", [(2.1, 2.2), (6.5, 32.7)])
+@pytest.mark.parametrize("replications", [0, 3])
+def test_fractional_band_stoch_simul_matches_direct_filter(ar1_model_factory, band, replications):
+    """Simulation and Monte Carlo paths must use the requested real cutoffs."""
+    from puremacro.cycles import baxter_king_filter
+
+    model = ar1_model_factory(rho=.8)
+    result = model.stoch_simul(periods=200, bandpass_filter=band,
+                              simul_replic=replications, seed=42, irf=0)
+    rng = np.random.default_rng(42) if replications else 42
+    means, variances = [], []
+    for _ in range(max(1, replications)):
+        simulation = model.simulate(periods=200, seed=rng)
+        cycle = baxter_king_filter(simulation["a"], low=band[0], high=band[1]).cycle
+        means.append(cycle.mean())
+        variances.append(cycle.var())
+    np.testing.assert_allclose(result.simulated_moments.loc["a", "Mean"], np.mean(means), atol=1e-14)
+    np.testing.assert_allclose(result.simulated_moments.loc["a", "Variance"], np.mean(variances), atol=1e-14)
+    if replications:
+        np.testing.assert_allclose(result.simulated_moments.loc["a", "MC Std.Err."],
+                                   np.std(means, ddof=1)/np.sqrt(replications), atol=1e-14)
+
+
 # =========================================================================
 # 4. Unit Roots, Explosive Roots & Singular Covariance Robustness
 # =========================================================================

@@ -29,6 +29,7 @@ import ast
 import re
 import shutil
 import subprocess
+import sys
 import warnings
 from pathlib import Path
 
@@ -639,8 +640,7 @@ def test_dml_module_has_no_extra_runtime_dependencies():
             roots.update(alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
             roots.add(node.module.split(".")[0])
-    allowed = {
-        "__future__", "copy", "sys", "warnings", "dataclasses", "typing",
+    allowed = sys.stdlib_module_names | {
         "numpy", "pandas", "scipy", "matplotlib", "puremacro",
     }
     assert roots <= allowed, roots - allowed

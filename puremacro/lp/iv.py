@@ -76,7 +76,7 @@ def mop_critical_values(
         raise ValueError(f"mop_critical_values: k_z must be >= 1, got {k_z}")
     if not (0.0 < alpha < 1.0):
         raise ValueError(f"mop_critical_values: alpha must be in (0, 1), got {alpha}")
-    taus = (float(tau),) if np.isscalar(tau) else tuple(float(t) for t in tau)
+    taus = (float(tau),) if isinstance(tau, (int, float, np.number)) else tuple(float(t) for t in tau)
     if not taus:
         raise ValueError("mop_critical_values: tau must contain at least one threshold")
     for t in taus:

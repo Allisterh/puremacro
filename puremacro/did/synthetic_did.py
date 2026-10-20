@@ -659,10 +659,6 @@ def synthetic_did(
     # Optional result fields, filled when SyntheticDiDResult declares them.
     # n_boot=0 computes no variance, so no estimator is recorded: summary()
     # then prints no "se method" line next to the NaN se.
-    extra = {"se_method": method if n_boot > 0 else None, "alpha": float(alpha),
-             "n_reps": 0 if reps is None else int(reps.size)}
-    extra = {k: v for k, v in extra.items() if k in _RESULT_FIELDS}
-
     return SyntheticDiDResult(
         tau=float(tau),
         omega=pd.Series(omega, index=donor_units),
@@ -673,7 +669,9 @@ def synthetic_did(
         treatment_time=T_treat,
         y_treated=y_treated,
         y_synthetic=y_synthetic,
-        **extra,
+        se_method=method if n_boot > 0 else None,
+        alpha=float(alpha),
+        n_reps=0 if reps is None else int(reps.size),
     )
 
 

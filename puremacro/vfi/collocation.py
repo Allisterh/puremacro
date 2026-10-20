@@ -15,7 +15,10 @@ from __future__ import annotations
 import inspect
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence, Tuple, Union, overload
+
+if TYPE_CHECKING:
+    import matplotlib.figure
 
 import numpy as np
 import pandas as pd
@@ -149,11 +152,13 @@ class CollocationBasis:
             raise ValueError(f"Unsupported node_type {node_type!r}; supported: 'lobatto', 'gauss'")
 
         # Normalize domain
+        norm_domain: tuple[tuple[float, float], ...]
+        d_any: Any = domain
         if isinstance(domain, (tuple, list)):
-            if len(domain) == 2 and not isinstance(domain[0], (tuple, list)):
-                norm_domain = ((float(domain[0]), float(domain[1])),)
+            if len(domain) == 2 and not isinstance(d_any[0], (tuple, list)):
+                norm_domain = ((float(d_any[0]), float(d_any[1])),)
             else:
-                norm_domain = tuple((float(b[0]), float(b[1])) for b in domain)
+                norm_domain = tuple((float(b[0]), float(b[1])) for b in d_any)
         else:
             raise ValueError("domain must be a tuple or list of (lower, upper) bounds")
 
@@ -167,6 +172,7 @@ class CollocationBasis:
                 raise ValueError(f"domain bounds for dim {d_idx} must satisfy a < b; got ({a}, {b})")
 
         # Normalize orders
+        norm_orders: tuple[int, ...]
         if isinstance(orders, (int, np.integer)):
             norm_orders = (int(orders),)
         elif isinstance(orders, (tuple, list)):
@@ -499,7 +505,7 @@ class CollocationSolution:
 
     def plot(
         self, figsize: Tuple[float, float] = (10, 4), show: bool = False
-    ) -> plt.Figure:
+    ) -> matplotlib.figure.Figure:
         """Plot the continuous policy, value function, and node collocation points.
 
         Returns
@@ -647,11 +653,13 @@ class CollocationProblem:
             raise ValueError(f"node_type must be 'lobatto' or 'gauss'; got {self.node_type!r}")
 
         # Normalize and validate domain
+        norm_domain: tuple[tuple[float, float], ...]
+        d_any: Any = self.domain
         if isinstance(self.domain, (tuple, list)):
-            if len(self.domain) == 2 and not isinstance(self.domain[0], (tuple, list)):
-                norm_domain = ((float(self.domain[0]), float(self.domain[1])),)
+            if len(self.domain) == 2 and not isinstance(d_any[0], (tuple, list)):
+                norm_domain = ((float(d_any[0]), float(d_any[1])),)
             else:
-                norm_domain = tuple((float(b[0]), float(b[1])) for b in self.domain)
+                norm_domain = tuple((float(b[0]), float(b[1])) for b in d_any)
         else:
             raise ValueError("domain must be a tuple or list of (lower, upper) bounds")
 
@@ -663,6 +671,7 @@ class CollocationProblem:
                 raise ValueError(f"domain bounds for dim {d_idx} must satisfy a < b; got ({a}, {b})")
 
         # Normalize and validate orders
+        norm_orders: tuple[int, ...]
         if isinstance(self.orders, (int, np.integer)):
             norm_orders = (int(self.orders),)
         elif isinstance(self.orders, (tuple, list)):
@@ -769,6 +778,10 @@ def _crra_curvature(params: Mapping[str, Any] | dict | None) -> float:
     return 1.0
 
 
+@overload
+def _crra_utility(c: np.ndarray, sigma: float) -> np.ndarray: ...
+@overload
+def _crra_utility(c: float, sigma: float) -> float: ...
 def _crra_utility(c: np.ndarray | float, sigma: float) -> np.ndarray | float:
     """Period utility ``log(c)`` for ``sigma == 1`` else ``(c^(1-sigma) - 1) / (1 - sigma)``."""
     if sigma == 1.0:
@@ -992,7 +1005,7 @@ def _solve_collocation_bellman(
     delta = problem.params.get("delta", 1.0)
     # Same curvature as the Euler path, read only when the built-in utility is used
     # (a user return_fn receives params untouched).
-    sigma = _crra_curvature(problem.params) if problem.return_fn is None else None
+    sigma: float = _crra_curvature(problem.params) if problem.return_fn is None else 1.0
     c_v = np.zeros(basis.n_nodes)
 
     def val_fn(cv, state):

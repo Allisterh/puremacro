@@ -51,10 +51,16 @@ def _optional(name: str, hint: str) -> ModuleType | _MissingStdlibModule:
 _PYODIDE_HINT = ("In Pyodide 0.28 run `await pyodide.loadPackage({pkg!r})` (or `%pip install {pkg}` in "
                  "JupyterLite) before importing puremacro; Pyodide 314 and CPython have it built in.")
 
-sqlite3 = _optional("sqlite3", _PYODIDE_HINT.format(pkg="sqlite3"))
-"""``sqlite3`` or a placeholder: used by the HTTP/data caches and the narrative LLM kernels."""
+from typing import TYPE_CHECKING
 
-ssl = _optional("ssl", _PYODIDE_HINT.format(pkg="ssl"))
-"""``ssl`` or a placeholder: used only to build TLS contexts for live fetches."""
+if TYPE_CHECKING:
+    import sqlite3 as sqlite3
+    import ssl as ssl
+else:
+    sqlite3 = _optional("sqlite3", _PYODIDE_HINT.format(pkg="sqlite3"))
+    """``sqlite3`` or a placeholder: used by the HTTP/data caches and the narrative LLM kernels."""
+
+    ssl = _optional("ssl", _PYODIDE_HINT.format(pkg="ssl"))
+    """``ssl`` or a placeholder: used only to build TLS contexts for live fetches."""
 
 __all__ = ["sqlite3", "ssl"]

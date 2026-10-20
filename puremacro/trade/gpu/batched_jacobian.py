@@ -124,6 +124,8 @@ def _resolve_layout(
 class _Ops:
     """The few array operations the batched residual needs, for one backend."""
 
+    m: Any
+
     def __init__(self, backend: str, module: Any = None, exact_exp: bool = False) -> None:
         self.backend = backend
         self.m = module
@@ -188,6 +190,10 @@ class BatchedJacobianEvaluator:
     imported lazily on first use. The model is the consistent-accounting model
     with Cobb-Douglas intermediates and the lump-sum fiscal closure.
     """
+
+    _torch: Any = None
+    _mx: Any = None
+    dtype: Any = None
 
     def __init__(
         self,

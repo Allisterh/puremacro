@@ -1159,11 +1159,13 @@ def test_presentation_contract(demo, knn3):
     fig = res.plot()
     assert len(fig.axes) == 3
     plt.close(fig)
-    fig = res.plot(kind="overlay")
+    fig = res.plot(kind="overlay", ylabel="GDP (%)")
     assert len(fig.axes) == 1
+    assert fig.axes[0].get_ylabel() == "GDP (%)"
     plt.close(fig)
-    fig = res.plot(kind="cumulative", components=("total",))
+    fig = res.plot(kind="cumulative", components=("total",), ylabel="GDP (%)")
     assert len(fig.axes) == 1
+    assert fig.axes[0].get_ylabel() == "GDP (%)"
     plt.close(fig)
     _, ax = plt.subplots()
     fig = res.plot(components=("direct",), ax=ax)
@@ -1175,6 +1177,8 @@ def test_presentation_contract(demo, knn3):
         res.plot(kind="spaghetti")
     with pytest.raises(ValueError, match="components"):
         res.plot(components=("sideways",))
+    with pytest.raises(TypeError, match="ylable"):
+        res.plot(ylable="GDP (%)")
     plt.close("all")
 
 

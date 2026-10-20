@@ -24,12 +24,11 @@ presamples and diffuse initialization require their own supported likelihood
 route. The [estimation guide](dsge_estimation.md) distinguishes analytic,
 user-supplied and numerical gradients, including fallback behavior.
 
-OccBin solves piecewise-linear constrained paths. The **5.4 development**
+OccBin solves piecewise-linear constrained paths. The development
 `solve_pruned_occbin` supports linear OccBin (including anticipated shocks)
 and slack second-order paths with one initial innovation; nonlinear binding
-episodes and nonlinear anticipated innovations are rejected. That entry point
-is not present in this 5.3 checkout. Existing perturbation methods are described
-in the [higher-order guide](dsge_higher_order.md).
+episodes and nonlinear anticipated innovations are rejected. See the
+[higher-order guide](dsge_higher_order.md) for these limits.
 
 ---
 

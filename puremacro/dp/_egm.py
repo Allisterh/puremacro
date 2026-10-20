@@ -89,6 +89,21 @@ class EGMLifeCycleSolution:
 class EGMPlan:
     """Validated EGM compilation of a ``_Compiled`` model."""
 
+    def __new__(cls, comp):
+        if len(comp.state_names) == 2:
+            from puremacro.dp._expr import symbols
+
+            leads = set()
+            for _, node in getattr(comp, "locals", []):
+                leads.update(n for n, l in symbols(node) if l == 1)
+            if hasattr(comp, "reward"):
+                leads.update(n for n, l in symbols(comp.reward) if l == 1)
+            if all(s in leads for s in comp.state_names):
+                from puremacro.dp._egm_two_asset import TwoAssetEGMPlan
+
+                return TwoAssetEGMPlan(comp)
+        return super().__new__(cls)
+
     def __init__(self, comp):
         m = comp.model
         if len(comp.state_names) != 1:

@@ -95,8 +95,8 @@ class TradeCalibrationResult:
     a_4d: np.ndarray | None = None
     afd_4d: np.ndarray | None = None
     data_calibra: np.ndarray | None = None
-    n_countries: int | None = None
-    n_sectors: int | None = None
+    n_countries: int = 0
+    n_sectors: int = 0
     n_final_demand: int = 3
     country_codes: tuple[str, ...] = field(default_factory=tuple)
     sector_codes: tuple[str, ...] = field(default_factory=tuple)
@@ -131,15 +131,15 @@ class TradeCalibrationResult:
                 )
 
         # Dimensions default to the shape of the output array, (1, ns, nc).
-        if self.n_countries is None or self.n_sectors is None:
+        if not self.n_countries or not self.n_sectors:
             if self.ytot.ndim != 3 or self.ytot.shape[0] != 1:
                 raise ValueError(
                     "TradeCalibrationResult reads n_sectors and n_countries from 'ytot', which must "
                     f"have shape (1, ns, nc); got {self.ytot.shape}. Pass n_countries and n_sectors."
                 )
-            if self.n_sectors is None:
+            if not self.n_sectors:
                 object.__setattr__(self, "n_sectors", int(self.ytot.shape[1]))
-            if self.n_countries is None:
+            if not self.n_countries:
                 object.__setattr__(self, "n_countries", int(self.ytot.shape[2]))
 
         # Normalize country_codes and sector_codes to tuples

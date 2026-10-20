@@ -75,8 +75,8 @@ def conditional_forecast(
     if conditions is None:
         conditions = target_paths if target_paths is not None else {}
     cond_dict: dict[str, list[float | None]] = {}
-    for k, v in conditions.items():
-        cond_dict[str(k)] = [None if x is None or np.isnan(x) else float(x) for x in v]
+    for c_k, c_v in conditions.items():
+        cond_dict[str(c_k)] = [None if x is None or np.isnan(x) else float(x) for x in c_v]
 
     # Count total active restrictions
     active_restrs = []
@@ -100,9 +100,9 @@ def conditional_forecast(
     n_v = len(model_vars)
     n_u = len(model_shocks)
 
-    for v, _, _ in active_restrs:
-        if v not in model_vars:
-            raise KeyError(f"Target variable '{v}' not declared in model.variables: {model_vars}")
+    for r_var, _, _ in active_restrs:
+        if r_var not in model_vars:
+            raise KeyError(f"Target variable '{r_var}' not declared in model.variables: {model_vars}")
 
     # 4. Resolve controlled shocks
     if controlled_shocks is None:

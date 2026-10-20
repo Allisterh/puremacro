@@ -364,7 +364,9 @@ def _treated_cluster_count(coords: np.ndarray, cutoff: float, metric: str) -> in
     return int(ncomp)
 
 
-def _fmt_edge(x: float) -> str:
+def _fmt_edge(x: float | None) -> str:
+    if x is None:
+        return "None"
     if not np.isfinite(x):
         return "inf"
     if float(x) == int(x):
@@ -372,7 +374,7 @@ def _fmt_edge(x: float) -> str:
     return f"{float(x):g}"
 
 
-def _default_labels(edges: Sequence[float], unit: str) -> tuple[str, ...]:
+def _default_labels(edges: Sequence[float] | np.ndarray, unit: str) -> tuple[str, ...]:
     """``('treated', '0-25 km', ..., '>100 km')`` from the band edges.
 
     ``unit='unknown'`` (the ``ring_col`` route, where the codes are the
@@ -390,7 +392,7 @@ def _default_labels(edges: Sequence[float], unit: str) -> tuple[str, ...]:
     return ("treated", *bands, f">{_fmt_edge(e[-1])}{suffix}")
 
 
-def _validate_edges(rings: Sequence[float], func: str) -> np.ndarray:
+def _validate_edges(rings: Sequence[float] | np.ndarray, func: str) -> np.ndarray:
     """Band cut points: strictly increasing, finite, starting at 0.0."""
     try:
         edges = np.asarray(list(rings), dtype=float)
@@ -465,7 +467,7 @@ def _entry_positions(periods: pd.Index, values: Sequence[Any], func: str) -> np.
     pos = np.full(n, len(periods), dtype=int)
     live = np.array([not _is_never(v) for v in values], dtype=bool)
     if live.any():
-        vals = [values[i] for i in np.flatnonzero(live)]
+        vals = [values[int(i)] for i in np.flatnonzero(live)]
         try:
             p = np.asarray(periods.searchsorted(np.asarray(vals), side="left"), dtype=int)
         except (TypeError, ValueError) as exc:
@@ -805,6 +807,7 @@ def _build_assignment(
     dist = np.empty((n, T))
     near = np.empty((n, T), dtype=int)
     if ring_timing == "already_treated":
+        assert D_by_cohort is not None and A_by_cohort is not None
         # k(t) = number of cohorts that have switched on by period t.
         kt = np.searchsorted(cohort_pos, np.arange(T), side="right") - 1
         for t in range(T):
@@ -815,6 +818,7 @@ def _build_assignment(
                 dist[:, t] = D_by_cohort[kt[t]]
                 near[:, t] = A_by_cohort[kt[t]]
     else:
+        assert D_static is not None and A_static is not None
         dist[:] = D_static[:, None]
         near[:] = A_static[:, None]
 
@@ -965,7 +969,7 @@ def exposure_rings(
     *,
     treat_time: Any,
     times: Any | None = None,
-    rings: Sequence[float] = (0.0, 25.0, 50.0, 100.0),
+    rings: Sequence[float] | np.ndarray = (0.0, 25.0, 50.0, 100.0),
     ring_timing: str = "already_treated",
     metric: str = "haversine",
     ids: Sequence[Any] | None = None,
@@ -1312,6 +1316,7 @@ def _sandwich(
     if cov_type == "conley":
         from ..spatial.hac import spatial_hac_panel_meat
 
+        assert cutoff_km is not None
         S = spatial_hac_panel_meat(
             X, u, coords_df, ent, tim, float(cutoff_km), int(time_lags),
             kernel=kernel, metric=metric)
@@ -1878,7 +1883,7 @@ class SpatialDiDResult:
         a0.set_ylabel("effect")
         a0.set_title(title or "Effect by exposure ring")
 
-        if a1 is not None:
+        if a1 is not None and self.event_study is not None:
             es = self.event_study
             a1.axhline(0.0, color="black", ls=":", lw=1.0)
             a1.axvline(-0.5, color="grey", ls="--", lw=1.0)
@@ -2741,7 +2746,7 @@ def spatial_did(
         drop = has_g[:, None] & not_yet & (code >= 1) & (code <= R)
         code[drop] = -1
 
-    dropped_rings = []
+    dropped_rings_list: list[int] = []
     for r in range(1, R + 1):
         m = code == r
         nu = int(m.any(axis=1).sum())
@@ -2784,13 +2789,13 @@ def spatial_did(
                 raise ValueError(
                     f"{func}: no treated unit-period survives the exclusion "
                     "rules, so the direct effect is not identified")
-            dropped_rings.append(r)
+            dropped_rings_list.append(r)
             warnings.warn(
                 f"{func}: ring {r} ({labels[r]}) has no unit-period and is "
                 "dropped from the design; the estimator reduces to the "
                 "two-way-FE DiD over the remaining rings",
                 RuntimeWarning, stacklevel=2)
-    dropped_rings = tuple(sorted(set(dropped_rings)))
+    dropped_rings: tuple[int, ...] = tuple(sorted(set(dropped_rings_list)))
 
     valid = code != -1
     for r in kept:
@@ -2870,6 +2875,7 @@ def spatial_did(
     lags = None
     n_clusters = None
     if cov_type == "conley":
+        assert cutoff_km is not None
         cut = float(cutoff_km)
         if cut > 0 and cut < edges[-1]:
             warnings.warn(
@@ -2896,7 +2902,8 @@ def spatial_did(
                     f"{func}: time_lags={lags} must be below the number of "
                     f"periods ({n_periods_fit})")
         treated_units = np.flatnonzero((code_full == 0).any(axis=1))
-        tc = coords_df.loc[[units[i] for i in treated_units]].to_numpy(float)
+        assert coords_df is not None
+        tc = coords_df.loc[[units[int(i)] for i in treated_units]].to_numpy(float)
         n_clusters = _treated_cluster_count(tc, cut, eff_metric)
         if n_clusters < 10:
             warnings.warn(
@@ -2925,11 +2932,24 @@ def spatial_did(
         cl = cl.set_index([unit, time])[cluster_col]
         cluster_keys = cl.loc[list(zip(ent_keys, tim_keys))].to_numpy()
 
-    cov_kwargs = dict(
+    cov_kwargs: dict[str, Any] = dict(
         cov_type=cov_type, coords_df=coords_df, cutoff_km=cut, time_lags=lags or 0,
         kernel=kernel, metric=eff_metric, cluster_keys=cluster_keys,
         small_sample=small_sample, psd_adjust=psd_adjust)
-    cov = _sandwich(fit, func=func, **cov_kwargs)
+
+    cov = _sandwich(
+        fit,
+        func=func,
+        cov_type=cov_type,
+        coords_df=coords_df,
+        cutoff_km=cut,
+        time_lags=lags or 0,
+        kernel=kernel,
+        metric=eff_metric,
+        cluster_keys=cluster_keys,
+        small_sample=small_sample,
+        psd_adjust=psd_adjust,
+    )
     V = cov["vcov"]
     se = cov["se"]
     z = norm.ppf(1 - alpha / 2)
@@ -2943,7 +2963,20 @@ def spatial_did(
     theta = (XtX1_inv @ X1.T @ X2).ravel() if X2.shape[1] else np.zeros(0)
     naive_fit = {"X_within": X1, "residuals": u_naive, "XtX_inv": XtX1_inv,
                  "entity_keys": ent_keys, "time_keys": tim_keys}
-    cov_naive = _sandwich(naive_fit, func=func, quiet=True, **cov_kwargs)
+    cov_naive = _sandwich(
+        naive_fit,
+        func=func,
+        quiet=True,
+        cov_type=cov_type,
+        coords_df=coords_df,
+        cutoff_km=cut,
+        time_lags=lags or 0,
+        kernel=kernel,
+        metric=eff_metric,
+        cluster_keys=cluster_keys,
+        small_sample=small_sample,
+        psd_adjust=psd_adjust,
+    )
     naive_se = float(cov_naive["se"][0])
 
     c_vec = np.concatenate([[0.0], theta])
@@ -3044,8 +3077,8 @@ def spatial_did(
             d0 = abs(float(beta[0]))
             outer_share = outer_bound / d0 if d0 >= _SHARE_FLOOR else float("nan")
         Rm = np.zeros((len(spill_idx), len(kept)))
-        for i, j in enumerate(spill_idx):
-            Rm[i, j] = 1.0
+        for row_idx, j in enumerate(spill_idx):
+            Rm[row_idx, j] = 1.0
         stat, dfree, p = _wald(beta, V, Rm, name=func)
         gate = _gated([kept[j] for j in spill_idx])
         test_rows.append({"test": "no_spillover",
@@ -3055,9 +3088,9 @@ def spatial_did(
                           "underpowered": gate})
         if len(spill_idx) >= 2:
             Rm = np.zeros((len(spill_idx) - 1, len(kept)))
-            for i in range(len(spill_idx) - 1):
-                Rm[i, spill_idx[i]] = 1.0
-                Rm[i, spill_idx[i + 1]] = -1.0
+            for row_idx in range(len(spill_idx) - 1):
+                Rm[row_idx, spill_idx[row_idx]] = 1.0
+                Rm[row_idx, spill_idx[row_idx + 1]] = -1.0
             stat, dfree, p = _wald(beta, V, Rm, name=func)
             test_rows.append({"test": "equal_rings",
                               "null": "delta_1 = ... = delta_R",

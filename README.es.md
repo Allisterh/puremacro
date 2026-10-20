@@ -22,13 +22,12 @@ python -m pip install puremacro
 | **Simular políticas** | Declare un modelo de hogares con [programación dinámica](docs/es/dp.md), estudie la [transmisión monetaria](docs/es/monetary_transmission.md) o construya un [contrafactual comercial](docs/es/trade_accounting.md). |
 | **Aprender o enseñar** | Elija una [ruta de cuadernos](docs/es/notebooks.md) o use el [curso bilingüe y sus laboratorios interactivos](curso/README.md). El curso fija su propia versión del paquete. |
 
-**Estado de publicación, verificado el 20 de octubre de 2026:** la última
-versión publicada en [PyPI](https://pypi.org/project/puremacro/) es **5.2.0**.
-Esta copia contiene el código de 5.3.0. La documentación también describe
-**desarrollo de 5.3/5.4**, con notas de versión cuando cambia el comportamiento.
-Las modificaciones de código de 5.4.0 no están incluidas aquí; esas notas no
-establecen su disponibilidad en esta copia ni en el paquete publicado. Véase el
-[historial de cambios](CHANGELOG.md).
+**Versión de la documentación: 5.4.0.** Estos ejemplos describen la API de
+5.4.0, incluidas las adiciones y correcciones registradas bajo 5.3.0 y 5.4.0
+en el [historial de cambios](CHANGELOG.md). Consulte
+[PyPI](https://pypi.org/project/puremacro/) para conocer las versiones disponibles
+y use la documentación correspondiente a su versión instalada.
+El curso mantiene su propio entorno y sus requisitos de versión.
 
 ## Inicio rápido y ejemplos desarrollados
 
@@ -860,11 +859,11 @@ verificación y la orden que reconstruye el archivo, se distribuye como
 
 ## Estado
 
-Según la verificación del **20 de octubre de 2026**, la versión publicada en
-PyPI es **5.2.0**, con `puremacro.trade` y sus módulos MRIO de vuelta. Esta copia
-contiene el código de 5.3.0; la documentación marcada como desarrollo de 5.4
-describe cambios que no están incluidos aquí. El
-[historial de cambios](CHANGELOG.md) distingue código fuente y publicación. La versión 4.8.1 es la última con los estudios de investigación
+La versión **5.4.0** incluye `puremacro.trade` y sus módulos MRIO, reincorporados
+en 5.2.0, junto con las adiciones y correcciones del
+[historial de cambios](CHANGELOG.md). Consulte
+[PyPI](https://pypi.org/project/puremacro/) para conocer las distribuciones
+disponibles. La versión 4.8.1 es la última con los estudios de investigación
 retirados en 5.x (`pip install "puremacro<5"`). Los [niveles de estabilidad](ARCHITECTURE.md#stability-tiers)
 identifican las superficies estables, experimentales y de soporte limitado.
 Los cálculos estructurales tienen [límites de validación](docs/es/STRUCTURAL_VALIDATION_STATUS.md)

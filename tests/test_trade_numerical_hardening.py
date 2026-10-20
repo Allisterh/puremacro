@@ -65,6 +65,14 @@ def test_periodic_network_has_correct_spectral_radius():
     assert hi < 1
 
 
+def test_misspelled_regularization_options_are_not_silently_ignored():
+    from puremacro.trade.regularize import regularize_mrio_table
+
+    with pytest.raises(TypeError, match="floor_va_ration"):
+        regularize_mrio_table(np.array([[0.]]), np.array([[2.]]),
+                              np.array([2.]), np.array([0.]), floor_va_ration=.9)
+
+
 def test_cp_offsetting_costs_preserve_tariff_revenue():
     from puremacro.trade.caliendo_parro import CaliendoParroModel
     cp = CaliendoParroModel(trade_shares=np.array([[[.8,.2],[.2,.8]]]),

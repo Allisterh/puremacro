@@ -25,7 +25,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import warnings
-from typing import Sequence
+from typing import Any, Sequence
 
 import numpy as np
 import pandas as pd
@@ -37,7 +37,7 @@ _EMPTY = pd.DataFrame(
 )
 
 #: Standard World Bank WDI AR5 indicator mapping to variable name and unit scale multiplier (Mt -> kt is * 1000).
-_INDICATOR_CONFIG: dict[str, dict[str, object]] = {
+_INDICATOR_CONFIG: dict[str, dict[str, Any]] = {
     "EN.GHG.CO2.PC.CE.AR5": {"variable": "co2_pc_a", "multiplier": 1.0},
     "EN.GHG.CO2.MT.CE.AR5": {"variable": "co2_total_kt_a", "multiplier": 1000.0},
     "EN.GHG.ALL.MT.CE.AR5": {"variable": "ghg_total_kt_a", "multiplier": 1000.0},

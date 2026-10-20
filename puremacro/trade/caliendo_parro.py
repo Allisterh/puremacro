@@ -145,10 +145,11 @@ class CaliendoParroResult:
         """Plot counterfactual outcome by country."""
         import matplotlib.pyplot as plt
 
+        fig: Any
         if ax is None:
             fig, ax = plt.subplots(figsize=figsize)
         else:
-            fig = ax.get_figure()
+            fig = ax.get_figure() or plt.gcf()
 
         countries = list(self.country_codes)
         x = np.arange(len(countries))

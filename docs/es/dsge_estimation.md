@@ -456,10 +456,7 @@ print(pf_res.summary())
 ### Gradientes rápidos del score para NUTS (`nuts_sample` y `estimate_dsge`)
 
 `nuts_sample` y `estimate_dsge(..., method="nuts")` admiten varias rutas de
-gradientes. Las siguientes notas de selección y manejo de cotas describen el
-**desarrollo de 5.4**, cuyos cambios de implementación no están incluidos en
-esta copia de 5.3. En 5.3, basta una plantilla de modelo para seleccionar el
-score estructural. En el código revisado de 5.4, el estimador selecciona primero
+gradientes. En el código de desarrollo actual, el estimador selecciona primero
 `grad_log_post_fn` si se proporciona. En otro caso, selecciona el score
 estructural cuando hay una plantilla de modelo y todos los nombres estimados
 son parámetros estructurales declarados; los demás objetivos usan diferencias

@@ -1028,10 +1028,11 @@ def solve_gertler_karadi(
             # branch below). The constrained regime is deliberately linearised
             # around the REFERENCE steady state (check_steady_state=False); the
             # resulting non-zero constant is the OccBin wedge.
-            if "prem_trigger" in (params or {}) and float(params["prem_trigger"]) != thresh:
+            params_dict = params or {}
+            if "prem_trigger" in params_dict and float(params_dict["prem_trigger"]) != thresh:
                 warnings.warn(
                     f"solve_gertler_karadi: params['prem_trigger']="
-                    f"{float(params['prem_trigger'])!r} is ignored and overridden with "
+                    f"{float(params_dict['prem_trigger'])!r} is ignored and overridden with "
                     f"threshold={thresh!r}. The policy rule's trigger must equal the OccBin "
                     "switch point, or psi jumps discontinuously where the regimes meet and "
                     "the regime iteration has no fixed point. Pass `threshold=` to move both.",

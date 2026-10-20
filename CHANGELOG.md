@@ -2,12 +2,45 @@
 
 This file records user-visible changes per release. Internal refactors that don't change behaviour are listed under "Internal" so a returning user can see what shifted under the hood without surprise.
 
-Publication status checked on 20 October 2026: **5.2.0 is the latest release
-available from [PyPI](https://pypi.org/project/puremacro/)**. The 5.3.0
-entry below describes the source in this checkout, not a published PyPI
-release. Some documentation also discusses 5.4.0 development; those
-implementation changes are not included in this checkout. See the
-[release procedure](RELEASING.md).
+This changelog describes versioned source changes. Check
+[PyPI](https://pypi.org/project/puremacro/) for published distributions.
+Version 5.3.0 was tagged but not published to PyPI; its additions are included
+in 5.4.0. See the [release procedure](RELEASING.md).
+
+## 5.4.0 (2026-10-20)
+
+**Validated two-asset DP bridges, analytic DSGE scores, and release hardening.** This release includes the 5.3.0 additions and fixes the CI failures that blocked publication of that tag.
+
+### Added
+
+- Two-asset `dp.Model.solve(method="egm")` for the supported infinite-horizon liquid/illiquid household with CRRA utility and convex adjustment costs, with stationary distributions, model-local evaluation, and declared aggregate Jacobians and nonlinear household transitions. Unsupported rewards, budgets, constraints, and model configurations raise explicit errors instead of silently solving the built-in household.
+- Analytic Kalman score and state-space sensitivity checks against numerical derivatives, including zero-calibrated persistence, fixed or stationary initialization, and zero shock standard deviations.
+- Experimental `solve_pruned_occbin`: verified linear OccBin reduction with anticipated shocks, and slack second-order paths with a single initial innovation. Nonlinear binding regimes and nonlinear anticipated paths remain unsupported and raise `NotImplementedError`.
+- Bilingual graduate exercise catalogs for showcase notebooks 66–68, a portable course publication script, and JOSS architecture and overview figures.
+
+### Fixed
+
+- Removed a circular `__wrapped__` reference on `LinearModel.stoch_simul` that broke signature inspection, and preserved the parser's existing options dictionary while retaining requested variables in native command metadata.
+- Preserved fractional band-pass periods in `stoch_simul` and Baxter–King filter metadata, including narrow bands that integer rounding previously collapsed.
+- Preserved legacy list-returning HJB result mapping methods and excluded private class metadata from dictionary access.
+- Kept NUTS finite-difference probes within prior bounds; restored state normalization for zero-lag calibrations and numerical derivative fallback for nonanalytic model equations.
+- Tempered particle filtering retains pure risk drift and cross terms in higher-order transitions and initializes all pruned state components consistently.
+- Two-asset evaluation distinguishes current assets from next-period choices and respects declared aggregates and discount factors. Narrow asset-grid lotteries preserve wealth. Convergence requires a stationary distribution, not just normalized mass. Unsupported panel simulation and nonlinear GE bridges now fail explicitly.
+- **Bridge timing correction:** explicit `A="a"` aggregates now mean current assets, consistently with `2*a` and `dp.Model`. Use `A="a(+1)"` to retain the 5.3.0 bridge's end-of-period saving convention; undeclared default `A`/`B` aliases still mean saving.
+- Trade regularization rejects unknown keyword arguments; tariff optimization rejects ambiguous multi-country sequences instead of taxing only their first member. Structural local projections reject complex shock sizes instead of discarding imaginary parts.
+- Explicitly empty course LLM fallback-cache lists no longer re-enable environment-configured fallbacks.
+- Course figure presets and notebook inventory checks cover the new notebooks; release integration tests use the active interpreter and exclude downstream private-research checks from the public package.
+
+### Internal
+
+- Restored package-wide static type checking and added a CI mypy step, with numerical regression coverage for behavioral changes discovered during review.
+- Updated the public API snapshot, documentation, manuscript assets, and synchronized release metadata. The release gate now fails closed when pytest exits unsuccessfully without parseable failure identifiers.
+
+### Known limitations
+
+- The existing RR2010 example intentionally exits nonzero: independent software parity, GDP response, and trough horizon pass, but its published t-statistic comparison remains outside the unchanged 0.005 tolerance by about 0.000003925. Optional examples Gate 5 therefore remains failed; this empirical discrepancy is preserved and documented in `docs/research_benchmarks.md`.
+- The two-asset EGM adapter is specialized, not a general two-state optimizer. Panel simulation, discrete-choice SSJs, and nonlinear general-equilibrium transitions through the DP bridge are not implemented.
+- Nonlinear constrained second-order OccBin requires regime-specific curvature and consistency checks; the experimental entry point rejects those cases rather than reporting a spurious converged path.
 
 ## 5.3.0 (2026-10-17)
 

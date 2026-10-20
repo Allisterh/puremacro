@@ -119,7 +119,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 
@@ -341,7 +341,7 @@ def _m_step(Y_dep: np.ndarray, X_lag: np.ndarray, smoothed: np.ndarray,
     w_sum = smoothed.sum(axis=0)
     active = w_sum > _EMPTY_REGIME_WEIGHT
     act = np.flatnonzero(active)
-    col = {k: j for j, k in enumerate(act)}
+    col: dict[int, int] = {int(k): j for j, k in enumerate(act)}
     q = len(act) + m
     Sigma_cur = current["Sigma"]
     mu = np.array(current["mu"], dtype=float, copy=True)
@@ -389,8 +389,8 @@ def _m_step(Y_dep: np.ndarray, X_lag: np.ndarray, smoothed: np.ndarray,
                 b = None
         if b is not None:
             B = b.reshape(n, q, order="F")
-            for k, j in col.items():
-                mu[k] = B[:, j]
+            for reg_k, j in col.items():
+                mu[reg_k] = B[:, j]
             A = B[:, len(act):]
 
     # --- CM 2: Sigma_k given (mu, A) --------------------------------------
@@ -603,7 +603,7 @@ def ms_var_fit(
     S0 = resid_init.T @ resid_init / T_eff
     var_floor = _VAR_FLOOR_REL
 
-    params = {
+    params: dict[str, Any] = {
         "A": np.zeros((n, n * p)),
         "mu": np.zeros((K, n)),
         "Sigma": None,
@@ -620,11 +620,14 @@ def ms_var_fit(
         # ----- M-step (ECM cycle), then E-step at the new parameters -----
         params = _m_step(Y_dep, X_lag, smoothed, pairwise, params, var_floor,
                          sigma_default=S0)
-        log_dens = _log_densities(Y_dep, X_lag, params["A"], params["mu"],
-                                  params["Sigma"])
-        filt, _, ll_std = _hamilton_filter_log(log_dens, params["P"],
-                                               params["pi0"])
-        smoothed, pairwise = _kim_smoother(filt, params["P"])
+        p_A: np.ndarray = params["A"]
+        p_mu: np.ndarray = params["mu"]
+        p_Sigma: np.ndarray = params["Sigma"]
+        p_P: np.ndarray = params["P"]
+        p_pi0: np.ndarray = params["pi0"]
+        log_dens = _log_densities(Y_dep, X_lag, p_A, p_mu, p_Sigma)
+        filt, _, ll_std = _hamilton_filter_log(log_dens, p_P, p_pi0)
+        smoothed, pairwise = _kim_smoother(filt, p_P)
         ll = ll_std + ll_shift
         path.append(ll)
 
@@ -649,7 +652,7 @@ def ms_var_fit(
         )
 
     # --- floor check (standardised units) and map back to the units of Y ---
-    Sigma_std = params["Sigma"]
+    Sigma_std: np.ndarray = params["Sigma"]
     lam_min = np.array([np.linalg.eigvalsh(S).min() for S in Sigma_std])
     at_floor = lam_min <= _FLOOR_WARN_FACTOR * var_floor
     if at_floor.any():
@@ -663,15 +666,19 @@ def ms_var_fit(
             "another seed, fewer regimes or a longer sample.",
             RuntimeWarning, stacklevel=2,
         )
-    A = params["A"] * s[:, None] / np.tile(s, p)[None, :]
-    mu = params["mu"] * s[None, :]
+    p_A_final: np.ndarray = params["A"]
+    p_mu_final: np.ndarray = params["mu"]
+    p_P_final: np.ndarray = params["P"]
+    p_pi0_final: np.ndarray = params["pi0"]
+    A = p_A_final * s[:, None] / np.tile(s, p)[None, :]
+    mu = p_mu_final * s[None, :]
     Sigma = Sigma_std * s[None, :, None] * s[None, None, :]
 
     return MSVARResult(
         K=K, A=A, mu=mu, Sigma=Sigma,
-        P=params["P"], smoothed_probs=smoothed, filtered_probs=filt,
+        P=p_P_final, smoothed_probs=smoothed, filtered_probs=filt,
         loglik=float(ll), n_iter=it + 1, converged=converged,
-        pi0=params["pi0"], loglik_path=np.asarray(path, dtype=float),
+        pi0=p_pi0_final, loglik_path=np.asarray(path, dtype=float),
         sigma_at_floor=at_floor,
     )
 

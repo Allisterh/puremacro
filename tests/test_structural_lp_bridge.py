@@ -90,6 +90,13 @@ def test_invalid_specs_refused(change):
         targets(**change)
 
 
+@pytest.mark.parametrize("size", [2 + 3j, np.complex128(2 + 3j), np.complex128(2),
+                                  "2", np.array(2.), np.array([2.]), np.nan, np.inf])
+def test_shock_size_requires_a_real_scalar(size):
+    with pytest.raises(ValueError, match="shock_size.*real scalar"):
+        targets(shock_size=size)
+
+
 def test_missing_and_irregular_periods_are_not_compressed():
     d = panel()
     with pytest.raises(ValueError, match="consecutive"):

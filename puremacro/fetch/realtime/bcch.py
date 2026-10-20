@@ -238,6 +238,7 @@ def fetch_bcch_vintages(
             if not cached.empty:
                 return cached
         credentials.require("bcch", explicit=user)
+    assert u is not None and p is not None
 
     url = _build_bcch_url(series_id, u, p, firstdate, lastdate)
     req = urllib.request.Request(url, headers={"User-Agent": _UA})

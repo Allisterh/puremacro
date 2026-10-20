@@ -420,6 +420,7 @@
       "solve_multiconstraint_occbin",
       "solve_occbin",
       "solve_perfect_foresight",
+      "solve_pruned_occbin",
       "solve_stacked_newton_krylov",
       "solve_steady_state",
       "steady",
@@ -636,7 +637,8 @@
       "smooth_min",
       "solve_differentiable_occbin",
       "solve_multiconstraint_occbin",
-      "solve_occbin"
+      "solve_occbin",
+      "solve_pruned_occbin"
     ],
     "puremacro.dsge.particle_filter": [
       "ParticleFilterResult",
@@ -4583,6 +4585,25 @@
       "horizon",
       "income",
       "policy_d"
+    ],
+    "puremacro.dp._egm_two_asset.TwoAssetHouseholdSolution": [
+      "V",
+      "Va",
+      "Vb",
+      "aprime",
+      "bprime",
+      "c",
+      "chi",
+      "choice_prob",
+      "converged",
+      "d",
+      "hh_block",
+      "n_iter",
+      "policy_d",
+      "r_a",
+      "r_b",
+      "sup_norm",
+      "w"
     ],
     "puremacro.dp.processes.AR1": [
       "m",

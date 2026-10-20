@@ -766,9 +766,10 @@ class SpatialLPResult(LPResult):
         components: Sequence[str] | None = None,
         scale: float = 1.0,
         title: str = "",
-        ax=None,
+        ylabel: str = "",
+        ax: Any = None,
         figsize: tuple[float, float] = (10.5, 3.2),
-    ):
+    ) -> Any:
         """Plot the direct / indirect / total responses.
 
         Parameters
@@ -812,7 +813,7 @@ class SpatialLPResult(LPResult):
         if kind == "overlay":
             from ..plot import plot_irf_single
             keep = ["h"] + [f"{b}_{c}" for c in comps for b in ("beta", "se", "lo", "hi")]
-            return plot_irf_single(pd.DataFrame(self)[keep], title=title, scale=scale, ax=ax)
+            return plot_irf_single(pd.DataFrame(self)[keep], title=title, ylabel=ylabel or "Response", scale=scale, ax=ax)
         if kind == "panels":
             src = pd.DataFrame(self)
             prefix, label = "beta", "response"
@@ -839,12 +840,12 @@ class SpatialLPResult(LPResult):
         for p in orders:
             titles.setdefault(_indirect_label(p), f"Indirect (order {p})")
         if ax is not None:
-            fig, axes = ax.get_figure(), [ax]
+            fig, ax_list = ax.get_figure(), [ax]
         else:
-            fig, axes = plt.subplots(1, len(comps), figsize=figsize, sharex=True, squeeze=False)
-            axes = list(axes[0])
+            fig, ax_arr = plt.subplots(1, len(comps), figsize=figsize, sharex=True, squeeze=False)
+            ax_list = list(ax_arr[0])
         h = src["h"].to_numpy()
-        for a, comp in zip(axes, comps):
+        for a, comp in zip(ax_list, comps):
             a.plot(h, src[f"{prefix}_{comp}"].to_numpy() * scale, color="0.0", linewidth=1.4)
             a.fill_between(h, src[f"lo_{comp}"].to_numpy() * scale,
                            src[f"hi_{comp}"].to_numpy() * scale,
@@ -852,7 +853,7 @@ class SpatialLPResult(LPResult):
             a.axhline(0.0, color="0.3", linewidth=0.6, linestyle=":")
             a.set_xlabel("Horizon (h)")
             a.set_title(titles[comp])
-        axes[0].set_ylabel(label.capitalize())
+        ax_list[0].set_ylabel(ylabel or label.capitalize())
         if title:
             fig.suptitle(title)
         fig.tight_layout()
@@ -900,8 +901,8 @@ def _resolve_cov(
                                   or int(time_lags) < 0):
         raise ValueError(f"{func}: time_lags must be a non-negative integer, got {time_lags!r}")
 
-    opts = {"cutoff_km": None, "time_lags": None if time_lags is None else int(time_lags),
-            "kernel": None, "metric": None, "_coords": None}
+    opts: dict[str, Any] = {"cutoff_km": None, "time_lags": None if time_lags is None else int(time_lags),
+                            "kernel": None, "metric": None, "_coords": None}
     if kind == "cluster":
         return kind, _cluster_cov, opts
     if kind == "driscoll-kraay":
@@ -933,7 +934,7 @@ def _resolve_total_scale(total_scale: Any, sbar: np.ndarray, func: str) -> np.nd
                 f"{func}: total_scale must be 'row_sum', 'unit', a float, or one float "
                 f"per spillover order ({P}), got {total_scale!r}")
     elif np.isscalar(total_scale):
-        c = np.full(P, float(total_scale))
+        c = np.full(P, float(np.asarray(total_scale).item()))
     else:
         arr = np.asarray(total_scale, dtype=float).ravel()
         if arr.shape[0] != P:
@@ -1536,7 +1537,8 @@ def spatial_lp(
                 weak.append(h)
 
         Vb = blocks[m]
-        row = {"h": h}
+        assert Vb is not None
+        row: dict[str, Any] = {"h": h}
         for label, sel in label_sel:
             pt = float(sel @ coef[m])
             var = float(sel @ Vb @ sel)
@@ -1663,7 +1665,7 @@ def _cross_horizon_cov(
         [np.asarray(ent_keys[m]) for m in live])))
     periods = pd.Index(np.unique(np.concatenate(
         [np.asarray(tim_keys[m]) for m in live])))
-    grids = {m: _panel_score_grid(psis[m], ent_keys[m], tim_keys[m], entities, periods)
+    grids = {m: _panel_score_grid(np.asarray(psis[m]), ent_keys[m], tim_keys[m], entities, periods)
              for m in live}
 
     if cov_kind == "cluster":
@@ -1714,7 +1716,7 @@ def _cumulative_frame(
     for m in range(H):
         if not np.isfinite(coef[m]).all():
             complete = False
-        row = {"h": int(horizons[m])}
+        row: dict[str, Any] = {"h": int(horizons[m])}
         for label, s in sel.items():
             r = np.zeros(H * nF)
             for j in range(m + 1):

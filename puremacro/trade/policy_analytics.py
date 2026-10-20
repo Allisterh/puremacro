@@ -14,7 +14,7 @@ exclusively from NumPy, SciPy, Pandas, and Python standard libraries.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal, Mapping, Sequence
+from typing import Any, Literal, Mapping, Sequence, cast
 
 import numpy as np
 import pandas as pd
@@ -524,7 +524,7 @@ def compute_effective_rate_of_protection(
             else:
                 t_tensor = tau_tensor
         else:
-            tau_mat, _ = build_tariff_matrices(calib, tariffs)
+            tau_mat, _ = build_tariff_matrices(calib, cast(TariffScenario, tariffs))
             t_tensor = tau_mat - 1.0  # (ns, nc, ns, nc)
 
         t_dest = t_tensor[:, :, :, c_idx]  # (ns, nc, ns)
@@ -558,11 +558,12 @@ def compute_effective_rate_of_protection(
     # Override nominal output tariffs if explicitly provided
     if output_tariffs is not None:
         if isinstance(output_tariffs, Mapping):
+            out_map: Mapping[Any, Any] = output_tariffs
             for idx, scode in enumerate(sector_codes):
-                if scode in output_tariffs:
-                    t_output[idx] = float(output_tariffs[scode])
-                elif idx in output_tariffs:
-                    t_output[idx] = float(output_tariffs[idx])
+                if scode in out_map:
+                    t_output[idx] = float(out_map[scode])
+                elif idx in out_map:
+                    t_output[idx] = float(out_map[idx])
         elif isinstance(output_tariffs, np.ndarray):
             t_output = output_tariffs.astype(np.float64)
 
@@ -703,7 +704,7 @@ def decompose_welfare_effects(
     delta_real_gdp = real_gdp_cf - real_gdp_base
 
     # If gdp_fc is available and provides factor payments (w*L + r*K):
-    if getattr(eq_result, "gdp_fc", None) is not None and getattr(base_result, "gdp_fc", None) is not None:
+    if eq_result.gdp_fc is not None and base_result.gdp_fc is not None:
         # Factor income at market prices deflated by domestic price adjustment
         delta_gdp_fc = float(eq_result.gdp_fc[c_idx] - base_result.gdp_fc[c_idx])
         # Use real GDP change directly if well-formed
@@ -716,8 +717,8 @@ def decompose_welfare_effects(
     p_sol_base = base_result.p_sol[0, :, :] if base_result.p_sol is not None else np.ones((ns, nc))
     p_sol_cf = eq_result.p_sol[0, :, :] if eq_result.p_sol is not None else np.ones((ns, nc))
 
-    tot_base = float(base_result.terms_of_trade[c_idx]) if getattr(base_result, "terms_of_trade", None) is not None else 1.0
-    tot_cf = float(eq_result.terms_of_trade[c_idx]) if getattr(eq_result, "terms_of_trade", None) is not None else 1.0
+    tot_base = float(base_result.terms_of_trade[c_idx]) if base_result.terms_of_trade is not None else 1.0
+    tot_cf = float(eq_result.terms_of_trade[c_idx]) if eq_result.terms_of_trade is not None else 1.0
     tot_index_change = ((tot_cf - tot_base) / tot_base) * 100.0 if abs(tot_base) > 1e-12 else 0.0
 
     foreign_indices = [r for r in range(nc) if r != c_idx]
@@ -736,17 +737,18 @@ def decompose_welfare_effects(
 
         # Change in net exports for sector i
         # Exports from c_idx of good i
-        if getattr(eq_result, "intermediate_flows", None) is not None and getattr(base_result, "intermediate_flows", None) is not None:
+        if eq_result.intermediate_flows is not None and base_result.intermediate_flows is not None:
             # Intermediate exports
             exp_cf_interm = float(np.sum(eq_result.intermediate_flows[i, c_idx, :, :][:, foreign_indices]))
             exp_base_interm = float(np.sum(base_result.intermediate_flows[i, c_idx, :, :][:, foreign_indices]))
 
             # Final demand exports and imports
             has_fd = (
-                getattr(eq_result, "final_demand_flows", None) is not None
-                and getattr(base_result, "final_demand_flows", None) is not None
+                eq_result.final_demand_flows is not None
+                and base_result.final_demand_flows is not None
             )
             if has_fd:
+                assert eq_result.final_demand_flows is not None and base_result.final_demand_flows is not None
                 exp_cf_fd = float(np.sum(eq_result.final_demand_flows[i, c_idx, :, :][:, foreign_indices]))
                 exp_base_fd = float(np.sum(base_result.final_demand_flows[i, c_idx, :, :][:, foreign_indices]))
                 imp_cf_fd = float(np.sum(eq_result.final_demand_flows[i, :, :, c_idx][foreign_indices, :]))
@@ -775,7 +777,7 @@ def decompose_welfare_effects(
     tot_effect = float(np.sum(tot_by_sector))
 
     # Fallback to aggregate trade volume * delta TOT if sectoral flows are zero
-    if abs(tot_effect) < 1e-12 and getattr(eq_result, "exports", None) is not None:
+    if abs(tot_effect) < 1e-12 and eq_result.exports is not None and eq_result.imports is not None:
         trade_vol = 0.5 * (float(eq_result.exports[c_idx]) + float(eq_result.imports[c_idx]))
         tot_effect = (tot_cf - tot_base) * trade_vol
 
@@ -795,7 +797,7 @@ def decompose_welfare_effects(
             cascading_distortion = 0.0
     else:
         # Approximate using intermediate tariff share * total tariffs
-        tariffs_total = float(eq_result.tariffs[c_idx]) if getattr(eq_result, "tariffs", None) is not None else 0.0
+        tariffs_total = float(eq_result.tariffs[c_idx]) if eq_result.tariffs is not None else 0.0
         cascading_distortion = - 0.5 * tariffs_total
         cascading_by_sector = np.full(ns, cascading_distortion / ns)
 
@@ -1085,7 +1087,7 @@ def calculate_tariff_revenue_incidence(
             )
 
     # Fallback if data_tariff_vf is not present
-    if r_interm == 0.0 and r_fd == 0.0 and getattr(eq_result, "tariffs", None) is not None:
+    if r_interm == 0.0 and r_fd == 0.0 and eq_result.tariffs is not None:
         r_gross_total = float(eq_result.tariffs[c_idx])
         # Approximate 50/50 intermediate/final demand split
         r_interm = 0.5 * r_gross_total
@@ -1103,7 +1105,7 @@ def calculate_tariff_revenue_incidence(
     # 2. Deadweight Loss Calculation
     # -------------------------------------------------------------------------
     dwl = 0.0
-    if base_result is not None and getattr(base_result, "imports", None) is not None and getattr(eq_result, "imports", None) is not None:
+    if base_result is not None and base_result.imports is not None and eq_result.imports is not None:
         m_base = float(base_result.imports[c_idx])
         m_cf = float(eq_result.imports[c_idx])
         delta_m = max(m_base - m_cf, 0.0)

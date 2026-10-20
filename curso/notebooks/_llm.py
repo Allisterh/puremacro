@@ -243,7 +243,7 @@ class _FallbackCache:
     ``sqlite3``, es una caché vacía.
     """
 
-    def __init__(self, path=None, fallback_paths=()) -> None:
+    def __init__(self, path=None, fallback_paths=None) -> None:
         if isinstance(path, Sequence) and not isinstance(path, (str, bytes, bytearray, os.PathLike)):
             if len(path) == 0:
                 raise ValueError("CompletionCache requires at least one path when a sequence is given")
@@ -258,7 +258,7 @@ class _FallbackCache:
         else:
             chosen = cache_path() if path is None else path
             self.path = Path(chosen).expanduser().absolute()
-            if fallback_paths:
+            if fallback_paths is not None:
                 raw_fb = (fallback_paths,) if isinstance(fallback_paths, (str, bytes, os.PathLike)) else fallback_paths
             else:
                 env_fb = os.environ.get(_FALLBACK_CACHE_ENV, "").strip()
@@ -1267,7 +1267,7 @@ def open_cache(paths=None, *, fallback_paths=None):
             paths = cache_path()
     if _LIBRARY is not None and callable(getattr(_LIBRARY, "open_cache", None)):
         return _LIBRARY.open_cache(paths, fallback_paths=fallback_paths)
-    return _FallbackCache(paths, fallback_paths=fallback_paths or ())
+    return _FallbackCache(paths, fallback_paths=fallback_paths)
 
 
 def get_llm(mode: str | None = None, model: str | None = None, lang: str | None = None,

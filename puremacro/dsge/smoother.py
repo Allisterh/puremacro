@@ -195,7 +195,7 @@ def forecast_model(
         P = np.zeros((m, m)) if P0 is None else np.asarray(P0, dtype=float).copy()
         t0 = 0
 
-    RQR = ssm.R @ ssm.Q @ ssm.R.T
+    RQR = ssm.Q if ssm.R is None else ssm.R @ ssm.Q @ ssm.R.T
     z = float(norm.ppf(0.5 * (1.0 + ci)))
     mean = np.zeros((horizon, len(report)))
     sd = np.zeros((horizon, len(report)))

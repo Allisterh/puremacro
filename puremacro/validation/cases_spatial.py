@@ -337,9 +337,9 @@ def _dense_impact_matrix_reference() -> dict:
         S = A_inv @ (EFFECTS_BETA[r] * np.eye(n) + EFFECTS_THETA[r] * Wd)
         direct.append(float(np.trace(S)) / n)
         total.append(float(S.sum()) / n)
-    direct = np.asarray(direct)
-    total = np.asarray(total)
-    return {"direct": direct, "indirect": total - direct, "total": total}
+    direct_arr = np.asarray(direct)
+    total_arr = np.asarray(total)
+    return {"direct": direct_arr, "indirect": total_arr - direct_arr, "total": total_arr}
 
 
 # ---------------------------------------------------------------------------

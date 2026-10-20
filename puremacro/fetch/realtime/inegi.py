@@ -289,6 +289,7 @@ def fetch_inegi_vintages(
             if not cached.empty:
                 return cached
         credentials.require("inegi")
+    assert tok is not None
 
     url = INEGI_SERIES_URL.format(series_id=series_id, token=tok)
     req = urllib.request.Request(url, headers={"User-Agent": _UA})

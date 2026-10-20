@@ -32,6 +32,7 @@ from puremacro.dsge._estimated_params import (
 )
 
 # Optional import of macro preprocessor (Worker M1)
+preprocess_macro: Any
 try:
     from puremacro.dsge._macro import preprocess_macro  # type: ignore
 except ImportError:
@@ -485,17 +486,20 @@ def _eval_steady_state_defs(
     the variable it shifts. An assignment that cannot be evaluated raises
     ``ValueError`` naming it.
     """
-    ss_scope: dict[str, float] = dict(param_values)
+    ss_scope: dict[tuple[str, int] | str, float] = {}
+    ss_scope.update(param_values)
     if local_variables:
         for loc_name, loc_node in local_variables.items():
             if not loc_node.variables():
                 try:
-                    ss_scope[loc_name] = float(loc_node.eval(ss_scope, ss_scope))
+                    p_scope = {k: v for k, v in ss_scope.items() if isinstance(k, str)}
+                    ss_scope[loc_name] = float(loc_node.eval(ss_scope, p_scope))
                 except Exception:
                     pass
     for s_name, s_expr in defs.items():
         try:
-            val = s_expr.eval(ss_scope, {**param_values, **ss_scope})
+            p_scope = {**param_values, **{k: v for k, v in ss_scope.items() if isinstance(k, str)}}
+            val = s_expr.eval(ss_scope, p_scope)
             ss_scope[s_name] = float(val)
         except Exception as exc:
             raise ValueError(
@@ -523,17 +527,20 @@ def _eval_initval_defs(
     starting point); auxiliary lead/lag variables inherit their root's guess,
     defaulting to ``1.0`` (or ``0.0`` for exogenous shock auxiliaries).
     """
-    init_scope: dict[str, float] = dict(param_values)
+    init_scope: dict[tuple[str, int] | str, float] = {}
+    init_scope.update(param_values)
     if local_variables:
         for loc_name, loc_node in local_variables.items():
             if not loc_node.variables():
                 try:
-                    init_scope[loc_name] = float(loc_node.eval(init_scope, init_scope))
+                    p_scope = {k: v for k, v in init_scope.items() if isinstance(k, str)}
+                    init_scope[loc_name] = float(loc_node.eval(init_scope, p_scope))
                 except Exception:
                     pass
     for i_name, i_expr in defs.items():
         try:
-            val = i_expr.eval(init_scope, {**param_values, **init_scope})
+            p_scope = {**param_values, **{k: v for k, v in init_scope.items() if isinstance(k, str)}}
+            val = i_expr.eval(init_scope, p_scope)
             init_scope[i_name] = float(val)
         except Exception:
             pass
@@ -1308,6 +1315,7 @@ class Parser:
 
                 # Regular model equation: lhs = rhs; or expr;
                 lhs = self.parse_expression()
+                eq_node: Node
                 if self._match("ASSIGN"):
                     rhs = self.parse_expression()
                     eq_node = BinOp("-", lhs, rhs)
@@ -1598,8 +1606,6 @@ class Parser:
         """Parse stoch_simul options."""
         opts, var_list = self._parse_command_options_and_vars("stoch_simul")
         self.options.update(opts)
-        if var_list:
-            self.options["var_list"] = var_list
         self.commands.append(
             {"command": "stoch_simul", "options": dict(opts), "variables": var_list}
         )
@@ -1801,6 +1807,7 @@ class Parser:
                 if len(val_list) == 1:
                     v = val_list[0]
                     v_str = str(v).strip("'\"")
+                    v_conv: float | str
                     try:
                         v_conv = float(v_str)
                     except ValueError:
@@ -2213,9 +2220,9 @@ class Parser:
                 order.append(u)
                 return False
 
-            for k in sorted(local_names):
-                if k not in visited:
-                    if dfs(k, []):
+            for loc_k in sorted(local_names):
+                if loc_k not in visited:
+                    if dfs(loc_k, []):
                         raise ModelError(
                             f"circular dependency in model-local variables: {' -> '.join(cycle)}"
                         )
@@ -2388,10 +2395,12 @@ class Parser:
 
         histval_values: dict[str, float] | None = None
         if self.histval_defs:
-            h_scope = dict(self.param_values)
+            h_scope: dict[tuple[str, int] | str, float] = {}
+            h_scope.update(self.param_values)
             for h_name, h_expr in self.histval_defs.items():
                 try:
-                    val = h_expr.eval(h_scope, {**self.param_values, **h_scope})
+                    p_scope = {**self.param_values, **{k: v for k, v in h_scope.items() if isinstance(k, str)}}
+                    val = h_expr.eval(h_scope, p_scope)
                     h_scope[h_name] = float(val)
                 except (ValueError, ArithmeticError, np.linalg.LinAlgError, KeyError, LookupError, AssertionError, TypeError, RuntimeError, OSError, ConnectionError, Exception):
                     pass
@@ -2403,10 +2412,12 @@ class Parser:
 
         endval_values: dict[str, float] | None = None
         if self.endval_defs:
-            e_scope = dict(self.param_values)
+            e_scope: dict[tuple[str, int] | str, float] = {}
+            e_scope.update(self.param_values)
             for e_name, e_expr in self.endval_defs.items():
                 try:
-                    val = e_expr.eval(e_scope, {**self.param_values, **e_scope})
+                    p_scope = {**self.param_values, **{k: v for k, v in e_scope.items() if isinstance(k, str)}}
+                    val = e_expr.eval(e_scope, p_scope)
                     e_scope[e_name] = float(val)
                 except (ValueError, ArithmeticError, np.linalg.LinAlgError, KeyError, LookupError, AssertionError, TypeError, RuntimeError, OSError, ConnectionError, Exception):
                     pass

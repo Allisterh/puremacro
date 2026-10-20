@@ -233,8 +233,10 @@ def _draw_prior_particles(
     for j, name in enumerate(names):
         spec = priors[name]
         dist = spec.get("dist") if isinstance(spec, dict) else getattr(spec, "dist", "normal")
-        mean = float(spec.get("mean") if isinstance(spec, dict) else getattr(spec, "mean", 0.0))
-        std = float(spec.get("std") if isinstance(spec, dict) else getattr(spec, "std", 1.0))
+        mean_val = (spec.get("mean") if isinstance(spec, dict) else getattr(spec, "mean", 0.0))
+        mean = float(mean_val) if mean_val is not None else 0.0
+        std_val = (spec.get("std") if isinstance(spec, dict) else getattr(spec, "std", 1.0))
+        std = float(std_val) if std_val is not None else 1.0
         lb = float(spec.get("lb", -math.inf) if isinstance(spec, dict) else getattr(spec, "lb", -math.inf))
         ub = float(spec.get("ub", math.inf) if isinstance(spec, dict) else getattr(spec, "ub", math.inf))
 
@@ -633,7 +635,7 @@ def smc_estimate(
 
     def eval_lp(theta_vec: np.ndarray) -> float:
         par_dict = {name: float(theta_vec[j]) for j, name in enumerate(param_names)}
-        lp = float(log_prior(par_dict, priors))
+        lp = float(log_prior(par_dict, dict(priors)))
         return lp if np.isfinite(lp) else -np.inf
 
     ll_particles = np.empty(n_particles, dtype=float)
@@ -947,6 +949,7 @@ class SMCSampler:
         m = self.m
         data = self.data
         varobs = self.varobs
+        assert varobs is not None
 
         if isinstance(data, pd.DataFrame):
             y_arr = data[varobs].to_numpy(dtype=float)
@@ -965,7 +968,7 @@ class SMCSampler:
         else:
             # Default sensible priors for monetary policy / structural parameters
             base_params = dict(getattr(m, "_params", {}) or {})
-            default_p = {}
+            default_p: dict[str, Any] = {}
             if "phi_pi" in base_params:
                 default_p["phi_pi"] = NormalPrior(mean=float(base_params["phi_pi"]), std=0.25, lb=1.0, ub=3.5)
             if "phi_y" in base_params:
@@ -1158,14 +1161,14 @@ def bootstrap_particle_filter(
     all_vars = tuple(getattr(pruned_sol, "variable_names", None) or (s_names + c_names))
 
     # Find observable indices in all_vars
-    obs_indices = []
+    obs_indices_list: list[int] = []
     for nm in obs_names:
         if nm in all_vars:
-            obs_indices.append(all_vars.index(nm))
+            obs_indices_list.append(all_vars.index(nm))
         else:
             # Fallback index if names not found
-            obs_indices.append(min(len(obs_indices), n_vars - 1))
-    obs_indices = np.array(obs_indices, dtype=int)
+            obs_indices_list.append(min(len(obs_indices_list), n_vars - 1))
+    obs_indices = np.array(obs_indices_list, dtype=int)
 
     # Steady state
     ss = getattr(pruned_sol, "steady_state", None)

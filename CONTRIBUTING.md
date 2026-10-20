@@ -5,7 +5,7 @@ This is a single-author research package. The conventions below exist so that **
 1. **Portable numerical core** — a local workstation install is the supported target; Pyodide / iPad / juno.sh are best-effort environments. Core estimators do not require `statsmodels`, `linearmodels` or `arch` at runtime.
 2. **Diagnostic over silent** — numerical failures must follow a documented error, warning or sentinel contract.
 3. **Public API curated in `__init__.py`** — top level exports `__version__`; subpackages re-export their stable names.
-4. **Tests and type checks** — numerical validation and edge-case tests establish behavior. `.github/workflows/ci.yml` in this 5.3 source checkout runs the default suite on three operating systems and Python 3.11–3.13, a strict docs build on Ubuntu/Python 3.12 and the fast release gates on Ubuntu/Python 3.11 and 3.12. The release workflow requires CI and the opt-in test job to pass before publishing. The separate 5.4 preparation adds `mypy puremacro --ignore-missing-imports` as a CI requirement; that workflow change is not included here.
+4. **Tests and type checks** — numerical validation and edge-case tests establish behavior; `mypy puremacro --ignore-missing-imports` is also a required CI check. `.github/workflows/ci.yml` runs the default suite on three operating systems and Python 3.11–3.13, with mypy and a strict docs build on Ubuntu/Python 3.12 and the fast release gates on Ubuntu/Python 3.11 and 3.12. The release workflow requires CI and the opt-in test job to pass on the tagged commit before publishing.
 
 If your change touches one of those, read `ARCHITECTURE.md` first.
 
@@ -114,7 +114,7 @@ python tools/release_check.py
 
 This runs five gates and exits 0 only if all pass:
 
-1. **Test baseline** — pytest failure and setup-error node IDs must be a subset of `tests/known_failures.json::entries[*].nodeid`. New failures fail the gate; recovered cases produce a warning to shrink the baseline. The 5.4 preparation additionally rejects unsuccessful runs without parseable failure IDs; this checkout does not include that hardening.
+1. **Test baseline** — pytest failure and setup-error node IDs must be a subset of `tests/known_failures.json::entries[*].nodeid`. New failures fail the gate; recovered cases produce a warning to shrink the baseline. An unsuccessful pytest run without parseable failure IDs also fails.
 2. **Pyodide contract** — `tests/test_pyodide_compat.py` green.
 3. **Public API snapshot** — fresh introspection must equal `tests/fixtures/public_api_snapshot.json`. Regenerate the fixture deliberately when a public-API change is intentional; the gate never writes.
 4. **Version sync** — all five version-bearing files listed above must agree.
@@ -189,7 +189,7 @@ If none of (1)–(3) fits, you're probably designing a new edge case. Add a comm
 # Default suite; numerical coverage can take substantial time.
 python -m pytest tests/
 
-# Type check used in 5.4 preparation; not yet a CI gate in this checkout.
+# Static type checking, also required by CI.
 mypy puremacro --ignore-missing-imports
 
 # Pyodide compatibility — must pass after any new top-level import.

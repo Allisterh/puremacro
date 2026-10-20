@@ -55,6 +55,7 @@ from __future__ import annotations
 
 import math
 import warnings
+from collections.abc import Sequence
 from functools import lru_cache
 
 import numpy as np
@@ -439,21 +440,23 @@ def _logpdf_for_spec(spec: dict | Prior, x: float) -> float:
         return density(x, float(s_val), float(nu_val))
 
     if dist == "beta":
+        scale_val = spec.get("scale")
+        scale = float(scale_val) if scale_val is not None else 1.0
         return _logpdf_beta(
             x, float(spec["mean"]), float(spec["std"]),
-            shift, float(spec.get("scale") if spec.get("scale") is not None else 1.0),
+            shift, scale,
         )
 
     if dist == "gamma":
         return _logpdf_gamma(x, float(spec["mean"]), float(spec["std"]), shift)
 
     if dist == "weibull":
-        shape, scale = spec.get("shape"), spec.get("scale")
-        if shape is None or scale is None:
-            shape, scale = _weibull_shape_scale(
+        w_shape, w_scale = spec.get("shape"), spec.get("scale")
+        if w_shape is None or w_scale is None:
+            w_shape, w_scale = _weibull_shape_scale(
                 float(spec["mean"]) - shift, float(spec["std"])
             )
-        return _logpdf_weibull(x, float(shape), float(scale), shift)
+        return _logpdf_weibull(x, float(w_shape), float(w_scale), shift)
 
     try:
         fn = _DIST_LOGPDF[dist]
@@ -1014,7 +1017,7 @@ def grad_log_prior(
     """
     if names is None:
         names = tuple(priors.keys())
-    if isinstance(params, (list, tuple, np.ndarray)):
+    if isinstance(params, (Sequence, np.ndarray)):
         p_dict = {nm: float(val) for nm, val in zip(names, params)}
     else:
         p_dict = dict(params)

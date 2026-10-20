@@ -24,8 +24,10 @@ Findings covered (see the 2026-09-22 audit, dimension ``dsge-vfi-4.3.0``):
    ``{'gamma': 3}`` solved a log-utility policy and valued it under CRRA(3).
    The Euler residual now honours ``gamma``, so IFT gradients with respect
    to ``gamma`` are the true CRRA sensitivity (4.3.0 returned a zero column).
-6. ``docs/vfi_analytic_gradients.md`` promised Aiyagari adjoint-distribution
-   sensitivities that raise ``NotImplementedError``.
+6. ``docs/vfi_analytic_gradients.md`` originally promised unavailable Aiyagari
+   sensitivities. The documentation contract now distinguishes supported
+   canonical continuous Aiyagari derivatives from general heterogeneous-agent
+   differentiation and representative-agent aggregate return values.
 
 The live Dynare 7.0 fixtures under ``tests/fixtures/dynare_live`` carry real
 decision rules but were exported with ``nomoments``: the moment rows of the
@@ -728,11 +730,27 @@ BELLMAN_EULER_TOL = 1e-4
 @pytest.mark.parametrize("path", ["docs/vfi_analytic_gradients.md", "docs/es/vfi_analytic_gradients.md"])
 def test_analytic_gradients_docs_state_current_scope(path):
     text = (ROOT / path).read_text(encoding="utf-8")
-    assert "NotImplementedError" in text
     solution_line = next(line for line in text.splitlines() if line.startswith("- `solution`:"))
-    assert "NotImplementedError" in solution_line
+    for supported in ("CollocationProblem.solve()", "FEMProblem.solve()",
+                      "SplineCollocationProblem.solve()", "AiyagariContinuousEquilibrium",
+                      "solve_aiyagari_continuous"):
+        assert supported in solution_line
+    # The canonical continuous equilibrium is supported; do not restore the
+    # obsolete claim that its gradient entry point raises NotImplementedError.
+    assert "NotImplementedError" not in solution_line
+    scope_line = next(line for line in text.splitlines()
+                      if line.startswith(("**Scope", "**Alcance")))
+    assert "AiyagariContinuousEquilibrium" in scope_line
+    assert "dp.Model" in scope_line
+    scope_limit = ("No es un diferenciador general" if "/es/" in path
+                   else "not a general differentiator")
+    assert scope_limit in scope_line
     aggregates_line = next(line for line in text.splitlines() if line.startswith("- `grad_aggregates`:"))
     assert '"mu": None' in aggregates_line
+    assert "Aiyagari" in aggregates_line
+    assert "(n_assets, n_z, p)" in aggregates_line
+    assert "always `None`" not in aggregates_line
+    assert "siempre `None`" not in aggregates_line
     assert "70x" not in text
     # J_c and J_theta are central differences, also for a user residual_fn:
     # the page must not call the IFT path step-size free or chatter free.

@@ -80,6 +80,14 @@ def test_strategic_tariffs_follow_codes(calib):
     assert np.count_nonzero(tau_fd != 1.0) == ns * calib.n_final_demand
 
 
+@pytest.mark.parametrize("metric", ["geary_khamis", "hicksian_ev"])
+def test_multi_country_player_is_not_silently_truncated(calib, metric):
+    # Otherwise welfare belongs to C01+C02 while the tariff applies only to C01.
+    with pytest.raises(ValueError, match="one country or a named bloc"):
+        compute_unilateral_optimal_tariff(calib, ["C01", "C02"], metric=metric,
+                                          tariff_max=.1, num_grid=2, method="grid")
+
+
 def test_unilateral_geary_khamis_search_runs_on_a_small_table(calib):
     res = compute_unilateral_optimal_tariff(calib, "C02", tariff_max=0.2, num_grid=3, method="grid")
     assert res.country_code == "C02"

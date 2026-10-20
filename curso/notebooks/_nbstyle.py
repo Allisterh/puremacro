@@ -399,6 +399,8 @@ TAMANO = {
     "1": (6.4, 4.0),          # one panel
     "1_alto": (6.4, 5.0),     # one panel, taller (phase diagrams, maps)
     "1_bajo": (6.4, 3.0),     # one panel, a strip (a single time series)
+    "cuadrada": (6.4, 6.4),   # square diagnostic panel
+    "alta": (6.4, 5.0),       # alias for a tall single panel
     "ancho": (9.6, 3.6),      # one wide panel (long time series, many bars)
     "2": (9.6, 4.0),          # two panels side by side
     "2_alto": (9.6, 5.0),
@@ -453,17 +455,27 @@ def tamano(nrows: int = 1, ncols: int = 1, *, alto: bool = False) -> tuple[float
     return TAMANO[clave]
 
 
-def figura(nrows: int = 1, ncols: int = 1, *, figsize=None, alto: bool = False,
-           layout: str | None = "constrained", **kwargs):
+def figura(nrows: int = 1, ncols: int = 1, *, figsize=None, alto: bool | float = False,
+           layout: str | None = "constrained", ancho: float | None = None, **kwargs):
     """``plt.subplots`` with the course size for the grid and constrained layout.
 
     ``figsize`` can be a key of ``TAMANO`` (or of ``LAMINA``) or a pair of
     inches.  A figure made here needs no ``tight_layout()``.
     """
-    if figsize is None:
-        figsize = tamano(nrows, ncols, alto=alto)
-    elif isinstance(figsize, str):
-        figsize = TAMANO.get(figsize) or LAMINA[figsize]
+    if isinstance(figsize, str):
+        if figsize in TAMANO:
+            figsize = TAMANO[figsize]
+        elif figsize in LAMINA:
+            figsize = LAMINA[figsize]
+        else:
+            raise ValueError(f"unknown figure size preset: {figsize!r}")
+    if ancho is not None or (isinstance(alto, (int, float)) and not isinstance(alto, bool)):
+        base_w, base_h = tamano(nrows, ncols, alto=bool(alto) if isinstance(alto, bool) else False)
+        w = float(ancho) if ancho is not None else (figsize[0] if figsize else base_w)
+        h = float(alto) if (isinstance(alto, (int, float)) and not isinstance(alto, bool)) else (figsize[1] if figsize else base_h)
+        figsize = (w, h)
+    elif figsize is None:
+        figsize = tamano(nrows, ncols, alto=bool(alto))
     if layout is not None:
         kwargs.setdefault("layout", layout)
     return plt.subplots(nrows, ncols, figsize=figsize, **kwargs)

@@ -137,6 +137,7 @@ class AllenArkolakisResult:
 
         regions = list(self.region_names)
         x = np.arange(len(regions))
+        fig: Any = None
 
         if kind == "spatial" and self.coordinates is not None:
             if ax is None:
@@ -342,6 +343,7 @@ class AllenArkolakisModel:
                 )
             self.region_names = tuple(str(r) for r in region_names)
 
+        self.coordinates: np.ndarray | None = None
         if coordinates is not None:
             coords_arr = np.asarray(coordinates, dtype=float)
             if coords_arr.shape != (self.N, 2):

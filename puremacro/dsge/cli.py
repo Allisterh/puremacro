@@ -176,21 +176,6 @@ def run_parity_cli(args: argparse.Namespace) -> int:
     )
     return 1
 
-    if not args.quiet:
-        sys.stdout.write(res.summary() + "\n")
-
-    if args.outdir or (args.format and args.format != "text"):
-        out_dir = Path(args.outdir) if args.outdir else Path("./dynare_parity_results")
-        out_dir.mkdir(parents=True, exist_ok=True)
-        if args.format in ("markdown", "all"):
-            (out_dir / "parity_scorecard.md").write_text(res.to_markdown(), encoding="utf-8")
-        if args.format in ("latex", "all"):
-            (out_dir / "parity_scorecard.tex").write_text(res.to_latex(), encoding="utf-8")
-        if args.format in ("typst", "all"):
-            (out_dir / "parity_scorecard.typ").write_text(res.to_typst(), encoding="utf-8")
-
-    return 0 if res.passed else 1
-
 
 def _bk_status_line(model) -> str:
     """Blanchard-Kahn verdict read off the solved model, never assumed."""

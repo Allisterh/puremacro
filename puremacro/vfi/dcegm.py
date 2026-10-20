@@ -23,7 +23,10 @@ from __future__ import annotations
 import time
 import warnings
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+
+if TYPE_CHECKING:
+    import matplotlib.figure
 
 import numpy as np
 import pandas as pd
@@ -298,7 +301,7 @@ def upper_envelope(
         m_con = np.linspace(a_min, m_min_unconstrained, num=30)
         c_con = np.maximum(m_con - a_min, 1e-6)
         if u_fn is not None and v_cont_amin is not None:
-            v_con = u_fn(c_con) + v_cont_amin
+            v_con = np.asarray(u_fn(c_con) + v_cont_amin, dtype=np.float64)
         else:
             if len(segments[0][0]) >= 2:
                 denom = max(segments[0][0][1] - segments[0][0][0], 1e-8)
@@ -606,7 +609,7 @@ class DCEGMSolution:
 
     def plot(
         self, figsize: Tuple[float, float] = (12, 8), show: bool = False
-    ) -> plt.Figure:
+    ) -> matplotlib.figure.Figure:
         """Plot diagnostic 4-panel figure of policies, values, and probabilities.
 
         Returns
@@ -908,7 +911,7 @@ class DCEGMProblem:
         sup_norm = np.inf
 
         is_finite = self.horizon is not None
-        steps = self.horizon if is_finite else max_iter
+        steps = self.horizon if self.horizon is not None else max_iter
 
         for it in range(1, steps + 1):
             n_iter = it
@@ -973,7 +976,7 @@ class DCEGMProblem:
                         m_grid,
                         a_min=self.a_min,
                         v_cont_amin=v_amin,
-                        u_fn=lambda c_: self._eval_u(c_, d),
+                        u_fn=lambda c_: self._eval_u(np.asarray(c_), d),
                     )
                     c_new[d, :, zi] = res_ue.policy
                     v_new[d, :, zi] = res_ue.value

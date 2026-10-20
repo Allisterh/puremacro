@@ -225,6 +225,7 @@ class MonetaryTransmissionResult:
         """Plot comparative HANK vs RANK transmission dynamics."""
         import matplotlib.pyplot as plt
 
+        fig: Any
         t = np.arange(self.horizon)
 
         if kind == "all":

@@ -227,7 +227,7 @@ class FlexibleTechnologyConfig:
             if not _is_number(getattr(self, name)):
                 raise TypeError(f"{name} must be a numeric float, got {type(getattr(self, name)).__name__}.")
 
-        float_rho = float(target_rho)
+        float_rho = float(target_rho if target_rho is not None else 1.0)
         object.__setattr__(self, "rho_va", float_rho)
         object.__setattr__(self, "sigma_va", float_rho)
         object.__setattr__(self, "sigma_y", float(self.sigma_y))
@@ -1420,14 +1420,14 @@ def compute_armington_purchaser_prices(
             P = _combine(p_ref.squeeze(1) * (np.maximum(inner, 1e-300) ** (1.0 / e)))
     else:
         sig_arr = np.asarray(sigma_trade, dtype=float).reshape(ns, 1, 1)
-        e = 1.0 - sig_arr
+        e_arr = 1.0 - sig_arr
         p_min = np.where(has_active, np.min(np.where(pos, p_tau_safe, np.inf), axis=1, keepdims=True), 1.0)
         p_max = np.where(has_active, np.max(np.where(pos, p_tau_safe, -np.inf), axis=1, keepdims=True), 1.0)
-        e_4d = e[:, :, np.newaxis]
+        e_4d = e_arr[:, :, np.newaxis]
         p_ref = np.where(e_4d < 0, p_min, p_max)
         u_pt = np.where(pos, p_tau_safe / np.maximum(p_ref, 1e-12), 1.0)
         inner = np.sum(np.where(pos, w_pos * (u_pt ** e_4d), 0.0), axis=1)
-        P_ces = _combine(p_ref.squeeze(1) * (np.maximum(inner, 1e-300) ** (1.0 / e)))
+        P_ces = _combine(p_ref.squeeze(1) * (np.maximum(inner, 1e-300) ** (1.0 / e_arr)))
         ln_pt = np.where(pos, np.log(p_tau_safe), 0.0)
         P_cd = _combine(np.exp(np.sum(np.where(pos, w_pos * ln_pt, 0.0), axis=1)))
         P = np.where(sig_arr < 1e-6, P_leo, np.where(np.abs(sig_arr - 1.0) < 1e-6, P_cd, P_ces))
@@ -2238,8 +2238,10 @@ def _condensed_solve(
     otherwise the direct attempt is reported, with
     ``meta["tariff_homotopy_steps"] = 0`` when a homotopy was tried.
     """
-    options = dict(tol=tol, eps_fd=eps_fd, foreign_saving_units=foreign_saving_units)
-    direct = _condensed_newton(calib, config, ta, tf, x0=x0, max_iter=max_iter, **options)
+    direct = _condensed_newton(
+        calib, config, ta, tf, x0=x0, max_iter=max_iter,
+        tol=tol, eps_fd=eps_fd, foreign_saving_units=foreign_saving_units,
+    )
     if direct[1] or max_iter == 0 or (np.all(ta == 1.0) and np.all(tf == 1.0)):
         return direct
     spent = direct[2]
@@ -2251,8 +2253,11 @@ def _condensed_solve(
         x_path, result = x0, None
         for k in range(1, n_steps + 1):
             lam = k / n_steps
-            result = _condensed_newton(calib, config, 1.0 + lam * (ta - 1.0), 1.0 + lam * (tf - 1.0),
-                                       x0=x_path, max_iter=max_iter - spent, **options)
+            result = _condensed_newton(
+                calib, config, 1.0 + lam * (ta - 1.0), 1.0 + lam * (tf - 1.0),
+                x0=x_path, max_iter=max_iter - spent,
+                tol=tol, eps_fd=eps_fd, foreign_saving_units=foreign_saving_units,
+            )
             spent += result[2]
             if not result[1] or (k < n_steps and spent >= max_iter):
                 result = None
@@ -2378,6 +2383,7 @@ def _condensed_newton(
         if not decreased:
             return finish(xm, False, it + 1, certified(xm), stalled=True)
         xm = xm_t
+        assert ev_t is not None
         f_m, p_sol, y_sol = ev_t[0], ev_t[3], ev_t[4]
         if np.all(np.isfinite(f_m)) and float(np.max(np.abs(f_m))) <= tol:
             ev_c = certified(xm)
@@ -2657,7 +2663,7 @@ class FlexibleTradeEquilibriumResult:
             EV = X1 * np.sum(theta * P0, axis=0) / np.sum(theta * P1, axis=0) - X0
         else:
             theta_les = compute_les_marginal_budget_shares(calib, pref)[0]
-            c_bar1 = mu * c_s0[0] * smooth_subsistence_scaling(np.maximum(X1 / budget_0[0, 0], 0.0))[None, :]
+            c_bar1 = mu * c_s0[0] * np.asarray(smooth_subsistence_scaling(np.maximum(X1 / budget_0[0, 0], 0.0)))[None, :]
             super1 = np.maximum(X1 - np.sum(P1 * c_bar1, axis=0), 0.0)
             EV = (np.sum(P0 * c_bar1, axis=0)
                   + super1 * np.sum(theta_les * P0, axis=0) / np.sum(theta_les * P1, axis=0) - X0)
@@ -2771,10 +2777,10 @@ def _resolve_flexible_model_config(
         b_max = float(mkt_kwargs.get("markup_max", cur_max))
         mkt_kwargs.update(markup_min=b_min, markup_max=b_max, markup_bounds=(b_min, b_max))
     cond_keys = ("condense_varieties", "variety_condensation", "variety_expansion")
-    if any(k in mkt_kwargs for k in cond_keys):
-        flag = any(bool(mkt_kwargs.get(k)) for k in cond_keys)
-        for k in cond_keys:
-            mkt_kwargs[k] = flag
+    if any(ck in mkt_kwargs for ck in cond_keys):
+        flag = any(bool(mkt_kwargs.get(ck)) for ck in cond_keys)
+        for ck in cond_keys:
+            mkt_kwargs[ck] = flag
 
     base = config if config is not None else FlexibleTradeModelConfig()
     tech = model_kwargs.get("technology", base.technology)
@@ -3023,7 +3029,7 @@ def solve_flexible_trade_equilibrium(
     negative = [
         {"category": int(f), "country": c_codes[c], "expenditure": float(blocks["expenditure"][0, f, c])}
         for f in range(nfd) for c in range(nc)
-        if float(blocks["expenditure"][0, f, c]) < 0.0 < float(calib.theta[0, f, c])
+        if float(blocks["expenditure"][0, f, c]) < 0.0 and calib.theta is not None and float(calib.theta[0, f, c]) > 0.0
     ]
     acc = flows["accounting_metadata"]
     meta.update({

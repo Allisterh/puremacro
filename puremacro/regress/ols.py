@@ -153,8 +153,8 @@ def add_constant(data, prepend: bool = True, has_constant: str = "skip"):
             # relies on the dtype sees the same thing.
             return x
         if has_constant == "raise":
-            cols = ",".join(str(c) for c in np.arange(x.shape[1])[is_const])
-            raise ValueError(f"Column(s) {cols} are constant.")
+            const_cols = ",".join(str(c) for c in np.arange(x.shape[1])[is_const])
+            raise ValueError(f"Column(s) {const_cols} are constant.")
 
     cols = [np.ones(x.shape[0]), x]
     return np.column_stack(cols if prepend else cols[::-1])

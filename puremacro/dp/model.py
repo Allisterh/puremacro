@@ -379,7 +379,7 @@ class _Compiled:
             self.z_grids = []
             self.P = np.ones((1, 1))
         self.P_idio = self.P
-        self.P_agg = np.ones((1, 1))
+        self.P_agg: np.ndarray = np.ones((1, 1))
         if m._agg_shocks and m._agg_state is None:
             raise ModelSpecError("aggregate_shock() needs an aggregate_state() that agents forecast")
         if m._agg_state is not None:
@@ -605,9 +605,11 @@ class _Compiled:
         probs = probs if age is None else probs[age]
         aps = sol.aprime_by_choice if age is None else sol.aprime_by_choice[age]
         out = np.zeros(pol.shape)
-        for k, dv in enumerate(self.model._discrete[1]):
-            with np.errstate(invalid="ignore"):
-                out += np.where(probs[k] > 0, probs[k] * call(dv, [aps[k]]), 0.0)
+        discrete = self.model._discrete
+        if discrete is not None:
+            for k, dv in enumerate(discrete[1]):
+                with np.errstate(invalid="ignore"):
+                    out += np.where(probs[k] > 0, probs[k] * call(dv, [aps[k]]), 0.0)
         return out
 
     def aggregate_values(self, sol, mu, params: dict) -> dict:
@@ -675,8 +677,8 @@ class _Compiled:
             if self.model._prices:
                 raise ModelSpecError("equilibrium with a finite horizon (OLG) is not supported yet")
             params = self.param_values()
-            sol = plan.solve_life_cycle(params)
-            return DPSolution(self, sol, params=params, distribution=plan.distribution(sol), method="egm")
+            sol_lc = plan.solve_life_cycle(params)
+            return DPSolution(self, sol_lc, params=params, distribution=plan.distribution(sol_lc), method="egm")
         if self.model._prices:
             eq, params, aggs = plan.equilibrium(tol=tol, max_iter=max_iter, xtol=xtol, max_evals=max_evals)
             (pname, _), = self.model._prices.items()

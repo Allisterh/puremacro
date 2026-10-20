@@ -117,7 +117,7 @@ def resolve_country_indices(
     return sorted(out_indices)
 
 
-def get_country_code(calib: TradeCalibrationResult, country_idx: int | str) -> str:
+def get_country_code(calib: TradeCalibrationResult, country_idx: int | str | Sequence[str | int]) -> str:
     """Return the country code of a position, or the normalized code of an identifier.
 
     Raises ``IndexError`` for a position outside the calibration.
@@ -125,9 +125,20 @@ def get_country_code(calib: TradeCalibrationResult, country_idx: int | str) -> s
     country_codes = _country_codes(calib)
     if isinstance(country_idx, str):
         return country_idx.strip().upper()
-    if 0 <= country_idx < len(country_codes):
-        return country_codes[country_idx]
-    raise IndexError(f"Country index {country_idx} out of range (0 <= idx < {len(country_codes)}).")
+    if isinstance(country_idx, (int, np.integer)):
+        idx = int(country_idx)
+        if 0 <= idx < len(country_codes):
+            return country_codes[idx]
+        raise IndexError(f"Country index {country_idx} out of range (0 <= idx < {len(country_codes)}).")
+    seq = list(country_idx)
+    if not seq:
+        raise ValueError("country_idx sequence cannot be empty")
+    if len(seq) != 1:
+        raise ValueError(
+            "A strategic player must be one country or a named bloc such as 'EUR'; "
+            "a sequence of multiple countries cannot be reduced to one country code."
+        )
+    return get_country_code(calib, seq[0])
 
 
 # ==============================================================================
@@ -278,6 +289,8 @@ def evaluate_national_welfare(
         c_fd = theta * Ycon / np.maximum(p_fd, 1e-12)
         cpi = None
         tot = None
+
+    assert c_fd is not None and p_fd is not None
 
     # --------------------------------------------------------------------------
     # 1. Geary-Khamis PPP Real GDP
@@ -949,11 +962,10 @@ def solve_multilateral_nash_tariffs(
     t_duration = time.perf_counter() - t_start
 
     # 4. Final equilibrium solve at Nash tariffs
+    tau_nash, tau_fd_nash = build_strategic_tariffs(calib, tau_curr, policy_mode=policy_mode)
     if all(v == 0.0 for v in tau_curr.values()):
         res_nash = res_base
-        tau_nash, tau_fd_nash = None, None
     else:
-        tau_nash, tau_fd_nash = build_strategic_tariffs(calib, tau_curr, policy_mode=policy_mode)
         res_nash = solve_trade_equilibrium(
             calib,
             tau=tau_nash,

@@ -1061,7 +1061,7 @@ def imf_pcps(*, freq: str = "M", start: str | int | None = None,
     raw = raw.dropna(subset=["OBS_VALUE"])
     raw = raw[raw["TIME_PERIOD"].astype(str).str.len() > 0]
     pairs = list(dict.fromkeys(zip(raw["INDICATOR"].astype(str), raw["DATA_TRANSFORMATION"].astype(str))))
-    spec = {}
+    spec: dict[tuple[str, ...], str] = {}
     for ind, tr in pairs:
         spec[(ind, tr)] = named.get((ind, tr)) or f"{ind.lower()}_{'idx' if tr == 'INDEX' else tr.lower()}"
     long, _ = _tidy(raw.assign(COUNTRY="WLD"), _FLOW_DIMS[flow], spec)
@@ -1197,7 +1197,7 @@ def imf_weo(codes: Iterable[str] | str | None = None, *,
             raise ValueError(f"vintage={vintage!r}; use 'YYYY_MON' such as '2025_OCT'")
         flow = f"IMF.RES,WEO_{v}_VINTAGE"
     reg = {c: IMF_WEO.get(c, (c, c, "as published", 1.0)) for c in cols}
-    spec = {(reg[c][0],): c for c in cols}
+    spec: dict[tuple[str, ...], str] = {(reg[c][0],): c for c in cols}
     country = _country_part(codes)
     key = _key(country, list(spec), "A")
     with warnings.catch_warnings():
@@ -1219,7 +1219,7 @@ def imf_weo(codes: Iterable[str] | str | None = None, *,
     if len(panel):
         # The GDP indicators are always asked for: they set the row-level flag.
         extra = [(b,) for b in _WEO_FLAG_BASIS if (b,) not in spec]
-        attr_key = _key(country, list(spec) + extra, "A")
+        attr_key = _key(country, [*spec, *extra], "A")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             attrs_raw = imf_get(flow, attr_key, detail="nodata", refresh=refresh)
@@ -1280,9 +1280,9 @@ def imf_weo(codes: Iterable[str] | str | None = None, *,
     panel["forecast"] = flag
     meta = []
     for c in cols:
-        ind, desc, units, mult = reg[c]
+        ind, desc, units, scale_factor = reg[c]
         meta.append(_meta_row(panel, c, source_flow=flow, source_key=ind, description=desc,
-                              units=units, scale=mult, sa="NSA"))
+                              units=units, scale=scale_factor, sa="NSA"))
     return _finish(panel, meta=meta, missing=missing, codes=codes, flow=flow,
                    latest_actual=latest, forecast_basis=basis, history_only=bool(history_only),
                    aggregates_dropped=tuple(sorted(agg)))

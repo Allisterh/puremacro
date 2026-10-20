@@ -12,7 +12,10 @@ for VARs. International Economic Review, 45(2), 643-673.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import TYPE_CHECKING, Any, Sequence
+
+if TYPE_CHECKING:
+    from puremacro.dsge._results import DSGEForecastResult
 
 import numpy as np
 import pandas as pd

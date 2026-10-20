@@ -43,6 +43,8 @@ from puremacro.models.hank_sequence_space import (
     _local_mpc,
     _transaction_cost,
     TwoAssetSequenceSpaceHANKResult,
+    _HouseholdBlock,
+    _TwoAssetHouseholdBlock,
 )
 
 # Two-asset calibration defaults (used when the .mod file does not set them); they
@@ -89,14 +91,25 @@ class HANKModel:
         # Determine 1-asset vs 2-asset configuration
         assets_val = self.hetagent_config.get("assets", 1)
         model_type = str(self.hetagent_config.get("model", "")).lower()
-        self.is_two_asset = (
-            self.household_model is None
-            and (
-                int(float(assets_val)) == 2
-                or "two_asset" in model_type
-                or "2_asset" in model_type
-            )
+        is_ta_cfg = (
+            int(float(assets_val)) == 2
+            or "two_asset" in model_type
+            or "2_asset" in model_type
         )
+        is_ta_model = False
+        if self.household_model is not None:
+            from puremacro.dp._results import DPSolution
+
+            m_orig = (
+                self.household_model._c.model
+                if isinstance(self.household_model, DPSolution)
+                else self.household_model
+            )
+            if hasattr(m_orig, "_states") and len(m_orig._states) == 2:
+                is_ta_model = True
+            if is_ta_cfg and not is_ta_model:
+                raise ValueError("a two-asset hetagent_block requires a two-state household_model")
+        self.is_two_asset = is_ta_cfg or is_ta_model
 
         # Baseline calibration parameters
         ta = _TWO_ASSET_DEFAULTS
@@ -121,7 +134,7 @@ class HANKModel:
         self.joint_distribution: np.ndarray | None = None
         self.deposit_distribution: np.ndarray | None = None
         self.mpc_distribution: np.ndarray | None = None
-        self._hh_block = None
+        self._hh_block: _HouseholdBlock | _TwoAssetHouseholdBlock | None = None
         self._dp_block: dict[str, Any] | None = None
         self._dp_inputs: list[str] = []
         self._solve_steady_state()
@@ -133,7 +146,7 @@ class HANKModel:
         m_orig = self.household_model._c.model if isinstance(self.household_model, DPSolution) else self.household_model
         avail = set(m_orig._params.keys()) | set(m_orig._prices.keys()) | {n for n, _ in m_orig._locals}
         inputs: list[str] = []
-        for cand in ("r", "w", "y"):
+        for cand in ("r_b", "r_a", "rb", "ra", "r", "w", "y", "z"):
             if cand in avail:
                 inputs.append(cand)
         if not inputs:
@@ -142,6 +155,58 @@ class HANKModel:
 
     def _solve_steady_state(self) -> None:
         """Solve the microeconomic stationary distribution and aggregate steady state."""
+        if self.is_two_asset:
+            if self.household_model is not None:
+                self._dp_inputs = self._resolve_dp_inputs()
+                blk = _prepare_dp_household_block(self.household_model, inputs=self._dp_inputs, outputs=None)
+                self._dp_block = blk
+                hh_ta = blk["hh_block"]
+            else:
+                ta = _TWO_ASSET_DEFAULTS
+                n_a = int(self.hetagent_config.get("n_a", ta["n_a"]))
+                n_b = int(self.hetagent_config.get("n_b", ta["n_b"]))
+                a_max = float(self.hetagent_config.get("a_max", ta["a_max"]))
+                b_max = float(self.hetagent_config.get("b_max", ta["b_max"]))
+                b_min = float(self.hetagent_config.get("b_min", ta["b_min"]))
+
+                hh_ta = _solve_two_asset_household_block(
+                    beta=self.beta,
+                    gamma=self.gamma,
+                    r_b_ss=self.r_b_ss,
+                    r_a_ss=self.r_a_ss,
+                    w_ss=1.0,
+                    n_a=n_a,
+                    n_b=n_b,
+                    a_max=a_max,
+                    b_max=b_max,
+                    b_min=b_min,
+                    chi_0=self.chi_0,
+                    chi_1=self.chi_1,
+                    a_bar=self.a_bar,
+                )
+            self._hh_block = hh_ta
+            self.asset_grid = hh_ta.a_grid.copy()
+            self.liquid_asset_grid = hh_ta.b_grid.copy()
+            self.asset_distribution = hh_ta.marginal_distribution_a.copy()
+            self.marginal_distribution_b = hh_ta.marginal_distribution_b.copy()
+            self.joint_distribution = hh_ta.joint_distribution.copy()
+            self.deposit_distribution = hh_ta.deposit_distribution.copy()
+
+            # Quarterly MPC out of a lump-sum transfer, averaged over (b, s) at each illiquid grid point
+            mpc_state = hh_ta.mpc()
+            weight = hh_ta.D_ss.sum(axis=(1, 2))
+            mpc_a = np.mean(mpc_state, axis=(1, 2))
+            has_mass = weight > 1e-12
+            mpc_a[has_mass] = np.sum(hh_ta.D_ss * mpc_state, axis=(1, 2))[has_mass] / weight[has_mass]
+            self.mpc_distribution = mpc_a
+
+            self.steady_state = _two_asset_steady_state_dict(hh_ta)
+            self.steady_state["r"] = hh_ta.r_b_ss
+            for v in self.variables:
+                if v not in self.steady_state:
+                    self.steady_state[v] = 0.0
+            return
+
         if self.household_model is not None:
             self._dp_inputs = self._resolve_dp_inputs()
             blk = _prepare_dp_household_block(self.household_model, inputs=self._dp_inputs, outputs=None)
@@ -180,74 +245,28 @@ class HANKModel:
                     self.steady_state[v] = 0.0
             return
 
-        if self.is_two_asset:
-            ta = _TWO_ASSET_DEFAULTS
-            n_a = int(self.hetagent_config.get("n_a", ta["n_a"]))
-            n_b = int(self.hetagent_config.get("n_b", ta["n_b"]))
-            a_max = float(self.hetagent_config.get("a_max", ta["a_max"]))
-            b_max = float(self.hetagent_config.get("b_max", ta["b_max"]))
-            b_min = float(self.hetagent_config.get("b_min", ta["b_min"]))
-
-            hh = _solve_two_asset_household_block(
-                beta=self.beta,
-                gamma=self.gamma,
-                r_b_ss=self.r_b_ss,
-                r_a_ss=self.r_a_ss,
-                w_ss=1.0,
-                n_a=n_a,
-                n_b=n_b,
-                a_max=a_max,
-                b_max=b_max,
-                b_min=b_min,
-                chi_0=self.chi_0,
-                chi_1=self.chi_1,
-                a_bar=self.a_bar,
-            )
-            self._hh_block = hh
-            self.asset_grid = hh.a_grid.copy()
-            self.liquid_asset_grid = hh.b_grid.copy()
-            self.asset_distribution = hh.marginal_distribution_a.copy()
-            self.marginal_distribution_b = hh.marginal_distribution_b.copy()
-            self.joint_distribution = hh.joint_distribution.copy()
-            self.deposit_distribution = hh.deposit_distribution.copy()
-
-            # Quarterly MPC out of a lump-sum transfer, averaged over (b, s) at each illiquid grid point
-            mpc_state = hh.mpc()
-            weight = hh.D_ss.sum(axis=(1, 2))
-            mpc_a = np.mean(mpc_state, axis=(1, 2))
-            has_mass = weight > 1e-12
-            mpc_a[has_mass] = np.sum(hh.D_ss * mpc_state, axis=(1, 2))[has_mass] / weight[has_mass]
-            self.mpc_distribution = mpc_a
-
-            self.steady_state = _two_asset_steady_state_dict(hh)
-            self.steady_state["r"] = self.r_b_ss
-            for v in self.variables:
-                if v not in self.steady_state:
-                    self.steady_state[v] = 0.0
-            return
-
         n_a = int(self.hetagent_config.get("n_a", 100))
         a_max = float(self.hetagent_config.get("a_max", 50.0))
 
-        hh = _solve_household_block(
+        hh_sa = _solve_household_block(
             beta=self.beta,
             gamma=self.gamma,
             r_ss=self.r_ss,
             n_a=n_a,
             a_max=a_max,
         )
-        self._hh_block = hh
-        self.asset_grid = hh.a_grid.copy()
-        self.asset_distribution = np.sum(hh.D_ss, axis=1)
-        mpc_mat = _local_mpc(hh.c_ss, hh.a_grid, hh.r_ss)
-        weight = np.sum(hh.D_ss, axis=1)
+        self._hh_block = hh_sa
+        self.asset_grid = hh_sa.a_grid.copy()
+        self.asset_distribution = np.sum(hh_sa.D_ss, axis=1)
+        mpc_mat = _local_mpc(hh_sa.c_ss, hh_sa.a_grid, hh_sa.r_ss)
+        weight = np.sum(hh_sa.D_ss, axis=1)
         mpc_cond = np.zeros(n_a)
         mask = weight > 1e-12
-        mpc_cond[mask] = np.sum(hh.D_ss[mask] * mpc_mat[mask], axis=1) / weight[mask]
+        mpc_cond[mask] = np.sum(hh_sa.D_ss[mask] * mpc_mat[mask], axis=1) / weight[mask]
         mpc_cond[~mask] = np.mean(mpc_mat[~mask], axis=1)
         self.mpc_distribution = mpc_cond
 
-        c_ss = float(hh.C_ss)
+        c_ss = float(hh_sa.C_ss)
         y_ss = c_ss  # Market clearing Y = C in baseline
         self.steady_state = {
             "Y": y_ss,
@@ -256,7 +275,7 @@ class HANKModel:
             "pi": 0.0,
             "i": self.r_ss,
             "w": 1.0,
-            "B": float(hh.B),
+            "B": float(hh_sa.B),
         }
         # Populate any other variables from .mod file with steady state
         for v in self.variables:
@@ -272,9 +291,13 @@ class HANKModel:
         dated, plus ``J_z_*`` for non-financial income); see
         :func:`puremacro.models.hank_sequence_space._two_asset_jacobians`.
         """
+        if self._hh_block is None and self._dp_block is None:
+            self._solve_steady_state()
+        if self.is_two_asset:
+            assert isinstance(self._hh_block, _TwoAssetHouseholdBlock)
+            return _two_asset_jacobians(self._hh_block, T=T)
+
         if self.household_model is not None:
-            if self._dp_block is None:
-                self._solve_steady_state()
             J_dp = dp_sequence_jacobian(self.household_model, inputs=self._dp_inputs, outputs=None, T=T)
             c_key = "C" if "C" in J_dp else ("c" if "c" in J_dp else next(iter(J_dp)))
             r_key = "r" if "r" in self._dp_inputs else self._dp_inputs[0]
@@ -302,8 +325,7 @@ class HANKModel:
 
         if self._hh_block is None:
             self._solve_steady_state()
-        if self.is_two_asset:
-            return _two_asset_jacobians(self._hh_block, T=T)
+        assert isinstance(self._hh_block, _HouseholdBlock)
         J_C_r, J_C_Y = _consumption_jacobians(self._hh_block, T=T)
         return {
             "J_C_r": J_C_r,
@@ -319,7 +341,76 @@ class HANKModel:
         nonlinear: bool = False,
     ) -> HANKResult:
         """Simulate general equilibrium transition dynamics for an MIT shock."""
+        if nonlinear and self.household_model is not None:
+            raise NotImplementedError("nonlinear general-equilibrium simulation for a dp household_model "
+                                      "is not implemented; dp_nonlinear_transition computes household "
+                                      "responses to specified price paths")
         shock_path = magnitude * (rho ** np.arange(horizon))
+
+        if self.is_two_asset:
+            # Linear GE on the steady state solved at construction (the same block the
+            # reported steady state and distributions come from).
+            assert isinstance(self._hh_block, _TwoAssetHouseholdBlock)
+            res_2a = _two_asset_ge_solve(
+                self._hh_block,
+                int(horizon),
+                self.phi_pi,
+                self.kappa,
+                shock_path,
+                self.alpha_ab,
+            )
+            dY = res_2a.irf_output[:horizon]
+            dC = res_2a.irf_consumption[:horizon]
+            dD = res_2a.irf_deposit[:horizon]
+            dr_b = res_2a.irf_rate_b[:horizon]
+            dr_a = res_2a.irf_rate_a[:horizon]
+            dpi = res_2a.irf_inflation[:horizon]
+            di = self.phi_pi * dpi + shock_path
+
+            path_data_2a: dict[str, np.ndarray] = {
+                "Y": dY,
+                "C": dC,
+                "CHI": dY - dC,  # adjustment costs: goods market Y = C + CHI
+                "D": dD,
+                "r_b": dr_b,
+                "r_a": dr_a,
+                "r": dr_b,
+                "pi": dpi,
+                "i": di,
+            }
+            if shock in self.shocks:
+                path_data_2a[shock] = shock_path
+            for v in self.variables:
+                if v not in path_data_2a:
+                    path_data_2a[v] = np.zeros(horizon)
+
+            df_paths = pd.DataFrame(path_data_2a)
+            J_dict = {
+                "J_C_rb": res_2a.jacobian_c_rb,
+                "J_C_ra": res_2a.jacobian_c_ra,
+                "J_C_Y": res_2a.jacobian_c_y,
+                "J_D_rb": res_2a.jacobian_d_rb,
+                "J_D_ra": res_2a.jacobian_d_ra,
+                "J_D_Y": res_2a.jacobian_d_y,
+                "J_C_r": res_2a.jacobian_c_rb,
+            }
+
+            return HANKResult(
+                steady_state=self.steady_state,
+                transition_paths=df_paths,
+                jacobians=J_dict,
+                asset_distribution=self.asset_distribution,
+                asset_grid=self.asset_grid,
+                liquid_asset_grid=self.liquid_asset_grid,
+                joint_distribution=self.joint_distribution,
+                marginal_distribution_b=self.marginal_distribution_b,
+                deposit_distribution=self.deposit_distribution,
+                mpc_distribution=self.mpc_distribution,
+                shock_name=shock,
+                horizon=horizon,
+                model_name=self.hetagent_config.get("model", "hank_two_asset"),
+                converged=res_2a.converged,
+            )
 
         if self.household_model is not None:
             J_dict = self.compute_jacobians(T=horizon)
@@ -361,72 +452,8 @@ class HANKModel:
                 converged=converged,
             )
 
-        if self.is_two_asset:
-            # Linear GE on the steady state solved at construction (the same block the
-            # reported steady state and distributions come from).
-            res_2a = _two_asset_ge_solve(
-                self._hh_block,
-                int(horizon),
-                self.phi_pi,
-                self.kappa,
-                shock_path,
-                self.alpha_ab,
-            )
-            dY = res_2a.irf_output[:horizon]
-            dC = res_2a.irf_consumption[:horizon]
-            dD = res_2a.irf_deposit[:horizon]
-            dr_b = res_2a.irf_rate_b[:horizon]
-            dr_a = res_2a.irf_rate_a[:horizon]
-            dpi = res_2a.irf_inflation[:horizon]
-            di = self.phi_pi * dpi + shock_path
-
-            path_data: dict[str, np.ndarray] = {
-                "Y": dY,
-                "C": dC,
-                "CHI": dY - dC,  # adjustment costs: goods market Y = C + CHI
-                "D": dD,
-                "r_b": dr_b,
-                "r_a": dr_a,
-                "r": dr_b,
-                "pi": dpi,
-                "i": di,
-            }
-            if shock in self.shocks:
-                path_data[shock] = shock_path
-            for v in self.variables:
-                if v not in path_data:
-                    path_data[v] = np.zeros(horizon)
-
-            df_paths = pd.DataFrame(path_data)
-            J_dict = {
-                "J_C_rb": res_2a.jacobian_c_rb,
-                "J_C_ra": res_2a.jacobian_c_ra,
-                "J_C_Y": res_2a.jacobian_c_y,
-                "J_D_rb": res_2a.jacobian_d_rb,
-                "J_D_ra": res_2a.jacobian_d_ra,
-                "J_D_Y": res_2a.jacobian_d_y,
-                "J_C_r": res_2a.jacobian_c_rb,
-            }
-
-            return HANKResult(
-                steady_state=self.steady_state,
-                transition_paths=df_paths,
-                jacobians=J_dict,
-                asset_distribution=self.asset_distribution,
-                asset_grid=self.asset_grid,
-                liquid_asset_grid=self.liquid_asset_grid,
-                joint_distribution=self.joint_distribution,
-                marginal_distribution_b=self.marginal_distribution_b,
-                deposit_distribution=self.deposit_distribution,
-                mpc_distribution=self.mpc_distribution,
-                shock_name=shock,
-                horizon=horizon,
-                model_name=self.hetagent_config.get("model", "hank_two_asset"),
-                converged=res_2a.converged,
-            )
-
         if nonlinear:
-            res_ssj = solve_nonlinear_transition(
+            res_nonlin = solve_nonlinear_transition(
                 beta=self.beta,
                 gamma=self.gamma,
                 r_ss=self.r_ss,
@@ -437,14 +464,14 @@ class HANKModel:
                 n_a=int(self.hetagent_config.get("n_a", 50)),
                 a_max=float(self.hetagent_config.get("a_max", 30.0)),
             )
-            dY = res_ssj.irf_output_nonlinear[:horizon]
-            dC = res_ssj.irf_consumption_nonlinear[:horizon]
-            dr = res_ssj.irf_rate_nonlinear[:horizon]
-            dpi = res_ssj.irf_inflation_nonlinear[:horizon]
-            converged = res_ssj.converged
+            dY = res_nonlin.irf_output_nonlinear[:horizon]
+            dC = res_nonlin.irf_consumption_nonlinear[:horizon]
+            dr = res_nonlin.irf_rate_nonlinear[:horizon]
+            dpi = res_nonlin.irf_inflation_nonlinear[:horizon]
+            converged = res_nonlin.converged
             J_dict = {
-                "J_C_r": res_ssj.jacobian_c_r,
-                "J_C_Y": res_ssj.jacobian_c_y,
+                "J_C_r": res_nonlin.jacobian_c_r,
+                "J_C_Y": res_nonlin.jacobian_c_y,
             }
         else:
             res_ssj = solve_hank_sequence_space(

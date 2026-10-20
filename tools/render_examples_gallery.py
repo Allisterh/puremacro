@@ -227,7 +227,7 @@ def run_example(
         )
         timed_out = False
         returncode = proc.returncode
-        stderr = proc.stderr
+        stderr = proc.stderr or (proc.stdout if proc.returncode else "")
     except subprocess.TimeoutExpired as e:
         timed_out = True
         returncode = None

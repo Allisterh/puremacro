@@ -69,8 +69,6 @@ from .dynare import (
     build_dynare, parse_mod, load_mod, load_dynare_mod, solve_dynare_2nd_order,
     _orig_stoch_simul, _linear_model_stoch_simul,
 )
-import functools as _functools
-LinearModel.stoch_simul = _functools.wraps(_orig_stoch_simul)(_linear_model_stoch_simul)
 from .perfect_foresight import PerfectForesightResult, solve_perfect_foresight
 from .extended_path import extended_path
 from .stacked_newton import (
@@ -91,6 +89,7 @@ from .occbin import (
     solve_occbin,
     solve_multiconstraint_occbin,
     solve_differentiable_occbin,
+    solve_pruned_occbin,
     smin_tau,
     smax_tau,
     d_smax_tau,
@@ -180,7 +179,7 @@ __all__ = [
     "StackedProblem", "BlockTridiagonalPreconditioner", "StructuredBlockTridiagonalPreconditioner",
     "preconditioned_lgmres", "solve_stacked_newton_krylov", "compare_stacked_horizons",
     "StackedNewtonResult", "HorizonComparison", "StackedNewtonError",
-    "OccBinConstraint", "OccBinResult", "solve_occbin", "solve_multiconstraint_occbin",
+    "OccBinConstraint", "OccBinResult", "solve_occbin", "solve_multiconstraint_occbin", "solve_pruned_occbin",
     "solve_gertler_karadi", "GertlerKaradiResult", "GK2011_PARAMS", "solve_steady_state", "build_gertler_karadi_model",
     "estimate_dsge", "estimate_dsge_bayesian", "estimate_sw07",
     "load_sw07_data", "sw07_laplace_mdd", "sw07_log_posterior", "SW07MarginalLikelihoodResult",
@@ -244,7 +243,6 @@ from . import hank
 from . import macro
 from . import news
 from . import markov_switching
-from . import particle_filter
 from . import estimate
 import types as _types
 
@@ -260,13 +258,13 @@ class _EstimateModule(_types.ModuleType):
 estimate.__class__ = _EstimateModule
 
 # Convenience aliases so particle_filter function can also act like module export
-particle_filter.particle_filter = particle_filter
-particle_filter.ParticleFilterResult = ParticleFilterResult
-particle_filter.StochasticVolatilitySpec = StochasticVolatilitySpec
-particle_filter.systematic_resample = systematic_resample
-particle_filter.stratified_resample = stratified_resample
-particle_filter.residual_resample = residual_resample
-particle_filter.multinomial_resample = multinomial_resample
+setattr(particle_filter, "particle_filter", particle_filter)
+setattr(particle_filter, "ParticleFilterResult", ParticleFilterResult)
+setattr(particle_filter, "StochasticVolatilitySpec", StochasticVolatilitySpec)
+setattr(particle_filter, "systematic_resample", systematic_resample)
+setattr(particle_filter, "stratified_resample", stratified_resample)
+setattr(particle_filter, "residual_resample", residual_resample)
+setattr(particle_filter, "multinomial_resample", multinomial_resample)
 
 
 

@@ -22,13 +22,12 @@ python -m pip install puremacro
 | **Simular políticas** | Declare un modelo de hogares con [programación dinámica](dp.md), estudie la [transmisión monetaria](monetary_transmission.md) o construya un [contrafactual comercial](trade_accounting.md). |
 | **Aprender o enseñar** | Elija una [ruta de cuadernos](notebooks.md) o use el [curso bilingüe y sus laboratorios interactivos](https://github.com/jalonso1979/puremacro/tree/main/curso). El curso fija su propia versión del paquete. |
 
-**Estado de publicación, verificado el 20 de octubre de 2026:** la última
-versión publicada en [PyPI](https://pypi.org/project/puremacro/) es **5.2.0**.
-Esta copia contiene el código de 5.3.0. La documentación también describe
-**desarrollo de 5.3/5.4**, con notas de versión cuando cambia el comportamiento.
-Las modificaciones de código de 5.4.0 no están incluidas aquí; esas notas no
-establecen su disponibilidad en esta copia ni en el paquete publicado. Véase el
-[historial de cambios](https://github.com/jalonso1979/puremacro/blob/main/CHANGELOG.md).
+**Versión de la documentación: 5.4.0.** Estos ejemplos describen la API de
+5.4.0, incluidas las adiciones y correcciones registradas bajo 5.3.0 y 5.4.0
+en el [historial de cambios](https://github.com/jalonso1979/puremacro/blob/main/CHANGELOG.md).
+Consulte [PyPI](https://pypi.org/project/puremacro/) para conocer las versiones
+disponibles y use la documentación correspondiente a su versión instalada.
+El curso mantiene su propio entorno y sus requisitos de versión.
 
 ## ¿Qué es puremacro?
 
@@ -51,7 +50,7 @@ para conocer el alcance de la evidencia.
    - **Modelado Híbrido DSGE-VAR**: Optimización de previas e identificación estructural DSGE-VAR($\lambda$) de Del Negro y Schorfheide (2004).
    - **Choques Anticipados de Noticias**: Aumento del espacio de estados con operadores nilpotentes que preservan la determinancia de Blanchard-Kahn.
    - **Filtrado No Lineal de Partículas y MS-DSGE**: Filtros de partículas bootstrap y auxiliares con volatilidad estocástica y soluciones racionales con cambio de régimen de Markov de Foerster et al. (2016) con GIRFs analíticas cerradas.
-   - **Perturbación y Restricciones Ocasionalmente Activas**: Perturbación podada para modelos sin restricciones y OccBin lineal por partes para regímenes con restricciones activas ([Guía](dsge_build.md)). La función de desarrollo de 5.4 `solve_pruned_occbin` admite OccBin lineal, incluidos choques anticipados, y trayectorias de segundo orden sin restricciones activas con una sola innovación inicial; los episodios no lineales con restricciones activas y las innovaciones futuras anticipadas no lineales generan errores explícitos. Esta función no está presente en el código de 5.3 ([Alcance de desarrollo](dsge_v3.md)).
+   - **Perturbación y Restricciones Ocasionalmente Activas**: Perturbación podada para modelos sin restricciones y OccBin lineal por partes para regímenes con restricciones activas ([Guía](dsge_build.md)). La función de desarrollo `solve_pruned_occbin` admite OccBin lineal, incluidos choques anticipados, y trayectorias de segundo orden sin restricciones activas con una sola innovación inicial; los episodios no lineales con restricciones activas y las innovaciones futuras anticipadas no lineales generan errores explícitos ([Límites soportados](dsge_higher_order.md)).
 
 2. **Modelos de Agentes Heterogéneos (DP Declarativa y HANK)**:
    - **Modelos de Hogares como Ecuaciones**: Declare estados, decisiones, recompensas y restricciones con `dp.Model`, y elija VFI, EGM, HJB en tiempo continuo o una resolución de Krusell–Smith admitida ([Guía](dp.md)).

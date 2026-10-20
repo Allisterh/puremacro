@@ -23,20 +23,17 @@ date: 13 September 2026
 bibliography: paper.bib
 ---
 
-<!-- AUTHOR: the ORCID above is the only "Jorge Alonso Ortiz" (ITAM) record in the
-     public ORCID registry (checked 2026-09-13); confirm it is yours. Set `date` to
-     the day you submit. -->
 
 <!-- Evidence snapshot. The validation-gallery counts (checks, subsystems, kinds
      of reference) and `scorecard.png` were recomputed from `validation.scorecard()`
      on the 5.0 development tree on 2026-10-13, after the trade modules left the
-     package: 110 checks, 15 subsystems, 20 external (13 package + 5 SciPy +
-     2 published) / 31 analytical / 59 internal, all passing (4.6.0 had 114 with
+     package: 113 checks, 16 subsystems, 20 external (13 package + 5 SciPy +
+     2 published) / 31 analytical / 62 internal, all passing (4.6.0 had 114 with
      four trade cases; 4.4.0 had 110: 20 / 31 / 59; 3.4.0 had 107: 19 / 29 / 59).
      The module, line and test counts of the "Scale" paragraph and the Pyodide
-     sentence were recomputed on the 5.3.0 tree on 2026-10-17 (RELEASING 6.5
-     recipe: 836 tracked modules, 297,579 lines, 20,342 collected tests of which
-     the default selection runs 20,088; Pyodide 0.28.3 and 314.0.5 110/110). The
+     sentence were recomputed on the 5.4.0 candidate on 2026-10-18 (RELEASING 6.5
+     recipe: 837 package modules, approximately 299,000 lines; more than 20,000 tests).
+     The dated browser evidence remains Pyodide 0.28.3 and 314.0.5 110/110. The
      swept-library-module (631), notebook-pair (70) and commit counts (369 of 555)
      also come from the 5.3.0 tree (commit d74eb7cb, 2026-10-17). The text was extended on
      2026-10-12 to cover `dp`, the survey microdata and `puremacro.text`
@@ -48,9 +45,12 @@ bibliography: paper.bib
 # Summary
 
 `puremacro` is a Python library for empirical macroeconomics and for solving
-quantitative macroeconomic models. It gives researchers, instructors and students
-one consistent interface to the field's standard methods, and a way to check the
-library's numbers on the machine that produces them.
+quantitative macroeconomic models (\autoref{fig:graphical_abstract}). It gives
+researchers, instructors and students one consistent interface to the field's
+standard methods, and a way to check the library's numbers on the machine that
+produces them.
+
+![Overview of the PureMacro library: empirical macroeconometrics, quantitative structural modeling, and zero-dependency core scientific Python architecture.\label{fig:graphical_abstract}](figures/graphical_abstract.png){ width=100% }
 
 On the empirical side it covers vector autoregressions (VARs) with recursive,
 long-run, sign, sign–zero, narrative and external-instrument identification
@@ -126,11 +126,10 @@ domains they are more mature than `puremacro` and, for large heterogeneous-agent
 problems, faster: `puremacro` trades speed for portability.
 
 As of September 2026 the Pyodide distribution includes NumPy, SciPy, pandas,
-Matplotlib and statsmodels, but not arch, linearmodels or Numba; arch and linearmodels publish no pure-Python wheels
-that a browser could install at run time; and HARK, QuantEcon.py and dolo declare Numba
-as a required dependency, directly or through QuantEcon.py, while the sequence-space Jacobian toolkit uses it in its
-core modules. In a browser, the volatility, panel-IV and heterogeneous-agent layers
-of the usual stack are therefore unavailable, and Dynare needs a different language
+Matplotlib and statsmodels, but not arch, linearmodels or Numba. HARK, QuantEcon.py
+and dolo require Numba, while arch and linearmodels provide no pure-Python browser wheels.
+In a browser, the volatility, panel-IV and heterogeneous-agent layers
+of the usual stack are therefore unavailable, and Dynare requires a separate language
 runtime altogether.
 
 Individual estimators could be contributed to existing packages. The collection's
@@ -140,11 +139,15 @@ would not change its host's dependency graph.
 
 # Software design
 
+The overall modular architecture is illustrated in \autoref{fig:architecture}.
+
+![Architectural schematic of `puremacro`: domain interfaces, algorithmic engines, and zero-dependency portability layer.\label{fig:architecture}](figures/architecture_schematic.png){ width=90% }
+
 **An import invariant.** Library modules import NumPy, SciPy, pandas and
 Matplotlib (plus requests, in the data layer) at module scope; anything else is
 imported only when available. Two tests enforce the rule against the packages most
 likely to leak in.
-The first imports each of the 631 library modules (examples, teaching helpers,
+The first imports each of the 632 shippable library modules (examples, teaching helpers,
 text-scraping sources and optional Numba kernels are excluded) and fails if
 statsmodels, linearmodels, arch or the scraping packages bs4, pdfplumber and pypdf
 have entered `sys.modules`. The second repeats the sweep with those packages
@@ -176,23 +179,21 @@ engines that not every Pyodide distribution provides. On
 13 October 2026 a headless Node.js harness ran the whole validation gallery inside Pyodide 0.28.3
 and 314.0.5 (the playground's version): every check passed on both.
 
-<!-- AUTHOR: re-run `python tools/pyodide_gallery.py` on the submitted commit and
-     update the sentence above if the counts or Pyodide versions changed. -->
-
-**Scale.** Version 5.3.0 comprises about 835 modules and 298,000 lines of Python,
-exercised by about 20,300 tests, of which CI runs 20,100 on Linux, macOS and Windows
-under Python 3.11–3.13 on every push and the remaining slow, reference and
-replication tests weekly and on every release tag, where they gate publication.
+**Scale.** Version 5.4.0 contains 837 package Python modules and approximately
+299,000 lines of Python, including 632 shippable library modules checked by the
+import sweep. More than 20,000 automated tests cover the package. CI runs the
+default selection on Linux, macOS and Windows under Python 3.11–3.13; slow,
+reference and replication tests run weekly and on release tags, where they gate publication.
 Before each release tag, a script checks the suite against a recorded baseline,
 the import invariant and a snapshot of the public API.
 
 ## Verification
 
 The gallery counts below and the scale measurements above were recomputed on
-2026-10-17 on the 5.3.0 tree.
+2026-10-18 on the 5.4.0 candidate.
 
-The validation gallery, `puremacro.validation.scorecard()`, runs 110 checks across
-15 subsystems in under a minute, with none of the oracle packages installed; all
+The validation gallery, `puremacro.validation.scorecard()`, runs 113 checks across
+16 subsystems in under a minute, with none of the oracle packages installed; all
 pass (\autoref{fig:scorecard}). The checks differ in strength, and each records
 its reference. Twenty compare against an external reference: stored outputs of
 statsmodels, arch, linearmodels and esda, SciPy results computed at run time, or a
@@ -200,7 +201,7 @@ published table. Agreement with independent implementations is typically at
 machine precision (median relative difference of order $10^{-15}$); the exception
 is GARCH, whose estimates differ from arch's by up to 0.35% because the two
 packages use different optimisers. Thirty-one checks compare against analytical
-results and 59 test internal consistency.
+results and 62 test internal consistency.
 
 A separate replication gallery, `puremacro.replication.scorecard()`, reproduces
 published estimates of the return to schooling [@card1995], a textbook logit of
@@ -210,17 +211,13 @@ incomplete-markets models [@huggett1993; @aiyagari1994]: the equilibrium interes
 rate lies below the rate of time preference and falls as income risk rises. Most model solvers (sequence-space, continuous-time, spatial,
 and climate) are covered by unit tests but not yet by gallery checks.
 
-![The validation gallery of `puremacro`: 110 checks in 15 subsystems, by kind of reference; all pass. *External reference*: stored outputs of statsmodels, arch, linearmodels or esda, SciPy computed at run time, or a published table. *Analytical result*: a closed form, or an effect planted in simulated data. *Internal consistency*: agreement between alternative algorithms, identities that correct output must satisfy, or recovery of parameters from simulated data. Regenerate with `python paper/make_scorecard_fig.py`.\label{fig:scorecard}](scorecard.png){ width=80% }
+![The validation gallery of `puremacro`: 113 checks in 16 subsystems, by kind of reference; all pass. *External reference*: stored outputs of statsmodels, arch, linearmodels or esda, SciPy computed at run time, or a published table. *Analytical result*: a closed form, or an effect planted in simulated data. *Internal consistency*: agreement between alternative algorithms, identities that correct output must satisfy, or recovery of parameters from simulated data. Regenerate with `python paper/make_scorecard_fig.py`.\label{fig:scorecard}](scorecard.png){ width=80% }
 
 # Research impact statement
 
 `puremacro` is young (public since July 2026) and has not yet been used in
 published research or by other packages. Its significance is near-term, and rests
 on evidence a reviewer can check.
-
-<!-- AUTHOR: add any external use you know of (other courses, theses, working
-     papers, downstream code); JOSS weighs realized impact above near-term promise. -->
-
 
 *Teaching.* The library was written for, and is used in, the author's course
 *Macroeconomía Avanzada* at ITAM, whose Fall 2026 edition builds its computational
@@ -231,11 +228,6 @@ material on it. The course's 22 Spanish lesson notebooks are in the repository
 pairs of worked-example notebooks; all of them, with the lesson notebooks, are also
 published as a JupyterLite [@jupyterlite] site that runs them in the browser.
 
-<!-- AUTHOR: the live site's install failure (the 3.2.1 wheel required openpyxl
-     while PyPI fallback is disabled) is fixed since 3.3.0. After the next Pages
-     deploy, run the first cell of a notebook in a browser to confirm, then delete
-     this comment. -->
-
 *Community readiness.* The package is released on PyPI under the MIT licence, with
 documentation at <https://jalonso1979.github.io/puremacro/>, contribution
 guidelines, and CI on three operating systems.
@@ -245,7 +237,7 @@ guidelines, and CI on three operating systems.
 Generative AI was used extensively in writing `puremacro`, its documentation and
 this paper. Anthropic's Claude models, used through the Claude Code agent (Claude
 Opus 5, Claude Opus 5.5, Claude Fable 5, Claude Fable 5.1 and Claude Sonnet 5.5), generated or
-co-wrote much of the code, tests, documentation and notebooks: 369 of the 555
+co-wrote much of the code, tests, documentation and notebooks: 389 of the 558
 commits in the public repository carry a Claude co-author trailer. Google's Jules coding agent
 contributed 20 pull requests (refactoring, performance and test improvements),
 each reviewed and merged by the author. Claude also drafted and revised this
@@ -291,8 +283,5 @@ and CI.
 
 The author thanks the scientific-Python and Pyodide communities, whose work makes
 a browser-capable macroeconomics library possible.
-
-<!-- AUTHOR: JOSS asks for financial support to be acknowledged; name any grant,
-     or state that the work received no specific funding. -->
 
 # References

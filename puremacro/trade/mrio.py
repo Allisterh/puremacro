@@ -843,7 +843,7 @@ class Concordance:
         return Concordance.build(f"{other.name} o {self.name}", self.fine_codes, groups,
                                  other.coarse_codes, other.coarse_names)
 
-    def coarse_mask(self, fine_mask: Sequence[bool], rule: str = "all") -> np.ndarray:
+    def coarse_mask(self, fine_mask: Sequence[bool] | np.ndarray, rule: str = "all") -> np.ndarray:
         """Aggregate a boolean sector mask: ``"all"`` (every member), ``"any"`` or ``"majority"``."""
         mask = np.asarray(fine_mask, dtype=bool)
         if mask.shape != (self.n_fine,):
@@ -1106,12 +1106,12 @@ class MRIOTable:
                 if code in fcodes and Ff[:, :, fcodes.index(code)].min(initial=0.0) < 0:
                     raise MRIOIntegrityError(f"negative {label} requires strict=False and a separately specified model")
         optional: dict[str, np.ndarray | None] = {}
-        for name, arr in (("production_taxes", production_taxes), ("labor_compensation", labor_compensation),
-                          ("operating_surplus", operating_surplus)):
-            if arr is None:
+        for name, opt_arr in (("production_taxes", production_taxes), ("labor_compensation", labor_compensation),
+                              ("operating_surplus", operating_surplus)):
+            if opt_arr is None:
                 optional[name] = None
                 continue
-            a = _frozen(arr).reshape(-1)
+            a = _frozen(opt_arr).reshape(-1)
             if a.shape != (m,):
                 raise ValueError(f"{name} must have shape ({m},)")
             if not np.isfinite(a).all():
@@ -1390,7 +1390,7 @@ class MRIOTable:
     @property
     def capital_share_available(self) -> np.ndarray:
         """Cells whose observed labour and surplus are nonnegative with positive factor value added."""
-        if self.operating_surplus is None:
+        if self.operating_surplus is None or self.labor_compensation is None:
             return np.zeros(self.n_cells, dtype=bool)
         return (self.factor_VA > 0) & (self.labor_compensation >= 0) & (self.operating_surplus >= 0)
 
@@ -1604,9 +1604,9 @@ class MRIOTable:
             data["net_exports"] = xn
             return pd.DataFrame(data, index=pd.Index(self.country_codes, name="country"))
         if which == "categories":
-            rows = [(c, FINAL_USE_NAMES[c], float(self.F[:, :, i].sum()), float(self.TFD[:, i].sum()))
-                    for i, c in enumerate(self.fd_codes)]
-            return pd.DataFrame(rows, columns=["Category", "Meaning", "Basic_price_total", "Net_taxes"]).set_index("Category")
+            cat_rows = [(c, FINAL_USE_NAMES[c], float(self.F[:, :, i].sum()), float(self.TFD[:, i].sum()))
+                        for i, c in enumerate(self.fd_codes)]
+            return pd.DataFrame(cat_rows, columns=["Category", "Meaning", "Basic_price_total", "Net_taxes"]).set_index("Category")
         if which == "sources":
             return pd.DataFrame([r.to_dict() for r in self.sources] or [{"path": None, "bytes": None, "sha256": None,
                                                                           "md5": None, "archive_member": None,
@@ -1698,7 +1698,7 @@ def read_oecd_native(
     }
     table = MRIOTable.from_raw(raw, reference_country=ref, metadata=meta,
                                merchandise_mask=goods_mask(raw.sectors, "oecd45"))
-    report = _reader_report(record, year=int(year), edition=meta["edition"], units=meta["units"],
+    report = _reader_report(record, year=int(year), edition=str(meta["edition"]), units=str(meta["units"]),
                             n=table.n_countries, s=table.n_sectors, adjustments=(), transformations=(),
                             path=str(path))
     return table.with_metadata(build_report=report)
@@ -1712,25 +1712,27 @@ def _figaro_rounding_repair(Z: np.ndarray, F: np.ndarray, VA: np.ndarray, TLS: n
     # Source is rounded to 0.001 million EUR. Only truly empty production nodes
     # with at most one rounding unit of negative output are zeroed.
     for i in np.flatnonzero(y < 0):
-        mass = float(np.abs(Z[i]).sum() + np.abs(Z[:, i]).sum() + np.abs(F[i]).sum() + abs(VA[i]) + abs(TLS[i]))
-        if y[i] < -0.001000001 or mass > 0.002000001:
-            raise MRIOIntegrityError(f"Non-rounding negative output: {labels[i]}, {y[i]}")
-        adjustments.append({"cell": labels[i], "reason": "negative empty-cell rounding",
-                            "output": float(y[i]), "absolute_input_mass": mass})
-        Z[i] = 0.0
-        Z[:, i] = 0.0
-        F[i] = 0.0
-        VA[i] = 0.0
-        TLS[i] = 0.0
+        idx = int(i)
+        mass = float(np.abs(Z[idx]).sum() + np.abs(Z[:, idx]).sum() + np.abs(F[idx]).sum() + abs(VA[idx]) + abs(TLS[idx]))
+        if y[idx] < -0.001000001 or mass > 0.002000001:
+            raise MRIOIntegrityError(f"Non-rounding negative output: {labels[idx]}, {y[idx]}")
+        adjustments.append({"cell": labels[idx], "reason": "negative empty-cell rounding",
+                            "output": float(y[idx]), "absolute_input_mass": mass})
+        Z[idx] = 0.0
+        Z[:, idx] = 0.0
+        F[idx] = 0.0
+        VA[idx] = 0.0
+        TLS[idx] = 0.0
     # Move negative consumption rounding to inventories, preserving every
     # output row and the country's total expenditure exactly.
     for i, k in np.argwhere(F[:, :, 0] < 0):
-        value = float(F[i, k, 0])
+        i_idx, k_idx = int(i), int(k)
+        value = float(F[i_idx, k_idx, 0])
         if value < -0.001000001:
-            raise MRIOIntegrityError(f"Material negative consumption cannot be regularized: {labels[i]} -> {countries[k]}")
-        F[i, k, 3] += value
-        F[i, k, 0] = 0.0
-        adjustments.append({"cell": labels[i], "destination": countries[k],
+            raise MRIOIntegrityError(f"Material negative consumption cannot be regularized: {labels[i_idx]} -> {countries[k_idx]}")
+        F[i_idx, k_idx, 3] += value
+        F[i_idx, k_idx, 0] = 0.0
+        adjustments.append({"cell": labels[i_idx], "destination": countries[k_idx],
                             "reason": "rounding reclassified from C to V", "amount": value})
     return adjustments
 
@@ -1859,7 +1861,7 @@ def read_figaro_native(
         production_taxes=prodtax, labor_compensation=lab, operating_surplus=cap,
         merchandise_mask=mask, reference_country="ROW" if "ROW" in ccodes else None, metadata=meta,
     )
-    report = _reader_report(record, year=int(year), edition=meta["edition"], units=meta["units"],
+    report = _reader_report(record, year=int(year), edition=str(meta["edition"]), units=str(meta["units"]),
                             n=n, s=s, adjustments=adjustments, transformations=transformations, path=str(path))
     return table.with_metadata(build_report=report)
 
@@ -2118,7 +2120,7 @@ def read_exiobase_native(
         fd_codes=("C", "G", "X", "V", "VAL"), output=output, production_taxes=prodtax,
         labor_compensation=lab, operating_surplus=cap, merchandise_mask=mask, reference_country=ref, metadata=meta,
     )
-    report = _reader_report(src.records[0], year=int(year), edition=meta["edition"], units=meta["units"],
+    report = _reader_report(src.records[0], year=int(year), edition=str(meta["edition"]), units=str(meta["units"]),
                             n=n, s=s, adjustments=(), transformations=(), path=str(path))
     return table.with_metadata(build_report=report)
 
@@ -2283,13 +2285,13 @@ def regularize_table(
          f"world sum of trade balances {raw_sum:.3e} exceeds {xn_sum_tol:.0e} of world GDP")
     if strict and failures:
         raise MRIOIntegrityError("; ".join(failures))
-    rho = None
+    rho: tuple[float, float, float] | None = None
     if spectral and not sparse.issparse(Z):
         from .regularize import compute_spectral_radius
 
         with np.errstate(divide="ignore", invalid="ignore"):
             A = np.divide(np.asarray(Z, dtype=float), row[None, :], out=np.zeros((m, m)), where=row[None, :] > 0)
-        rho = tuple(float(v) for v in compute_spectral_radius(A))
+        rho = compute_spectral_radius(A)
     passed = not failures
     failed = tuple(k for k, v in gates.items() if not v["passed"])
     transformation = (f"regularize_table: inactive={inactive}, {len(zero_idx)} phantoms of {phantom:g} own-country C "
@@ -2527,7 +2529,7 @@ def to_calibration_matrix(
         )
     share = np.full(m, float(labor_share))
     observed = np.zeros(m, dtype=bool)
-    if table.labor_compensation is not None:
+    if table.labor_compensation is not None and table.operating_surplus is not None:
         L, K = table.labor_compensation, table.operating_surplus
         observed = (L > 0) & (K > 0)
         share[observed] = L[observed] / (L[observed] + K[observed])

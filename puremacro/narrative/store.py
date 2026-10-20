@@ -241,6 +241,7 @@ class CorpusStore:
              json.dumps(report, default=_json_default), _version()),
         )
         self._conn.commit()
+        assert cur.lastrowid is not None
         return int(cur.lastrowid)
 
     # ── reads ──────────────────────────────────────────────────────────────

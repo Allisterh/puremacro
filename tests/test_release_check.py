@@ -230,6 +230,30 @@ def test_gate1_pytest_collect_error_path(monkeypatch, tmp_path):
     assert "could not run" in r["report"] or "exited with code" in r["report"]
 
 
+@pytest.mark.parametrize("output", ["1 failed in 0.01s\n", "", "\x1b[31mFAILED tests/test_example.py::test_x\x1b[0m\n"])
+def test_gate1_failure_without_readable_nodeids_cannot_pass(monkeypatch, tmp_path, output):
+    """Suppressed/truncated/colored summaries must not turn pytest exit 1 green."""
+    def fake_run(cmd, **kwargs):
+        assert "--color=no" in cmd
+        return subprocess.CompletedProcess(cmd, 1, stdout=output, stderr="")
+
+    monkeypatch.setattr(release_check.subprocess, "run", fake_run)
+    monkeypatch.setattr(release_check, "load_whitelist", lambda _p: set())
+    result = release_check.gate_test_baseline(tmp_path)
+    assert result["passed"] is False
+    assert "no FAILED/ERROR node ids" in result["report"]
+
+
+def test_gate1_parsed_failures_still_use_the_declared_baseline(monkeypatch, tmp_path):
+    output = "FAILED tests/test_example.py::test_x - AssertionError\n1 failed in 0.01s\n"
+    monkeypatch.setattr(release_check.subprocess, "run", lambda cmd, **kwargs:
+                        subprocess.CompletedProcess(cmd, 1, stdout=output, stderr=""))
+    monkeypatch.setattr(release_check, "load_whitelist", lambda _p: {"tests/test_example.py::test_x"})
+    result = release_check.gate_test_baseline(tmp_path)
+    assert result["passed"] is True
+    assert result["new"] == set()
+
+
 def test_gate3_snapshot_equal(tmp_path):
     snap = {"all": {"puremacro._linalg": ["inv_xtx", "safe_cholesky"]}}
     f = tmp_path / "snap.json"

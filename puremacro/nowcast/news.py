@@ -374,6 +374,7 @@ def banbura_modugno_news(
     T, n = old_arr.shape
 
     # Extract model system matrices
+    res: Any = None
     if isinstance(model, DynamicFactorModel):
         if model.result_ is None:
             model.fit(old_arr)
@@ -393,6 +394,7 @@ def banbura_modugno_news(
         }
     else:
         raise TypeError(f"Unsupported model type: {type(model)}")
+    assert res is not None
 
     A = np.asarray(res["A"], dtype=float)
     Q = np.asarray(res["Q"], dtype=float)
@@ -529,7 +531,7 @@ def banbura_modugno_news(
         P_pred = sm_int["P_pred"]
         P_sm = sm_int["P_smooth"]
 
-        J = [None] * (T - 1)
+        J: list[np.ndarray] = [np.zeros((m, m)) for _ in range(T - 1)]
         for t in range(T - 1):
             try:
                 J[t] = P_filt[t] @ A.T @ np.linalg.pinv(P_pred[t + 1], rcond=1e-10)

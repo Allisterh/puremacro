@@ -223,6 +223,7 @@ class ParameterContinuationResult:
 
         scalar = all(isinstance(v, Real) for v in self.parameter_values) and self.parameter
         x = np.asarray(self.parameter_values, dtype=float) if scalar else self.fractions
+        y: Sequence[Any] | np.ndarray
         if values is None:
             y = [s["audited_max_residual"] for s in self.stages]
             name, log = "audited max residual", True
@@ -400,7 +401,7 @@ def _resolve_solver(solve: Any, calib: TradeCalibrationResult | None, allow_fall
 
 def _requested_tolerance(kwargs: Mapping[str, Any]) -> float:
     tol = kwargs.get("tol", _DEFAULT_TOLERANCE)
-    if not isinstance(tol, Real) or isinstance(tol, bool) or not np.isfinite(tol) or tol <= 0:
+    if not isinstance(tol, Real) or isinstance(tol, bool) or not np.isfinite(float(tol)) or tol <= 0:
         raise ValueError("Solver kwargs must carry a finite positive tol")
     return float(tol)
 
@@ -424,7 +425,7 @@ def _check_parameters(result: Any, calib: TradeCalibrationResult, kwargs: Mappin
         raise _ContractError("Continuation requires lump-sum fiscal transfers, the closure that "
                              "solve_policy_equilibrium and its audit support")
     sigma = kwargs.get("sigma", 0.)
-    if not isinstance(sigma, Real) or isinstance(sigma, bool) or not np.isfinite(sigma) or sigma < 0:
+    if not isinstance(sigma, Real) or isinstance(sigma, bool) or not np.isfinite(float(sigma)) or sigma < 0:
         raise ValueError("sigma must be finite and nonnegative")
     if meta.get("sigma") is None or float(meta["sigma"]) != float(sigma):
         raise _ContractError("Returned technology differs from the requested sigma")

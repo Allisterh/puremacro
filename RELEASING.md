@@ -24,7 +24,7 @@ snapshots the repository's package even when another puremacro is installed.*
 
 | file | trigger | what it does |
 |---|---|---|
-| `ci.yml` | push / PR to `main`; also called by `release.yml` (`workflow_call`) | pytest on 9 targets (ubuntu + macos + windows × Python 3.11–3.13; 3.10 is below `requires-python` and was dropped), then `release_check.py --no-tests` on ubuntu/3.11 and ubuntu/3.12, and a strict `mkdocs build` on ubuntu/3.12 |
+| `ci.yml` | push / PR to `main`; also called by `release.yml` (`workflow_call`) | pytest on 9 targets (ubuntu + macos + windows × Python 3.11–3.13; 3.10 is below `requires-python` and was dropped), then `mypy puremacro --ignore-missing-imports` on ubuntu/3.12, `release_check.py --no-tests` on ubuntu/3.11 and ubuntu/3.12, and a strict `mkdocs build` on ubuntu/3.12 |
 | `release.yml` | push of a `v*` tag | job `ci` runs the whole `ci.yml` and job `opt-in` runs `opt-in-tests.yml` on the tagged commit; only if both pass (`needs: [ci, opt-in]`) does `build-and-publish` build → `twine check` → publish to PyPI (`environment: pypi`, `id-token: write`). A red suite blocks the upload, and the tag is left in place: fix forward with a new tag, or re-run the failed jobs if the failure was flaky |
 | `pages.yml` | push to `main`, or manual | builds the JupyterLite playground + mkdocs site, deploys to Pages |
 | `opt-in-tests.yml` | Mondays 05:17 UTC; manual; called by `release.yml` (`workflow_call`) | the `slow`, `reference` and `replication` markers that the default `pytest` deselects, on ubuntu / Python 3.12 (job `opt-in`, about an hour on a shared runner; it gates the release). A second job executes every notebook (43 of the 74 local minutes) on the schedule and on demand only. Added 2026-10-03 after the measured run: 115 passed, 9 skipped. |
@@ -37,11 +37,6 @@ If you ever see two PyPI workflows again, one of them is wrong.
 ## 2. The gate
 
 `tools/release_check.py` is the pre-tag check. Five gates run by default, two are opt-in:
-
-This checkout retains the 5.3 source and workflows. Separate 5.4 preparation
-adds a dedicated mypy CI step and rejects unsuccessful baseline runs whose
-failure IDs cannot be parsed. Those changes are not part of this documentation
-update; follow the workflow and checker in the commit being released.
 
 | gate | what it proves | notes |
 |---|---|---|
@@ -58,6 +53,25 @@ python tools/release_check.py                 # the five defaults
 python tools/release_check.py --no-tests      # fast: gates 2, 3, 4 and 7, seconds
 python tools/release_check.py --pyodide       # add the real-kernel smoke test
 ```
+
+Gate 1 explicitly selects `not network and not slow`. This overrides pytest's
+default selection, so the local release baseline also includes tests marked
+`reference`, `replication` or `benchmark` unless they carry an excluded marker.
+Ordinary CI pytest deselects all five opt-in groups; `opt-in-tests.yml` covers
+the additional groups separately. The local gate can therefore take longer and
+require more optional fixtures than ordinary pytest. A pytest failure whose
+node IDs cannot be read from the summary fails the gate; it never counts as an
+empty failure baseline.
+
+Install `puremacro[dev]` for the full release suite. Its public upgrade checks
+require mypy and fail on missing public features or tools. The optional
+Colab teaching-copy check uses `PUREMACRO_TEACHING_ROOT`; that checkout is not
+required by public CI. Downstream research tests live outside the public suite.
+Mypy also runs as a dedicated CI step
+on Ubuntu/Python 3.12, so type failures block release publication.
+The author's manuscript attestation is checked only when
+`PUREMACRO_JOSS_SUBMISSION=1`; publishing a package does not certify readiness
+to submit the JOSS paper or authorize removing its outstanding author comments.
 
 > Gate 4 reads **five** version-bearing files. `CITATION.cff` was added to it after it
 > silently went stale at 1.3.0 while the package shipped 1.3.1 — three files were bumped
@@ -391,12 +405,14 @@ licensee detects it), documentation, automated tests, and a functioning CI.
 
 ### 6.7 Bundled third-party data
 
-Reviewers check the licences of bundled data. The OECD input-output fixture that 4.0.0
-to 4.8.1 redistributed left with the trade modules (4.8.1 is the last release that ships
-it), so the wheel no longer carries it. The data files that remain in the package are
-public-statistics extracts (`puremacro/datasets/data/`, `puremacro/dsge/_sw07_data.csv`),
-replication inputs with their published sources, and reference outputs computed by
-puremacro's own tools.
+Reviewers check the licences of bundled data. Version 5.2.0 restored the trade
+library with a new OECD ICIO table (2023 edition, reference year 2019). Its source,
+aggregation, attribution, terms and checksums are documented in
+`puremacro/trade/_datafiles/SOURCES.md`; the old 4.x fixture remains removed.
+Other packaged data include public-statistics extracts
+(`puremacro/datasets/data/`, `puremacro/dsge/_sw07_data.csv`), replication inputs
+with their published sources, and reference outputs computed by puremacro's own
+tools.
 
 Before bundling any third-party table, record its publisher, source page, terms, what was
 changed and the SHA-256 in a `SOURCES.md` next to it, state that the MIT licence covers

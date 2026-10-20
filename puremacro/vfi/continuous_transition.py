@@ -40,7 +40,10 @@ import inspect
 import time
 import warnings
 from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional, Sequence, Tuple
+
+if TYPE_CHECKING:
+    import matplotlib.figure
 
 import numpy as np
 import pandas as pd
@@ -347,8 +350,8 @@ def _backward_egm_path(
     n_a = len(a_grid_dense)
     beta_arr = np.broadcast_to(np.asarray(beta, dtype=np.float64), (T,))
 
-    policies_a = [None] * T
-    policies_c = [None] * T
+    policies_a: list[np.ndarray] = [np.zeros((N_k, n_z), dtype=np.float64) for _ in range(T)]
+    policies_c: list[np.ndarray] = [np.zeros((N_k, n_z), dtype=np.float64) for _ in range(T)]
 
     c_next = np.asarray(c_term, dtype=np.float64).copy()
 
@@ -437,13 +440,13 @@ def _forward_young_path(
         Aggregate consumption path of shape (T,).
     """
     T = len(policies_a)
-    distributions = [None] * (T + 1)
     K_s_path = np.zeros(T, dtype=np.float64)
     C_path = np.zeros(T, dtype=np.float64)
 
     curr_pdf = np.asarray(mu_0, dtype=np.float64).copy()
     # Normalize initial mass
     curr_pdf /= np.sum(curr_pdf)
+    distributions: list[np.ndarray] = [np.zeros_like(curr_pdf) for _ in range(T + 1)]
     distributions[0] = curr_pdf
 
     for t in range(T):

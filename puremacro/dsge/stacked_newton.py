@@ -448,7 +448,7 @@ class StackedProblem:
         """
         Y = self.reshape(np.asarray(Y_flat, dtype=float))
         flat = Y.ravel()
-        if self._cache_x is not None and np.array_equal(flat, self._cache_x):
+        if self._cache_x is not None and self._cache_f is not None and np.array_equal(flat, self._cache_x):
             return self._cache_f.copy()
         F = self._stack(Y)
         if not np.isfinite(F).all():
@@ -588,10 +588,10 @@ class StackedProblem:
                     pert[j] += 1j * _COMPLEX_STEP
                     cargs[which] = pert
                     try:
-                        out = self._evaluate(cargs[0], cargs[1], cargs[2], eps, 0, complex)
+                        eval_out = self._evaluate(cargs[0], cargs[1], cargs[2], eps, 0, complex)
                     except TypeError as exc:
                         raise self._complex_type_error(exc) from exc
-                    M[:, j] = out.imag / _COMPLEX_STEP
+                    M[:, j] = eval_out.imag / _COMPLEX_STEP
                 else:
                     h = self._fd_step * max(1.0, abs(base[j]))
                     up = [a for a in args]
@@ -700,9 +700,9 @@ def _assemble_sparse(A: np.ndarray, B: np.ndarray, C: np.ndarray, T: int, n: int
     rows = []
     cols = []
     vals = []
-    ii, jj = np.meshgrid(np.arange(n), np.arange(n), indexing="ij")
-    ii = ii.ravel()
-    jj = jj.ravel()
+    ii_mesh, jj_mesh = np.meshgrid(np.arange(n), np.arange(n), indexing="ij")
+    ii = ii_mesh.ravel()
+    jj = jj_mesh.ravel()
     for t in range(T):
         rows.append(t * n + ii)
         cols.append(t * n + jj)
@@ -984,6 +984,7 @@ class BlockTridiagonalPreconditioner:
         if R.size != self.shape[0]:
             raise ValueError(f"right-hand side has {R.size} entries, expected {self.shape[0]}")
         if self._method == "splu":
+            assert self._splu is not None
             out = self._splu.solve(R.ravel())
         else:
             out = self._thomas_solve(R.reshape(self._T, self._n)).ravel()
@@ -1069,12 +1070,16 @@ class StructuredBlockTridiagonalPreconditioner:
         return R.reshape(self._T, self._n)
 
     def _solve(self, t: int, rhs: np.ndarray) -> np.ndarray:
+        if self._diag_solve is None:
+            raise ValueError("diag_solve is None")
         out = np.asarray(self._diag_solve(t, rhs), dtype=float).ravel()
         if out.size != self._n:
             raise ValueError(f"diag_solve returned {out.size} entries at date {t}, expected {self._n}")
         return out
 
-    def _act(self, fn: Callable, t: int, x: np.ndarray) -> np.ndarray:
+    def _act(self, fn: Callable | None, t: int, x: np.ndarray) -> np.ndarray:
+        if fn is None:
+            raise ValueError("off-diagonal callable is None")
         out = np.asarray(fn(t, x), dtype=float).ravel()
         if out.size != self._n:
             raise ValueError(f"off-diagonal action returned {out.size} entries at date {t}, expected {self._n}")
@@ -1182,6 +1187,8 @@ def preconditioned_lgmres(operator: Any, rhs: Any, M: Any = None, *, side: str =
     if not np.isfinite(rtol) or rtol < 0.0 or not np.isfinite(atol) or atol < 0.0:
         raise ValueError("rtol and atol must be finite and nonnegative")
     A = _as_operator(operator)
+    if A is None:
+        raise ValueError("operator cannot be None")
     b = np.asarray(rhs, dtype=float).ravel()
     if b.size != A.shape[0]:
         raise ValueError(f"rhs has {b.size} entries, operator expects {A.shape[0]}")
@@ -1492,10 +1499,10 @@ def _resolve_preconditioner(problem: StackedProblem, preconditioner: Any, time_b
     if hasattr(preconditioner, "as_linear_operator") or isinstance(preconditioner, spla.LinearOperator) \
             or sp.issparse(preconditioner) or isinstance(preconditioner, np.ndarray):
         op = _as_operator(preconditioner, (problem.n, problem.n))
-        name = getattr(preconditioner, "name", None)
-        if not name:
-            name = "LinearOperator" if isinstance(preconditioner, spla.LinearOperator) else type(preconditioner).__name__
-        return str(name), lambda x: op
+        op_name = getattr(preconditioner, "name", None)
+        if not op_name:
+            op_name = "LinearOperator" if isinstance(preconditioner, spla.LinearOperator) else type(preconditioner).__name__
+        return str(op_name), lambda x: op
     if callable(preconditioner):
         def factory_user(x):
             return _as_operator(preconditioner(x), (problem.n, problem.n))
@@ -1799,7 +1806,7 @@ def solve_stacked_newton_krylov(
                 f"Nonfinite Newton direction at residual {res:.3g}; Krylov status {info}.",
                 build_result(x, f, False, steps, "nonfinite_direction"))
         step_norm = _norm_inf(d)
-        if small_res and step_norm <= step_tol * y_scale:
+        if small_res and step_tol is not None and step_norm <= step_tol * y_scale:
             record.update({"step": 0.0, "backtracks": 0, "residual": res, "convergence_check": True})
             history.append(record)
             converged, converged_by = True, "residual_and_step"
@@ -1833,7 +1840,7 @@ def solve_stacked_newton_krylov(
         if not accepted:
             record.update({"step": step, "backtracks": backtracks, "line_search_failed": True})
             history.append(record)
-            if small_res:
+            if small_res and step_tol is not None:
                 raise StackedNewtonError(
                     _step_test_message(res, tol * jac_scale, step_norm, step_tol * y_scale,
                                        "the line search along it failed"),
@@ -1853,7 +1860,7 @@ def solve_stacked_newton_krylov(
             checkpoint(x.copy(), dict(record))
 
     if not converged:
-        if small_res:
+        if small_res and step_tol is not None:
             raise StackedNewtonError(
                 _step_test_message(_norm_inf(f), tol * jac_scale, step_norm, step_tol * y_scale,
                                    f"the iteration limit ({max_iter}) was reached"),

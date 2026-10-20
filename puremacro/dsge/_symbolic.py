@@ -248,21 +248,15 @@ def _normalize_vec(
     if isinstance(v, np.ndarray) and v.ndim == 1 and len(v) == expected_len:
         return v.astype(float, copy=False)
     if isinstance(v, dict):
-        return np.array(
-            [
-                float(
-                    v.get(
-                        name,
-                        v.get(
-                            (name, 0),
-                            defaults.get(name, 0.0) if defaults else 0.0,
-                        ),
-                    )
-                )
-                for name in names
-            ],
-            dtype=float,
-        )
+        res = []
+        for name in names:
+            val = v.get(name)
+            if val is None:
+                val = v.get((name, 0))
+            if val is None and defaults:
+                val = defaults.get(name)
+            res.append(float(val) if val is not None else 0.0)
+        return np.array(res, dtype=float)
     if hasattr(v, "_values"):
         return np.asarray(v._values, dtype=float)
     if isinstance(v, (list, tuple)):

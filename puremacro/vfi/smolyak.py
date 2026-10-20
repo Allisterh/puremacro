@@ -219,13 +219,15 @@ class SmolyakGrid:
         self.mu = int(mu)
 
         # Normalize and validate domain
+        norm_domain: tuple[tuple[float, float], ...]
+        d_any: Any = domain
         if domain is None:
             norm_domain = tuple((-1.0, 1.0) for _ in range(self.d))
         elif isinstance(domain, (tuple, list)):
-            if len(domain) == 2 and not isinstance(domain[0], (tuple, list)) and self.d == 1:
-                norm_domain = ((float(domain[0]), float(domain[1])),)
+            if len(domain) == 2 and not isinstance(d_any[0], (tuple, list)) and self.d == 1:
+                norm_domain = ((float(d_any[0]), float(d_any[1])),)
             else:
-                norm_domain = tuple((float(b[0]), float(b[1])) for b in domain)
+                norm_domain = tuple((float(b[0]), float(b[1])) for b in d_any)
         else:
             raise ValueError("domain must be a sequence of (lower, upper) pairs")
 
@@ -650,7 +652,7 @@ class SmolyakSolution:
 
     def euler_residual(
         self, s: Union[float, Sequence[float], np.ndarray]
-    ) -> np.ndarray:
+    ) -> Union[float, np.ndarray]:
         """Evaluate continuous Euler equation residual(s) at arbitrary state(s) s."""
         s_arr = np.asarray(s, dtype=np.float64)
         is_single = (s_arr.ndim == 1 and len(s_arr) == self.basis.d) or (s_arr.ndim == 0 and self.basis.d == 1)
@@ -820,7 +822,7 @@ class SmolyakSolution:
 
         # Panel 3: Euler equation residual slice
         ax3 = axes[2]
-        res_slice = self.euler_residual(pts)
+        res_slice = np.asarray(self.euler_residual(pts), dtype=np.float64)
         if res_slice.ndim > 1:
             res_plot = np.max(np.abs(res_slice), axis=1)
         else:
@@ -889,11 +891,13 @@ class SmolyakProblem:
             raise ValueError(f"mu must be >= 1; got {self.mu}")
 
         # Normalize domain
+        norm_domain: tuple[tuple[float, float], ...]
+        d_any: Any = self.domain
         if isinstance(self.domain, (tuple, list)):
-            if len(self.domain) == 2 and not isinstance(self.domain[0], (tuple, list)):
-                norm_domain = ((float(self.domain[0]), float(self.domain[1])),)
+            if len(self.domain) == 2 and not isinstance(d_any[0], (tuple, list)):
+                norm_domain = ((float(d_any[0]), float(d_any[1])),)
             else:
-                norm_domain = tuple((float(b[0]), float(b[1])) for b in self.domain)
+                norm_domain = tuple((float(b[0]), float(b[1])) for b in d_any)
         else:
             raise ValueError("domain must be a sequence of (lower, upper) pairs")
 

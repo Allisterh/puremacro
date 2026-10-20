@@ -75,18 +75,19 @@ def _redact(exc: BaseException, secret_params: Optional[dict]) -> None:
     # A traceback prints the whole chain: requests raises ConnectionError
     # while handling urllib3's MaxRetryError, whose text holds the URL. The
     # exception (and its request/response) also keep the URL as `.url`.
+    cur: BaseException | None = exc
     seen = set()
-    while exc is not None and id(exc) not in seen:
-        seen.add(id(exc))
-        exc.args = tuple(clean(a) for a in exc.args)
-        for holder in (exc, getattr(exc, "request", None),
-                       getattr(exc, "response", None)):
-            if isinstance(getattr(holder, "url", None), str):
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        cur.args = tuple(clean(a) for a in cur.args)
+        for holder in (cur, getattr(cur, "request", None),
+                       getattr(cur, "response", None)):
+            if holder is not None and isinstance(getattr(holder, "url", None), str):
                 try:
-                    holder.url = clean(holder.url)
+                    setattr(holder, "url", clean(getattr(holder, "url")))
                 except (AttributeError, TypeError):
                     pass
-        exc = exc.__cause__ or exc.__context__
+        cur = cur.__cause__ or cur.__context__
 
 
 def cached_get(
@@ -94,7 +95,7 @@ def cached_get(
     *,
     refresh: bool = False,
     headers: Optional[dict] = None,
-    timeout: int = 60,
+    timeout: float = 60,
     params: Optional[dict] = None,
     secret_params: Optional[dict] = None,
 ) -> bytes:
