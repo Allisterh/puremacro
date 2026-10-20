@@ -859,11 +859,11 @@ verificación y la orden que reconstruye el archivo, se distribuye como
 
 ## Estado
 
-Según la verificación del **20 de octubre de 2026**, la versión publicada en
-PyPI es **5.2.0**, con `puremacro.trade` y sus módulos MRIO de vuelta. Este árbol
-de código incluye **trabajo de desarrollo de 5.4.0**; el
-[historial de cambios](CHANGELOG.md) detalla las adiciones posteriores al paquete
-publicado. La versión 4.8.1 es la última con los estudios de investigación
+La versión **5.4.0** incluye `puremacro.trade` y sus módulos MRIO, reincorporados
+en 5.2.0, junto con las adiciones y correcciones del
+[historial de cambios](CHANGELOG.md). Consulte
+[PyPI](https://pypi.org/project/puremacro/) para conocer las distribuciones
+disponibles. La versión 4.8.1 es la última con los estudios de investigación
 retirados en 5.x (`pip install "puremacro<5"`). Los [niveles de estabilidad](ARCHITECTURE.md#stability-tiers)
 identifican las superficies estables, experimentales y de soporte limitado.
 Los cálculos estructurales tienen [límites de validación](docs/es/STRUCTURAL_VALIDATION_STATUS.md)
