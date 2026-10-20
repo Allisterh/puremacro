@@ -57,4 +57,6 @@ For an empirical study replace the simulator with your transformed data and
 identified shocks, or provide your own `MomentTargets`. The same model callback
 can wrap a DSGE, VFI or HANK solve. Model equations, moment definitions, shock
 units, frequency and cumulative/level conventions must agree. The bridge does
-not supply missing identification assumptions or HA equilibrium derivatives.
+not supply missing identification assumptions or construct model derivatives.
+Supply a `jac` callback when available; the specialized continuous Aiyagari
+sensitivities are documented in [Parameter gradients](vfi_analytic_gradients.md).

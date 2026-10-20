@@ -2,6 +2,13 @@
 
 This file records user-visible changes per release. Internal refactors that don't change behaviour are listed under "Internal" so a returning user can see what shifted under the hood without surprise.
 
+Publication status checked on 20 October 2026: **5.2.0 is the latest release
+available from [PyPI](https://pypi.org/project/puremacro/)**. The 5.3.0
+entry below describes the source in this checkout, not a published PyPI
+release. Some documentation also discusses 5.4.0 development; those
+implementation changes are not included in this checkout. See the
+[release procedure](RELEASING.md).
+
 ## 5.3.0 (2026-10-17)
 
 This release extends `puremacro.dp`, `puremacro.dsge`, and the heterogeneous-agent sequence-space bridge with continuous-time and Krusell–Smith simulation, user-registered functions, declarative `dp.Model` Fake-News Jacobians, dated exogenous shocks and native policy/decomposition commands in `.mod` files, Real Schur Sylvester solvers up to 3rd order, a Tempered Particle Filter, and fast score gradients for NUTS.

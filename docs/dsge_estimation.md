@@ -455,14 +455,38 @@ print(pf_res.summary())
 
 ### Fast Score Gradients for NUTS (`nuts_sample` & `estimate_dsge`)
 
-Both `nuts_sample` (`puremacro.dsge.nuts`) and `estimate_dsge(..., method="nuts")` (`puremacro.dsge.estimate`) support custom or analytic score gradients and fast cached finite-difference evaluations at every Hamiltonian leapfrog step:
+`nuts_sample` and `estimate_dsge(..., method="nuts")` support several gradient
+routes. The following selection and boundary-handling notes describe **5.4
+development**, whose implementation changes are not included in this 5.3
+checkout. In 5.3, a model template alone selects the structural-score route.
+In the reviewed 5.4 source, the estimator selects a supplied
+`grad_log_post_fn` first. Otherwise it selects the structural score when a
+model template is available and all estimated names are declared structural
+parameters; other targets use numerical differentiation of the ordinary
+observation-equation posterior.
 
-- **`grad_log_post_fn`**: optional callable `grad_log_post_fn(theta) -> np.ndarray` returning the exact gradient $\nabla_\theta \log p(\theta \mid y)$ of shape `(n_params,)` (or `(log_post, grad)`).
-- **`grad_method`**: finite-difference scheme when `grad_log_post_fn` is `None`:
-  - `"forward"` (default): reuses the cached baseline log-posterior evaluation $f(\theta)$ at the current leapfrog point, requiring only $d$ extra likelihood evaluations per step instead of $2d$, and automatically reflects the step into the interior (`theta - eps_i`) when `theta + eps_i` crosses a prior boundary (`-inf`).
-  - `"central"`: symmetric two-sided differences ($2d$ evaluations per leapfrog step) with interior one-sided fallback near prior bounds.
-  - `"complex"`: complex-step differentiation $\text{Im}(f(\theta + i h e_j))/h$ for complex-analytic objectives, falling back to `"central"` if the objective rejects complex inputs.
-- **`grad_eps`** and **`vectorized_grad`**: custom step size (default $\varepsilon^{1/2}$ for `"forward"` and $\varepsilon^{1/3}$ for `"central"`) and batched `(d, d)` coordinate evaluation (`vectorized_grad=True`).
+The structural score covers the supported **first-order stationary likelihood**.
+Its Kalman recursion is analytic, but the structural Jacobian inputs may use
+finite differences. This does not establish analytic-score support for arbitrary
+measurement equations, presamples, diffuse initialization or nonlinear filtering.
+Check that the gradient and the intended likelihood use the same specification.
+
+- **`grad_log_post_fn`** returns a gradient array of shape `(n_params,)`.
+  It does not return `(log_post, grad)`. A direct `nuts_sample` target callable
+  can return that pair instead; the sampler then uses its gradient directly.
+- **`grad_method`** controls the numerical route only; both public entry points
+  default to `"central"`. It does not override a supplied or selected structural
+  score.
+  - `"forward"` reuses the baseline evaluation and normally needs `d` additional
+    evaluations, reversing the step when a bound or nonfinite value requires it.
+  - `"central"` normally uses `2d` evaluations, with one-sided fallback near bounds.
+  - `"complex"` uses a complex-step derivative for compatible objectives and
+    falls back to central differences if the target rejects complex input.
+- **`grad_eps`** defaults to `1e-5` in both entry points. Coordinate steps are
+  `grad_eps * max(abs(theta_i), 1)`.
+- **`vectorized_grad=True`** is a direct `nuts_sample` option for a numerical
+  target accepting a batch of parameter vectors. `estimate_dsge` does not
+  forward this option to its numerical gradient evaluator.
 
 ```python
 # requires: standalone snippet
@@ -477,7 +501,6 @@ est_nuts = estimate_dsge(
     n_draws=500,
     burn_in=250,
     grad_method="forward",
-    vectorized_grad=True,
     seed=0,
 )
 ```

@@ -1,24 +1,33 @@
 # puremacro browser playground (JupyterLite)
 
-A zero-install, zero-key, zero-cloud sandbox: `puremacro`'s pure-compute core
-running entirely in your browser via JupyterLite + Pyodide (WebAssembly).
+Explore `puremacro`'s numerical core in your browser via JupyterLite + Pyodide
+(WebAssembly), without a local Python install or a hosted compute session.
+Loading the site and its packages requires network access. Browser execution
+is best-effort; a local workstation install is the supported target.
 
 ## Build
 
 ```bash
-cd ..                      # the puremacro project root
+# Run from the puremacro project root.
 pip install -e ".[playground,notebooks]"
 bash playground/build_playground.sh
 python -m http.server -d playground/dist 8000   # then open http://localhost:8000/lab
 ```
 
 `build_playground.sh` builds the `puremacro` wheel, pins it via
-`PipliteAddon.piplite_urls` (so `%pip install puremacro` resolves offline in the
-browser), copies the showcase notebooks (`notebooks/NN_*.ipynb`) **and** the
-course lessons (`notebooks/course/*.ipynb`) plus `_nbstyle.py` / `_tutor.py`
+`PipliteAddon.piplite_urls` (so `%pip install puremacro` resolves to the wheel
+served with the site), copies the showcase notebooks (`notebooks/NN_*.ipynb`)
+and companion lessons (`notebooks/course/*.ipynb`) plus `_nbstyle.py` / `_tutor.py`
 into `content/`, injects a `%pip install puremacro` bootstrap cell into **every**
 `NN…`-prefixed notebook it copied (`%pip install puremacro pyarrow` in the ones
 whose code reads parquet), and runs `jupyter lite build` → `dist/`.
+It also builds the documentation into `dist/docs/`.
+
+These companion lessons are distinct from the MAV notebooks in
+[`curso/notebooks/`](../curso/notebooks/README.md), whose course edition retains
+`puremacro>=4.8.1,<5`. The Pages workflow separately copies the static
+HTML/JavaScript course labs into `dist/curso/`; it does not run them against
+the wheel built for the playground.
 
 ## Deploy
 
@@ -36,11 +45,11 @@ it, and the opt-in Pyodide gate (`tools/pyodide/runner.js`) performs the same
 dependency-resolving install. After a deploy, run the first cells of one
 showcase notebook and of one parquet lesson (08 or 24) to confirm.
 
-Whether the course offers the browser path ("Forma A" in the course's Software
-page) is a teaching decision; the build no longer blocks it.
-
-The showcase notebooks are fully synthetic and offline (Pyodide blocks network
-sockets), so they run without any data files or API keys. The **course lessons**
-do read small local files, so the build copies `notebooks/course/data/` into
-`content/course/data/` — the layout their `DATA = _nb/"course"/"data"` expects.
-Either way no network and no API key is ever needed at run time.
+The build copies `notebooks/course/data/` into `content/course/data/`, matching
+the companion lessons' `DATA = _nb/"course"/"data"` layout. Showcase notebooks
+include synthetic and empirical examples; some need additional repository
+files, optional packages or services. Copying a notebook into the playground
+does not establish browser compatibility. Start with `00_start_here`, and use
+the [local notebook setup](../docs/notebooks.md) when an example's data or
+dependencies are unavailable in the browser. Live data access also depends on
+the provider's authentication and browser cross-origin policy.

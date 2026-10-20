@@ -58,3 +58,7 @@ Es recuperación con datos simulados, no replicación histórica. Para un estudi
 empírico sustituya el simulador por datos transformados y shocks identificados,
 o construya `MomentTargets` con estimaciones y su covarianza conjunta. Frecuencia,
 unidades, transformación y normalización deben coincidir con el modelo.
+El puente no aporta supuestos de identificación ni construye derivadas del
+modelo. Proporcione un callback `jac` cuando esté disponible; las sensibilidades
+especializadas de Aiyagari continuo se documentan en
+[Gradientes paramétricos](vfi_analytic_gradients.md).

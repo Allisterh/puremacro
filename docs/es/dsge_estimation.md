@@ -455,14 +455,40 @@ print(pf_res.summary())
 
 ### Gradientes rápidos del score para NUTS (`nuts_sample` y `estimate_dsge`)
 
-Tanto `nuts_sample` (`puremacro.dsge.nuts`) como `estimate_dsge(..., method="nuts")` (`puremacro.dsge.estimate`) admiten gradientes analíticos o personalizados del score y evaluaciones rápidas por diferencias finitas con caché en cada paso *leapfrog* hamiltoniano:
+`nuts_sample` y `estimate_dsge(..., method="nuts")` admiten varias rutas de
+gradientes. Las siguientes notas de selección y manejo de cotas describen el
+**desarrollo de 5.4**, cuyos cambios de implementación no están incluidos en
+esta copia de 5.3. En 5.3, basta una plantilla de modelo para seleccionar el
+score estructural. En el código revisado de 5.4, el estimador selecciona primero
+`grad_log_post_fn` si se proporciona. En otro caso, selecciona el score
+estructural cuando hay una plantilla de modelo y todos los nombres estimados
+son parámetros estructurales declarados; los demás objetivos usan diferencias
+numéricas del log-posteriori ordinario de la ecuación de observación.
 
-- **`grad_log_post_fn`**: función opcional `grad_log_post_fn(theta) -> np.ndarray` que devuelve el gradiente exacto $\nabla_\theta \log p(\theta \mid y)$ de forma `(n_params,)` (o `(log_post, grad)`).
-- **`grad_method`**: esquema de diferencias finitas cuando `grad_log_post_fn` es `None`:
-  - `"forward"` (por defecto): reutiliza la evaluación en caché del log-posteriori base $f(\theta)$ en el punto *leapfrog* actual, requiriendo solo $d$ evaluaciones adicionales de la verosimilitud por paso en lugar de $2d$, y refleja automáticamente el paso hacia el interior (`theta - eps_i`) cuando `theta + eps_i` cruza una cota de la distribución a priori (`-inf`).
-  - `"central"`: diferencias simétricas bilaterales ($2d$ evaluaciones por paso *leapfrog*) con respaldo unilateral hacia el interior cerca de las cotas a priori.
-  - `"complex"`: diferenciación de paso complejo $\text{Im}(f(\theta + i h e_j))/h$ para objetivos analíticos complejos, recurriendo a `"central"` si el objetivo rechaza entradas complejas.
-- **`grad_eps`** y **`vectorized_grad`**: tamaño de paso personalizado ($\varepsilon^{1/2}$ por defecto para `"forward"` y $\varepsilon^{1/3}$ para `"central"`) y evaluación por lotes `(d, d)` de las coordenadas perturbadas (`vectorized_grad=True`).
+El score estructural cubre la **verosimilitud estacionaria de primer orden
+soportada**. La recursión de Kalman es analítica, pero sus entradas de jacobianos
+estructurales pueden usar diferencias finitas. Esto no establece soporte del
+score analítico para ecuaciones de medida arbitrarias, premuestras,
+inicialización difusa ni filtrado no lineal. Verifique que el gradiente y la
+verosimilitud deseada empleen la misma especificación.
+
+- **`grad_log_post_fn`** devuelve un arreglo de gradientes de forma `(n_params,)`.
+  No devuelve `(log_post, grad)`. La función objetivo pasada directamente a
+  `nuts_sample` sí puede devolver ese par; el muestreador usa entonces su gradiente.
+- **`grad_method`** controla únicamente la ruta numérica; ambos puntos de entrada
+  usan `"central"` por defecto. No reemplaza un score estructural seleccionado
+  ni un gradiente suministrado.
+  - `"forward"` reutiliza la evaluación base y normalmente necesita `d`
+    evaluaciones adicionales; invierte el paso ante una cota o un valor no finito.
+  - `"central"` normalmente usa `2d` evaluaciones y una alternativa unilateral
+    cerca de las cotas.
+  - `"complex"` usa una derivada de paso complejo para objetivos compatibles y
+    recurre a diferencias centrales si el objetivo rechaza entradas complejas.
+- **`grad_eps`** vale `1e-5` por defecto en ambos puntos de entrada. Los pasos por
+  coordenada son `grad_eps * max(abs(theta_i), 1)`.
+- **`vectorized_grad=True`** es una opción directa de `nuts_sample` para un
+  objetivo numérico que acepte lotes de vectores de parámetros. `estimate_dsge`
+  no transmite esa opción a su evaluador de gradientes numéricos.
 
 ```python
 # requires: standalone snippet
@@ -477,7 +503,6 @@ est_nuts = estimate_dsge(
     n_draws=500,
     burn_in=250,
     grad_method="forward",
-    vectorized_grad=True,
     seed=0,
 )
 ```

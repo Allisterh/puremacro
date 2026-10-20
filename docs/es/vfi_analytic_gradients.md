@@ -4,7 +4,7 @@
 
 `puremacro.vfi.analytic_gradients` proporciona jacobianos de soluciones de proyección continua con agente representativo, y de los agregados de estado estacionario determinista que implican, respecto a los parámetros estructurales $\theta = (\beta, \alpha, \delta, \sigma, \dots)$ mediante el **Teorema de la Función Implícita (TFI)**. Opera de manera uniforme sobre colocación polinómica ortogonal de Chebyshev, proyecciones de Galerkin del Método de Elementos Finitos (MEF) y sistemas de splines cúbicos o de Schumaker.
 
-**Alcance (4.3.0 y posteriores).** El paso TFI es una única resolución lineal con el jacobiano de residuos convergido (sin re-resolver el modelo); los jacobianos de residuos $\mathbf{J}_c$ y $\mathbf{J}_\theta$ que consume se construyen por diferencias finitas centrales con pasos `step_c` y `h` (una `residual_fn` propia sustituye al evaluador de residuos incorporado y se diferencia del mismo modo). Solo se admiten soluciones con agente representativo: `compute_ift_gradients` y `equilibrium_parameter_jacobian` lanzan `NotImplementedError` para cualquier solución que tenga un atributo `distribution` (por ejemplo `AiyagariContinuousEquilibrium`). La sensibilidad adjunta de la distribución estacionaria descrita en la sección 1.3 no está implementada.
+**Alcance (5.4).** Para las proyecciones con agente representativo, el paso TFI reutiliza una factorización del jacobiano de residuos convergido; los jacobianos $\mathbf{J}_c$ y $\mathbf{J}_\theta$ se construyen por diferencias finitas centrales con pasos `step_c` y `h` (una `residual_fn` propia sustituye al evaluador incorporado y se diferencia del mismo modo). También se admite el `AiyagariContinuousEquilibrium` especializado que produce `solve_aiyagari_continuous`, mediante derivadas acopladas del hogar, la distribución estacionaria y el vaciado de mercados, descritas en la sección 1.3. No es un diferenciador general para modelos arbitrarios de agentes heterogéneos ni para soluciones declarativas de `dp.Model`. La factorización y las comparaciones de tiempos de las proyecciones que siguen no describen el cálculo completo de Aiyagari.
 
 En la estimación econométrica estructural (GMM, SMM) y el muestreo bayesiano posterior (HMC, NUTS), el cálculo de gradientes en modelos económicos dinámicos ha dependido históricamente de diferencias finitas numéricas. Sin embargo, las diferencias finitas sufren de un severo dilema de tamaño de paso ($\epsilon \sim 10^{-5}$ para equilibrar el error de truncamiento y el de redondeo), exhiben ruido numérico espurio cerca de restricciones financieras no lineales y requieren resolver de nuevo el modelo no lineal completo $2 \times \dim(\theta)$ veces. El motor de gradientes analíticos de `puremacro` elimina las $2 \times \dim(\theta)$ re-resoluciones calculando las sensibilidades de los coeficientes a partir de una **única factorización LU** del jacobiano de residuos convergido. La batería de pruebas del repositorio exige una aceleración de al menos 5x frente a diferencias finitas centrales en el ejemplo de la sección 4; en bases mayores son habituales cocientes más altos, pero los tiempos citados en la sección 3 son indicativos, no un contrato.
 
@@ -62,11 +62,15 @@ $$\nabla_\theta r^* = \frac{\partial r^*}{\partial k} \nabla_\theta k^* + \left.
 
 Estas sensibilidades de estado estacionario con agente representativo son las que devuelve `grad_aggregates` (claves `K`, `C`, `r`, `w`). Son semianalíticas: el punto fijo del estado estacionario se localiza numéricamente y su derivada se propaga después de forma analítica mediante las fórmulas anteriores.
 
-**No implementado: economías con agentes heterogéneos.** En economías de mercados incompletos (Aiyagari 1994) la oferta agregada de capital es $K^* = \int k \, d\mu^*(k; \theta)$ y su sensibilidad tendría que propagarse a través del adjunto del operador de la distribución estacionaria (lotería),
+**Equilibrio especializado de Aiyagari.** Para la solución continua de Aiyagari por EGM, la implementación diferencia la ecuación de Coleman del hogar, propaga la derivada de la política de ahorro a través de la lotería de Young y resuelve la ecuación tangente de la distribución estacionaria. Con matriz de transición $\mathbf{T}$ estocástica por filas,
 
-$$\nabla_\theta K^* = \sum_{i, m} k_i \nabla_\theta \mu^*(k_i, z_m) = \mathbf{k}^\top (\mathbf{I} - \mathbf{T}^*)^{-1} \nabla_\theta \mathbf{T}^* \boldsymbol{\mu}^*$$
+$$(\mathbf{I} - \mathbf{T}^{\top})\,d\boldsymbol{\mu}
+= (d\mathbf{T}^{\top})\,\boldsymbol{\mu},
+\qquad \mathbf{1}^{\top}d\boldsymbol{\mu}=0.$$
 
-junto con la respuesta de los precios de equilibrio general. puremacro 4.3.0 retiró el atajo anterior de distribución fija porque no era una sensibilidad de equilibrio general; desde entonces `compute_ift_gradients`, `equilibrium_parameter_jacobian` y la rutina interna de agregados lanzan `NotImplementedError` para cualquier solución con atributo `distribution`. La fórmula se recoge aquí como objetivo de trabajo futuro, no como una funcionalidad disponible.
+La normalización sustituye una fila redundante de la ecuación estacionaria. La condición del mercado de capital $E(r,\theta)=K^s(r,\theta)-K^d(r,\theta)=0$ da entonces $dr^*/d\theta=-E_\theta/E_r$; las derivadas totales incluyen esta respuesta de precios. `grad_aggregates` contiene `K`, `C`, `r`, `w` y `mu`, donde `mu` tiene dimensiones `(N_k, n_z, n_params)`. Las derivadas de los residuos del hogar y de los parámetros siguen siendo diferencias centrales numéricas.
+
+La regresión en `tests/test_vfi/test_analytic_gradients.py` comprueba masa total cero en las derivadas de la distribución y compara $dK/d\beta$ y $dr/d\beta$ con resoluciones independientes del equilibrio, con tolerancia relativa `1e-4`, en una calibración con tres estados del shock. Comprueba las dimensiones de la columna de alfa devuelta, pero no valida de forma independiente cada derivada paramétrica ni cada calibración. Las derivadas locales dependen de la malla, la interpolación, el condicionamiento y las restricciones activas; esta prueba no establece soporte general de modelos con agentes heterogéneos.
 
 ### 1.4 Estimación estructural acelerada (GMM y SMM)
 
@@ -204,7 +208,7 @@ gmm_objective_and_gradient(
 ```
 
 #### Parámetros:
-- `solution`: Contenedor de solución convergida con agente representativo procedente de `CollocationProblem.solve()`, `FEMProblem.solve()` o `SplineCollocationProblem.solve()`. Las soluciones con agentes heterogéneos (cualquier objeto con atributo `distribution`, como `AiyagariContinuousEquilibrium`) lanzan `NotImplementedError`.
+- `solution`: Solución convergida con agente representativo de `CollocationProblem.solve()`, `FEMProblem.solve()` o `SplineCollocationProblem.solve()`, o el `AiyagariContinuousEquilibrium` especializado de `solve_aiyagari_continuous`. La sección 1.3 precisa el alcance y la validación de este último.
 - `problem`: Definición del modelo económico asociado.
 - `params`: Secuencia de nombres de parámetros a diferenciar (p. ej. `['alpha', 'beta', 'delta']`). Si es `None`, inspecciona automáticamente los parámetros del modelo.
 - `h`: Tamaño de paso para la diferenciación paramétrica $\nabla_\theta \mathbf{R}$ (por defecto $10^{-5}$).

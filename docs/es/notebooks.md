@@ -25,12 +25,19 @@ acotado hacia una aplicación más amplia.
 | ¿Cómo verifico un solucionador contra un resultado publicado? | 66 → 67 → 68 → 12 | Formas cerradas, rutas de solución independientes, tolerancias y criterio de evaluación |
 
 Para una primera sesión, elija 06, 10, 11 o 34. Cada uno plantea una pregunta
-concreta antes de pasar a ejercicios amplios de política. Las colecciones de
-curso ofrecen secuencias docentes separadas, con numeración distinta.
+concreta antes de pasar a ejercicios amplios de política.
+
+Este catálogo corresponde a la biblioteca de la copia del repositorio. La
+[edición del curso MAV](https://github.com/jalonso1979/puremacro/blob/main/curso/notebooks/README.md)
+conserva un entorno base `puremacro>=4.8.1,<5` hasta validar sus cuadernos para
+5.x; siga sus instrucciones, incluidas las secciones con un commit de
+desarrollo fijado, en un entorno separado. Su numeración y sus
+laboratorios HTML/JavaScript son independientes de este catálogo.
 
 ## Ejecute y modifique un ejemplo
 
-Desde una copia del repositorio, instale las herramientas y una interfaz:
+La instalación local en una computadora es el entorno soportado. Desde una
+copia del repositorio, instale las herramientas y una interfaz:
 
 ```bash
 python -m pip install -e ".[notebooks]" jupyterlab
@@ -51,14 +58,14 @@ python tools/build_notebooks.py 34_penalized_macro_forecasting 34_penalized_macr
 python tools/build_notebooks.py --check 34_penalized_macro_forecasting 34_penalized_macro_forecasting_es
 
 # Inspeccionar los artefactos existentes sin ejecutarlos.
-python tools/build_notebooks.py --validate-only
+python tools/build_notebooks.py --validate-only --suite showcase
 ```
 
 `--suite showcase` selecciona las demostraciones principales y `notebooks/course/`;
 `--suite curso` selecciona `curso/notebooks/`. Sin nombre ni suite, la herramienta
 procesa ambas colecciones.
 Empiece por ejemplos individuales: simulación, bootstrap y estimación bayesiana
-tienen costos distintos. Para ejecutarlos en el navegador, consulte la
+tienen costos distintos. La ejecución en navegador tiene soporte limitado; consulte la
 [guía de tabletas y Pyodide](tablet.md). La inferencia con LLM local requiere un
 motor de escritorio; el respaldo simulado solo demuestra la interfaz.
 

@@ -4,7 +4,7 @@
 
 `puremacro.vfi.analytic_gradients` provides Jacobians of representative-agent continuous projection solutions, and of the deterministic steady-state aggregates they imply, with respect to structural model parameters $\theta = (\beta, \alpha, \delta, \sigma, \dots)$ using the **Implicit Function Theorem (IFT)**. It operates uniformly across Chebyshev orthogonal polynomial collocation, Finite Element Method (FEM) Galerkin projections, and Cubic/Schumaker spline systems.
 
-**Scope (4.3.0 and later).** The IFT step is one linear solve with the converged residual Jacobian (no re-solve of the model); the residual Jacobians $\mathbf{J}_c$ and $\mathbf{J}_\theta$ it consumes are built by central finite differences with steps `step_c` and `h` (a custom `residual_fn` replaces the built-in residual evaluator and is differenced the same way). Only representative-agent solutions are supported: `compute_ift_gradients` and `equilibrium_parameter_jacobian` raise `NotImplementedError` for any solution that carries a `distribution` attribute (for example `AiyagariContinuousEquilibrium`). The adjoint stationary-distribution sensitivity described in section 1.3 is not implemented.
+**Scope (5.4).** For representative-agent projections, the IFT step reuses a factorization of the converged residual Jacobian; the residual Jacobians $\mathbf{J}_c$ and $\mathbf{J}_\theta$ are built by central finite differences with steps `step_c` and `h` (a custom `residual_fn` replaces the built-in residual evaluator and is differenced the same way). The specialized `AiyagariContinuousEquilibrium` produced by `solve_aiyagari_continuous` is also supported through coupled household, stationary-distribution and market-clearing derivatives, described in section 1.3. This is not a general differentiator for arbitrary heterogeneous-agent models or declarative `dp.Model` solutions. The projection factorization and timing comparisons below do not describe the full Aiyagari calculation.
 
 In structural econometric estimation (GMM, SMM) and Bayesian posterior sampling (HMC, NUTS), gradient evaluations of dynamic economic models have historically relied on numerical finite differences. However, finite differences suffer from a severe step-size dilemma ($\epsilon \sim 10^{-5}$ balances truncation and round-off error), exhibit numerical chatter near non-linear borrowing constraints, and require $2 \times \dim(\theta)$ full non-linear model re-solves. The `puremacro` analytic gradient engine removes the $2 \times \dim(\theta)$ re-solves by computing the coefficient sensitivities from a **single LU factorization** of the converged residual Jacobian. The repository test suite asserts at least a 5x speedup over two-sided finite differences on the worked example of section 4; larger ratios are typical on bigger bases, but the timings quoted in section 3 are indicative rather than a contract.
 
@@ -44,7 +44,7 @@ Using an LU factorization $\mathbf{J}_c = \mathbf{P} \mathbf{L} \mathbf{U}$:
 
 This reduces the computational complexity from $O(2p \cdot N_{\text{iter}} \cdot N^3)$ for non-linear re-solving down to $O(N^3 + p N^2)$, accelerating gradient evaluation by 1 to 2 orders of magnitude.
 
-### 1.3 Policy Sensitivities & Adjoint Aggregate Jacobians
+### 1.3 Policy Sensitivities & Aggregate Jacobians
 
 Because continuous projection approximations represent policy functions as linear combinations of basis functions $g(k; c) = \sum_{j=1}^N c_j \phi_j(k) = \mathbf{\Phi}(k) c$, the continuous policy gradient at any arbitrary state $k$ is obtained analytically:
 
@@ -62,11 +62,15 @@ $$\nabla_\theta r^* = \frac{\partial r^*}{\partial k} \nabla_\theta k^* + \left.
 
 These representative-agent steady-state sensitivities are what `grad_aggregates` returns (keys `K`, `C`, `r`, `w`). They are semi-analytic: the steady-state fixed point is located numerically and its derivative is then propagated analytically through the formulas above.
 
-**Not implemented: heterogeneous-agent economies.** In incomplete-markets economies (Aiyagari 1994) aggregate capital supply is $K^* = \int k \, d\mu^*(k; \theta)$ and its sensitivity would have to propagate through the adjoint of the stationary-distribution (lottery) operator,
+**Specialized Aiyagari equilibrium.** For the continuous Aiyagari EGM solution, the implementation differentiates the household Coleman equation, propagates the saving-policy derivative through the Young lottery, and solves the tangent stationary-distribution equation. With row-stochastic transition matrix $\mathbf{T}$,
 
-$$\nabla_\theta K^* = \sum_{i, m} k_i \nabla_\theta \mu^*(k_i, z_m) = \mathbf{k}^\top (\mathbf{I} - \mathbf{T}^*)^{-1} \nabla_\theta \mathbf{T}^* \boldsymbol{\mu}^*$$
+$$(\mathbf{I} - \mathbf{T}^{\top})\,d\boldsymbol{\mu}
+= (d\mathbf{T}^{\top})\,\boldsymbol{\mu},
+\qquad \mathbf{1}^{\top}d\boldsymbol{\mu}=0.$$
 
-together with the general-equilibrium price response. puremacro 4.3.0 removed the earlier fixed-distribution shortcut because it was not a general-equilibrium sensitivity; since then `compute_ift_gradients`, `equilibrium_parameter_jacobian` and the internal aggregate routine raise `NotImplementedError` for any solution with a `distribution` attribute. The formula is recorded here as the target of future work, not as a shipped feature.
+The normalization replaces one redundant stationary-equation row. The capital-market condition $E(r,\theta)=K^s(r,\theta)-K^d(r,\theta)=0$ then gives $dr^*/d\theta=-E_\theta/E_r$; total derivatives include this price response. `grad_aggregates` contains `K`, `C`, `r`, `w` and `mu`, where `mu` has shape `(N_k, n_z, n_params)`. The household and parameter residual derivatives remain numerical central differences.
+
+The regression in `tests/test_vfi/test_analytic_gradients.py` checks zero total mass in distribution derivatives and compares $dK/d\beta$ and $dr/d\beta$ with independent equilibrium re-solves to relative tolerance `1e-4` at one calibration with three productivity states. It checks the returned alpha column's shape, but does not independently validate every parameter derivative or every calibration. Local derivatives depend on the grid, interpolation, conditioning and binding constraints; the test is not evidence of general HA support.
 
 ### 1.4 Fast Structural Estimation (SMM & GMM)
 
@@ -204,7 +208,7 @@ gmm_objective_and_gradient(
 ```
 
 #### Parameters:
-- `solution`: Converged representative-agent solution object from `CollocationProblem.solve()`, `FEMProblem.solve()` or `SplineCollocationProblem.solve()`. Heterogeneous-agent solutions (any object with a `distribution` attribute, such as `AiyagariContinuousEquilibrium`) raise `NotImplementedError`.
+- `solution`: Converged representative-agent solution from `CollocationProblem.solve()`, `FEMProblem.solve()` or `SplineCollocationProblem.solve()`, or the specialized `AiyagariContinuousEquilibrium` from `solve_aiyagari_continuous`. See section 1.3 for the latter's scope and validation.
 - `problem`: Associated economic problem definition.
 - `params`: Sequence of parameter names to differentiate (e.g. `['alpha', 'beta', 'delta']`). If `None`, automatically inspects model parameters.
 - `h`: Step size for parameter differentiation $\nabla_\theta \mathbf{R}$ (default $10^{-5}$).

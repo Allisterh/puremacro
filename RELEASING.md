@@ -38,6 +38,11 @@ If you ever see two PyPI workflows again, one of them is wrong.
 
 `tools/release_check.py` is the pre-tag check. Five gates run by default, two are opt-in:
 
+This checkout retains the 5.3 source and workflows. Separate 5.4 preparation
+adds a dedicated mypy CI step and rejects unsuccessful baseline runs whose
+failure IDs cannot be parsed. Those changes are not part of this documentation
+update; follow the workflow and checker in the commit being released.
+
 | gate | what it proves | notes |
 |---|---|---|
 | 1 test baseline | pytest `FAILED` + `ERROR` node ids are a subset of `tests/known_failures.json` | Empty since 4.4.0, which resolved the eleven entries carried from 4.2.0. A new entry needs a reason, a workaround and CI evidence; prefer fixing the test or the code. CI runs plain pytest, so any entry keeps CI red on every platform. Recovered cases are reported for removal. Setup errors count. The wall-clock budget is 5400 s, overridable with `PUREMACRO_BASELINE_TIMEOUT_S`; complete runs take tens of minutes. |
@@ -143,6 +148,25 @@ Everything here is local and reversible until step 7.
    Expect a few minutes' lag: the JSON API shows the new version before pip's index CDN
    does, so an immediate `pip install` can still fail with *"no matching distribution"*.
    That is propagation, not a failed release.
+10. **Align the public documentation with the published artifact.** Only after
+    step 9 succeeds, update the published-version notices in both READMEs,
+    `docs/index.md` and `docs/es/index.md`, and the
+    [public landing page](https://jorgealonsoortiz.work/puremacro/).
+    Distinguish the PyPI release from unreleased source-tree work; a tag, changelog
+    heading or successful local build does not establish publication. Check the
+    installation links, trade/API migration guidance, citation version and any
+    capability claims changed by this release. Prefer links to the evidence
+    inventories over manually maintained test/example counts.
+
+    Keep the course edition separate. Do not update its package pins or claim
+    that its browser labs match the current library until that migration has
+    been executed and checked. See `curso/notebooks/README.md` for its base
+    environment and optional development sections.
+
+    Run `mkdocs build --strict` for the final documentation, then verify the
+    deployed entry pages after the Pages workflow finishes. PyPI's rendered
+    README comes from the uploaded distribution; changing GitHub's README
+    alone does not update the existing PyPI release description.
 
 ## 4. The traps, all of which have actually bitten
 

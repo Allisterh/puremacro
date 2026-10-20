@@ -434,27 +434,27 @@
 
       // Gráfica 3: Descomposición de Bienestar
       chDecomp.update({
-        title: { es: "Descomposición del Bienestar (Caliendo & Parro 2015)", en: "Welfare Decomposition (Caliendo & Parro 2015)" },
-        sub: { es: "Canales económicos: Términos de intercambio, insumo-producto y recaudación arancelaria",
-               en: "Economic channels: Terms of trade, input-output, and tariff revenue" },
+        title: { es: "Componentes ilustrativos del bienestar", en: "Illustrative welfare components" },
+        sub: { es: "Dos estadísticas de cuotas domésticas y un residual; no identifican canales causales",
+               en: "Two domestic-share statistics and a residual; these do not identify causal channels" },
         xLabel: { es: "País", en: "Country" },
-        yLabel: { es: "Contribución al bienestar (%)", en: "Welfare contribution (%)" },
+        yLabel: { es: "Componente en escala porcentual", en: "Component on percentage scale" },
         xFmt: (v) => v === 0 ? "MEX" : v === 1 ? "USA" : "CHN",
         series: [
           {
-            name: { es: "Términos de intercambio", en: "Terms of trade" },
+            name: { es: "Término de cuota doméstica", en: "Domestic-share term" },
             x: [0, 1, 2],
             y: res.totDecomp,
             style: 0
           },
           {
-            name: { es: "Multiplicador insumo-producto", en: "Input-output multiplier" },
+            name: { es: "Término ponderado por insumo-producto", en: "Input-output-weighted term" },
             x: [0, 1, 2],
             y: res.ioDecomp,
             style: 2
           },
           {
-            name: { es: "Efecto recaudación fiscal", en: "Tariff revenue effect" },
+            name: { es: "Residual", en: "Residual" },
             x: [0, 1, 2],
             y: res.revDecomp,
             style: 3

@@ -55,7 +55,12 @@ class TradePolicySimulationResult:
     tariff_revenue_prime : np.ndarray
         Counterfactual tariff revenue by country (R_n'), shape (N,).
     welfare_decomposition : dict[str, np.ndarray]
-        Decomposition into Terms of Trade, Input-Output, and Tariff Revenue effects.
+        Descriptive domestic-share statistics under ``terms_of_trade`` and
+        ``input_output``, plus ``tariff_revenue`` defined as the residual to
+        ``total = log(welfare_hat)``. Additivity is by construction, not an
+        identification of economic channels. The residual is not actual
+        receipts (``tariff_revenue_prime``), and the first statistic is not the
+        separately computed ``terms_of_trade_hat`` index.
     market_clearing_residual : float
         Maximum goods and factor market clearing residual across countries, in
         the units of the baseline flows (an absolute level, not relative). The
@@ -235,7 +240,8 @@ class TradePolicySimulator:
 
     Wraps CaliendoParroModel to compute general equilibrium tariff counterfactuals,
     bilateral trade shifts, real wage responses, terms-of-trade indices, and
-    welfare decompositions with verified goods market clearing convergence (< 10^-6).
+    descriptive welfare components with a residual. Equilibrium convergence
+    requires goods and factor market clearing (< 10^-6).
     """
 
     def __init__(self, model: CaliendoParroModel) -> None:
@@ -505,7 +511,13 @@ class TradePolicySimulator:
         self,
         base_result: CaliendoParroResult,
     ) -> dict[str, np.ndarray]:
-        """Compute the Caliendo & Parro (2015) exact welfare decomposition."""
+        """Compute two domestic-share statistics and a residual to log welfare.
+
+        The historical ``tariff_revenue`` key is the residual, not a separately
+        identified fiscal welfare effect; ``terms_of_trade`` is a domestic-share
+        statistic, not the terms-of-trade price index. The entries sum to
+        ``total`` by construction.
+        """
         N, J = self.model.N, self.model.J
         tot_effect = np.zeros(N, dtype=float)
         io_effect = np.zeros(N, dtype=float)

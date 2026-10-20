@@ -5,7 +5,7 @@
 `puremacro` provides a production-grade, dual-delivery quantitative macroeconomic simulation suite designed for research, policy analysis, and interactive teaching:
 
 1. **Python General Equilibrium API (`puremacro.models`)**:
-   - **`TradePolicySimulator`**: Multi-country, multi-sector Ricardian general equilibrium model based on **Caliendo and Parro (2015, *Review of Economic Studies*)**. Solves exact hat algebra counterfactuals for bilateral tariff shocks, terms of trade, input-output intermediate cost cascades, and exact welfare decompositions with machine-checked goods market clearing ($\max_i |X_i - (Y_i + R_i + D_i)| < 10^{-6}$).
+   - **`TradePolicySimulator`**: Multi-country, multi-sector Ricardian general equilibrium model based on **Caliendo and Parro (2015, *Review of Economic Studies*)**. Solves exact hat algebra counterfactuals for bilateral tariff shocks, terms of trade and input-output intermediate cost cascades, with machine-checked goods market clearing ($\max_i |X_i - (Y_i + R_i + D_i)| < 10^{-6}$). Its `welfare_decomposition` is a descriptive split with a residual component, as detailed below.
    - **`MonetaryTransmissionSimulator`**: Side-by-side comparative simulation of **Heterogeneous-Agent New Keynesian (HANK)** and **Representative-Agent New Keynesian (RANK)** economies, featuring the **Kaplan, Moll, and Violante (2018, *American Economic Review*)** direct versus indirect transmission decomposition across empirical Marginal Propensity to Consume (MPC) wealth deciles.
 2. **Zero-Build Browser-Native Laboratories (`curso/site/labs/`)**:
    - **`comercio-aranceles.html` / `.js`**: Real-time trade war counterfactual laboratory (MEX-USA-CHN) with live bilateral tariff sliders, client-side general equilibrium solver in vanilla JavaScript (< 2 ms solve time), terms-of-trade shifts, and trade diversion visualizers.
@@ -82,14 +82,20 @@ Given counterfactual bilateral gross tariff changes $\hat{\tau}_{ni}^j = \frac{1
    Equilibrium wages $\hat{w}_n$ are solved iteratively via damped tatonnement until excess factor demand satisfies:
    $$\max_n \left| \sum_{j=1}^J \gamma_n^j Y_n'^j - \hat{w}_n w_n L_n \right| < 10^{-6}$$
 
-### 1.2 Terms of Trade & Exact Welfare Decomposition
+### 1.2 Terms of Trade & Descriptive Welfare Components
 
 The terms-of-trade index change $\widehat{\text{ToT}}_n \equiv \hat{P}_n^X / \hat{P}_n^M$ reflects the price of country $n$'s exports relative to its imports:
 - **Export Price Index Change**: $\hat{P}_n^X = \sum_j \sum_{m \ne n} \omega_{n, m}^j \hat{c}_n^j$
 - **Import Price Index Change**: $\hat{P}_n^M = \sum_j \sum_{m \ne n} \mu_{n, m}^j (\hat{c}_m^j \hat{\tau}_{nm}^j)$
 
-The overall change in real welfare $\Delta \ln \mathcal{W}_n = \ln \left( \frac{\hat{I}_n}{\hat{P}_n} \right)$ decomposes exactly into three economic mechanisms:
-$$\Delta \ln \mathcal{W}_n = \underbrace{\sum_{j=1}^J \frac{\alpha_n^j}{\theta_j} \ln \left( \frac{\pi_{nn}^j}{\pi_{nn}'^j} \right)}_{\text{Terms of Trade}} + \underbrace{\sum_{j=1}^J \frac{\alpha_n^j (1 - \gamma_n^j)}{\gamma_n^j \theta_j} \ln \left( \frac{\pi_{nn}^j}{\pi_{nn}'^j} \right)}_{\text{Input-Output Multiplier}} + \underbrace{\Delta \text{Tariff Revenue}_n}_{\text{Fiscal Effect}}$$
+The `welfare_decomposition` dictionary reports two domestic-share statistics over tradable sectors $\mathcal{T}$:
+
+$$S_n = \sum_{j \in \mathcal{T}} \frac{\alpha_n^j}{\theta_j}
+\ln\left(\frac{\pi_{nn}^j}{\pi_{nn}'^j}\right), \qquad
+M_n = \sum_{j \in \mathcal{T}} \frac{\alpha_n^j(1-\gamma_n^j)}{\gamma_n^j\theta_j}
+\ln\left(\frac{\pi_{nn}^j}{\pi_{nn}'^j}\right).$$
+
+The existing keys are `terms_of_trade` for $S_n$ and `input_output` for $M_n$. The key `total` is $\Delta\ln\mathcal{W}_n=\ln(\hat I_n/\hat P_n)$, and `tariff_revenue` is defined as the residual $\Delta\ln\mathcal{W}_n-S_n-M_n$. The three entries add to `total` by construction; this does not identify three separate economic mechanisms. In particular, `terms_of_trade` is not the log of the separately computed `terms_of_trade_hat` index, and `tariff_revenue` is not an independently computed fiscal welfare effect. Use `tariff_revenue_prime` for actual counterfactual receipts. These dictionary values are in log-change units, while `welfare_pct` is a percentage change.
 
 ### 1.3 Python Usage & Counterfactual Recipes
 
@@ -263,7 +269,7 @@ print(f"Initial Consumption Multiplier in RANK: {res_tf.irf_consumption_rank[0]:
 | `terms_of_trade_hat` | `np.ndarray (N,)` | Proportional change in terms of trade index $\hat{P}_n^X / \hat{P}_n^M$. |
 | `welfare_pct` | `np.ndarray (N,)` | Percentage change in real income / welfare $(\hat{\mathcal{W}}_n - 1) \times 100$. |
 | `tariff_revenue_prime`| `np.ndarray (N,)` | Counterfactual tariff revenue collection by country $R_n'$. |
-| `welfare_decomposition`| `dict[str, np.ndarray]` | Exact decomposition: `'terms_of_trade'`, `'input_output'`, `'tariff_revenue'`. |
+| `welfare_decomposition`| `dict[str, np.ndarray]` | Domestic-share statistics `'terms_of_trade'` and `'input_output'`, residual `'tariff_revenue'`, and log-welfare `'total'`; see section 1.2. |
 | `market_clearing_residual`| `float` | Maximum goods and factor market clearing residual across countries, in the units of the baseline flows ($< 10^{-6}$ on convergence). The `tol` argument is relative to each country's labour income, so this absolute residual can exceed `tol`. |
 | `converged` | `bool` | Whether wage tatonnement converged within tolerance. |
 | `country(code)` | `code: str \| int -> pd.Series` | Return the equilibrium outcome series for a specific country. |
@@ -314,7 +320,7 @@ In addition to the Python library, `puremacro` bundles two fully interactive, cl
 - **Core Features**:
   * Real-time general equilibrium solver in client-side JavaScript executing in $<2$ ms per slider adjustment.
   * Interactive bilateral tariff controls: US on China, US on Mexico, Mexican retaliation, Chinese retaliation.
-  * Live structural decomposition into terms of trade, input-output linkages, and fiscal tariff revenues.
+  * Illustrative domestic-share and input-output statistics with a residual that makes the displayed components add to the percentage welfare change. The chart's channel labels do not establish a structural decomposition; its percentage scale also differs from the Python dictionary's log-change scale.
   * Visualizer for trade diversion and nearshoring effects toward Mexican manufacturing.
   * Pre-configured policy presets: *Baseline*, *US–China Trade War*, *Nearshoring Boom*, *All-Out Trade War*.
 

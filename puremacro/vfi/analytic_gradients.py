@@ -19,8 +19,10 @@ Computational & Algorithmic Advantages:
   equilibrium c^*, avoiding non-linear solver convergence chatter and inner-loop tolerance inconsistencies.
 - Continuous Policy Gradients: Evaluates continuous sensitivities \nabla_\theta g(s) = \Phi(s) \nabla_\theta c^*
   at arbitrary continuous state coordinates s.
-- Aggregate sensitivities: supported representative-agent formulas are available;
-  heterogeneous-agent distribution and coupled GE sensitivities are not implemented.
+- Aggregate sensitivities: representative-agent formulas and a specialized continuous
+  Aiyagari EGM equilibrium path are available. The latter couples household,
+  stationary-distribution, and market-clearing derivatives; it is not a general
+  heterogeneous-agent model differentiator.
 - Robust Regularization Fallback: Automatically detects high condition numbers cond(J_c) > 10^12
   or singular systems, falling back to Tikhonov regularization or truncated SVD pseudoinverse.
 - Uses NumPy/SciPy linear algebra; ships no compiled extension of its own.

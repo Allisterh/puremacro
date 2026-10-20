@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title data-title-es="Guerra arancelaria y desvío de comercio · Laboratorios MAV" data-title-en="Tariff war and trade diversion · MAV Labs">Guerra arancelaria y desvío de comercio · Laboratorios MAV</title>
-<meta name="description" content="Laboratorio interactivo: equilibrio general cuantitativo de comercio (Caliendo & Parro 2015). Mueve aranceles bilaterales entre México, EE. UU. y China, observa el desvío de comercio y descompone el bienestar en términos de intercambio y enlaces insumo-producto.">
+<meta name="description" content="Laboratorio interactivo: equilibrio general cuantitativo de comercio (Caliendo & Parro 2015). Mueve aranceles bilaterales entre México, EE. UU. y China, observa el desvío de comercio y compara cambios de bienestar con estadísticas ilustrativas de cuotas domésticas.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23111'/%3E%3Cpath d='M5 21c4 0 5-10 9-10s5 10 9 10 3-5 4-5' fill='none' stroke='%23fff' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -84,9 +84,12 @@
           <p><span class="es">donde \(R_n' = \sum_j \sum_i \frac{\tau_{ni}'^j - 1}{\tau_{ni}'^j} \pi_{ni}'^j X_n'^j\) es la recaudación arancelaria.</span><span class="en">where \(R_n' = \sum_j \sum_i \frac{\tau_{ni}'^j - 1}{\tau_{ni}'^j} \pi_{ni}'^j X_n'^j\) is tariff revenue.</span></p>
         </details>
         <details class="math">
-          <summary><span class="es">Descomposición del bienestar</span><span class="en">Welfare decomposition</span></summary>
-          <p><span class="es">La variación en el bienestar real (\(\Delta \ln W_n\)) se descompone exactamente en tres canales:</span><span class="en">The real welfare change (\(\Delta \ln W_n\)) decomposes exactly into three economic channels:</span></p>
-          $$\Delta \ln W_n = \underbrace{\sum_{j=1}^J \frac{\alpha_n^j}{\theta_j} \ln \left( \frac{\pi_{nn}^j}{\pi_{nn}'^j} \right)}_{\text{Términos de intercambio}} + \underbrace{\sum_{j=1}^J \frac{\alpha_n^j (1 - \gamma_n^j)}{\gamma_n^j \theta_j} \ln \left( \frac{\pi_{nn}^j}{\pi_{nn}'^j} \right)}_{\text{Multiplicador insumo-producto}} + \underbrace{\Delta \text{Recaudación arancelaria}}_{\text{Ingreso fiscal}}$$
+          <summary><span class="es">Componentes ilustrativos del bienestar</span><span class="en">Illustrative welfare components</span></summary>
+          <p><span class="es">La gráfica usa dos estadísticas de la cuota doméstica de manufacturas \(m\):</span><span class="en">The chart uses two statistics of the domestic manufacturing share \(m\):</span></p>
+          $$S_n = 100\frac{\alpha_n^m}{\theta_m}\ln\left(\frac{\pi_{nn}^m}{\pi_{nn}'^m}\right), \qquad M_n = \frac{1-\gamma_n^m}{\gamma_n^m}S_n.$$
+          <p><span class="es">El residual se calcula para que los componentes sumen el cambio porcentual del bienestar:</span><span class="en">The residual is calculated so the components add to the percentage welfare change:</span></p>
+          $$E_n = 100(\hat W_n-1)-S_n-M_n.$$
+          <p><span class="es">Esta suma es una identidad por construcción, no una descomposición identificada en mecanismos económicos. \(S_n\) no es un índice de términos de intercambio y \(E_n\) no es un efecto de la recaudación fiscal. La recaudación efectiva \(R_n'\) se calcula por separado. La gráfica usa una escala porcentual; el diccionario <code>welfare_decomposition</code> de Python utiliza cambios logarítmicos.</span><span class="en">This sum is an identity by construction, not an identified decomposition into economic mechanisms. \(S_n\) is not a terms-of-trade index and \(E_n\) is not a tariff-revenue effect. Actual receipts \(R_n'\) are calculated separately. The chart uses a percentage scale; Python's <code>welfare_decomposition</code> dictionary uses log changes.</span></p>
         </details>
       </div>
     </div>

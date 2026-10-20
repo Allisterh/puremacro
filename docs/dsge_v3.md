@@ -1,45 +1,53 @@
 [Español](es/dsge_v3.md) · **English**
 
-# puremacro 3.0: Exact Analytic Gradients, Pure-Python HMC/NUTS & Sequence-Space HANK
+# DSGE likelihood scores, HMC/NUTS and sequence-space HANK
 
-`puremacro 3.0.0` represents a transformative generational leap for macroeconomic modeling in Python. While the 2.x release cycle brought `puremacro` to **complete operational parity with Dynare**—encompassing the full `.mod` parser, second- and third-order pruned perturbation, extended path simulation, OccBin piecewise filtering, and automated identification analysis—version 3.0.0 pivots from *emulating legacy toolchains* to *surpassing them*.
+This guide explains capabilities introduced in the 3.x series and their
+current scope. Numerical parity is specific to the models, options and
+quantities checked in the [validation status](STRUCTURAL_VALIDATION_STATUS.md).
+The numerical core uses NumPy, SciPy, pandas and Matplotlib; browser execution
+has the limits described in the [runtime guide](tablet.md).
 
-Version 3.0.0 introduces three pioneering capabilities directly into standard `.mod` macroeconomic workflows:
+## Capabilities and scope
 
-1. **Exact Analytic Likelihood Gradients ($\nabla_\theta \ln L$)**: Evaluates exact structural score vectors via AST parameter differentiation, generalized Sylvester matrix equations solved via complex Schur triangular back-substitution, and single-pass forward Kalman score recursions.
-2. **Pure-Python Hamiltonian Monte Carlo & No-U-Turn Sampler (NUTS)**: Provides high-efficiency gradient-based MCMC for high-dimensional posterior sampling with Betancourt generalized U-turn stopping, Hoffman-Gelman dual averaging, Welford online covariance adaptation with Stan shrinkage, and complete MCMC diagnostics (split-$\hat{R}$, bulk/tail ESS, E-BFMI) under the strict zero-C-extension Pyodide four-package contract (`numpy`, `scipy`, `pandas`, `matplotlib`).
-3. **Heterogeneous Agents (HANK) Sequence-Space Bridge in `.mod` Files**: Introduces the `hetagent_block; ... end;` grammar into Dynare-style `.mod` specifications, seamlessly coupling microeconomic household decisions (stationary wealth distributions $\mathcal{D}^*(a)$, $MPC(a)$ schedules) with aggregate DSGE market-clearing conditions via Auclert, Bardóczy, Rognlie & Straub (2021) Fake-News Jacobians ($J_{C, r}, J_{C, Y}$) and linear/nonlinear Broyden transition dynamics.
+| Capability | Supported workflow | What to check |
+|---|---|---|
+| Likelihood gradients | Analytic Kalman score recursion and implicit decision-rule sensitivities for structural parameters in the supported first-order stationary likelihood. | Structural derivative inputs may use finite differences. Compare the score with numerical derivatives of the same likelihood. |
+| Bayesian sampling | Pure-Python HMC/NUTS with step-size and diagonal mass adaptation. | Check chain mixing, divergences and effective sample sizes; speed depends on the model and posterior. |
+| HANK bridge | Household blocks in `.mod` files connected through sequence-space Jacobians. | Check the household backend and linear/nonlinear transition scope in the [HANK guide](hank_nonlinear.md). |
+
+`log_posterior_and_gradient` covers structural parameters declared by the
+model. Its analytic Kalman recursion does not imply an entirely symbolic
+parameter-to-likelihood derivative: structural Jacobian inputs may be
+finite-differenced. Noise scales, correlations, measurement equations,
+presamples and diffuse initialization require their own supported likelihood
+route. The [estimation guide](dsge_estimation.md) distinguishes analytic,
+user-supplied and numerical gradients, including fallback behavior.
+
+OccBin solves piecewise-linear constrained paths. The **5.4 development**
+`solve_pruned_occbin` supports linear OccBin (including anticipated shocks)
+and slack second-order paths with one initial innovation; nonlinear binding
+episodes and nonlinear anticipated innovations are rejected. That entry point
+is not present in this 5.3 checkout. Existing perturbation methods are described
+in the [higher-order guide](dsge_higher_order.md).
 
 ---
 
-## Executive Summary: Beyond Legacy Toolchains
-
-Traditional macroeconomic toolchains (such as Dynare, Dynare++, or custom MATLAB routines) have long been constrained by three structural bottlenecks:
-
-| Dimension | Legacy Toolchains (Dynare / MATLAB) | puremacro 3.0.0 |
-|:---|:---|:---|
-| **Likelihood Gradients** | Two-sided finite differences ($\approx 2K$ Kalman filter evaluations per gradient step); noisy, slow, prone to numerical breakdown near unit roots. | **Exact Analytic Gradients ($\nabla_\theta \ln L$)**: Implicit generalized Sylvester solver + single-pass forward Kalman score recursion in $\mathcal{O}(K \cdot N^3)$ flops ($< 1$ ms). |
-| **Bayesian Posterior Sampling** | Random-Walk Metropolis-Hastings (RWMH); diffuses slowly in high dimensions ($ESS < 2\%$), requiring millions of draws for medium-scale models. | **Pure-Python HMC / NUTS**: Phase-space symplectic leapfrog dynamics traversing complex curved posteriors with zero step-size tuning ($ESS / s \ge 10\times$ RWMH). |
-| **Heterogeneous Agents** | Representative Agent (RANK) or two-agent (TANK); unable to solve heterogeneous-agent sequence-space models natively within `.mod` files. | **Sequence-Space HANK Bridge**: Native `hetagent_block` grammar in `.mod` files; solves stationary distributions $\mathcal{D}^*(a)$, Fake-News Jacobians, and general equilibrium transition paths in seconds. |
-| **Software Footprint** | Requires proprietary MATLAB runtime or external C++ / Fortran compilers, MEX binaries, and LAPACK links. | **Zero-Dependency Pure Python**: Runs everywhere from HPC clusters to tablets and web browsers via Pyodide / WebAssembly (`numpy`, `scipy`, `pandas`, `matplotlib` only). |
-
----
-
-## Pillar 1: Exact Analytic Likelihood Gradients ($\nabla_\theta \ln L$)
+## Pillar 1: Kalman Likelihood Scores and Structural Sensitivities ($\nabla_\theta \ln L$)
 
 ### 1.1 Motivation & Mathematical Formulation
 
 Estimating DSGE models via gradient-based optimizers (such as L-BFGS-B, SQP) or Hamiltonian Monte Carlo requires the gradient of the log-posterior:
 $$\nabla_\theta \ln p(\theta \mid Y) = \nabla_\theta \ln L(Y \mid \theta) + \nabla_\theta \ln p(\theta)$$
 
-In legacy toolchains, $\nabla_\theta \ln L$ is approximated via two-sided finite differences:
+One way to approximate the likelihood derivative is a central difference:
 $$\frac{\partial \ln L}{\partial \theta_j} \approx \frac{\ln L(\theta + h e_j) - \ln L(\theta - h e_j)}{2h}$$
 
-This numerical approach suffers from severe flaws:
-1. **Computational Inefficiency**: For $K$ estimated parameters, each gradient evaluation demands $2K$ full Kalman filter sweeps over the sample history $T_{obs}$. For large models ($K \ge 35$), a single optimization step can take hundreds of seconds.
-2. **Step-Size Instability**: Choosing the perturbation step $h$ is fraught: too large induces truncation bias; too small triggers catastrophic floating-point cancellation in near-unit-root regimes.
-
-`puremacro 3.0.0` replaces finite differences with an **exact, single-pass forward analytic score engine**.
+This requires two likelihood evaluations per parameter and a step-size choice.
+The score recursion differentiates the Kalman updates in a single forward
+sweep given state-space sensitivities. In the current implementation, those
+sensitivities can themselves contain finite-difference structural inputs;
+accuracy still needs an independent derivative check.
 
 Consider a rational-expectations structural DSGE system around its deterministic steady state:
 $$\mathbb{E}_t \left[ f(y_{t+1}, y_t, y_{t-1}, u_t; \theta) \right] = 0$$
@@ -103,7 +111,7 @@ which `puremacro` solves directly via `scipy.linalg.solve_discrete_lyapunov`.
 Given observed data $y_t \in \mathbb{R}^{n_y}$, the forecast errors $v_t = y_t - Z a_{t|t-1} - d$ and error covariances $F_t = Z P_{t|t-1} Z^\top + H$ determine the Gaussian log-likelihood:
 $$\ln L(Y \mid \theta) = -\frac{T_{obs} n_y \ln(2\pi)}{2} - \frac{1}{2} \sum_{t=1}^{T_{obs}} \left( \ln |F_t| + v_t^\top F_t^{-1} v_t \right)$$
 
-The exact score vector $\nabla_\theta \ln L$ is computed in a single forward sweep:
+Given the state-space sensitivities, the score vector $\nabla_\theta \ln L$ is computed in a single forward sweep:
 $$\frac{\partial \ln L}{\partial \theta_j} = -\frac{1}{2} \sum_{t=1}^{T_{obs}} \left[ \operatorname{tr}\left( F_t^{-1} \frac{\partial F_t}{\partial \theta_j} \right) + 2 v_t^\top F_t^{-1} \frac{\partial v_t}{\partial \theta_j} - (F_t^{-1} v_t)^\top \frac{\partial F_t}{\partial \theta_j} (F_t^{-1} v_t) \right]$$
 
 During each forward step $t$, state sensitivities $\frac{\partial a_{t|t-1}}{\partial \theta_j}$ and covariance sensitivities $\frac{\partial P_{t|t-1}}{\partial \theta_j}$ are updated alongside the standard Kalman equations:
@@ -282,7 +290,7 @@ model = load_mod(MOD_CODE)
 rng = np.random.default_rng(42)
 data = pd.DataFrame({"y": rng.normal(0, 0.5, size=80)})
 
-# 3. Estimate using pure-Python NUTS with exact analytic gradients
+# 3. Estimate this first-order model using pure-Python NUTS
 res = model.estimate(
     data=data,
     method="nuts",
@@ -471,9 +479,9 @@ print("Bridge Solved Successfully:", res_bridge.converged)
 | Function / Class | Description | Key Arguments | Returns |
 |:---|:---|:---|:---|
 | `solve_sylvester_generalized` | Solves $\hat{A} X + B X C = D$ via Schur decomposition. | `A_hat`, `B`, `C`, `D` | `np.ndarray` (solution matrix or batch) |
-| `build_state_space_sensitivities` | Generates $\frac{\partial T}{\partial \theta}, \frac{\partial R}{\partial \theta}, \dots$ for all estimated parameters. | `model`, `varobs`, `param_names` | `dict[str, StateSpaceSensitivity]` |
+| `build_state_space_sensitivities` | Generates $\frac{\partial T}{\partial \theta}, \frac{\partial R}{\partial \theta}, \dots$ for supported structural parameters, using implicit derivatives and numerical structural inputs where needed. | `model`, `varobs`, `param_names` | `dict[str, StateSpaceSensitivity]` |
 | `kalman_score` | Single-pass forward Kalman filter likelihood and score. | `y`, `model`, `sensitivities`, `a0=None`, `P0=None` | `tuple[float, np.ndarray]` (`loglik`, `score`) |
-| `log_posterior_and_gradient` | Evaluates $\ln p(\theta \mid Y)$ and $\nabla_\theta \ln p(\theta \mid Y)$ analytically. | `vec`, `names`, `model_template`, `y_data`, `varobs`, `priors` | `tuple[float, np.ndarray]` (`log_post`, `grad`) |
+| `log_posterior_and_gradient` | Evaluates the supported first-order stationary log posterior and structural-parameter score. | `vec`, `names`, `model_template`, `y_data`, `varobs`, `priors` | `tuple[float, np.ndarray]` (`log_post`, `grad`) |
 | `ScoreDiagnosticsResult` | Diagnostics container for score vectors and finite difference checks. | `loglik`, `gradient`, `param_names`, `elapsed_sec` | Result container (`.to_markdown()`, `.to_latex()`) |
 
 ### 2. Hamiltonian Monte Carlo / NUTS (`puremacro.dsge.nuts`, `estimate`)
@@ -499,10 +507,10 @@ print("Bridge Solved Successfully:", res_bridge.converged)
 
 ## Conclusion & Next Steps
 
-With `puremacro 3.0.0`, researchers and macroeconomists gain access to:
-- High-speed, exact analytical score vectors eliminating finite difference noise.
+These workflows provide:
+- Analytic Kalman score recursions with explicitly scoped structural sensitivities.
 - Automated, pure-Python Hamiltonian Monte Carlo for high-dimensional Bayesian DSGE posteriors without C++ dependencies.
-- Frictionless sequence-space HANK modeling directly inside standard Dynare `.mod` workflows.
+- Sequence-space HANK bridges through supported `hetagent_block` declarations.
 
 To explore further:
 - View the Dynare estimation guide at [dsge_estimation.md](dsge_estimation.md).

@@ -5,7 +5,7 @@
 `puremacro` ofrece una suite de simulación cuantitativa de grado de producción con arquitectura dual, concebida para la investigación de frontera, el análisis de política económica y la docencia interactiva:
 
 1. **API de Equilibrio General en Python (`puremacro.models`)**:
-   - **`TradePolicySimulator`**: Modelo de equilibrio general cuantitativo ricardiano multisectorial y multipaís basado en **Caliendo y Parro (2015, *Review of Economic Studies*)**. Resuelve contrafactuales mediante álgebra exacta de sombreros (*exact hat algebra*) para perturbaciones arancelarias bilaterales, términos de intercambio, cascadas de costos intermedios insumo-producto y descomposición analítica del bienestar con verificación rigurosa de vaciado de mercados ($\max_i |X_i - (Y_i + R_i + D_i)| < 10^{-6}$).
+   - **`TradePolicySimulator`**: Modelo de equilibrio general cuantitativo ricardiano multisectorial y multipaís basado en **Caliendo y Parro (2015, *Review of Economic Studies*)**. Resuelve contrafactuales mediante álgebra exacta de sombreros (*exact hat algebra*) para perturbaciones arancelarias bilaterales, términos de intercambio y cascadas de costos intermedios insumo-producto, con verificación del vaciado de mercados ($\max_i |X_i - (Y_i + R_i + D_i)| < 10^{-6}$). Su `welfare_decomposition` es una separación descriptiva con un componente residual, detallada abajo.
    - **`MonetaryTransmissionSimulator`**: Comparación lado a lado entre modelos **Neokeynesianos de Agentes Heterogéneos (HANK)** y de **Agente Representativo (RANK)**, implementando la descomposición de canales directo e indirecto de **Kaplan, Moll y Violante (2018, *American Economic Review*)** a través de la escalera empírica de Propensión Marginal a Consumir (PMC) por deciles de riqueza.
 2. **Laboratorios Interactivos en Navegador sin Compilación (`curso/site/labs/`)**:
    - **`comercio-aranceles.html` / `.js`**: Laboratorio interactivo en tiempo real de guerra arancelaria (MEX-EE. UU.-CHN) con controles deslizantes bilaterales, solucionador de equilibrio general en JavaScript puro (< 2 ms por iteración), variaciones en términos de intercambio y visualizadores de desvío de comercio y *nearshoring*.
@@ -82,14 +82,20 @@ Ante variaciones contrafactuales en los aranceles brutos bilaterales $\hat{\tau}
    Los salarios de equilibrio $\hat{w}_n$ se resuelven iterativamente por tanteo amortiguado (*damped tatonnement*) hasta satisfacer la cota Walrasiana:
    $$\max_n \left| \sum_{j=1}^J \gamma_n^j Y_n'^j - \hat{w}_n w_n L_n \right| < 10^{-6}$$
 
-### 1.2 Términos de Intercambio y Descomposición Exacta del Bienestar
+### 1.2 Términos de Intercambio y Componentes Descriptivos del Bienestar
 
 El índice de variación en los términos de intercambio $\widehat{\text{ToT}}_n \equiv \hat{P}_n^X / \hat{P}_n^M$ refleja el poder adquisitivo externo del país $n$:
 - **Índice de Precios de Exportación**: $\hat{P}_n^X = \sum_j \sum_{m \ne n} \omega_{n, m}^j \hat{c}_n^j$
 - **Índice de Precios de Importación**: $\hat{P}_n^M = \sum_j \sum_{m \ne n} \mu_{n, m}^j (\hat{c}_m^j \hat{\tau}_{nm}^j)$
 
-El cambio total en el bienestar real $\Delta \ln \mathcal{W}_n = \ln \left( \frac{\hat{I}_n}{\hat{P}_n} \right)$ se descompone analíticamente en tres canales económicos:
-$$\Delta \ln \mathcal{W}_n = \underbrace{\sum_{j=1}^J \frac{\alpha_n^j}{\theta_j} \ln \left( \frac{\pi_{nn}^j}{\pi_{nn}'^j} \right)}_{\text{Términos de Intercambio}} + \underbrace{\sum_{j=1}^J \frac{\alpha_n^j (1 - \gamma_n^j)}{\gamma_n^j \theta_j} \ln \left( \frac{\pi_{nn}^j}{\pi_{nn}'^j} \right)}_{\text{Multiplicador Insumo-Producto}} + \underbrace{\Delta \text{Recaudación Arancelaria}_n}_{\text{Efecto Fiscal}}$$
+El diccionario `welfare_decomposition` presenta dos estadísticas de cuotas domésticas sobre los sectores comerciables $\mathcal{T}$:
+
+$$S_n = \sum_{j \in \mathcal{T}} \frac{\alpha_n^j}{\theta_j}
+\ln\left(\frac{\pi_{nn}^j}{\pi_{nn}'^j}\right), \qquad
+M_n = \sum_{j \in \mathcal{T}} \frac{\alpha_n^j(1-\gamma_n^j)}{\gamma_n^j\theta_j}
+\ln\left(\frac{\pi_{nn}^j}{\pi_{nn}'^j}\right).$$
+
+Las claves existentes son `terms_of_trade` para $S_n$ e `input_output` para $M_n$. La clave `total` es $\Delta\ln\mathcal{W}_n=\ln(\hat I_n/\hat P_n)$, y `tariff_revenue` se define como el residual $\Delta\ln\mathcal{W}_n-S_n-M_n$. Los tres componentes suman `total` por construcción; esto no identifica tres mecanismos económicos separados. En particular, `terms_of_trade` no es el logaritmo del índice `terms_of_trade_hat` calculado por separado, y `tariff_revenue` no es un efecto fiscal sobre el bienestar calculado de manera independiente. Use `tariff_revenue_prime` para la recaudación contrafactual efectiva. Los valores del diccionario están en unidades de cambio logarítmico, mientras que `welfare_pct` es una variación porcentual.
 
 ### 1.3 Recetas Prácticas en Python
 
@@ -263,7 +269,7 @@ print(f"Multiplicador inicial de consumo en RANK: {res_tf.irf_consumption_rank[0
 | `terms_of_trade_hat` | `np.ndarray (N,)` | Variación en términos de intercambio $\hat{P}_n^X / \hat{P}_n^M$. |
 | `welfare_pct` | `np.ndarray (N,)` | Cambio porcentual en bienestar real $(\hat{\mathcal{W}}_n - 1) \times 100$. |
 | `tariff_revenue_prime`| `np.ndarray (N,)` | Recaudación arancelaria contrafactual por país $R_n'$. |
-| `welfare_decomposition`| `dict[str, np.ndarray]` | Descomposición exacta: `'terms_of_trade'`, `'input_output'`, `'tariff_revenue'`. |
+| `welfare_decomposition`| `dict[str, np.ndarray]` | Estadísticas de cuotas domésticas `'terms_of_trade'` e `'input_output'`, residual `'tariff_revenue'` y cambio logarítmico del bienestar `'total'`; véase la sección 1.2. |
 | `market_clearing_residual`| `float` | Máximo residual de vaciado de mercados en todos los países, en las unidades de los flujos de base ($< 10^{-6}$ al converger). El argumento `tol` es relativo a la renta laboral de cada país, así que este residual absoluto puede superar `tol`. |
 | `converged` | `bool` | Indica si el tanteo salarial convergió dentro de la tolerancia. |
 | `country(code)` | `code: str \| int -> pd.Series` | Retorna la serie de resultados de equilibrio para un país específico. |
@@ -314,7 +320,7 @@ Además de la librería de Python, `puremacro` integra dos laboratorios totalmen
 - **Características**:
   * Solucionador de equilibrio general en tiempo real en JavaScript que converge en $<2$ ms por movimiento de control deslizante.
   * Controles de aranceles bilaterales: EE. UU. a China, EE. UU. a México, represalias mexicanas y chinas.
-  * Descomposición estructural en vivo en términos de intercambio, enlaces insumo-producto e ingresos arancelarios.
+  * Estadísticas ilustrativas de cuotas domésticas e insumo-producto, con un residual que hace que los componentes mostrados sumen el cambio porcentual del bienestar. Las etiquetas de canales de la gráfica no establecen una descomposición estructural; su escala porcentual también difiere de la escala logarítmica del diccionario de Python.
   * Visualizador de desvío de comercio y auge de *nearshoring* en las manufacturas mexicanas.
   * Preajustes de política: *Línea Base*, *Guerra EE. UU.–China*, *Boom de Nearshoring*, *Guerra Total*.
 

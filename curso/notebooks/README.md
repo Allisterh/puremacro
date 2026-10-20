@@ -7,6 +7,19 @@ Economía del ITAM, otoño 2026. Todo el curso corre en Python con
 [`puremacro`](https://github.com/jalonso1979/puremacro): cada cuaderno trae sus salidas ya
 ejecutadas, así que se puede leer en GitHub sin correr nada.
 
+**Entorno base de esta edición:** `puremacro>=4.8.1,<5`. Mantenga el curso en un
+entorno separado de puremacro 5.x: actualizar el paquete requiere volver a
+ejecutar y validar los cuadernos. Los [cuadernos de demostración de la
+biblioteca](../../docs/es/notebooks.md) son el punto de entrada para la versión
+actual. Los laboratorios HTML/JavaScript del curso son materiales separados.
+
+Las secciones opcionales de programación dinámica en T03_A, T06_A y T06_B
+pueden instalar en Colab el commit de desarrollo
+`4a726629aa8a35c1c3d762a9bbbb2b4036590252`, también identificado como 4.8.1,
+si falta `puremacro.dp`. Siga las notas de cada sección. Las sugerencias
+históricas de instalar el repositorio sin fijar un commit no reproducen esta
+edición; puede omitir esas secciones opcionales.
+
 La carpeta contiene los cuadernos en español (`*_es.ipynb`) y en inglés, los
 auxiliares `_datos.py`, `_nbstyle.py`, `_tutor.py` y `_llm.py`, los datos congelados en
 `data_curso/` y los modelos `.mod` en `modelos/`. Las diapositivas en PDF están
@@ -15,7 +28,7 @@ en `curso/site/diapositivas/`.
 ## Abrir un cuaderno en Google Colab
 
 Haga clic en el enlace del cuaderno. La primera celda de código instala
-`puremacro` y descarga sólo esta carpeta del repositorio (un clon parcial, unos
+`puremacro>=4.8.1,<5` y descarga sólo esta carpeta del repositorio (un clon parcial, unos
 55 MB, casi todo datos); no pide acceso a Google Drive. Ejecute las celdas en orden.
 
 | Código | Tema | Español | Inglés |
@@ -68,10 +81,11 @@ jupyter lab
 ```
 
 Un `git clone https://github.com/jalonso1979/puremacro.git` completo también funciona. T03_E usa un modelo de lenguaje local si lo
-encuentra (`pip install "puremacro[local-llm]"` u Ollama); sin él corre con un
+encuentra (`pip install "puremacro[io,local-llm]>=4.8.1,<5"` u Ollama); sin él corre con un
 motor simulado que avisa y no extrae eventos, que es lo que muestran sus salidas
-guardadas. Ningún cuaderno necesita red: las descargas en vivo son opcionales y,
-por omisión, se leen los datos congelados de `data_curso/`.
+guardadas. La instalación inicial y la descarga de materiales requieren red.
+Después, los ejemplos usan por omisión los datos congelados de `data_curso/`;
+las descargas de datos en vivo son opcionales.
 
 ## Datos
 
@@ -98,6 +112,18 @@ programme in Economics, fall 2026. The whole course runs in Python with
 [`puremacro`](https://github.com/jalonso1979/puremacro). Every notebook is saved with its
 executed outputs, so you can read it on GitHub without running anything.
 
+**Base environment for this edition:** `puremacro>=4.8.1,<5`. Keep the course in a separate
+environment from puremacro 5.x; upgrading requires reexecuting and validating
+the notebooks. The library's [showcase notebooks](../../docs/notebooks.md) are
+the starting point for the current release. The course's HTML/JavaScript labs
+are separate teaching materials.
+
+The optional dynamic-programming sections in T03_A, T06_A and T06_B can install
+development commit `4a726629aa8a35c1c3d762a9bbbb2b4036590252` in Colab, also
+identified as 4.8.1, when `puremacro.dp` is missing. Follow each section's notes.
+Historical suggestions to install the repository without a pinned commit do
+not reproduce this edition; those optional sections can be skipped.
+
 This folder holds the notebooks in Spanish (`*_es.ipynb`) and English, the
 helpers `_datos.py`, `_nbstyle.py`, `_tutor.py` and `_llm.py`, the frozen data in
 `data_curso/` and the `.mod` models in `modelos/`. The PDF slides are in
@@ -105,7 +131,7 @@ helpers `_datos.py`, `_nbstyle.py`, `_tutor.py` and `_llm.py`, the frozen data i
 
 ## Open a notebook in Google Colab
 
-Click the notebook's link. The first code cell installs `puremacro` and fetches
+Click the notebook's link. The first code cell installs `puremacro>=4.8.1,<5` and fetches
 only this folder from the repository (a partial clone of about 55 MB, mostly
 data); it does not ask for Google Drive access. Run the cells in order.
 
@@ -159,10 +185,11 @@ jupyter lab
 ```
 
 A full `git clone https://github.com/jalonso1979/puremacro.git` also works. T03_E uses a local language model if it finds one
-(`pip install "puremacro[local-llm]"` or Ollama); without one it runs on a mock
+(`pip install "puremacro[io,local-llm]>=4.8.1,<5"` or Ollama); without one it runs on a mock
 engine that prints a notice and extracts no events, which is what its saved outputs
-show. No notebook needs the network: live downloads are optional and, by default,
-the frozen data in `data_curso/` is read.
+show. Initial installation and downloading the materials need network access.
+After setup, the examples use the frozen data in `data_curso/` by default;
+live data downloads are optional.
 
 ## Data
 

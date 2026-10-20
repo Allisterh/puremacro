@@ -2,10 +2,10 @@
 
 This is a single-author research package. The conventions below exist so that **future-you** (or a collaborator) can land changes confidently without re-deriving the trade-offs that produced the current shape. They also keep the four cross-cutting promises of the package intact:
 
-1. **Pyodide-compatible** — runs on iPad / juno.sh; no `statsmodels`, `linearmodels`, `arch` at runtime.
-2. **Diagnostic over silent** — every numerical-failure path raises a named `LinAlgError` (or fires a `UserWarning`), never returns garbage.
+1. **Portable numerical core** — a local workstation install is the supported target; Pyodide / iPad / juno.sh are best-effort environments. Core estimators do not require `statsmodels`, `linearmodels` or `arch` at runtime.
+2. **Diagnostic over silent** — numerical failures must follow a documented error, warning or sentinel contract.
 3. **Public API curated in `__init__.py`** — top level exports `__version__`; subpackages re-export their stable names.
-4. **Tests over types** — replication-validation + edge-case unit tests are the contract; there is no linter, and `mypy` is a dev extra rather than a gate. There *is* CI: `.github/workflows/ci.yml` runs the suite on three operating systems and three Python versions, plus the release gate and a strict docs build, on every push and pull request to `main`.
+4. **Tests and type checks** — numerical validation and edge-case tests establish behavior. `.github/workflows/ci.yml` in this 5.3 source checkout runs the default suite on three operating systems and Python 3.11–3.13, a strict docs build on Ubuntu/Python 3.12 and the fast release gates on Ubuntu/Python 3.11 and 3.12. The release workflow requires CI and the opt-in test job to pass before publishing. The separate 5.4 preparation adds `mypy puremacro --ignore-missing-imports` as a CI requirement; that workflow change is not included here.
 
 If your change touches one of those, read `ARCHITECTURE.md` first.
 
@@ -94,11 +94,15 @@ nothing about scaffolding that was never running. That is why all three exist.
 
 | Change | Bump |
 |---|---|
-| New public function, no removal or signature change | minor (`0.X.0`) |
-| Pure internal hardening / refactor / bug fix, **no** API change | patch (`0.X.Y`) |
+| New public function, no removal or signature change | minor (`X.Y.0`) |
+| Pure internal hardening / refactor / bug fix, **no** API change | patch (`X.Y.Z`) |
 | Removed or renamed a public symbol; changed a return schema | major (`X.0.0`) |
 
-Update `pyproject.toml`, `puremacro/__init__.py`, `tests/test_import.py`, and add a `CHANGELOG.md` entry **in the same commit**.
+Update all five version-bearing files **in the same commit**:
+`pyproject.toml`, `puremacro/__init__.py`, the top release heading in
+`CHANGELOG.md`, `CITATION.cff`, and the wheel pin in
+`playground/jupyter_lite_config.json`. See [RELEASING.md](RELEASING.md) for
+the complete release procedure.
 
 ## Before tagging a release
 
@@ -108,16 +112,23 @@ Run the release-gate from the repo root:
 python tools/release_check.py
 ```
 
-This runs four gates and exits 0 only if all pass:
+This runs five gates and exits 0 only if all pass:
 
-1. **Test baseline** — pytest failing set must equal `tests/known_failures.json::entries[*].nodeid`. New failures → fail. Previously-red-now-green → pass with a warning that the whitelist should shrink.
+1. **Test baseline** — pytest failure and setup-error node IDs must be a subset of `tests/known_failures.json::entries[*].nodeid`. New failures fail the gate; recovered cases produce a warning to shrink the baseline. The 5.4 preparation additionally rejects unsuccessful runs without parseable failure IDs; this checkout does not include that hardening.
 2. **Pyodide contract** — `tests/test_pyodide_compat.py` green.
 3. **Public API snapshot** — fresh introspection must equal `tests/fixtures/public_api_snapshot.json`. Regenerate the fixture deliberately when a public-API change is intentional; the gate never writes.
-4. **Version sync** — `pyproject.toml`, `puremacro/__init__.py`, and the first `## X.Y.Z` heading in `CHANGELOG.md` must agree.
+4. **Version sync** — all five version-bearing files listed above must agree.
+5. **Minimum-Python syntax (Gate 7)** — Python files under `puremacro/`, `tools/` and `tests/` must parse on the declared Python floor.
 
-If a gate's failure is real and accepted (e.g. environmentally-gated test), add it to `tests/known_failures.json` with a populated `reason` / `since_version` / `owner_note`. The whitelist is the audit trail.
+Prefer fixing failures. An accepted baseline entry needs a populated `reason`,
+`since_version` and `owner_note`; it does not waive the other gates or make
+plain pytest in CI pass.
 
-CI runs the same gate (`tools/release_check.py --no-tests`) on every push to `main`, so drift is caught there too. The discipline is still to run it before every `git tag`, because CI cannot check the things a tag decides.
+CI runs `tools/release_check.py --no-tests` on pushes and pull requests to
+`main`, and on tagged commits through the release workflow. Run the local
+release check before tagging too. Gate 1 selects `not network and not slow`,
+which includes reference, replication and benchmark tests unless they also
+carry an excluded marker; it is broader than the ordinary pytest selection.
 
 ### Opt-in: examples-gallery health (Gate 5)
 
@@ -143,17 +154,24 @@ cd ../..
 python tools/release_check.py --examples --pyodide
 ```
 
-The `--pyodide` flag builds the puremacro wheel, boots Pyodide via Node, installs the wheel via `micropip`, and runs `pytest -m pyodide_smoke` (currently 8 tests across 7 subpackages). Slow (~60-180s typical; ~6s observed on modern hardware); requires Node ≥18. Default gate run does not include this.
+The `--pyodide` flag builds the puremacro wheel, boots Pyodide via Node, installs
+the wheel via `micropip`, and runs the tests marked `pyodide_smoke`. It requires
+Node and the dependencies in `tools/pyodide/`. The default gate run does not
+include this; a smoke pass does not certify every notebook or browser runtime.
 
 ### Opt-in: slow tests (`pytest -m slow`)
 
-Some tests are long-running (minutes). They are skipped by default via the `addopts = ["-m", "not slow"]` in `pyproject.toml`. Run them explicitly before tag if the change touches Bayesian estimation or DSGE code:
+The default pytest selection in `pyproject.toml` excludes `slow`, `network`,
+`reference`, `replication` and `benchmark`. Run the relevant opt-in tests when
+changing those paths. For example:
 
 ```bash
 pytest -m slow tests/test_dsge/test_sw07_estimate_replication.py
 ```
 
-The SW07 Bayesian replication test runs ~20-40 min.
+The release workflow runs the `slow`, `reference`, `replication` and `benchmark`
+groups separately. Full notebook execution runs weekly and on demand; live
+network checks remain optional.
 
 ## Diagnostic-error contract
 
@@ -168,8 +186,11 @@ If none of (1)–(3) fits, you're probably designing a new edge case. Add a comm
 ## How to run things
 
 ```bash
-# Smoke check — should be fast.
+# Default suite; numerical coverage can take substantial time.
 python -m pytest tests/
+
+# Type check used in 5.4 preparation; not yet a CI gate in this checkout.
+mypy puremacro --ignore-missing-imports
 
 # Pyodide compatibility — must pass after any new top-level import.
 python -m pytest tests/test_pyodide_compat.py
@@ -183,5 +204,5 @@ There is no linter or formatter. Keep imports grouped (stdlib / third-party / fi
 ## Out of scope
 
 - **Async / threads.** Source connectors are synchronous on purpose; see `narrative/sources/RETRY_POLICY.md` §6.
-- **Type checking.** Annotations are encouraged for documentation, not enforced. No `mypy --strict`.
-- **Backwards-compat shims.** The package passed 1.0 at v1.0.0 and ships 1.8.0, so "rename freely" no longer applies to anything in `tests/fixtures/public_api_snapshot.json`: removing or renaming a snapshotted name fails release gate 3, and the documented policy in `docs/1.0_path.md` is a `DeprecationWarning` naming the replacement, one minor release ahead of removal. Private helpers are still free. Promote private helpers to public when an example needs them, rather than keeping a `_` alias.
+- **Stricter type-checking modes.** Follow the configured mypy checks; CI does not use `mypy --strict`.
+- **Unannounced API breaks.** Removing or renaming a name in `tests/fixtures/public_api_snapshot.json` fails release gate 3. Follow the deprecation policy in `docs/1.0_path.md`, including a `DeprecationWarning` naming the replacement, and schedule incompatible removals for a major release. Private helpers are still free to change. Promote private helpers to public when an example needs them, rather than keeping a `_` alias.

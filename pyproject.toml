@@ -10,7 +10,7 @@ name = "puremacro"
 # CHANGELOG.md, `version:` in CITATION.cff, and the wheel pin in
 # playground/jupyter_lite_config.json.
 version = "5.3.0"
-description = "Pyodide-compatible empirical macro toolbox: SVAR + LP + GARCH + inference"
+description = "Macroeconometrics and structural modeling on the core scientific-Python stack"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}

@@ -25,13 +25,19 @@ from a focused example to a broader application.
 | How do I check a solver against a published result? | 66 → 67 → 68 → 12 | Closed forms, independent solution routes, tolerances and the evaluation criterion |
 
 For a first session, choose one of 06, 10, 11 or 34. Each gives a specific
-question to answer before moving to a larger policy exercise. The course
-collections provide separate teaching sequences; their numbering differs from
-this showcase catalog.
+question to answer before moving to a larger policy exercise.
+
+This catalog follows the library in the repository checkout. The separate
+[MAV course edition](https://github.com/jalonso1979/puremacro/blob/main/curso/notebooks/README.md)
+retains a `puremacro>=4.8.1,<5` base environment until its notebooks are
+validated for 5.x; use its own setup instructions, including the pinned
+development sections, in a separate environment. Its numbering and
+HTML/JavaScript labs are separate from this showcase catalog.
 
 ## Run and change an example
 
-From a repository checkout, install the notebook tools and a notebook interface:
+A local workstation install is the supported path. From a repository checkout,
+install the notebook tools and a notebook interface:
 
 ```bash
 python -m pip install -e ".[notebooks]" jupyterlab
@@ -52,14 +58,14 @@ python tools/build_notebooks.py 34_penalized_macro_forecasting 34_penalized_macr
 python tools/build_notebooks.py --check 34_penalized_macro_forecasting 34_penalized_macro_forecasting_es
 
 # Inspect existing artifacts without executing them.
-python tools/build_notebooks.py --validate-only
+python tools/build_notebooks.py --validate-only --suite showcase
 ```
 
 `--suite showcase` selects the top-level showcases and `notebooks/course/`;
 `--suite curso` selects `curso/notebooks/`. Without a name or suite, the tool
 processes both suites.
 Build individual examples first: simulation, bootstrap and Bayesian examples
-have different computation costs. For browser execution, consult the
+have different computation costs. Browser execution is best-effort; consult the
 [tablet and Pyodide guide](tablet.md). Local LLM inference requires a desktop
 engine; its mock fallback demonstrates the interface only.
 

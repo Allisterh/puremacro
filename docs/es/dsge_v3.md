@@ -1,27 +1,37 @@
 **Español** · [English](../dsge_v3.md)
 
-# puremacro 3.0: Gradientes analíticos de verosimilitud, HMC/NUTS y modelos HANK en el espacio de secuencias
+# Scores de verosimilitud DSGE, HMC/NUTS y HANK en el espacio de secuencias
 
-> [!NOTE]
-> **puremacro 3.0.0** trasciende la paridad operativa con Dynare. Esta versión incorpora tres innovaciones analíticas y computacionales fundamentales para la macroeconomía moderna: gradientes analíticos exactos de verosimilitud mediante diferenciación en el AST y recursión del score de Kalman, muestreo posterior de alta eficiencia mediante Hamiltonian Monte Carlo y No-U-Turn Sampler (NUTS) en Python puro, y un puente nativo para modelos de agentes heterogéneos (HANK) en el espacio de secuencias directamente desde archivos `.mod`. Todo ello bajo el **contrato estricto de cuatro paquetes de Pyodide** (`numpy`, `scipy`, `pandas`, `matplotlib`), sin compiladores externos ni dependencias en C++/Fortran.
+Esta guía explica capacidades introducidas en la serie 3.x y su alcance
+actual. La paridad numérica corresponde a modelos, opciones y cantidades
+concretos: consulte el [estado de validación](STRUCTURAL_VALIDATION_STATUS.md).
+El núcleo numérico usa NumPy, SciPy, pandas y Matplotlib; la ejecución en el
+navegador tiene los límites de la [guía de ejecución](tablet.md).
 
----
+## Capacidades y alcance
 
-## Resumen ejecutivo
+`log_posterior_and_gradient` cubre parámetros estructurales declarados por el
+modelo en la verosimilitud estacionaria de primer orden soportada. La
+recursión analítica de Kalman recibe sensibilidades del espacio de estados
+cuyas entradas estructurales pueden calcularse por diferencias finitas. Las
+escalas de ruido, correlaciones, ecuaciones de observación, premuestras e
+inicialización difusa requieren su propia ruta de verosimilitud soportada.
+La [guía de estimación](dsge_estimation.md) distingue los gradientes analíticos,
+numéricos y suministrados por el usuario, incluidas las alternativas automáticas.
 
-Durante el ciclo de versiones 2.x, puremacro completó la paridad operativa integral con la superficie clásica de Dynare:
-- **Nivel 0 (2.7.0)**: Analizador sintáctico de árbol de sintaxis abstracta (AST), preprocesador de macros (`@#for`, `@#if`, `@#define`), derivadas simbólicas de primer y segundo orden, y aceleración de 165× en ecuaciones de Sylvester.
-- **Nivel 1 (2.6.0)**: Estimación bayesiana integral desde archivos `.mod`, diagnósticos de modelo (`check`, `resid`, `model_diagnostics`), análisis de identificación econométrica (Iskrev, 2010) y diseño de política óptima (`osr`, discrecional y compromiso).
-- **Nivel 2 (2.8.0)**: Perturbación de tercer orden con poda de estados (*pruning* de Andreasen), problemas de complementariedad mixta (MCP / ZLB), OccBin con 4 regímenes contemporáneos, filtro de Kalman por tramos (PKF), Monte Carlo secuencial (SMC) y política no lineal de Ramsey.
-- **Nivel 3 (2.9.0)**: Filtrado espectral de Hodrick-Prescott y paso de banda, filtro HP uniselectivo (causal) recursivo de Kalman, sendero extendido de Fair-Taylor, pronóstico condicional de Waggoner-Zha, descomposición por grupos de perturbaciones y panel automatizado de paridad en integración continua.
+HMC/NUTS adapta el tamaño de paso y la matriz de masa diagonal. Su eficiencia
+se evalúa con mezcla entre cadenas, divergencias y tamaños muestrales efectivos;
+depende del modelo y de la distribución posterior. El puente HANK conecta
+bloques de hogares en archivos `.mod` mediante jacobianos en el espacio de
+secuencias, dentro del alcance de cada [backend de hogares](hank_nonlinear.md).
 
-A pesar de estas capacidades, las cadenas de herramientas macroeconómicas heredadas (Dynare / MATLAB / Dynare++) sufren tres limitaciones arquitectónicas fundamentales:
-
-1. **La ineficiencia del paseo aleatorio en MCMC**: En modelos DSGE de mediana y gran escala (como Smets-Wouters 2007, con más de 35 parámetros estimados), el muestreador clásico de Random-Walk Metropolis-Hastings (RWMH) requiere cientos de miles de iteraciones para explorar distribuciones posteriores complejas y degeneradas. El resultado es un tiempo de cómputo elevado y tamaños muestrales efectivos extremadamente bajos ($ESS < 2\%$).
-2. **Ausencia de gradientes analíticos exactos de verosimilitud**: Mientras que la estadística bayesiana y el aprendizaje automático contemporáneo han estandarizado el uso del muestreador Hamiltoniano Monte Carlo (HMC) y el algoritmo No-U-Turn Sampler (NUTS), los modelos DSGE no podían beneficiarse de NUTS debido a que calcular el gradiente de la verosimilitud del filtro de Kalman mediante diferencias finitas requiere $2K$ evaluaciones por paso, un costo prohibitivo y propenso a errores numéricos de cancelación.
-3. **La barrera del agente representativo**: La investigación de frontera en macroeconomía se basa crecientemente en modelos nuevo-keynesianos con agentes heterogéneos (HANK). Dynare no puede resolver ni simular de forma nativa modelos en el espacio de secuencias con bloques microeconómicos de hogares sin recurrir a códigos auxiliares externos o parametrizaciones complejas.
-
-`puremacro 3.0` resuelve estos tres desafíos en Python puro:
+OccBin resuelve trayectorias restringidas lineales por partes. La función de
+desarrollo **de 5.4** `solve_pruned_occbin` admite OccBin lineal, incluidos choques
+anticipados, y trayectorias de segundo orden sin restricciones activas con una
+innovación inicial. Rechaza episodios no lineales con restricciones activas e
+innovaciones futuras anticipadas no lineales. Esa función no está presente en
+esta copia de 5.3. Los métodos de perturbación existentes se describen en la
+[guía de orden superior](dsge_higher_order.md).
 
 ```
 puremacro/dsge/
@@ -29,7 +39,7 @@ puremacro/dsge/
 ├── _gradients.py      [new]  Sensibilidad implícita de Sylvester para reglas de decisión y score forward de Kalman
 ├── nuts.py            [new]  No-U-Turn Sampler (NUTS) en Python puro con promedio dual y adaptación de métrica
 ├── hank.py            [new]  Puente acoplado HANK en espacio-secuencia desde archivos .mod
-├── estimate.py        [ext]  Integración nativa de method="nuts" y gradientes analíticos exactos
+├── estimate.py        [ext]  Integración de method="nuts" y selección de gradientes
 ├── _parser.py         [ext]  Sintaxis hetagent_block; ... end; integrada en el AST
 └── _results.py        [ext]  Contenedores NUTSResult, HANKResult y ScoreDiagnosticsResult
 ```
@@ -38,23 +48,23 @@ puremacro/dsge/
 
 | Componente | Módulo | Entidad principal | Salida / Contenedor | Propósito central |
 |:---|:---|:---|:---|:---|
-| **Pilar 1** | `puremacro.dsge._gradients` | `kalman_score()`<br>`solve_sylvester_generalized()`<br>`log_posterior_and_gradient()` | `ScoreDiagnosticsResult` | Gradientes analíticos exactos $\nabla_\theta \ln L$ mediante Sylvester y recursión forward del score. |
+| **Pilar 1** | `puremacro.dsge._gradients` | `kalman_score()`<br>`solve_sylvester_generalized()`<br>`log_posterior_and_gradient()` | `ScoreDiagnosticsResult` | Score de Kalman y sensibilidades estructurales dentro del alcance documentado. |
 | **Pilar 2** | `puremacro.dsge.nuts` | `nuts_sample()`<br>`DualAveraging`<br>`WelfordVariance` | `NUTSResult` | Muestreo Hamiltoniano NUTS con diagnósticos completos (split-$\hat{R}$, ESS, E-BFMI). |
 | **Pilar 3** | `puremacro.dsge.hank` | `load_hank_mod()`<br>`HANKModel`<br>`solve_hank_bridge()` | `HANKResult` | Acoplamiento micro-macro en el espacio de secuencias desde bloques `hetagent_block;`. |
 
 ---
 
-## Pilar 1: Gradientes analíticos exactos de verosimilitud ($\nabla_\theta \ln L$)
+## Pilar 1: Score de Kalman y sensibilidades estructurales ($\nabla_\theta \ln L$)
 
-El cálculo del gradiente analítico exacto de la verosimilitud marginal gaussiana $\nabla_\theta \ln L(Y \mid \theta)$ requiere diferenciar toda la cadena computacional del modelo DSGE: desde las ecuaciones estructurales en el AST hasta las ecuaciones recursivas de actualización del filtro de Kalman.
+El gradiente de la verosimilitud marginal gaussiana requiere diferenciar las reglas de decisión y las actualizaciones del filtro de Kalman. La recursión de Kalman es analítica; la construcción de sus entradas estructurales puede usar diferencias finitas y debe contrastarse con una derivada independiente de la misma verosimilitud.
 
 ```mermaid
 flowchart LR
-    A["Ecuaciones estructurales AST<br/>A+, A0, A-, Bu"] --> B["Diferenciación paramétrica<br/>diff_param(theta_j)"]
+    A["Ecuaciones estructurales AST<br/>A+, A0, A-, Bu"] --> B["Derivadas estructurales<br/>implícitas y numéricas"]
     B --> C["Ecuación de Sylvester<br/>dG/dtheta, dN/dtheta"]
     C --> D["Sensibilidades espacio-estados<br/>dT, dR, dQ, dZ, dH, dP0"]
     D --> E["Recursión forward score Kalman<br/>dv_t, dF_t, dK_t, da_t, dP_t"]
-    E --> F["Gradiente analítico exacto<br/>nabla_theta ln L"]
+    E --> F["Score de verosimilitud<br/>nabla_theta ln L"]
 ```
 
 ### 1.1 Sensibilidad estructural de las reglas de decisión de equilibrio
@@ -112,7 +122,7 @@ Las matrices del modelo de espacio de estados (`StateSpaceModel`) relacionan el 
 $$s_{t+1} = T s_t + c + R u_{t+1}, \quad u_t \sim \mathcal{N}(0, Q)$$
 $$y^{obs}_t = Z s_t + d + \epsilon_t, \quad \epsilon_t \sim \mathcal{N}(0, H)$$
 
-Las sensibilidades paramétricas $\frac{\partial T}{\partial \theta_j}$, $\frac{\partial R}{\partial \theta_j}$, $\frac{\partial Q}{\partial \theta_j}$, $\frac{\partial Z}{\partial \theta_j}$, $\frac{\partial H}{\partial \theta_j}$ y $\frac{\partial d}{\partial \theta_j}$ se extraen analíticamente mediante `build_state_space_sensitivities()`.
+Las sensibilidades paramétricas $\frac{\partial T}{\partial \theta_j}$, $\frac{\partial R}{\partial \theta_j}$, $\frac{\partial Q}{\partial \theta_j}$, $\frac{\partial Z}{\partial \theta_j}$, $\frac{\partial H}{\partial \theta_j}$ y $\frac{\partial d}{\partial \theta_j}$ se construyen mediante `build_state_space_sensitivities()`, con derivadas implícitas y entradas estructurales numéricas donde se necesitan.
 
 La covarianza estacionaria inicial $P_0$ satisface la ecuación discreta de Lyapunov:
 
@@ -130,7 +140,7 @@ Dada una muestra observable de tamaño $T_{obs}$ con errores de pronóstico $v_t
 
 $$\ln L(Y \mid \theta) = -\frac{T_{obs} n_y \ln(2\pi)}{2} - \frac{1}{2} \sum_{t=1}^{T_{obs}} \left( \ln |F_t| + v_t^\top F_t^{-1} v_t \right)$$
 
-El gradiente analítico exacto respecto a cada parámetro $\theta_j$ se calcula en una única pasada progresiva sin necesidad de almacenar toda la trayectoria temporal de estados (*single-pass forward Kalman score recursion*):
+Dadas las sensibilidades del espacio de estados, el score respecto a cada parámetro $\theta_j$ se calcula en una única pasada progresiva sin necesidad de almacenar toda la trayectoria temporal de estados (*single-pass forward Kalman score recursion*):
 
 $$\frac{\partial \ln L}{\partial \theta_j} = -\frac{1}{2} \sum_{t=1}^{T_{obs}} \left[ \operatorname{tr}\left( F_t^{-1} \frac{\partial F_t}{\partial \theta_j} \right) + 2 v_t^\top F_t^{-1} \frac{\partial v_t}{\partial \theta_j} - \left(F_t^{-1} v_t\right)^\top \frac{\partial F_t}{\partial \theta_j} \left(F_t^{-1} v_t\right) \right]$$
 
@@ -230,7 +240,7 @@ Sea $\mathcal{L}(\theta) = \ln p(\theta \mid Y) = \ln L(Y \mid \theta) + \ln p(\
 
 $$\mathcal{H}(\theta, p) = -\mathcal{L}(\theta) + \frac{1}{2} p^\top M^{-1} p$$
 
-El gradiente analítico total es la suma del score exacto y el gradiente de la distribución a priori:
+El gradiente del log-posteriori es la suma del score de verosimilitud y el gradiente de la distribución a priori:
 
 $$\nabla_\theta \mathcal{L}(\theta) = \nabla_\theta \ln L(Y \mid \theta) + \nabla_\theta \ln p(\theta)$$
 
@@ -454,16 +464,15 @@ Estructura de la tabla de resumen (`res_hank.summary()`):
 
 ---
 
-## Tabla comparativa: puremacro 3.0 frente a Dynare clásico
+## Comprobaciones antes de usar los resultados
 
-| Dimensión | Dynare clásico (4.6 / 5.x / 6.x) | puremacro 3.0 | Ventaja metodológica |
-|:---|:---|:---|:---|
-| **Gradientes de verosimilitud** | Diferencias finitas ruidosas ($2K$ evaluaciones de filtro de Kalman). | Gradientes analíticos exactos ($\nabla_\theta \ln L$) vía Sylvester y score forward de Kalman. | Precisión a nivel de máquina ($10^{-12}$) y aceleración de 5× a 15×. |
-| **Muestreador posterior** | Random-Walk Metropolis-Hastings (RWMH) con propuestas gaussianas ciegas. | Hamiltonian Monte Carlo y No-U-Turn Sampler (NUTS) con trayectorias guiadas por gradiente. | Tamaño muestral efectivo ($ESS$) por segundo hasta 20× superior. |
-| **Acondicionamiento dimensional** | Se degrada severamente cuando $K > 25$ parámetros estimados. | Escala eficientemente en dimensiones altas mediante la geometría simpléctica del espacio de fases. | Estimación viable de modelos de gran escala (como Smets-Wouters). |
-| **Diagnósticos MCMC** | Convergencia básica de Brooks-Gelman ($R$ univariado y multivariado). | Split-$\hat{R}$, Bulk ESS, Tail ESS y diagnóstico de energía $E\text{-BFMI}$. | Estándar riguroso de la literatura bayesiana contemporánea. |
-| **Modelos HANK** | No soportado nativamente (requiere cajas de herramientas externas y aproximaciones locales). | Soporte nativo en archivos `.mod` mediante `hetagent_block;` y espacio de secuencias. | Solución de transiciones dinámicas MIT en segundos sin explosión dimensional. |
-| **Entorno y dependencias** | Requiere MATLAB propietario o GNU Octave, compiladores C++ y librerías externas. | Python puro bajo contrato estricto de 4 paquetes (`numpy`, `scipy`, `pandas`, `matplotlib`). | Ejecutable en cualquier entorno: Jupyter, CI/CD, servidores en la nube y navegadores web (Pyodide). |
+| Componente | Comprobación |
+|---|---|
+| Gradientes | Comparar el score con diferencias numéricas de la misma verosimilitud, usando varios tamaños de paso. |
+| Muestreo posterior | Revisar mezcla, divergencias y tamaños muestrales efectivos; esta guía no establece una ventaja general de velocidad frente a otro muestreador. |
+| Diagnósticos | El $\hat{R}$ dividido y los ESS implementados no usan normalización por rangos. |
+| HANK | Verificar el backend de hogares y los límites de las transiciones lineales o no lineales. |
+| Ejecución | La instalación local es el destino soportado; consultar los límites del entorno en navegador. |
 
 ---
 

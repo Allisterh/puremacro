@@ -2,11 +2,32 @@
 
 # puremacro
 
-A **Pyodide-compatible empirical macroeconomics toolbox**: the estimator
-code runs on pure numpy + scipy + pandas + matplotlib, so the numerical
-core stays importable under Pyodide (iPad / juno.sh, best-effort — see
-"juno.sh / iPad" below). The supported target is a local install on a
-regular workstation.
+**Macroeconometrics and structural modeling on the core scientific-Python stack.**
+
+Estimate policy effects, compare economic models, and export results for a
+research note or policy brief with NumPy, SciPy, pandas and Matplotlib.
+A local workstation installation is the supported target; the numerical core
+also runs under Pyodide, with best-effort browser and tablet support.
+
+Requires Python 3.11 or later:
+
+```bash
+python -m pip install puremacro
+```
+
+| Start with your task | First steps |
+|---|---|
+| **Analyze data** | Estimate a shock response with the [quickstart](docs/quickstart.md), then explore [data sources](docs/micro_data.md) and [research workflows](docs/research_workflows.md). |
+| **Simulate policy** | Declare a household model with [dynamic programming](docs/dp.md), study [monetary transmission](docs/monetary_transmission.md), or build a [trade counterfactual](docs/trade_accounting.md). |
+| **Learn or teach** | Choose a [notebook learning path](docs/notebooks.md) or use the [bilingual course and interactive labs](curso/README.md). The course has its own pinned package version. |
+
+**Release status, checked 20 October 2026:** the latest published
+[PyPI release](https://pypi.org/project/puremacro/) is **5.2.0**. This
+checkout contains the 5.3.0 source. Its documentation also discusses **5.3/5.4
+development**, with version-specific notes where behavior differs. The 5.4.0
+implementation changes are not included here; those notes do not establish
+availability in this checkout or in the published package. See the
+[changelog](CHANGELOG.md).
 
 ## Quickstart and worked examples
 
@@ -85,8 +106,13 @@ print(mom.summary())
 print(mom.to_latex())
 ```
 
-### 3. Bayesian DSGE Estimation via NUTS & Exact Analytic Gradients (puremacro 3.0)
-Perform Hamiltonian Monte Carlo via the No-U-Turn Sampler (NUTS) using exact analytical Kalman likelihood score gradients ($\nabla_\theta \ln L$ via implicit state-space differentiation and generalized Sylvester solvers):
+### 3. Bayesian DSGE Estimation via NUTS
+Estimate a DSGE model with the No-U-Turn Sampler (NUTS). The analytic Kalman
+score recursion supports structural parameters in the supported first-order
+stationary likelihood; its structural derivative inputs may use finite
+differences. Numerical and user-supplied gradients are also available. See the
+[estimation guide](docs/dsge_estimation.md) for gradient selection, fallback
+behavior and diagnostics:
 ```python
 # requires: numpy scipy
 import numpy as np
@@ -109,7 +135,7 @@ model = load_mod(mod_text)
 sim = model.stoch_simul(periods=100, seed=42)
 data = pd.DataFrame({"y": sim.paths["y"], "pi": sim.paths["pi"]})
 
-# Bayesian NUTS estimation with exact analytic likelihood gradients
+# Bayesian NUTS estimation for this first-order model
 res = model.estimate(
     data,
     varobs=["y", "pi"],
@@ -123,7 +149,7 @@ res = model.estimate(
 print(res.summary())
 ```
 
-### 4. Heterogeneous-Agent (HANK) Sequence-Space Bridge (puremacro 3.0)
+### 4. Heterogeneous-Agent (HANK) Sequence-Space Bridge
 Couple microeconomic heterogeneous-agent household blocks (`hetagent_block; ... end;`) with aggregate general-equilibrium DSGE conditions in Dynare `.mod` files using the Auclert et al. (2021) Sequence-Space Jacobian method:
 ```python
 # requires: numpy scipy
@@ -179,7 +205,7 @@ show_colab_offload_dialog("sw07_offload.ipynb")
 #    posterior = load_colab_result("sw07_posterior.pmz")
 ```
 
-### 6. Continuous Dynamic Programming & Projection Solvers (puremacro 3.3)
+### 6. Continuous Dynamic Programming & Projection Solvers
 Solve continuous state-space dynamic programming models via orthogonal Chebyshev polynomial collocation or Finite Element Galerkin projection with Fischer-Burmeister NCP complementarity:
 ```python
 from puremacro.vfi import CollocationProblem, solve_collocation
@@ -201,7 +227,7 @@ print(f"Collocation converged: {sol.converged}")
 print(f"Policy at steady state: {sol.policy(k_ss):.4f}")
 ```
 
-### 7. Deep Macro Physics-Informed Neural Networks (puremacro 3.3)
+### 7. Deep Macro Physics-Informed Neural Networks
 Solve ultra-high-dimensional continuous dynamic general equilibrium models (10+ continuous state variables) using Physics-Informed Neural Networks (PINNs) trained along simulated ergodic state trajectories in pure NumPy:
 ```python
 from puremacro.vfi import DeepMacroModel, solve_deep_macro
@@ -225,7 +251,7 @@ print(f"PINN converged: {sol.converged}")
 print(f"Final training loss: {sol.loss_history[-1]:.4e}")
 ```
 
-### 8. Quantitative Spatial Economics (puremacro 3.3)
+### 8. Quantitative Spatial Economics
 Evaluate the general equilibrium welfare, trade flow, and real wage effects of changes in bilateral trade costs and of transport infrastructure investments:
 ```python
 import numpy as np
@@ -248,7 +274,7 @@ print(f"Spatial GE converged: {res.converged}")
 print(f"Aggregate welfare change: {res.welfare_pct:+.4f}%")
 ```
 
-### 9. Double / Debiased Machine Learning (puremacro 3.4)
+### 9. Double / Debiased Machine Learning
 Estimate a treatment effect with high-dimensional macro controls via Chernozhukov et al. (2018) partially linear regression: cross-fitted Robinson orthogonal scores, pure-NumPy penalized learners, and result objects that export to LaTeX, Typst and Markdown. The learners are **lasso and ridge only** — there is no elastic-net learner:
 ```python
 import numpy as np
@@ -274,7 +300,7 @@ observations and arrays above two dimensions raise `ValueError`; a training fold
 estimate. A learner passed as an instance is deep-copied per fold, so the folds never
 share fitted state, and `.to_latex()` compiles with `booktabs` alone.
 
-### 10. Implicit Continuous-Time HJB, Adjoint KFE & Aiyagari GE (puremacro 3.4)
+### 10. Implicit Continuous-Time HJB, Adjoint KFE & Aiyagari GE
 Solve the Achdou, Han, Lasry, Lions & Moll (2022) implicit upwind M-matrix system, then the adjoint Kolmogorov forward equation for the stationary density on the same grid, then the continuous-time Aiyagari general equilibrium:
 ```python
 from puremacro.vfi import solve_hjb_achdou, solve_aiyagari_continuous_hjb
@@ -300,7 +326,7 @@ divided by the cell width, so `sum_i g_i w_i = 1` with the trapezoid quadrature 
 explicit solver carried the same two income states but no switching term, so they were
 independent deterministic-income problems.
 
-### 11. Montiel Olea-Pflueger Weak-IV Inference (puremacro 3.4)
+### 11. Montiel Olea-Pflueger Weak-IV Inference
 `lp_iv` reports the effective F-statistic with its critical values, and inverts the Anderson-Rubin set exactly instead of scanning a fixed grid — the closed-form tail limit classifies it as a bounded interval, two rays, the whole line or empty, and the endpoints are Brent roots (a closed-form quadratic when there is a single instrument):
 ```python
 import numpy as np
@@ -336,7 +362,7 @@ reports nor the Anderson-Rubin set it inverts is cluster-robust.** Only
 `inference.weak_iv.olea_pflueger_f(x, z, cluster=...)` takes clusters, and it returns
 the effective F alone — there is no cluster-robust confidence set anywhere.
 
-### 12. Latin American Real-Time Macro Data (puremacro 3.4)
+### 12. Latin American Real-Time Macro Data
 Banco de México, INEGI, Banco Central do Brasil and Banco Central de Chile join the real-time providers. The catalog, the series identifiers and the vintage semantics all resolve offline, before any request is made:
 ```python
 from puremacro.fetch.realtime import (
@@ -457,17 +483,17 @@ entries that could not be confirmed against the live API are marked `VERIFY_ONLI
   numbers, sparse document-term matrices with TF-IDF and country-by-period
   panels, and a stored, exportable narrative corpus; see `docs/text_analysis.md`.
 
-**Continuous dynamic programming & projection engines (puremacro 3.3)**
+**Continuous dynamic programming & projection engines**
 
 - **Continuous projection solvers** (`vfi.collocation`, `vfi.fem`) — Chebyshev orthogonal polynomial collocation (Gauss and Lobatto extrema nodes) and Finite Element Galerkin projection with Fischer-Burmeister complementarity ($\Psi_{\text{FB}}^\epsilon(a, b) = 0$) for borrowing kinks ($k' \ge \bar{k}$); analytical Brock-Mirman neoclassical growth benchmark.
 - **Shape-preserving splines & sparse grids** (`vfi.splines`, `vfi.smolyak`) — Cox-De Boor cubic B-splines, Schumaker (1983) shape-preserving quadratic splines ensuring strict monotonicity and concavity preservation ($\partial g / \partial k \ge 0$), and Smolyak (1963) sparse grid collocation scaling as $\mathcal{O}(N (\log N)^{d-1})$ for multidimensional models ($d \in [2, 6]$).
 - **Discrete choice EGM** (`vfi.dcegm`) — Iskhakov, Jørgensen, Rust & Schjerning (2017) DC-EGM for models with discrete retirement/labor choices and continuous savings, featuring the fast Upper Envelope algorithm to prune sub-optimal branches, and extreme value taste shocks.
 - **Continuous stationary distributions & GE** (`vfi.continuous_distribution`) — Young (2010) non-stochastic continuous density simulation preserving mass conservation to machine precision ($\sum \mu^* = 1.0 \pm 10^{-15}$), power iteration / sparse linear solvers, and Aiyagari continuous general equilibrium factor price root-finding ($K^s(r^*) = K^d(r^*)$).
 - **Continuous transition dynamics under MIT shocks** (`vfi.continuous_transition`) — Non-linear transition paths coupling backward continuous EGM with forward time-dependent Young distribution operators ($\mu_{t+1} = T_t^* \mu_t$), solved via sequence-space Broyden Quasi-Newton.
-- **Parameter gradients via the IFT** (`vfi.analytic_gradients`) — Semi-analytic parameter sensitivities $\nabla_\theta c^*$ of representative-agent projection solutions via the Implicit Function Theorem in a single linear solve with central-difference residual Jacobians, for structural estimation (GMM / SMM); heterogeneous-agent distribution/GE sensitivities are not implemented.
+- **Parameter gradients via the IFT** (`vfi.analytic_gradients`) — Semi-analytic parameter sensitivities via the Implicit Function Theorem, using central-difference residual Jacobians. Supports representative-agent continuous projection solutions and the canonical continuous Aiyagari equilibrium through coupled household, stationary-distribution and market-clearing derivatives. Other heterogeneous-agent models require their own derivative implementation.
 - **Deep Macro & PINNs** (`vfi.deep_macro`) — Physics-Informed Neural Networks in pure NumPy for ultra-high-dimensional dynamic models (10+ continuous states), bounded activations guaranteeing physical resource feasibility ($c > 0, k' > 0, c < W$), and Maliar et al. (2021) ergodic trajectory sampling.
 
-**Quantitative spatial economics (puremacro 3.3)**
+**Quantitative spatial economics**
 
 - **Allen-Arkolakis (2014) spatial equilibrium** (`spatial.allen_arkolakis`) — Continuous geographic general equilibrium with bilateral iceberg trade costs, mobile labor, Marshallian agglomeration ($\alpha$), and amenity congestion ($\beta$) (`AllenArkolakisModel`).
 - **Validation status** — `docs/STRUCTURAL_VALIDATION_STATUS.md` states, surface by surface, the supported calculation, the acceptance contract and the remaining limits.
@@ -480,12 +506,12 @@ entries that could not be confirmed against the live API are marked `VERIFY_ONLI
 - **Extensions** — the flexible CGE (`trade.solve_flexible_trade_equilibrium`: nested CES, Stone-Geary, Armington, Atkeson-Burstein markups), the exact nested-CES block Newton (`trade.ces_newton`), household demand and distributional incidence (`trade.household`, `trade.distributional`), audited continuation (`trade.continuation`), a local-stability diagnostic (`trade.stability`), native MRIO tables (`trade.mrio`), the condensed Leontief tariff model (`trade.condensed`), a perfect-foresight dynamic MRIO (`trade.dynamic`) and optional torch/MLX solvers (`trade.gpu`).
 - **Data** — `trade.data.load_icio_data()` reads the bundled OECD ICIO 2019 table (19 G20 countries plus a rest of the world, 20 ISIC Rev.4 sections), rebuilt from the OECD file by `tools/build_icio_isic.py`; `trade.data.synthetic_icio_table(nc, ns, seed=...)` builds a synthetic table of any size. See "Bundled data and attribution" below.
 
-**Monetary Policy Simulator & Browser Laboratory (puremacro 4.1)**
+**Monetary Policy Simulator & Browser Laboratory**
 
 - **Monetary & Macroprudential Transmission Simulator** (`models.monetary_transmission.MonetaryTransmissionSimulator`) — Side-by-side HANK vs. RANK transmission engine with the Kaplan-Moll-Violante (2018) direct vs. indirect decomposition across 10 wealth deciles of a stylised calibration (a steep HANK MPC gradient against RANK's flat MPC of $1-\beta$). See `docs/monetary_transmission.md`.
 - **Interactive Browser Laboratory** (`curso/site/labs/politica-monetaria-hank.html`) — A static client-side lab in plain JavaScript (d3 and KaTeX from a CDN, no build step): the HANK Jacobians and MPC deciles are fixed arrays and moving a control re-solves the linear general equilibrium in the browser. Described in `docs/monetary_transmission.md`.
 
-**Causal ML, continuous-time HJB, multi-constraint OccBin & regional real time (puremacro 3.4)**
+**Causal ML, continuous-time HJB, multi-constraint OccBin & regional real time**
 
 - **Double / Debiased Machine Learning** (`causal.dml`) — Chernozhukov et al. (2018) partially linear regression with Neyman-orthogonal Robinson scores, $K$-fold cross-fitting and pure-NumPy penalized learners (`LassoCoordinateDescent`, `RidgeGCV`); the entry points are `dml_plr` and `DoubleMLPLR`, and the learners are **lasso and ridge only**. `DMLResult` carries `.summary()`, `.plot()`, `.to_latex()`, `.to_typst()` and `.to_markdown()`.
 - **Implicit continuous-time HJB & adjoint KFE** (`vfi.hjb_achdou`) — Achdou, Han, Lasry, Lions & Moll (2022) implicit upwind M-matrix scheme solved with `scipy.sparse.linalg.spsolve`, two-state Poisson income switching (default intensity $\lambda = 0.1$, new in 3.4), and the stationary density from $A^\top g = 0$. `solve_kfe_achdou` returns a **density** — node mass divided by the cell width — normalized with trapezoid quadrature weights, so it integrates to one on non-uniform grids too. `solve_aiyagari_continuous_hjb` closes the loop in general equilibrium, with `tol_ge` governing convergence and `converged` meaning $|K^s - K^d| \le$ `tol_ge`.
@@ -1034,7 +1060,7 @@ All notebooks strictly adhere to the Pyodide contract and the 7-section pedagogi
 - **`docs/dcegm.md`** — Discrete Choice Endogenous Grid Method (DC-EGM) with fast Upper Envelope filtering for non-convex dynamic programming.
 - **`docs/vfi_continuous_equilibrium.md`** — Young (2010) continuous stationary wealth distributions, mass conservation, and Aiyagari general equilibrium factor market clearing.
 - **`docs/vfi_continuous_transition.md`** — Non-linear continuous transition dynamics under unexpected MIT shocks and sequence-space Broyden solvers.
-- **`docs/vfi_analytic_gradients.md`** — Parameter gradients and Jacobians via the Implicit Function Theorem (IFT) for structural GMM/SMM estimation (representative-agent scope).
+- **`docs/vfi_analytic_gradients.md`** — Parameter gradients and Jacobians via the Implicit Function Theorem (IFT) for structural GMM/SMM estimation, covering representative-agent projections and the canonical continuous Aiyagari equilibrium.
 - **`docs/deep_macro.md`** — Deep Macro & Physics-Informed Neural Networks (PINNs) in pure NumPy for ultra-high-dimensional dynamic models (10+ continuous states) via ergodic sampling.
 - **`docs/spatial_and_trade_ge.md`** — Quantitative spatial economics and gravity trade GE: Caliendo-Parro (2015) exact hat algebra with input-output linkages and tariffs, Allen-Arkolakis (2014) economic geography with labor mobility, agglomeration and congestion, and the bundled OECD ICIO table with its attribution.
 - **`docs/STRUCTURAL_VALIDATION_STATUS.md`** — Structural solver validation status: per-surface acceptance contracts, evidence and remaining limits for the DSGE and VFI solvers (Spanish twin under `docs/es/`).
@@ -1107,7 +1133,12 @@ command that rebuilds the file, ships as `puremacro/trade/_datafiles/SOURCES.md`
 
 ## Status
 
-Current release: **5.2.0**, with `puremacro.trade` and its MRIO modules back. Release 4.8.1 is the last one with the research studies (`pip install "puremacro<5"`). The [stability tiers](ARCHITECTURE.md#stability-tiers)
+As verified on **20 October 2026**, the published PyPI release is **5.2.0**,
+with `puremacro.trade` and its MRIO modules restored. This checkout contains
+5.3.0 source; documentation marked as 5.4 development describes changes not
+included here. See the [changelog](CHANGELOG.md) for the source/publication
+distinction. Release 4.8.1 is the last one with the research
+studies removed in 5.x (`pip install "puremacro<5"`). The [stability tiers](ARCHITECTURE.md#stability-tiers)
 identify stable, experimental and best-effort surfaces. Structural calculations
 have additional [validation limits](docs/STRUCTURAL_VALIDATION_STATUS.md).
 
