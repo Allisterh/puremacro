@@ -32,5 +32,5 @@ abstract: >-
   (FAVAR, Minnesota BVAR, Narrative Signs), mixed-frequency nowcasting, penalized
   forecasting (Elastic Net, Adaptive Lasso), debiased machine learning for causal
   inference, real-time vintage data from ten statistical agencies and central
-  banks, and climate-macro integration (DICE). It runs identically in local
-  environments, cloud clusters, and client-side in the browser via Pyodide.
+  banks, and climate-macro integration (DICE). Local execution is supported;
+  browser execution through Pyodide is best effort.
