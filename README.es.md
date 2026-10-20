@@ -22,12 +22,12 @@ python -m pip install puremacro
 | **Simular políticas** | Declare un modelo de hogares con [programación dinámica](docs/es/dp.md), estudie la [transmisión monetaria](docs/es/monetary_transmission.md) o construya un [contrafactual comercial](docs/es/trade_accounting.md). |
 | **Aprender o enseñar** | Elija una [ruta de cuadernos](docs/es/notebooks.md) o use el [curso bilingüe y sus laboratorios interactivos](curso/README.md). El curso fija su propia versión del paquete. |
 
-**Estado de publicación, verificado el 20 de octubre de 2026:** la última
-versión publicada en [PyPI](https://pypi.org/project/puremacro/) es **5.2.0**.
-Este árbol de código y su documentación incluyen **trabajo de desarrollo de
-5.4.0**. Las adiciones registradas bajo 5.3.0 y 5.4.0 en el
-[historial de cambios](CHANGELOG.md) requieren el código fuente correspondiente;
-no están incluidas en el paquete 5.2.0 publicado.
+**Versión de la documentación: 5.4.0.** Estos ejemplos describen la API de
+5.4.0, incluidas las adiciones y correcciones registradas bajo 5.3.0 y 5.4.0
+en el [historial de cambios](CHANGELOG.md). Consulte
+[PyPI](https://pypi.org/project/puremacro/) para conocer las versiones disponibles
+y use la documentación correspondiente a su versión instalada.
+El curso mantiene su propio entorno y sus requisitos de versión.
 
 ## Inicio rápido y ejemplos desarrollados
 

@@ -2,12 +2,12 @@
 
 This file records user-visible changes per release. Internal refactors that don't change behaviour are listed under "Internal" so a returning user can see what shifted under the hood without surprise.
 
-Publication status checked on 20 October 2026: **5.2.0 is the latest release
-available from [PyPI](https://pypi.org/project/puremacro/)**. The 5.3.0 and 5.4.0
-entries below describe source-tree changes; they do not imply those versions
-have been published to PyPI. See the [release procedure](RELEASING.md).
+This changelog describes versioned source changes. Check
+[PyPI](https://pypi.org/project/puremacro/) for published distributions.
+Version 5.3.0 was tagged but not published to PyPI; its additions are included
+in 5.4.0. See the [release procedure](RELEASING.md).
 
-## 5.4.0 (2026-10-18)
+## 5.4.0 (2026-10-20)
 
 **Validated two-asset DP bridges, analytic DSGE scores, and release hardening.** This release includes the 5.3.0 additions and fixes the CI failures that blocked publication of that tag.
 

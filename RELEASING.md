@@ -405,12 +405,14 @@ licensee detects it), documentation, automated tests, and a functioning CI.
 
 ### 6.7 Bundled third-party data
 
-Reviewers check the licences of bundled data. The OECD input-output fixture that 4.0.0
-to 4.8.1 redistributed left with the trade modules (4.8.1 is the last release that ships
-it), so the wheel no longer carries it. The data files that remain in the package are
-public-statistics extracts (`puremacro/datasets/data/`, `puremacro/dsge/_sw07_data.csv`),
-replication inputs with their published sources, and reference outputs computed by
-puremacro's own tools.
+Reviewers check the licences of bundled data. Version 5.2.0 restored the trade
+library with a new OECD ICIO table (2023 edition, reference year 2019). Its source,
+aggregation, attribution, terms and checksums are documented in
+`puremacro/trade/_datafiles/SOURCES.md`; the old 4.x fixture remains removed.
+Other packaged data include public-statistics extracts
+(`puremacro/datasets/data/`, `puremacro/dsge/_sw07_data.csv`), replication inputs
+with their published sources, and reference outputs computed by puremacro's own
+tools.
 
 Before bundling any third-party table, record its publisher, source page, terms, what was
 changed and the SHA-256 in a `SOURCES.md` next to it, state that the MIT licence covers

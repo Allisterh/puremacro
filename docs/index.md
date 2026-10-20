@@ -22,13 +22,12 @@ python -m pip install puremacro
 | **Simulate policy** | Declare a household model with [dynamic programming](dp.md), study [monetary transmission](monetary_transmission.md), or build a [trade counterfactual](trade_accounting.md). |
 | **Learn or teach** | Choose a [notebook learning path](notebooks.md) or use the [bilingual course and interactive labs](https://github.com/jalonso1979/puremacro/tree/main/curso). The course has its own pinned package version. |
 
-**Release status, checked 20 October 2026:** the latest published
-[PyPI release](https://pypi.org/project/puremacro/) is **5.2.0**. This source tree
-and its documentation include **5.4.0 development work**. Additions recorded
-under 5.3.0 and 5.4.0 in the
-[changelog](https://github.com/jalonso1979/puremacro/blob/main/CHANGELOG.md)
-require the matching source checkout; they are not included in the published
-5.2.0 package.
+**Documentation version: 5.4.0.** These examples describe the 5.4.0 API,
+including the additions and fixes recorded under 5.3.0 and 5.4.0 in the
+[changelog](https://github.com/jalonso1979/puremacro/blob/main/CHANGELOG.md).
+Check [PyPI](https://pypi.org/project/puremacro/) for available releases and
+match your installed version to the documentation. The course maintains its
+own environment and version requirements.
 
 ## What is puremacro?
 
