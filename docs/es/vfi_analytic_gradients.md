@@ -226,7 +226,7 @@ gmm_objective_and_gradient(
 
 ### Atributos
 - `grad_coefficients`: Matriz jacobiana $N \times p$ de coeficientes de la base $\nabla_\theta c^*$.
-- `grad_aggregates`: Diccionario de derivadas de agregados de estado estacionario con agente representativo `{"K": (p,), "C": (p,), "r": (p,), "w": (p,), "mu": None}` (semianalíticas, sección 1.3). La entrada `"mu"` es siempre `None`: no se calcula ninguna sensibilidad de la distribución estacionaria.
+- `grad_aggregates`: Diccionario de derivadas de agregados de estado estacionario. Las proyecciones con agente representativo devuelven `{"K": (p,), "C": (p,), "r": (p,), "w": (p,), "mu": None}` porque esa vía no tiene distribución estacionaria. El equilibrio especializado de Aiyagari devuelve los mismos cuatro vectores de derivadas agregadas y un arreglo `"mu"` de forma `(n_assets, n_z, p)`, con las derivadas de la distribución estacionaria en las mallas de activos y productividad (sección 1.3).
 - `param_names`: Lista ordenada de los nombres de los parámetros diferenciados.
 - `jacobian_resid_c`: Jacobiano respecto a los coeficientes $\mathbf{J}_c = \nabla_c \mathbf{R}$ de forma $(N, N)$.
 - `jacobian_resid_theta`: Jacobiano respecto a los parámetros $\mathbf{J}_\theta = \nabla_\theta \mathbf{R}$ de forma $(N, p)$.
