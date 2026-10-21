@@ -393,6 +393,168 @@ def test_gate5_stale_json_warns(tmp_path):
     assert "stale" in r["report"].lower() or "consider re-rendering" in r["report"].lower()
 
 
+# --- Gate 5 known-example-failures allowlist (tests/known_example_failures.json) ---
+
+_RR_EXAMPLE = "romer_romer_2010_replication"
+_RR_REASON = (
+    "RR2010 baseline: FAIL; h10=-3.08081276, t=-3.52499608; "
+    "output=output/romer_romer_2010_replication"
+)
+_RR_ENTRY = {
+    "example": _RR_EXAMPLE,
+    "reason_prefix": "RR2010 baseline: FAIL; h10=-3.08081276, t=-3.52499608",
+    "reason": "documented published-rounding miss (test fixture)",
+    "documented_in": ["docs/research_benchmarks.md"],
+    "since": "5.4.0",
+}
+
+
+def _gallery_entry(status, reason=None):
+    return {"status": status, "reason": reason, "runtime_s": 1.0, "figures": [],
+            "last_run": "2026-05-22T14:30:00Z"}
+
+
+def _gallery_json(tmp_path, examples):
+    """Write a docs/examples_gallery.json-shaped file and return its path."""
+    f = tmp_path / "gallery.json"
+    f.write_text(json.dumps({"schema_version": 1, "generated_at": "2026-05-22T14:30:00Z",
+                             "examples": examples}), encoding="utf-8")
+    return f
+
+
+def _known_example_failures(tmp_path, entries):
+    """Write a tests/known_example_failures.json-shaped allowlist and return its path."""
+    f = tmp_path / "known_example_failures.json"
+    f.write_text(json.dumps({"schema_version": 1, "entries": entries}), encoding="utf-8")
+    return f
+
+
+def test_gate5_known_failure_with_matching_prefix_passes(tmp_path):
+    """A FAIL whose recorded reason starts with the allowlisted prefix is documented, not fatal."""
+    gallery = _gallery_json(tmp_path, {"a": _gallery_entry("PASS"),
+                                       _RR_EXAMPLE: _gallery_entry("FAIL", _RR_REASON)})
+    allow = _known_example_failures(tmp_path, [_RR_ENTRY])
+    r = release_check.gate_examples_gallery(
+        gallery, examples_source_dir=tmp_path / "no_examples", known_failures_path=allow)
+    assert r["passed"] is True, r["report"]
+    assert r["name"] == "examples_gallery"
+    assert "1 known FAIL (documented)" in r["report"]
+    assert "0 new FAIL" in r["report"]
+    assert f"known FAIL (documented) {_RR_EXAMPLE}" in r["report"]
+    assert "recovered" not in r["report"]
+
+
+@pytest.mark.parametrize("reason", [
+    "RR2010 baseline: FAIL; h10=-3.09000000, t=-3.52499608; output=output/romer_romer_2010_replication",
+    "RR2010 baseline: FAIL; h10=-3.08081276, t=-3.53000000; output=output/romer_romer_2010_replication",
+    "Traceback (most recent call last): ... ValueError: boom",
+    None,
+], ids=["h10-drift", "t-drift", "traceback", "no-reason"])
+def test_gate5_known_failure_reason_drift_fails(tmp_path, reason):
+    """A listed example whose reason no longer starts with the pinned prefix is a hard FAIL again."""
+    gallery = _gallery_json(tmp_path, {_RR_EXAMPLE: _gallery_entry("FAIL", reason)})
+    allow = _known_example_failures(tmp_path, [_RR_ENTRY])
+    r = release_check.gate_examples_gallery(
+        gallery, examples_source_dir=tmp_path / "no_examples", known_failures_path=allow)
+    assert r["passed"] is False
+    assert "1 example(s) failed" in r["report"]
+    assert f"    FAIL {_RR_EXAMPLE} — " in r["report"]
+    assert "known FAIL" not in r["report"]
+
+
+def test_gate5_unlisted_fail_still_fails_with_allowlist_present(tmp_path):
+    """The allowlist covers only the examples it names; any other FAIL still fails the gate."""
+    gallery = _gallery_json(tmp_path, {_RR_EXAMPLE: _gallery_entry("FAIL", _RR_REASON),
+                                       "b": _gallery_entry("FAIL", "ValueError")})
+    allow = _known_example_failures(tmp_path, [_RR_ENTRY])
+    r = release_check.gate_examples_gallery(
+        gallery, examples_source_dir=tmp_path / "no_examples", known_failures_path=allow)
+    assert r["passed"] is False
+    assert "1 example(s) failed" in r["report"]
+    assert "    FAIL b — ValueError" in r["report"]
+    # The documented one is still shown, but as known rather than as a new failure.
+    assert f"known FAIL (documented) {_RR_EXAMPLE}" in r["report"]
+
+
+def test_gate5_recovered_known_failure_warns(tmp_path):
+    """A listed example that now passes is a warning to shrink the allowlist, not a failure."""
+    gallery = _gallery_json(tmp_path, {_RR_EXAMPLE: _gallery_entry("PASS")})
+    allow = _known_example_failures(tmp_path, [_RR_ENTRY])
+    r = release_check.gate_examples_gallery(
+        gallery, examples_source_dir=tmp_path / "no_examples", known_failures_path=allow)
+    assert r["passed"] is True
+    assert "1 PASS" in r["report"]
+    assert f"recovered: {_RR_EXAMPLE}" in r["report"]
+    assert "known FAIL" not in r["report"]
+
+
+def test_gate5_empty_prefix_never_matches(tmp_path):
+    """An empty reason_prefix would allowlist any reason, so the gate refuses to match it."""
+    gallery = _gallery_json(tmp_path, {_RR_EXAMPLE: _gallery_entry("FAIL", _RR_REASON)})
+    allow = _known_example_failures(tmp_path, [dict(_RR_ENTRY, reason_prefix="")])
+    r = release_check.gate_examples_gallery(
+        gallery, examples_source_dir=tmp_path / "no_examples", known_failures_path=allow)
+    assert r["passed"] is False
+    assert "known FAIL" not in r["report"]
+
+
+def test_gate5_missing_allowlist_file_behaves_like_none(tmp_path):
+    gallery = _gallery_json(tmp_path, {_RR_EXAMPLE: _gallery_entry("FAIL", _RR_REASON)})
+    r = release_check.gate_examples_gallery(
+        gallery, examples_source_dir=tmp_path / "no_examples",
+        known_failures_path=tmp_path / "does_not_exist.json")
+    assert r["passed"] is False
+    assert f"    FAIL {_RR_EXAMPLE} — " in r["report"]
+
+
+def test_gate5_live_gallery_passes_with_repo_allowlist():
+    """The committed gallery carries the documented RR2010 FAIL; with the repo allowlist Gate 5 passes.
+
+    This is the regression for "Gate 5 cannot pass": the example exits nonzero
+    on purpose (published t-statistic rounding miss, see
+    docs/research_benchmarks.md), the gallery honestly records it as FAIL, and
+    tests/known_example_failures.json is what lets the release gate distinguish
+    that from a broken example.
+    """
+    r = release_check.gate_examples_gallery(
+        REPO_ROOT / "docs" / "examples_gallery.json",
+        examples_source_dir=REPO_ROOT / "puremacro" / "examples",
+        known_failures_path=REPO_ROOT / "tests" / "known_example_failures.json",
+    )
+    assert r["passed"] is True, r["report"]
+    assert r["report"].startswith("  Gate 5 (examples gallery): PASS")
+
+
+def test_known_example_failures_entries_are_well_formed():
+    """tests/known_example_failures.json must describe the committed gallery, entry by entry."""
+    path = REPO_ROOT / "tests" / "known_example_failures.json"
+    assert path.exists(), f"{path} must exist (tools/release_check.py reads it)"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data.get("schema_version") == 1
+    assert isinstance(data.get("entries"), list)
+    gallery = json.loads(
+        (REPO_ROOT / "docs" / "examples_gallery.json").read_text(encoding="utf-8"))["examples"]
+    required = {"example", "reason_prefix", "reason", "documented_in", "since"}
+    names = [e["example"] for e in data["entries"]]
+    assert len(names) == len(set(names)), "duplicate example in known_example_failures.json"
+    for i, entry in enumerate(data["entries"]):
+        missing = required - set(entry)
+        assert not missing, f"entry {i} missing fields: {missing}"
+        for key in ("example", "reason_prefix", "reason", "since"):
+            assert isinstance(entry[key], str) and entry[key], f"entry {i}: {key} must be a non-empty string"
+        assert isinstance(entry["documented_in"], list) and entry["documented_in"]
+        for ref in entry["documented_in"]:
+            assert (REPO_ROOT / ref.split(" ")[0]).exists(), f"entry {i}: {ref!r} names a missing file"
+        assert (REPO_ROOT / "puremacro" / "examples" / f"{entry['example']}.py").exists()
+        live = gallery.get(entry["example"])
+        assert live is not None, f"{entry['example']} is not in docs/examples_gallery.json"
+        assert live["status"] == "FAIL", (
+            f"{entry['example']} is {live['status']} in the gallery; remove its allowlist entry")
+        assert (live.get("reason") or "").startswith(entry["reason_prefix"]), (
+            f"{entry['example']}: gallery reason {live.get('reason')!r} drifted from "
+            f"prefix {entry['reason_prefix']!r}")
+
+
 def test_main_summary_5_gates_with_examples_flag(capsys, monkeypatch):
     """With --examples, the summary count matches the gates actually run."""
     monkeypatch.setattr(release_check, "gate_test_baseline", lambda _r: {"name": "test_baseline", "passed": True, "report": "  Gate 1: PASS"})
@@ -402,7 +564,7 @@ def test_main_summary_5_gates_with_examples_flag(capsys, monkeypatch):
     monkeypatch.setattr(release_check, "gate_min_python_syntax", lambda *a, **kw: {"name": "min_python_syntax", "passed": True, "report": "  Gate 7: PASS"})
     monkeypatch.setattr(
         release_check, "gate_examples_gallery",
-        lambda _p, *, examples_source_dir: {"name": "examples_gallery", "passed": True, "report": "  Gate 5: PASS"},
+        lambda _p, *, examples_source_dir, known_failures_path=None: {"name": "examples_gallery", "passed": True, "report": "  Gate 5: PASS"},
     )
     rc = release_check.main(["--examples"])
     captured = capsys.readouterr()
@@ -448,7 +610,7 @@ def test_main_summary_with_pyodide_flag(capsys, monkeypatch):
     monkeypatch.setattr(release_check, "gate_min_python_syntax", lambda *a, **kw: {"name": "min_python_syntax", "passed": True, "report": "  Gate 7: PASS"})
     monkeypatch.setattr(
         release_check, "gate_examples_gallery",
-        lambda _p, *, examples_source_dir: {"name": "examples_gallery", "passed": True, "report": "  Gate 5: PASS"},
+        lambda _p, *, examples_source_dir, known_failures_path=None: {"name": "examples_gallery", "passed": True, "report": "  Gate 5: PASS"},
     )
     monkeypatch.setattr(
         release_check, "gate_pyodide_smoke",

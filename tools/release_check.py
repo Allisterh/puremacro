@@ -8,7 +8,9 @@ Run me before `git tag X.Y.Z`. Up to seven gates (all run; no fail-fast):
   Gate 3 (public API snap)   — re-generated snapshot must match the fixture
   Gate 4 (version sync)      — pyproject / __init__ / CHANGELOG / CITATION.cff /
                               playground wheel pin agree
-  Gate 5 (examples gallery)  — opt-in via --examples; reads docs/examples_gallery.json
+  Gate 5 (examples gallery)  — opt-in via --examples; reads docs/examples_gallery.json;
+                              a FAIL listed in tests/known_example_failures.json with
+                              its reason prefix still matching is reported, not fatal
   Gate 6 (pyodide smoke)     — opt-in via --pyodide; boots Pyodide, runs marked tests
   Gate 7 (min-Python syntax) — every .py parses on the requires-python floor
                               (default-on, seconds); catches what only the
@@ -313,12 +315,35 @@ def gate_snapshot(repo_root: Path) -> dict:
     return compare_snapshot(fresh, repo_root / "tests" / "fixtures" / "public_api_snapshot.json")
 
 
-def gate_examples_gallery(json_path: Path, *, examples_source_dir: Path) -> dict:
+def load_known_example_failures(path: Path) -> dict[str, dict]:
+    """Read tests/known_example_failures.json into ``{example: entry}``.
+
+    Gate 5's counterpart of :func:`load_whitelist`. An entry names an example
+    whose FAIL is deliberate and documented elsewhere (``documented_in``) and
+    pins ``reason_prefix``: the start of the reason string the gallery records
+    for it. The FAIL counts as known only while the recorded reason still
+    starts with that prefix, so a changed number or a traceback fails the
+    gate again instead of hiding behind the entry.
+    """
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    return {e["example"]: e for e in data.get("entries", [])}
+
+
+def gate_examples_gallery(
+    json_path: Path,
+    *,
+    examples_source_dir: Path,
+    known_failures_path: Path | None = None,
+) -> dict:
     """Gate 5 — examples gallery health.
 
-    Reads docs/examples_gallery.json. Fails on any FAIL entry. Warns
-    (does not fail) if the JSON's generated_at is older than the newest
-    *.py file under examples_source_dir.
+    Reads docs/examples_gallery.json. Fails on any FAIL entry, except one
+    listed in ``known_failures_path`` (tests/known_example_failures.json)
+    whose recorded reason starts with the entry's ``reason_prefix``: that is
+    reported as a known, documented FAIL and does not fail the gate. A listed
+    example that now passes is reported for removal. Warns (does not fail) if
+    the JSON's generated_at is older than the newest *.py file under
+    examples_source_dir.
     """
     name = "examples_gallery"
     if not Path(json_path).exists():
@@ -339,17 +364,32 @@ def gate_examples_gallery(json_path: Path, *, examples_source_dir: Path) -> dict
             "passed": False,
             "report": f"  Gate 5 (examples gallery): FAIL — JSON malformed: {e}",
         }
+    known: dict[str, dict] = {}
+    if known_failures_path is not None and Path(known_failures_path).exists():
+        known = load_known_example_failures(known_failures_path)
     examples = data.get("examples", {})
     counts = {"PASS": 0, "SKIP": 0, "FAIL": 0}
-    fails = []
+    fails: list[tuple[str, str]] = []
+    known_fails: list[tuple[str, str]] = []
     for nm, e in examples.items():
         s = e.get("status", "FAIL")
         counts[s] = counts.get(s, 0) + 1
         if s == "FAIL":
-            fails.append((nm, e.get("reason", "(no reason)")))
+            reason = e.get("reason") or "(no reason)"
+            prefix = known.get(nm, {}).get("reason_prefix") or ""
+            # An empty prefix would match anything, so it never counts as known.
+            if prefix and reason.startswith(prefix):
+                known_fails.append((nm, reason))
+            else:
+                fails.append((nm, reason))
 
-    # Stale-JSON warning (not a failure).
-    warn_lines = []
+    # Warnings (not failures): a listed example that now passes, and a stale JSON.
+    warn_lines: list[str] = []
+    for nm in sorted(known):
+        if examples.get(nm, {}).get("status") == "PASS":
+            warn_lines.append(
+                f"    recovered: {nm} now passes; remove its entry from {known_failures_path}"
+            )
     if examples_source_dir.exists():
         from datetime import datetime, timezone
         try:
@@ -366,17 +406,22 @@ def gate_examples_gallery(json_path: Path, *, examples_source_dir: Path) -> dict
         except (KeyError, ValueError):
             pass
 
+    known_lines = [f"    known FAIL (documented) {nm} — {reason}" for nm, reason in sorted(known_fails)]
+
     if fails:
         lines = [f"  Gate 5 (examples gallery): FAIL — {len(fails)} example(s) failed"]
         for nm, reason in sorted(fails):
             lines.append(f"    FAIL {nm} — {reason}")
+        lines.extend(known_lines)
         lines.extend(warn_lines)
         return {"name": name, "passed": False, "report": "\n".join(lines)}
 
-    head = f"  Gate 5 (examples gallery): PASS — {counts['PASS']} PASS, {counts['SKIP']} SKIP, 0 FAIL"
-    if warn_lines:
-        return {"name": name, "passed": True, "report": "\n".join([head] + warn_lines)}
-    return {"name": name, "passed": True, "report": head}
+    head = f"  Gate 5 (examples gallery): PASS — {counts['PASS']} PASS, {counts['SKIP']} SKIP, "
+    if known_fails:
+        head += f"{len(known_fails)} known FAIL (documented), 0 new FAIL"
+    else:
+        head += "0 FAIL"
+    return {"name": name, "passed": True, "report": "\n".join([head] + known_lines + warn_lines)}
 
 
 def gate_pyodide_smoke(repo_root: Path) -> dict:
@@ -878,7 +923,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--examples",
         action="store_true",
-        help="Also run Gate 5 (examples gallery health). Reads docs/examples_gallery.json.",
+        help="Also run Gate 5 (examples gallery health). Reads docs/examples_gallery.json; "
+             "a FAIL listed in tests/known_example_failures.json whose reason prefix still "
+             "matches is reported as known, not fatal.",
     )
     parser.add_argument(
         "--pyodide",
@@ -929,6 +976,7 @@ def main(argv: list[str] | None = None) -> int:
         g5 = gate_examples_gallery(
             REPO_ROOT / "docs" / "examples_gallery.json",
             examples_source_dir=REPO_ROOT / "puremacro" / "examples",
+            known_failures_path=REPO_ROOT / "tests" / "known_example_failures.json",
         )
         gates.append(g5)
     if args.pyodide:
