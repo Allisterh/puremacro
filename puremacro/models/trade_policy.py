@@ -69,6 +69,7 @@ class TradePolicySimulationResult:
         converged result reports a residual below 1e-6.
     converged : bool
         Whether the equilibrium wage iteration converged within tolerance.
+        A ``RuntimeWarning`` is issued by the solver when this is False.
     iterations : int
         Number of wage tatonnement iterations performed.
     country_codes : tuple[str, ...]
@@ -631,6 +632,13 @@ class TradePolicySimulator:
             Maximum iterations.
         damping : float, default 0.35
             Wage adjustment damping parameter.
+
+        Warns
+        -----
+        RuntimeWarning
+            When the wage tatonnement stops at ``max_iter`` without converging;
+            the result then has ``converged=False`` and its fields are the last
+            iterate.
         """
         imp_idx = self.model._resolve_country_index(importer)
         exp_idx = self.model._resolve_country_index(exporter)

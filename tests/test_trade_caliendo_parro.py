@@ -11,6 +11,8 @@ Verifies:
 """
 from __future__ import annotations
 
+import warnings
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -293,6 +295,35 @@ class TestCaliendoParroCounterfactuals:
         )
         assert res_zero.converged
         assert res_zero.trade_balance_residual < 1e-6
+
+
+class TestCaliendoParroConvergenceReporting:
+    """A solve that stops at ``max_iter`` says so; converged solves stay quiet."""
+
+    def test_non_convergence_warns(self, symmetric_3c_2s_model):
+        """Exhausting max_iter emits a RuntimeWarning and returns converged=False."""
+        with pytest.warns(RuntimeWarning, match="did not converge in 1 iterations"):
+            res = symmetric_3c_2s_model.simulate_tariff_shock(
+                "USA", "CHN", tariff_rate=0.20, max_iter=1
+            )
+        assert res.converged is False
+        assert res.iterations == 1
+        assert res.max_residual > 1e-8
+
+    def test_converged_solve_is_warning_free(self, symmetric_3c_2s_model):
+        """A solve that meets tol must not warn (run with warnings as errors)."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            res = symmetric_3c_2s_model.simulate_tariff_shock("USA", "CHN", tariff_rate=0.20)
+        assert res.converged
+
+    def test_identity_short_circuit_is_warning_free(self, symmetric_3c_2s_model):
+        """The zero-shock short-circuit never enters the loop and must not warn."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            res = symmetric_3c_2s_model.solve_counterfactual()
+        assert res.converged
+        assert res.iterations == 0
 
 
 class TestCaliendoParroPresentations:
