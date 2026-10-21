@@ -144,6 +144,10 @@ model `rbc_canonico.mod` is recalibrated (see Fixed).
   notebook, every shipped lab is in a module row, the stored table output matches
   the source, the start page names only notebooks the build copies, and every
   `git+` install hint in the course pins the README's commit.
+- Regenerated `curso/site/diapositivas/index.html` and the trade lab's cache-busting
+  hash from the committed sources: the slide index still listed the page counts
+  and sizes of the PDFs replaced on 18 October, so every course-site build (and
+  every `tests/test_e2e_upgrade.py` run) rewrote both tracked files.
 - Six pre-existing HJB tests that exhaust `max_iter` on purpose now expect the
   new warning or use a converging iteration budget; `_caller_stacklevel` moved
   to the dependency-free `puremacro/_warnings.py` so the trade and HJB solvers
