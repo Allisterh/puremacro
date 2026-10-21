@@ -47,11 +47,14 @@ print("puremacro", puremacro.__version__, "— ready in the browser")
 #
 # **En español:** every showcase notebook has a Spanish twin with the `_es`
 # suffix (e.g. `06_svar_identification_es`) — same code, Spanish narrative.
-# Course companion lessons (`00_syllabus`, `01_business_cycle_facts`, EN/ES)
-# are included when present.
+# Course companion lessons from `notebooks/course/` (`00_syllabus_es`,
+# `01_business_cycle_facts_es`, ...; Spanish only) are included when present.
 #
-# Each notebook is fully synthetic and offline. Edit a cell and re-run — it all
-# executes locally in your browser tab.
+# Nothing here needs network access: the notebooks run on synthetic data or on
+# frozen public data files that ship with the site. Edit a cell and re-run — it
+# all executes locally in your browser tab. A few showcases need repository
+# files or optional packages the browser build does not carry; see
+# `playground/README.md`.
 #
 # *(One extra lives outside the playground: the `local_llm_uncertainty`
 # notebook in the repo's `notebooks/` folder scores narrative text with a free
