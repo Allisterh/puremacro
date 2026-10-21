@@ -1096,7 +1096,9 @@ class TestTier2BoundaryTrack2:
             lnk = tpath / "lnk.txt"
             lnk.symlink_to(real)
             assert lnk.is_symlink()
-            assert os.readlink(lnk) == str(real)
+            # Windows returns the extended-length form (\\?\C:\...) from
+            # os.readlink; compare resolved paths rather than raw strings.
+            assert Path(os.readlink(lnk)).resolve() == real.resolve()
             dangling = tpath / "dangling.txt"
             dangling.symlink_to(tpath / "nonexistent.txt")
             assert dangling.is_symlink()

@@ -746,6 +746,7 @@ class RamseyResult:
         else:
             cols = list(df_irf.columns)[:min(6, len(df_irf.columns))]
 
+        axes_flat: np.ndarray | list[Any]
         if ax is None:
             fig, axes = plt.subplots(
                 math.ceil(len(cols) / 2), 2, figsize=(10, 2.5 * math.ceil(len(cols) / 2))

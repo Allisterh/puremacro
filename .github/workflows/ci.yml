@@ -59,8 +59,10 @@ jobs:
         run: |
           pytest --durations=10
 
+      # The 3.11 leg resolves NumPy 2.4 (NumPy 2.5 requires Python 3.12), whose
+      # stubs differ from 2.5's; v5.4.0 failed typing only there. Check both.
       - name: Run static type checking (mypy)
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        if: matrix.os == 'ubuntu-latest' && (matrix.python-version == '3.11' || matrix.python-version == '3.12')
         run: |
           mypy puremacro --ignore-missing-imports
 

@@ -119,22 +119,22 @@ def correr_datos(datos):
 
 
 def mazos():
-    idx = json.loads((SITIO / "diapositivas" / "index.json").read_text())
+    idx = json.loads((SITIO / "diapositivas" / "index.json").read_text(encoding="utf-8"))
     return {m["numero"]: m for m in idx["mazos"]}
 
 
 def enlazar_diapositivas(M):
     patron = re.compile(r'href="\.\./diapositivas/[^"]*"(\s+data-deck="(\d+)")')
     for f in sorted((SITIO / "labs").glob("*.html")):
-        s = f.read_text()
+        s = f.read_text(encoding="utf-8")
         nuevo = patron.sub(lambda m: f'href="../diapositivas/{M[int(m.group(2))]["archivo"]}"{m.group(1)}', s)
         if nuevo != s:
-            f.write_text(nuevo)
+            f.write_text(nuevo, encoding="utf-8")
             print(f"· diapositivas enlazadas en {f.name}")
 
 
 def leer_lab(slug):
-    s = (SITIO / "labs" / f"{slug}.html").read_text()
+    s = (SITIO / "labs" / f"{slug}.html").read_text(encoding="utf-8")
     kicker = re.search(r'<p class="kicker">(.*?)</p>', s, re.S).group(1)
     h1 = re.search(r"<h1>(.*?)</h1>", s, re.S).group(1)
     return {"unidad_es": spans(kicker, "es"), "unidad_en": spans(kicker, "en"),
@@ -191,7 +191,7 @@ def portada(M):
     head = HEAD.format(title_es="Laboratorios · Macroeconomía Avanzada", title_en="Labs · Advanced Macroeconomics",
                        desc="Laboratorios interactivos del curso Macroeconomía Avanzada (ITAM): filtros, crecimiento, RBC, identificación, agentes heterogéneos, nuevo keynesiano y mercado laboral.",
                        root="", notebooks=NOTEBOOKS_GH, curso=CURSO_WP)
-    (SITIO / "index.html").write_text(head + cuerpo + FOOT.format(root=""))
+    (SITIO / "index.html").write_text(head + cuerpo + FOOT.format(root=""), encoding="utf-8")
     print(f"· index.html con {len(tarjetas)} laboratorios")
 
 
@@ -219,7 +219,7 @@ def pagina_diapositivas(M):
     head = HEAD.format(title_es="Diapositivas · Macroeconomía Avanzada", title_en="Slides · Advanced Macroeconomics",
                        desc="Diapositivas del curso Macroeconomía Avanzada (ITAM), en PDF.",
                        root="../", notebooks=NOTEBOOKS_GH, curso=CURSO_WP)
-    (SITIO / "diapositivas" / "index.html").write_text(head + cuerpo + FOOT.format(root="../"))
+    (SITIO / "diapositivas" / "index.html").write_text(head + cuerpo + FOOT.format(root="../"), encoding="utf-8")
     print(f"· diapositivas/index.html con {len(filas)} mazos")
 
 
@@ -228,7 +228,7 @@ def versionar_recursos():
     import hashlib
     patron = re.compile(r'((?:src|href)=")((?:\.\./)?(?:assets/)?[\w.-]+\.(?:js|css))(?:\?v=[0-9a-f]+)?(")')
     for f in [SITIO / "index.html", SITIO / "diapositivas" / "index.html", *sorted((SITIO / "labs").glob("*.html"))]:
-        s = f.read_text()
+        s = f.read_text(encoding="utf-8")
 
         def firma(m):
             ruta = (f.parent / m.group(2)).resolve()
@@ -238,7 +238,7 @@ def versionar_recursos():
 
         nuevo = patron.sub(firma, s)
         if nuevo != s:
-            f.write_text(nuevo)
+            f.write_text(nuevo, encoding="utf-8")
 
 
 def enlazar_curso():
@@ -247,22 +247,22 @@ def enlazar_curso():
     patron = re.compile(r'href="(?:https://jorgealonsoortiz\.work/macro-avanzada/|(?:\.\./)?index\.html)"'
                         r'(?: data-curso="[^"]*")?(?=[^>]*>(?:\s*<span class="es">(?:El curso|El curso completo →)</span>))')
     for f in [SITIO / "index.html", SITIO / "diapositivas" / "index.html", *sorted((SITIO / "labs").glob("*.html"))]:
-        s = f.read_text()
+        s = f.read_text(encoding="utf-8")
         raiz = "" if f.parent == SITIO else "../"
         destino = CURSO_WP if CURSO_PUBLICADO else f"{raiz}index.html"
         nuevo = patron.sub(f'href="{destino}" data-curso="{CURSO_WP}"', s)
         if nuevo != s:
-            f.write_text(nuevo)
+            f.write_text(nuevo, encoding="utf-8")
 
 
 def revisar():
     problemas = []
     for f in sorted((SITIO / "labs").glob("*.html")):
-        s = f.read_text()
+        s = f.read_text(encoding="utf-8")
         for src in re.findall(r'<script[^>]+src="([^"?]+)', s):
             if not src.startswith("http") and not (f.parent / src).exists():
                 problemas.append(f"{f.name}: falta {src}")
-        for data in re.findall(r'MAV\.json\("([^"]+)"\)', (f.with_suffix(".js")).read_text() if f.with_suffix(".js").exists() else ""):
+        for data in re.findall(r'MAV\.json\("([^"]+)"\)', (f.with_suffix(".js")).read_text(encoding="utf-8") if f.with_suffix(".js").exists() else ""):
             if not (f.parent / data).exists():
                 problemas.append(f"{f.stem}.js: falta {data}")
         if re.search(r'href="\.\./diapositivas/"', s):

@@ -472,15 +472,22 @@ def get_memory_usage(
         except (ValueError, ArithmeticError, np.linalg.LinAlgError, Exception):
             pass
 
-    # CPU / OS level fallback
-    try:
-        import resource
-        usage = resource.getrusage(resource.RUSAGE_SELF)
-        # On macOS, ru_maxrss is in bytes; on Linux, in kilobytes
-        scale = (1024**2) if platform.system() == "Darwin" else 1024.0
-        info["allocated_mb"] = float(usage.ru_maxrss / scale)
-        info["peak_mb"] = info["allocated_mb"]
-    except (ValueError, ArithmeticError, np.linalg.LinAlgError, Exception):
+    # CPU / OS level fallback. The resource module is POSIX-only, so the
+    # platform guard keeps the Windows branch explicit (and type-checkable
+    # with mypy --platform win32); Windows previously reached the same zeros
+    # through the ImportError.
+    if sys.platform != "win32":
+        try:
+            import resource
+            usage = resource.getrusage(resource.RUSAGE_SELF)
+            # On macOS, ru_maxrss is in bytes; on Linux, in kilobytes
+            scale = (1024**2) if platform.system() == "Darwin" else 1024.0
+            info["allocated_mb"] = float(usage.ru_maxrss / scale)
+            info["peak_mb"] = info["allocated_mb"]
+        except (ValueError, ArithmeticError, np.linalg.LinAlgError, Exception):
+            info["allocated_mb"] = 0.0
+            info["peak_mb"] = 0.0
+    else:
         info["allocated_mb"] = 0.0
         info["peak_mb"] = 0.0
 

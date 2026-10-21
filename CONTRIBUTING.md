@@ -5,7 +5,7 @@ This is a single-author research package. The conventions below exist so that **
 1. **Portable numerical core** — a local workstation install is the supported target; Pyodide / iPad / juno.sh are best-effort environments. Core estimators do not require `statsmodels`, `linearmodels` or `arch` at runtime.
 2. **Diagnostic over silent** — numerical failures must follow a documented error, warning or sentinel contract.
 3. **Public API curated in `__init__.py`** — top level exports `__version__`; subpackages re-export their stable names.
-4. **Tests and type checks** — numerical validation and edge-case tests establish behavior; `mypy puremacro --ignore-missing-imports` is also a required CI check. `.github/workflows/ci.yml` runs the default suite on three operating systems and Python 3.11–3.13, with mypy and a strict docs build on Ubuntu/Python 3.12 and the fast release gates on Ubuntu/Python 3.11 and 3.12. The release workflow requires CI and the opt-in test job to pass on the tagged commit before publishing.
+4. **Tests and type checks** — numerical validation and edge-case tests establish behavior; `mypy puremacro --ignore-missing-imports` is also a required CI check. `.github/workflows/ci.yml` runs the default suite on three operating systems and Python 3.11–3.13, with mypy and the fast release gates on Ubuntu/Python 3.11 and 3.12, a strict docs build on Ubuntu/Python 3.12, and the mypy check repeated inside the test suite on every leg. The release workflow requires CI and the opt-in test job to pass on the tagged commit before publishing.
 
 If your change touches one of those, read `ARCHITECTURE.md` first.
 

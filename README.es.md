@@ -22,8 +22,8 @@ python -m pip install puremacro
 | **Simular políticas** | Declare un modelo de hogares con [programación dinámica](docs/es/dp.md), estudie la [transmisión monetaria](docs/es/monetary_transmission.md) o construya un [contrafactual comercial](docs/es/trade_accounting.md). |
 | **Aprender o enseñar** | Elija una [ruta de cuadernos](docs/es/notebooks.md) o use el [curso bilingüe y sus laboratorios interactivos](curso/README.md). El curso fija su propia versión del paquete. |
 
-**Versión de la documentación: 5.4.0.** Estos ejemplos describen la API de
-5.4.0, incluidas las adiciones y correcciones registradas bajo 5.3.0 y 5.4.0
+**Versión de la documentación: 5.4.1.** Estos ejemplos describen la API de
+5.4.1, incluidas las adiciones y correcciones registradas de 5.3.0 a 5.4.1
 en el [historial de cambios](CHANGELOG.md). Consulte
 [PyPI](https://pypi.org/project/puremacro/) para conocer las versiones disponibles
 y use la documentación correspondiente a su versión instalada.
@@ -859,7 +859,7 @@ verificación y la orden que reconstruye el archivo, se distribuye como
 
 ## Estado
 
-La versión **5.4.0** incluye `puremacro.trade` y sus módulos MRIO, reincorporados
+La versión **5.4.1** incluye `puremacro.trade` y sus módulos MRIO, reincorporados
 en 5.2.0, junto con las adiciones y correcciones del
 [historial de cambios](CHANGELOG.md). Consulte
 [PyPI](https://pypi.org/project/puremacro/) para conocer las distribuciones

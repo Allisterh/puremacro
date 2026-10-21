@@ -274,6 +274,10 @@ def _detect_backends() -> tuple[str, ...]:
 
 
 def _detect_memory_mb() -> int | None:
+    if sys.platform == "win32":
+        # os.sysconf is POSIX-only; Windows previously took the AttributeError
+        # path below. The explicit guard keeps mypy --platform win32 clean.
+        return None
     try:
         page = os.sysconf("SC_PAGE_SIZE")
         pages = os.sysconf("SC_PHYS_PAGES")

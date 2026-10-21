@@ -24,7 +24,7 @@ snapshots the repository's package even when another puremacro is installed.*
 
 | file | trigger | what it does |
 |---|---|---|
-| `ci.yml` | push / PR to `main`; also called by `release.yml` (`workflow_call`) | pytest on 9 targets (ubuntu + macos + windows × Python 3.11–3.13; 3.10 is below `requires-python` and was dropped), then `mypy puremacro --ignore-missing-imports` on ubuntu/3.12, `release_check.py --no-tests` on ubuntu/3.11 and ubuntu/3.12, and a strict `mkdocs build` on ubuntu/3.12 |
+| `ci.yml` | push / PR to `main`; also called by `release.yml` (`workflow_call`) | pytest on 9 targets (ubuntu + macos + windows × Python 3.11–3.13; 3.10 is below `requires-python` and was dropped), then `mypy puremacro --ignore-missing-imports` on ubuntu/3.11 and ubuntu/3.12, `release_check.py --no-tests` on ubuntu/3.11 and ubuntu/3.12, and a strict `mkdocs build` on ubuntu/3.12 |
 | `release.yml` | push of a `v*` tag | job `ci` runs the whole `ci.yml` and job `opt-in` runs `opt-in-tests.yml` on the tagged commit; only if both pass (`needs: [ci, opt-in]`) does `build-and-publish` build → `twine check` → publish to PyPI (`environment: pypi`, `id-token: write`). A red suite blocks the upload, and the tag is left in place: fix forward with a new tag, or re-run the failed jobs if the failure was flaky |
 | `pages.yml` | push to `main`, or manual | builds the JupyterLite playground + mkdocs site, deploys to Pages |
 | `opt-in-tests.yml` | Mondays 05:17 UTC; manual; called by `release.yml` (`workflow_call`) | the `slow`, `reference` and `replication` markers that the default `pytest` deselects, on ubuntu / Python 3.12 (job `opt-in`, about an hour on a shared runner; it gates the release). A second job executes every notebook (43 of the 74 local minutes) on the schedule and on demand only. Added 2026-10-03 after the measured run: 115 passed, 9 skipped. |
@@ -68,7 +68,8 @@ require mypy and fail on missing public features or tools. The optional
 Colab teaching-copy check uses `PUREMACRO_TEACHING_ROOT`; that checkout is not
 required by public CI. Downstream research tests live outside the public suite.
 Mypy also runs as a dedicated CI step
-on Ubuntu/Python 3.12, so type failures block release publication.
+on Ubuntu/Python 3.11 and 3.12, and inside the test suite on every leg, so type
+failures block release publication.
 The author's manuscript attestation is checked only when
 `PUREMACRO_JOSS_SUBMISSION=1`; publishing a package does not certify readiness
 to submit the JOSS paper or authorize removing its outstanding author comments.
@@ -116,7 +117,10 @@ Everything here is local and reversible until step 7.
    `playground/jupyter_lite_config.json` (`./wheels/puremacro-X.Y.Z-py3-none-any.whl`).
    A pre-release is written `X.Y.ZaN`, `X.Y.ZbN` or `X.Y.ZrcN` in all five, and the
    gate's version check accepts those forms.
-4. **Run the gate:** `python tools/release_check.py`. All five must pass.
+4. **Run the gate:** `python tools/release_check.py`. All five must pass. If anything
+   under `puremacro/` changed, also run the oldest-interpreter and `--platform win32`
+   mypy checks from §4 ("The local gate runs on one Python and one platform"); the
+   gate does not run them.
 5. **Sanity-build and inspect the artifact**, because this is the last point at which a
    mistake is free. Build from a clean export, not from the live tree: setuptools seeds
    the sdist from a stale, gitignored `puremacro.egg-info/SOURCES.txt` when one is
@@ -212,6 +216,27 @@ not in a traceback.
 **The changelog must describe the artifact, not the branch.** When a fix slips to the next
 version, move its entry too. 1.3.0's section was edited after the fact to stop claiming a
 fix that only shipped in 1.3.1.
+
+**The local gate runs on one Python and one platform; CI runs on three of each.** The
+`v5.4.0` tag passed all five local gates on macOS/Python 3.13 and then failed five of the
+nine CI legs. All three Python 3.11 legs failed the typing gate: NumPy 2.5 requires Python
+3.12, so the 3.11 legs resolve NumPy 2.4, whose stubs type `np.linalg.qr(..., mode="r")`
+as a `QRResult` tuple and `ndarray.any(axis=1)` as `numpy.bool | ndarray` (nine errors in
+five files; zero on 3.12 and 3.13). All three Windows legs failed on Windows-only paths:
+`curso/tools/construir_sitio.py` read UTF-8 lab pages with the cp1252 default encoding,
+mypy on Windows flagged the POSIX-only `resource` and `os.sysconf` fallbacks, and one test
+compared raw `os.readlink` output, which Windows returns in the `\\?\` extended-length
+form. 5.4.1 followed within the day; the numerical results did not change. Before tagging,
+run mypy under the oldest supported interpreter with its own resolved dependencies, and
+once more as Windows:
+```bash
+python3.11 -m venv /tmp/py311 && /tmp/py311/bin/pip install -e ".[dev]"
+/tmp/py311/bin/python -m mypy puremacro --ignore-missing-imports
+/tmp/py311/bin/python -m mypy puremacro --ignore-missing-imports --platform win32
+```
+`uv python install 3.11` provides the interpreter when none is installed, and `uv venv` /
+`uv pip install --python ...` are drop-in equivalents. For text files that CI touches on
+Windows, pass `encoding="utf-8"` explicitly; `PYTHONIOENCODING` covers only stdio.
 
 ## 5. What only you can do
 
