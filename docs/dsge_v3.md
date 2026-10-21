@@ -355,6 +355,8 @@ model;
 end;
 ```
 
+The `model;` block is parsed and kept on `HANKModel.dag` for inspection, but it is not solved: every household backend is closed by the built-in New Keynesian Phillips curve $\pi_t = \beta \pi_{t+1} + \kappa Y_t$ and Taylor rule $i_t = \phi_\pi \pi_t + \varepsilon_{m,t}$ (ex-ante real rate $r_t = i_t - \pi_{t+1}$; the two-asset household adds $dr^a_t = \alpha_{ab}\, dr^b_t$) evaluated on the declared `beta`, `kappa`, `phi_pi` (and `alpha_ab`) parameters, and the only shock is the monetary path `magnitude * rho**t`; the `shock` argument names the column in `transition_paths`. Change the parameters, not the equations, to change the closure.
+
 #### Supported `hetagent_block` Attributes
 - `model`: Sector template name (`one_asset_hank` or custom identifier).
 - `n_a`: Number of wealth grid points (default: `100`).
@@ -388,12 +390,12 @@ $$\mathbf{H}(\mathbf{Y}, \mathbf{r}, \boldsymbol{\epsilon}) \equiv \mathbf{Y} - 
 #### Linear Sequence-Space Solver
 Differentiating around steady state yields:
 $$(\mathbf{I} - \mathcal{J}_{C, Y}) d\mathbf{Y} - \mathcal{J}_{C, r} d\mathbf{r} = 0$$
-Combining with aggregate monetary and Phillips curve equations produces a linear system solved in a single block matrix operation in $< 0.05$ s.
+Combining with the built-in aggregate Taylor rule and Phillips curve (the `model;` block is not read) produces a linear system solved in a single block matrix operation in $< 0.05$ s.
 
 #### Nonlinear Broyden Solver
 For large MIT shocks where borrowing constraints bind asymmetrically, `simulate(..., nonlinear=True)` activates the Broyden quasi-Newton solver with Sherman-Morrison rank-1 updates:
 $$B_{k+1} = B_k + \frac{(\Delta \mathbf{U}_k - B_k \Delta \mathbf{H}_k) (\Delta \mathbf{U}_k^\top B_k)}{\Delta \mathbf{U}_k^\top B_k \Delta \mathbf{H}_k}$$
-combined with an Armijo backtracking line search, guaranteeing convergence without recomputing microeconomic Jacobians at each iteration.
+combined with an Armijo backtracking line search, guaranteeing convergence without recomputing microeconomic Jacobians at each iteration. `nonlinear=True` is implemented for the built-in one-asset household only: a two-asset `hetagent_block` (`assets = 2`) and any `household_model` bridge raise `NotImplementedError`, and their linear sequence-space transition (`nonlinear=False`) stays available.
 
 ### 3.6 Python Code Example: Solving a HANK `.mod` Model
 
@@ -497,7 +499,7 @@ print("Bridge Solved Successfully:", res_bridge.converged)
 | Function / Class | Description | Key Arguments | Returns |
 |:---|:---|:---|:---|
 | `load_hank_mod` | Loads `.mod` file with `hetagent_block` into coupled HANK model. | `source`, `**param_overrides` | `HANKModel` |
-| `solve_hank_bridge` | Solves `.mod` HANK model and returns general equilibrium transition path. | `source`, `shock`, `magnitude`, `rho`, `horizon`, `nonlinear` | `HANKResult` |
+| `solve_hank_bridge` | Solves the `.mod` household block under the built-in NKPC/Taylor closure and returns the general equilibrium transition path. | `source`, `shock`, `magnitude`, `rho`, `horizon`, `nonlinear` | `HANKResult` |
 | `HANKModel.simulate` | Simulates linear or nonlinear MIT shock transition path. | `shock`, `magnitude`, `rho`, `horizon`, `nonlinear` | `HANKResult` |
 | `HANKModel.compute_jacobians`| Computes Fake-News Jacobians $J_{C, r}$ and $J_{C, Y}$. | `T=300` | `dict[str, np.ndarray]` |
 | `HANKResult` | Results container with transition dynamics and micro distributions. | Holds steady state, transition paths, distributions, Jacobians. | `.summary()`, `.to_frame()`, `.plot_transition()`, `.plot_distribution()` |

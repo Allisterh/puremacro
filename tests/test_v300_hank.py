@@ -8,6 +8,8 @@ Tests:
 5. Nonlinear Broyden transition simulation convergence.
 6. Gate 3.3: HANKResult methods (.summary(), .to_frame(), .to_markdown(), .to_latex(), .to_typst(), plotting).
 7. High-level solve_hank_bridge API end-to-end integration.
+8. The `model;` block is descriptive: the closure is the built-in NKPC + Taylor rule on
+   the declared parameters, and `shock` only names the output column.
 """
 from __future__ import annotations
 
@@ -279,3 +281,40 @@ def test_solve_hank_bridge_helper():
     assert res.horizon == 20
     assert res.converged is True
     assert res.transition_paths["Y"].iloc[0] > 0.0
+
+
+def test_model_block_is_descriptive_and_parameters_drive_the_closure():
+    """The GE closure is the built-in NKPC + Taylor rule on beta/kappa/phi_pi.
+
+    The ``model;`` block is parsed and stored on ``HANKModel.dag`` but not solved:
+    rewriting an equation leaves the transition untouched, while changing the
+    declared parameter moves it, and ``shock`` only names the output column.
+    README.md, docs/dsge_v3.md and docs/hank_nonlinear.md (EN and ES) state this;
+    keep them in step if this test ever has to change.
+    """
+    kwargs = dict(shock="eps_m", magnitude=-0.0025, horizon=20)
+    base = solve_hank_bridge(SAMPLE_HANK_MOD, **kwargs)
+    cols = ["Y", "C", "r", "pi", "i"]
+
+    # (a) a different Taylor coefficient written inside model; -> identical paths
+    hard_coded = SAMPLE_HANK_MOD.replace("i = r_ss + phi_pi * pi + eps_m;", "i = r_ss + 3.0 * pi + eps_m;")
+    assert hard_coded != SAMPLE_HANK_MOD
+    res_a = solve_hank_bridge(hard_coded, **kwargs)
+    np.testing.assert_array_equal(res_a.transition_paths[cols].to_numpy(), base.transition_paths[cols].to_numpy())
+
+    # (b) the declared parameter phi_pi = 3.0 -> different paths (stronger rule, smaller boom)
+    stronger = SAMPLE_HANK_MOD.replace("phi_pi = 1.5;", "phi_pi = 3.0;")
+    assert stronger != SAMPLE_HANK_MOD
+    res_b = solve_hank_bridge(stronger, **kwargs)
+    assert not np.allclose(res_b.transition_paths["Y"], base.transition_paths["Y"])
+    assert abs(res_b.transition_paths["Y"].iloc[0]) < abs(base.transition_paths["Y"].iloc[0])
+
+    # (c) the DAG is kept for inspection: the four aggregate equations are parsed
+    model = load_hank_mod(SAMPLE_HANK_MOD)
+    assert len(model.dag.equations) == 4
+
+    # (d) the shock argument names the output column; the path is the monetary shock either way
+    res_d = model.simulate(shock="not_a_shock", magnitude=-0.0025, horizon=20)
+    assert res_d.shock_name == "not_a_shock"
+    np.testing.assert_array_equal(res_d.transition_paths["Y"].to_numpy(), base.transition_paths["Y"].to_numpy())
+    assert "eps_m" in base.transition_paths.columns and "not_a_shock" not in res_d.transition_paths.columns

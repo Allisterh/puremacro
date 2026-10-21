@@ -528,6 +528,23 @@ def test_solve_hank_bridge_two_asset_end_to_end(horizon):
     assert fig_dist is not None
 
 
+def test_two_asset_nonlinear_simulation_is_rejected():
+    """nonlinear=True must not silently return the linear two-asset transition.
+
+    The Broyden solver covers the built-in one-asset household only; the dp
+    household_model path already raised, the built-in two-asset household did not.
+    """
+    model = load_hank_mod(MOD)
+    assert model.is_two_asset and model.household_model is None
+    with pytest.raises(NotImplementedError, match="nonlinear general-equilibrium"):
+        model.simulate(shock="eps_m", magnitude=-0.0025, horizon=4, nonlinear=True)
+    with pytest.raises(NotImplementedError, match="two-asset"):
+        solve_hank_bridge(MOD, shock="eps_m", magnitude=-0.0025, horizon=4, nonlinear=True)
+    # the linear path is unaffected
+    res = model.simulate(shock="eps_m", magnitude=-0.0025, horizon=4, nonlinear=False)
+    assert isinstance(res, HANKResult) and res.horizon == 4
+
+
 def test_bridge_matches_standalone_solver():
     res_b = solve_hank_bridge(MOD, shock="eps_m", magnitude=-0.0025, horizon=30)
     res_s = solve_two_asset_hank_sequence_space(T=30)

@@ -151,7 +151,7 @@ print(res.summary())
 ```
 
 ### 4. Puente Espacio-Secuencia para Agentes Heterogéneos (HANK)
-Acopla bloques microeconómicos de hogares con heterogeneidad (`hetagent_block; ... end;`) con el equilibrio macroeconómico general en archivos `.mod` de Dynare utilizando el método de Jacobianos en espacio-secuencia de Auclert et al. (2021):
+Acopla bloques microeconómicos de hogares con heterogeneidad (`hetagent_block; ... end;`) con el cierre neokeynesiano agregado integrado en archivos `.mod` de Dynare utilizando el método de Jacobianos en espacio-secuencia de Auclert et al. (2021). El bloque `model;` se analiza y se conserva en `HANKModel.dag` para inspección, pero no se resuelve: el puente cierra todos los backends de hogares con su curva de Phillips y su regla de Taylor integradas sobre los parámetros declarados `beta`, `kappa`, `phi_pi` y la trayectoria del choque monetario `magnitude * rho**t`, y el argumento `shock` solo da nombre a la columna de salida; para cambiar el cierre, cambie los parámetros, no las ecuaciones:
 ```python
 # requires: numpy scipy
 from puremacro.dsge import solve_hank_bridge

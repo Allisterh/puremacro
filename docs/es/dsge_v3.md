@@ -49,7 +49,7 @@ puremacro/dsge/
 |:---|:---|:---|:---|:---|
 | **Pilar 1** | `puremacro.dsge._gradients` | `kalman_score()`<br>`solve_sylvester_generalized()`<br>`log_posterior_and_gradient()` | `ScoreDiagnosticsResult` | Score de Kalman y sensibilidades estructurales dentro del alcance documentado. |
 | **Pilar 2** | `puremacro.dsge.nuts` | `nuts_sample()`<br>`DualAveraging`<br>`WelfordVariance` | `NUTSResult` | Muestreo Hamiltoniano NUTS con diagnósticos completos (split-$\hat{R}$, ESS, E-BFMI). |
-| **Pilar 3** | `puremacro.dsge.hank` | `load_hank_mod()`<br>`HANKModel`<br>`solve_hank_bridge()` | `HANKResult` | Acoplamiento micro-macro en el espacio de secuencias desde bloques `hetagent_block;`. |
+| **Pilar 3** | `puremacro.dsge.hank` | `load_hank_mod()`<br>`HANKModel`<br>`solve_hank_bridge()` | `HANKResult` | Acoplamiento micro-macro en el espacio de secuencias desde bloques `hetagent_block;` con el cierre NKPC + regla de Taylor integrado. |
 
 ---
 
@@ -332,7 +332,7 @@ print(f"E-BFMI promedio: {diag_dict['mean_ebfmi']:.3f} (Superado: {diag_dict['pa
 
 Los modelos de Agentes Heterogéneos Nuevo-Keynesianos (HANK) rompen el supuesto del agente representativo al incorporar fricciones financieras, límites de endeudamiento no triviales y una masa sustancial de hogares con propensión marginal al consumo (PMC) elevada ("*hand-to-mouth*").
 
-`puremacro 3.0` implementa un puente analítico directo que permite escribir modelos HANK completos en archivos `.mod` mediante la extensión gramatical `hetagent_block; ... end;`, acoplándolos con el motor de espacio de secuencias (Sequence-Space Jacobian, SSJ) formulado por Auclert, Bardóczy, Rognlie y Straub (2021, *Econometrica*).
+`puremacro 3.0` implementa un puente analítico directo que permite escribir el bloque de hogares de un modelo HANK en archivos `.mod` mediante la extensión gramatical `hetagent_block; ... end;`, acoplándolo con el motor de espacio de secuencias (Sequence-Space Jacobian, SSJ) formulado por Auclert, Bardóczy, Rognlie y Straub (2021, *Econometrica*).
 
 ```mermaid
 flowchart TD
@@ -353,14 +353,14 @@ flowchart TD
 
     HB --> SS
     SS --> FN
-    MB --> GE
+    MB -. descriptivo .-> GE
     FN --> GE
     GE --> SOL
 ```
 
 ### 3.1 Sintaxis del bloque `hetagent_block` en archivos `.mod`
 
-El analizador sintáctico de `puremacro` interpreta bloques de agentes heterogéneos acoplados a las ecuaciones macroeconómicas agregadas:
+El analizador sintáctico de `puremacro` interpreta el bloque de agentes heterogéneos junto con las ecuaciones agregadas del bloque `model;`, que se conservan solo a título descriptivo (véase más abajo):
 
 ```dynare
 var Y C r pi i;
@@ -389,6 +389,8 @@ model;
 end;
 ```
 
+El bloque `model;` se analiza y se conserva en `HANKModel.dag` para inspección, pero no se resuelve: todos los backends de hogares se cierran con la curva de Phillips neokeynesiana $\pi_t = \beta \pi_{t+1} + \kappa Y_t$ y la regla de Taylor $i_t = \phi_\pi \pi_t + \varepsilon_{m,t}$ integradas (tasa real ex ante $r_t = i_t - \pi_{t+1}$; con dos activos se añade $dr^a_t = \alpha_{ab}\, dr^b_t$) evaluadas sobre los parámetros declarados `beta`, `kappa`, `phi_pi` (y `alpha_ab`), y el único choque es la trayectoria monetaria `magnitude * rho**t`; el argumento `shock` solo da nombre a la columna de `transition_paths`. Para cambiar el cierre, cambie los parámetros, no las ecuaciones.
+
 #### Parámetros de configuración en `hetagent_block`
 
 - `model`: Tipo de bloque microeconómico heterogéneo (`one_asset_hank`, `two_asset_hank`).
@@ -413,10 +415,12 @@ El equilibrio macroeconómico general acopla las decisiones microeconómicas con
 
 $$\mathbf{H}(\mathbf{Y}, \mathbf{r}, \mathbf{\pi}, \mathbf{i}; \mathbf{\varepsilon}_m) = \begin{bmatrix} \mathbf{Y} - \mathbf{C}(\mathbf{r}, \mathbf{Y}) \\ \mathbf{\pi} - \beta \mathbf{\pi}_{+1} - \kappa \mathbf{Y} \\ \mathbf{i} - r_{ss} - \phi_\pi \mathbf{\pi} - \mathbf{\varepsilon}_m \\ \mathbf{r} - \mathbf{i} + \mathbf{\pi}_{+1} \end{bmatrix} = \mathbf{0}$$
 
+Este sistema es el cierre integrado del puente, evaluado sobre los parámetros declarados `beta`, `kappa`, `phi_pi` (y `alpha_ab` con dos activos); las ecuaciones del bloque `model;` no se leen.
+
 `puremacro` resuelve este sistema apilado de dos formas:
 1. **Transición lineal**: Resolución exacta mediante inversión de la matriz jacobiana total del equilibrio general:
    $$\mathbf{dY} = -\left( \mathcal{H}_{\mathbf{Y}} \right)^{-1} \mathcal{H}_{\mathbf{\varepsilon}} \mathbf{\varepsilon}_m$$
-2. **Transición no lineal (cuasi-Newton Broyden)**: Simulación no lineal global para choques de gran magnitud mediante el algoritmo de Broyden, preservando la convergencia sin necesidad de discretizar espacios de estados de alta dimensión.
+2. **Transición no lineal (cuasi-Newton Broyden)**: Simulación no lineal global para choques de gran magnitud mediante el algoritmo de Broyden, preservando la convergencia sin necesidad de discretizar espacios de estados de alta dimensión. `nonlinear=True` está implementado solo para el hogar de un activo integrado: un `hetagent_block` de dos activos (`assets = 2`) y cualquier puente `household_model` lanzan `NotImplementedError`, y su transición lineal en el espacio de secuencias (`nonlinear=False`) sigue disponible.
 
 ### 3.4 API y contenedor `HANKResult`
 

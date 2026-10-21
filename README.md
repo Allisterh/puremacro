@@ -148,7 +148,7 @@ print(res.summary())
 ```
 
 ### 4. Heterogeneous-Agent (HANK) Sequence-Space Bridge
-Couple microeconomic heterogeneous-agent household blocks (`hetagent_block; ... end;`) with aggregate general-equilibrium DSGE conditions in Dynare `.mod` files using the Auclert et al. (2021) Sequence-Space Jacobian method:
+Couple microeconomic heterogeneous-agent household blocks (`hetagent_block; ... end;`) with the built-in aggregate New Keynesian closure in Dynare `.mod` files using the Auclert et al. (2021) Sequence-Space Jacobian method. The `model;` block is parsed and kept on `HANKModel.dag` for inspection but is not solved: the bridge closes every household backend with its built-in Phillips curve and Taylor rule on the declared `beta`, `kappa`, `phi_pi` parameters and the monetary shock path `magnitude * rho**t`, and the `shock` argument only names the output column, so edit the parameters, not the equations, to change the closure:
 ```python
 # requires: numpy scipy
 from puremacro.dsge import solve_hank_bridge

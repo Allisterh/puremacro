@@ -6,8 +6,11 @@ Sequence-Space Jacobian (SSJ) engine from Auclert, Bardóczy, Rognlie & Straub
 
 Key Features
 ------------
-1. Parses `hetagent_block; ... end;` in .mod files and links microeconomic
-   household decision blocks with aggregate DSGE equilibrium conditions.
+1. Parses `hetagent_block; ... end;` in .mod files. The `model;` block is
+   parsed and kept on `HANKModel.dag` for inspection but is not solved: the
+   general-equilibrium closure is the built-in New Keynesian Phillips curve and
+   Taylor rule on the declared `beta`, `kappa`, `phi_pi` (and `alpha_ab` for
+   two-asset) parameters, see `_ge_matrices` in `models.hank_sequence_space`.
 2. Computes microeconomic stationary distributions D*(a) and consumption Jacobians
    (J_C_r, J_C_Y) via the Fake-News Algorithm.
 3. Solves coupled general equilibrium MIT transition paths in sequence space
@@ -340,11 +343,24 @@ class HANKModel:
         horizon: int = 40,
         nonlinear: bool = False,
     ) -> HANKResult:
-        """Simulate general equilibrium transition dynamics for an MIT shock."""
+        """Simulate general equilibrium transition dynamics for an MIT shock.
+
+        The closure is the built-in NKPC + Taylor rule on the declared ``beta``,
+        ``kappa``, ``phi_pi`` (and ``alpha_ab`` for two-asset) parameters with the
+        single monetary shock path ``magnitude * rho**t``; the ``model;`` block of
+        the .mod file is not read, and ``shock`` only names the column of the
+        returned ``transition_paths``. ``nonlinear=True`` (Broyden quasi-Newton)
+        is implemented for the built-in one-asset household only: a two-asset
+        ``hetagent_block`` or a dp ``household_model`` raises ``NotImplementedError``.
+        """
         if nonlinear and self.household_model is not None:
             raise NotImplementedError("nonlinear general-equilibrium simulation for a dp household_model "
                                       "is not implemented; dp_nonlinear_transition computes household "
                                       "responses to specified price paths")
+        if nonlinear and self.is_two_asset:
+            raise NotImplementedError("nonlinear general-equilibrium simulation for the two-asset household "
+                                      "is not implemented; two-asset models are solved by the linear "
+                                      "sequence-space method (nonlinear=False)")
         shock_path = magnitude * (rho ** np.arange(horizon))
 
         if self.is_two_asset:
