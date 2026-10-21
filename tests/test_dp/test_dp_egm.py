@@ -477,3 +477,17 @@ def test_return_that_varies_with_the_shock():
     e600 = model(600).solve("egm", tol=1e-10)
     fine = model(1201).solve(tol=1e-9, howard=40)
     assert e600.aggregates["A"] == pytest.approx(fine.aggregates["A"], rel=0.01)
+
+
+@pytest.mark.parametrize("method, solver", [("vfi", "VFI"), ("egm", "solve_egm")])
+def test_one_asset_max_iter_exhaustion_raises(method, solver):
+    # The one-asset kernels return no `converged` field, so running out of max_iter
+    # raises instead of handing back a partial policy. The two-asset, Krusell-Smith
+    # and HJB solvers warn and return converged=False instead (docs/dp.md).
+    with pytest.raises(RuntimeError, match=rf"{solver} did not converge in 1 iterations"):
+        household().solve(method, tol=1e-12, max_iter=1)
+
+
+def test_dc_egm_max_iter_exhaustion_raises():
+    with pytest.raises(RuntimeError, match=r"DC-EGM did not converge in 1 iterations"):
+        labour(n_a=50).solve("egm", tol=1e-12, max_iter=1)

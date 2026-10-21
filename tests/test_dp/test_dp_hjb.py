@@ -6,6 +6,8 @@ hard-coded continuous-time Aiyagari equilibrium. dp's ``crra`` carries the
 """
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pytest
 
@@ -158,3 +160,28 @@ def test_continuous_and_discrete_time_pieces_do_not_mix():
     v.reward("a")
     with pytest.raises(ModelSpecError, match="continuous time"):
         v.solve()
+
+
+def test_hjb_max_iter_exhaustion_warns_and_flags():
+    # Contract shared with the two-asset and Krusell-Smith solvers: running out of
+    # max_iter warns and returns the last iterate with converged=False (the one-asset
+    # vfi/egm kernels raise instead). The flag used to be set silently.
+    with pytest.warns(RuntimeWarning, match=r"solve_hjb_achdou did not converge in 1 iterations"):
+        sol = household().solve(max_iter=1)
+    assert sol.raw.converged is False
+    assert sol.raw.n_iter == 1
+    with pytest.warns(RuntimeWarning,
+                      match=r"did not converge in 1 iterations \(sup-norm .* > tol .*\); "
+                            r"the returned HJBSolution has converged=False"):
+        ref = solve_hjb_achdou(Na=10, max_iter=1)
+    assert ref.converged is False
+
+
+def test_hjb_converged_solve_does_not_warn():
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("always")
+        sol = household().solve()
+        ref = solve_hjb_achdou()
+    assert sol.raw.converged is True
+    assert ref.converged is True
+    assert not [w for w in rec if issubclass(w.category, RuntimeWarning) and "did not converge" in str(w.message)]

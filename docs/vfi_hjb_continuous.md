@@ -243,7 +243,7 @@ for Delta in (1e4, 1e2, 10.0, 1.0):
 print("Delta = 1, max_iter = 1000:", solve_hjb_achdou(Delta=1.0, max_iter=1000).n_iter)
 ```
 
-This is the source of the table in Section 1.3: 9, 14, 50 and 100 iterations for $\Delta = 10^4, 10^2, 10, 1$, with `converged=False` at $\Delta = 1$ under the default `max_iter=100` (the value function is still $6.7 \times 10^{-2}$ away from the reference) and 360 iterations when the cap is raised to 1000. Always check `converged` after lowering `Delta`.
+This is the source of the table in Section 1.3: 9, 14, 50 and 100 iterations for $\Delta = 10^4, 10^2, 10, 1$, with `converged=False` at $\Delta = 1$ under the default `max_iter=100` (the value function is still $6.7 \times 10^{-2}$ away from the reference) and 360 iterations when the cap is raised to 1000. Always check `converged` after lowering `Delta`; the unconverged `Delta = 1` run also emits a `RuntimeWarning`.
 
 ---
 
@@ -307,7 +307,7 @@ solve_aiyagari_continuous_hjb(
 | `a_grid` | Explicit grid; overrides `Na`, `a_min`, `a_max`. May be non-uniform; the KFE weights each node by its cell width (Section 1.4). Must be 1-D, finite and strictly increasing with at least two points (`ValueError` otherwise). |
 | `e_grid` | Productivity states, shape `(Ne,)`; default `[0.2, 1.0]`. |
 | `A_z` | Income generator, shape `(Ne, Ne)`, finite, non-negative off-diagonals and zero row sums — all validated, with `ValueError` on any violation. Default: symmetric intensity $0.1$ for two states, $0.2/(N_e - 1)$ off-diagonal with $-0.2$ on the diagonal otherwise, `[[0.]]` for one state. |
-| `max_iter`, `tol` | Iteration cap (integer $\ge 1$, `ValueError` otherwise) and sup-norm tolerance on $v^{n+1} - v^n$. `converged` is `False` when the cap binds. |
+| `max_iter`, `tol` | Iteration cap (integer $\ge 1$, `ValueError` otherwise) and sup-norm tolerance on $v^{n+1} - v^n$. `converged` is `False` when the cap binds, and the solver emits a `RuntimeWarning` naming the cap and the final sup-norm. |
 | `Delta` | Implicit step $\Delta$ (Section 1.3). |
 | `compute_kfe` | Solve the adjoint KFE after convergence and fill `g_dist` and `mass_residual`. |
 | `v_prime_boundary` | `(v'_min, v'_max)` Neumann derivatives; either entry may be `None`. |
@@ -380,7 +380,7 @@ Methods: `summary()` (eleven rows: prices, capital supply and demand, clearing e
 ## 7. Caveats & Limitations
 
 - **`g_dist` is a density, not a vector of node masses.** Multiply by the cell-width weights before summing: node mass is $g_{i,j} w_i$, and $w_i = \Delta a$ only on a uniform grid. The examples on this page do exactly that. This matters most on non-uniform grids — on the quadratic grid `np.linspace(0, 1, 100)**2 * 30` the weighted capital supply is $5.9155$, and reading `g_dist` as a mass vector instead would be wrong by the local cell width at every node.
-- **The iteration count depends on `Delta`.** With `Delta=1` the default `max_iter=100` is not enough (Section 4.5). `converged` is the field to check; the solver does not warn.
+- **The iteration count depends on `Delta`.** With `Delta=1` the default `max_iter=100` is not enough (Section 4.5). `converged` is the field to check; the solver also emits a `RuntimeWarning` when the cap binds but does not raise, so the returned solution is the last iterate.
 - **Brent's iteration budget is per pass.** `max_iter_ge` caps each bracketing pass, and `n_iter_ge` reports the sum over passes, so the total number of household solves can exceed `max_iter_ge` when `tol_ge` forces a re-bracket. The HJB solutions are cached by $r$, so a repeated trial rate costs nothing.
 - **`mass_residual` is measured after renormalization** and is therefore of order $10^{-16}$ regardless of how accurate the linear solve was; it certifies the normalization, not the KFE residual. Compute `A_generator.T @ (g_dist * w[:, None]).ravel(order="F")` — the generator acts on node masses — if you want the latter.
 - **State ordering is column-major.** `A_generator` indexes state $(i, j)$ as $j N_a + i$; reshape vectors with `order="F"`, as `solve_kfe_achdou` does.
