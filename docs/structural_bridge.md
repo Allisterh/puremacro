@@ -112,7 +112,8 @@ empirical = lp_moment_targets(
 
 `frequency` is a pandas alias: a `PeriodIndex` takes period aliases (`"Q"`, `"M"`,
 `"Y"`), while a `DatetimeIndex` accepts both the pandas 2 (`"Q"`, `"M"`, `"Y"`) and
-the pandas 3 (`"QE"`, `"ME"`, `"YE"`, or `"QS"`/`"MS"`/`"YS"`) offset spellings; an
+the pandas 3 (`"QE"`, `"ME"`, `"YE"`, which need pandas 2.2 or later, or
+`"QS"`/`"MS"`/`"YS"`) offset spellings, compared at the index's own resolution; an
 unrecognised alias raises a `ValueError` that names the index kind.
 
 Like `lp_hac`, the dependent variable is **`y[t+h] - y[t-1]`**. The design

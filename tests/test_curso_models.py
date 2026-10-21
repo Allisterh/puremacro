@@ -13,8 +13,10 @@ hours came out at 0.285% instead of the 0.393% the course quotes.
 Checked here, with every file read as UTF-8 (the comments carry accents):
 
 1. the glob finds exactly the seven known files;
-2. the six determinate models load as a :class:`LinearModel` and run the
-   header's advertised ``stoch_simul(order=1, irf=40)``;
+2. the six determinate models load as a :class:`LinearModel` and run
+   ``stoch_simul(order=1, irf=40)`` (the horizon four of the files use;
+   ``new_keynesian_3eq.mod`` ships ``irf=20`` and ``nk_zlb_ref.mod`` carries no
+   ``stoch_simul`` line);
 3. ``nk_zlb_cons.mod`` is the documented indeterminate ZLB regime: it raises
    :class:`BlanchardKahnError` under ``strict=True`` and loads with
    ``strict=False``, as lesson T02_D does;
@@ -112,7 +114,7 @@ def test_seven_mod_files_are_discovered():
 
 @pytest.mark.parametrize("name", DETERMINATE)
 def test_mod_file_solves_at_order_one(name):
-    """``load_mod`` + ``stoch_simul(order=1, irf=40)``: the header's own recipe."""
+    """``load_mod`` + ``stoch_simul(order=1, irf=40)`` on every determinate course model."""
     model = load_mod(MODELOS / name)
     assert isinstance(model, LinearModel)
     assert model.is_determinate

@@ -178,3 +178,13 @@ def test_unrecognised_frequency_alias_reports_the_index_kind(on_timestamps, freq
     d = _on_timestamps(panel()) if on_timestamps else panel()
     with pytest.raises(ValueError, match=message):
         targets(d, frequency=frequency)
+
+
+@pytest.mark.parametrize("unit", ["s", "ms", "us"])
+def test_datetime_index_at_coarser_resolution_is_accepted(unit):
+    """pandas 2.x builds date_range grids at nanosecond resolution; a regular
+    index stored at another unit must not be refused as 'not consecutive'."""
+    d = _on_timestamps(panel())
+    coarse = d.set_axis(d.index.as_unit(unit))
+    out = targets(coarse, frequency="Q")
+    assert_allclose(out.values, targets(d).values)

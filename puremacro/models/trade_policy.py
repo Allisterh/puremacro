@@ -698,6 +698,13 @@ class TradePolicySimulator:
             Tariff rate imposed by Coalition A on Coalition B.
         tariff_rate_b : float | None, optional
             Retaliatory tariff rate imposed by Coalition B on Coalition A. If None, equals tariff_rate_a.
+
+        Warns
+        -----
+        RuntimeWarning
+            When the wage tatonnement stops at ``max_iter`` without converging;
+            the result then has ``converged=False`` and its fields are the last
+            iterate.
         """
         if not coalition_a:
             raise ValueError("coalition_a cannot be empty.")
@@ -746,7 +753,15 @@ class TradePolicySimulator:
         damping: float = 0.35,
         **kwargs: Any,
     ) -> TradePolicySimulationResult:
-        """Simulate arbitrary bilateral tariff matrix \\tau_{ni}'^j of shape (J, N, N)."""
+        """Simulate arbitrary bilateral tariff matrix \\tau_{ni}'^j of shape (J, N, N).
+
+        Warns
+        -----
+        RuntimeWarning
+            When the wage tatonnement stops at ``max_iter`` without converging;
+            the result then has ``converged=False`` and its fields are the last
+            iterate.
+        """
         tariffs_arr = np.asarray(tariffs_new, dtype=float)
         if tariffs_arr.shape != (self.model.J, self.model.N, self.model.N):
             raise ValueError(
@@ -784,6 +799,14 @@ class TradePolicySimulator:
             - If np.ndarray of shape (J, N, N): counterfactual gross tariffs.
             - If dict with keys (imp, exp): ad-valorem tariff rate for all tradables.
             - If dict with keys (imp, exp, sec): ad-valorem tariff rate for specific sector.
+
+        Warns
+        -----
+        RuntimeWarning
+            When the wage tatonnement stops at ``max_iter`` without converging;
+            the result then has ``converged=False`` and its fields are the last
+            iterate. The identity shock short-circuits with ``iterations=0`` and
+            never warns.
         """
         if tariff_shocks is None:
             if "tariffs_new" in kwargs:

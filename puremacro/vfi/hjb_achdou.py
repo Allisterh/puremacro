@@ -7,6 +7,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, fields
 from typing import Any, ClassVar
 
+from puremacro._warnings import _caller_stacklevel
+
 import numpy as np
 import pandas as pd
 import scipy.optimize as opt
@@ -843,7 +845,7 @@ def solve_hjb_achdou(
         warnings.warn(
             f"solve_hjb_achdou did not converge in {max_iter} iterations "
             f"(sup-norm {dist:.3e} > tol {tol:.1e}); the returned HJBSolution has converged=False",
-            RuntimeWarning, stacklevel=2,
+            RuntimeWarning, stacklevel=_caller_stacklevel(),
         )
 
     g_dist = None

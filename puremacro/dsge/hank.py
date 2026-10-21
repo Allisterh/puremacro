@@ -348,8 +348,9 @@ class HANKModel:
         The closure is the built-in NKPC + Taylor rule on the declared ``beta``,
         ``kappa``, ``phi_pi`` (and ``alpha_ab`` for two-asset) parameters with the
         single monetary shock path ``magnitude * rho**t``; the ``model;`` block of
-        the .mod file is not read, and ``shock`` only names the column of the
-        returned ``transition_paths``. ``nonlinear=True`` (Broyden quasi-Newton)
+        the .mod file is not read, and ``shock`` only labels the result
+        (``shock_name``, plus a ``transition_paths`` column holding the monetary
+        path when the name is a declared ``varexo``). ``nonlinear=True`` (Broyden quasi-Newton)
         is implemented for the built-in one-asset household only: a two-asset
         ``hetagent_block`` or a dp ``household_model`` raises ``NotImplementedError``.
         """

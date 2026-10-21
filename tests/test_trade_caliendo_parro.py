@@ -364,3 +364,10 @@ class TestCaliendoParroPresentations:
         fig2 = res.plot(kind="real_wage")
         assert fig2 is not None
         plt.close("all")
+
+
+def test_max_iter_must_be_a_positive_integer(symmetric_3c_2s_model):
+    """max_iter <= 0 is an argument error, not a non-convergence warning followed by a crash."""
+    for bad in (0, -3, True, 2.5):
+        with pytest.raises(ValueError, match="max_iter must be an integer >= 1"):
+            symmetric_3c_2s_model.simulate_tariff_shock("USA", "CHN", tariff_rate=0.10, max_iter=bad)

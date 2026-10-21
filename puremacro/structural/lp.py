@@ -18,12 +18,25 @@ _OFFSET_RENAMES = {"A": "YE", "Y": "YE", "Q": "QE", "M": "ME",
                    "BA": "BYE", "BY": "BYE", "BQ": "BQE", "BM": "BME"}
 
 
+def _pandas_has_end_aliases() -> bool:
+    try:
+        pd.tseries.frequencies.to_offset("QE")
+    except ValueError:  # pandas < 2.2
+        return False
+    return True
+
+
+_HAS_END_ALIASES = _pandas_has_end_aliases()
+
+
 def _expected_grid(index: pd.Index, frequency: str) -> pd.Index:
     """Regular grid of ``len(index)`` points from ``index[0]`` at the declared frequency."""
     if isinstance(index, pd.PeriodIndex):
         try:
             return pd.period_range(index[0], periods=len(index), freq=frequency)
-        except ValueError:
+        except (ValueError, AttributeError):
+            # pandas < 2.2 reaches Period(start, freq) with a non-period offset such as
+            # 'QS'/'MS' and fails on _period_dtype_code (AttributeError) instead of ValueError.
             raise ValueError(
                 f"frequency {frequency!r} is not a pandas period alias; a PeriodIndex declares "
                 "its frequency as 'Q', 'M', 'Y', ... (not 'QE'/'QS')") from None
@@ -35,12 +48,17 @@ def _expected_grid(index: pd.Index, frequency: str) -> pd.Index:
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", FutureWarning)  # pandas 2.2 alias deprecation
-                return pd.date_range(index[0], periods=len(index), freq=candidate)
+                # Build the grid at the index's own resolution: pandas 2.x date_range is
+                # always datetime64[ns] and DatetimeIndex.equals compares dtypes.
+                return pd.date_range(index[0], periods=len(index), freq=candidate,
+                                     unit=getattr(index, "unit", None))
         except ValueError:
             continue
-    raise ValueError(
-        f"frequency {frequency!r} is not a pandas offset alias for a DatetimeIndex "
-        "(quarterly: 'Q'/'QE' quarter-end or 'QS' quarter-start; monthly: 'M'/'ME' or 'MS')")
+    hint = ("quarterly: 'Q'/'QE' quarter-end or 'QS' quarter-start; monthly: 'M'/'ME' or 'MS'"
+            if _HAS_END_ALIASES else
+            "quarterly: 'Q' quarter-end or 'QS' quarter-start; monthly: 'M' or 'MS'; "
+            "the 'QE'/'ME'/'YE' spellings need pandas 2.2 or later")
+    raise ValueError(f"frequency {frequency!r} is not a pandas offset alias for a DatetimeIndex ({hint})")
 
 
 def lp_moment_targets(
@@ -80,7 +98,9 @@ def lp_moment_targets(
     other ordered indices use the caller's explicit frequency declaration.
     ``frequency`` uses pandas aliases: period aliases ('Q', 'M', 'Y') for a
     PeriodIndex; for a DatetimeIndex both the pandas-2 ('Q', 'M', 'Y') and
-    pandas-3 ('QE', 'ME', 'YE', or 'QS'/'MS'/'YS') offset spellings are accepted.
+    pandas-3 ('QE', 'ME', 'YE', which need pandas 2.2 or later, or 'QS'/'MS'/'YS')
+    offset spellings are accepted, and the grid is compared at the index's own
+    resolution.
     Missing/nonfinite data are refused, rather than silently collapsing time.
     All quantities are in supplied units; no name-based percent conversion.
     """

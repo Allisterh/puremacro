@@ -79,7 +79,7 @@ def test_hjb_solution_subscripting_parity():
 
 def test_hjb_solution_dict_methods():
     """Verify dict-like methods: .keys(), .values(), .items(), .get()."""
-    sol = solve_hjb_achdou(Na=15, max_iter=5)
+    sol = solve_hjb_achdou(Na=15, max_iter=10)
     keys = sol.keys()
     assert isinstance(keys, list)
     assert len(keys) == 12
@@ -102,7 +102,7 @@ def test_hjb_solution_dict_methods():
 
 def test_hjb_solution_kwargs_unpacking_and_conversion():
     """Verify that **sol and dict(sol) work."""
-    sol = solve_hjb_achdou(Na=15, max_iter=5)
+    sol = solve_hjb_achdou(Na=15, max_iter=10)
 
     def receiver(**kwargs):
         return set(kwargs.keys())
@@ -127,7 +127,7 @@ def test_hjb_solution_iteration_yields_its_keys():
     the string keys, so this asserts the positive contract rather than
     branching on whether ``__iter__`` happens to exist.
     """
-    sol = solve_hjb_achdou(Na=10, max_iter=2)
+    sol = solve_hjb_achdou(Na=10, max_iter=10)
     assert "__iter__" in type(sol).__dict__
     iterated = list(sol)
     assert iterated == sol.keys()
@@ -139,7 +139,7 @@ def test_hjb_solution_iteration_yields_its_keys():
 
 def test_hjb_solution_pickle_and_copy():
     """Verify frozen dataclass serializability and copying."""
-    sol = solve_hjb_achdou(Na=15, max_iter=5)
+    sol = solve_hjb_achdou(Na=15, max_iter=10)
     copied = copy.copy(sol)
     assert copied.n_iter == sol.n_iter
     np.testing.assert_array_equal(copied.V, sol.V)
@@ -153,7 +153,7 @@ def test_hjb_solution_pickle_and_copy():
 
 def test_hjb_solution_frozenness():
     """Verify that HJBSolution attributes cannot be mutated/rebound."""
-    sol = solve_hjb_achdou(Na=10, max_iter=2)
+    sol = solve_hjb_achdou(Na=10, max_iter=10)
     with pytest.raises(Exception):  # FrozenInstanceError
         sol.n_iter = 999
 

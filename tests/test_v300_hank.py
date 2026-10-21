@@ -9,7 +9,8 @@ Tests:
 6. Gate 3.3: HANKResult methods (.summary(), .to_frame(), .to_markdown(), .to_latex(), .to_typst(), plotting).
 7. High-level solve_hank_bridge API end-to-end integration.
 8. The `model;` block is descriptive: the closure is the built-in NKPC + Taylor rule on
-   the declared parameters, and `shock` only names the output column.
+   the declared parameters, and `shock` only labels the result (a column appears
+   only for a declared varexo).
 """
 from __future__ import annotations
 
@@ -288,7 +289,7 @@ def test_model_block_is_descriptive_and_parameters_drive_the_closure():
 
     The ``model;`` block is parsed and stored on ``HANKModel.dag`` but not solved:
     rewriting an equation leaves the transition untouched, while changing the
-    declared parameter moves it, and ``shock`` only names the output column.
+    declared parameter moves it, and ``shock`` only labels the result.
     README.md, docs/dsge_v3.md and docs/hank_nonlinear.md (EN and ES) state this;
     keep them in step if this test ever has to change.
     """
@@ -313,7 +314,8 @@ def test_model_block_is_descriptive_and_parameters_drive_the_closure():
     model = load_hank_mod(SAMPLE_HANK_MOD)
     assert len(model.dag.equations) == 4
 
-    # (d) the shock argument names the output column; the path is the monetary shock either way
+    # (d) the shock argument only labels the result: an undeclared name gets no column,
+    #     and the path is the monetary shock either way
     res_d = model.simulate(shock="not_a_shock", magnitude=-0.0025, horizon=20)
     assert res_d.shock_name == "not_a_shock"
     np.testing.assert_array_equal(res_d.transition_paths["Y"].to_numpy(), base.transition_paths["Y"].to_numpy())

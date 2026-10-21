@@ -355,7 +355,7 @@ model;
 end;
 ```
 
-The `model;` block is parsed and kept on `HANKModel.dag` for inspection, but it is not solved: every household backend is closed by the built-in New Keynesian Phillips curve $\pi_t = \beta \pi_{t+1} + \kappa Y_t$ and Taylor rule $i_t = \phi_\pi \pi_t + \varepsilon_{m,t}$ (ex-ante real rate $r_t = i_t - \pi_{t+1}$; the two-asset household adds $dr^a_t = \alpha_{ab}\, dr^b_t$) evaluated on the declared `beta`, `kappa`, `phi_pi` (and `alpha_ab`) parameters, and the only shock is the monetary path `magnitude * rho**t`; the `shock` argument names the column in `transition_paths`. Change the parameters, not the equations, to change the closure.
+The `model;` block is parsed and kept on `HANKModel.dag` for inspection, but it is not solved: every household backend is closed by the built-in New Keynesian Phillips curve $\pi_t = \beta \pi_{t+1} + \kappa Y_t$ and Taylor rule $i_t = \phi_\pi \pi_t + \varepsilon_{m,t}$ (ex-ante real rate $r_t = i_t - \pi_{t+1}$; the two-asset household adds $dr^a_t = \alpha_{ab}\, dr^b_t$) evaluated on the declared `beta`, `kappa`, `phi_pi` (and `alpha_ab`) parameters, and the only shock is the monetary path `magnitude * rho**t`; the `shock` argument only labels the result (`shock_name`, plus a `transition_paths` column holding the monetary path when the name is a declared `varexo`); it never selects a different shock. Change the parameters, not the equations, to change the closure.
 
 #### Supported `hetagent_block` Attributes
 - `model`: Sector template name (`one_asset_hank` or custom identifier).

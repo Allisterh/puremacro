@@ -19,6 +19,8 @@ if TYPE_CHECKING:
     import matplotlib.figure
 
 import numpy as np
+
+from puremacro._warnings import _caller_stacklevel
 import pandas as pd
 from scipy import linalg
 
@@ -620,6 +622,12 @@ class CaliendoParroModel:
         CaliendoParroResult
             Frozen dataclass containing counterfactual equilibrium outcomes.
 
+        Raises
+        ------
+        ValueError
+            If ``max_iter`` is not an integer >= 1, or the tariff/deficit inputs
+            have the wrong shape.
+
         Warns
         -----
         RuntimeWarning
@@ -627,6 +635,8 @@ class CaliendoParroModel:
             the result then has ``converged=False`` and its fields are the last
             iterate.
         """
+        if isinstance(max_iter, bool) or not isinstance(max_iter, (int, np.integer)) or max_iter < 1:
+            raise ValueError(f"solve_counterfactual: max_iter must be an integer >= 1, got {max_iter!r}")
         N, J = self.N, self.J
 
         # Determine counterfactual tariffs tau_prime and relative changes tau_hat
@@ -774,7 +784,7 @@ class CaliendoParroModel:
                 f"(max relative excess labour demand {max_residual:.3g}, tol {tol:g}; absolute excess "
                 f"{max_abs_residual:.3g}, floor 1e-6). The returned result has converged=False and its "
                 "w_hat, prices and welfare are the last iterate. Raise max_iter or lower damping.",
-                RuntimeWarning, stacklevel=2,
+                RuntimeWarning, stacklevel=_caller_stacklevel(),
             )
 
         # Final calculations of aggregate outcomes

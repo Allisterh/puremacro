@@ -35,11 +35,15 @@ model `rbc_canonico.mod` is recalibrated (see Fixed).
   symlink test; Windows returns the extended-length `\\?\` form from `os.readlink`
   and `Path.resolve()` keeps that prefix when the input already carries it.
 - `lp_moment_targets` accepts both the pandas 2 (`'Q'`, `'M'`, `'Y'`) and pandas 3
-  (`'QE'`, `'ME'`, `'YE'`, or `'QS'`/`'MS'`/`'YS'`) offset spellings of `frequency`
-  for a `DatetimeIndex`, and reports an unrecognised alias with its own
-  `ValueError` naming the index kind instead of pandas' internal message.
-  `PeriodIndex` callers and the `structural_irf_matching` example were already
-  correct.
+  (`'QE'`, `'ME'`, `'YE'`, which need pandas 2.2 or later, or `'QS'`/`'MS'`/`'YS'`)
+  offset spellings of `frequency` for a `DatetimeIndex`, builds the comparison
+  grid at the index's own resolution (a regular index stored at second or
+  microsecond resolution was refused as non-consecutive on pandas 2.x), and
+  reports an unrecognised alias with its own `ValueError` naming the index kind
+  instead of pandas' internal message, including the `AttributeError` pandas
+  2.0/2.1 raise for an offset alias such as `'QS'` on a `PeriodIndex`.
+  `PeriodIndex` callers using period aliases and the `structural_irf_matching`
+  example were already correct.
 - `HANKModel.simulate(nonlinear=True)` and `solve_hank_bridge(..., nonlinear=True)`
   on the built-in two-asset household (`hetagent_block` with `assets = 2`, no
   `household_model`) now raise `NotImplementedError` instead of silently
@@ -49,7 +53,10 @@ model `rbc_canonico.mod` is recalibrated (see Fixed).
 - `CaliendoParroModel.solve_counterfactual` and the `TradePolicySimulator.simulate_*`
   methods that call it issue a `RuntimeWarning` when the wage tatonnement stops
   at `max_iter` without converging; they used to return `converged=False`
-  silently. Returned values are unchanged.
+  silently. Returned values are unchanged. `max_iter` must be an integer >= 1
+  (`ValueError`); `max_iter <= 0` used to crash with an `UnboundLocalError`. This
+  warning and the HJB one below point at the caller's line, as the Krusell-Smith
+  warning does.
 - `solve_hjb_achdou` (and `dp.Model.solve(method="hjb")`) emits a `RuntimeWarning`
   naming the iteration cap and the final sup-norm when `max_iter` is exhausted
   instead of setting `converged=False` silently; the returned `HJBSolution` is
@@ -87,7 +94,8 @@ model `rbc_canonico.mod` is recalibrated (see Fixed).
   block is parsed onto `HANKModel.dag` but not solved: the closure is the
   built-in Phillips curve and Taylor rule on the declared `beta`, `kappa`,
   `phi_pi` (`alpha_ab` for two-asset) with a single monetary shock path, and the
-  `shock` argument only names the output column. A test in
+  `shock` argument only labels the result (a `transition_paths` column appears
+  only for a declared `varexo`). A test in
   `tests/test_v300_hank.py` pins this so the docs and the behaviour move in step.
 - `docs/dp.md`, `docs/es/dp.md` and the `dp.Model.solve()` docstring describe the
   household-solver non-convergence contract: the one-asset `vfi`/`egm` engines
@@ -111,15 +119,19 @@ model `rbc_canonico.mod` is recalibrated (see Fixed).
   README declares instead of an unpinned repository install, and no longer call
   5.x unpublished; the browser playground's start page describes the companion
   lessons as Spanish-only and the notebooks as network-free rather than "fully
-  synthetic".
+  synthetic"; the inline `multi_shock_mod` in `T02_B` (EN/ES) now carries the
+  same `mu = 1.455567` as the model file (the notebook already overrode it
+  through `params=`, so its outputs are unchanged).
 
 ### Internal
 
 - The dedicated CI mypy step runs on Ubuntu/Python 3.11 as well as 3.12, so the
   NumPy 2.4 stub line is type-checked outside the test suite too.
 - `tests/test_curso_models.py` loads all seven course `.mod` files under
-  `curso/notebooks/modelos`, solves the six determinate ones with the header's
-  `stoch_simul(order=1, irf=40)`, treats `nk_zlb_cons.mod` as the documented
+  `curso/notebooks/modelos`, solves the six determinate ones with
+  `stoch_simul(order=1, irf=40)` (the horizon four of the files use;
+  `new_keynesian_3eq.mod` ships `irf=20` and `nk_zlb_ref.mod` carries no
+  `stoch_simul` line), treats `nk_zlb_cons.mod` as the documented
   `BlanchardKahnError` / `strict=False` regime, checks every `initval` block
   against the solved steady state and pins the calibration targets the files
   document. Previously no test loaded any course model.
@@ -132,6 +144,10 @@ model `rbc_canonico.mod` is recalibrated (see Fixed).
   notebook, every shipped lab is in a module row, the stored table output matches
   the source, the start page names only notebooks the build copies, and every
   `git+` install hint in the course pins the README's commit.
+- Six pre-existing HJB tests that exhaust `max_iter` on purpose now expect the
+  new warning or use a converging iteration budget; `_caller_stacklevel` moved
+  to the dependency-free `puremacro/_warnings.py` so the trade and HJB solvers
+  can use it without importing the continuous-time VFI module.
 
 ### Known limitations
 

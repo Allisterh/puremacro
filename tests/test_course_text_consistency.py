@@ -38,6 +38,9 @@ _NB_STEM = re.compile(r"`(\d\d[a-z]?_[a-z0-9_]+)`")
 _GIT_INSTALL = re.compile(
     r"git\+https://github\.com/jalonso1979/puremacro(?:\.git)?(@[0-9a-f]{40})?(?![0-9a-f])")
 _COMMIT = re.compile(r"\b[0-9a-f]{40}\b")
+#: Cells the stale-wording scan applies to: those that talk about installing or
+#: importing the two modules, so data-vintage prose elsewhere is never flagged.
+_INSTALL_CONTEXT = re.compile(r"puremacro\.(?:text|dp)|pip install|git\+https")
 #: Wording that froze while puremacro.text and puremacro.dp were development-only.
 _STALE = re.compile(
     r"not yet published|not yet released|not released yet|a[úu]n no publicado|"
@@ -164,8 +167,9 @@ def test_course_colab_hints_pin_the_readme_commit():
                 pin = m.group(1)
                 if pin is None or pin[1:] not in readme_commits:
                     unpinned.append(f"{path.name} cell {i}: {m.group(0)}")
-            for m in _STALE.finditer(text + "\n" + _rendered(cell)):
-                stale.append(f"{path.name} cell {i}: {m.group(0)!r}")
+            if _INSTALL_CONTEXT.search(text):
+                for m in _STALE.finditer(text + "\n" + _rendered(cell)):
+                    stale.append(f"{path.name} cell {i}: {m.group(0)!r}")
     assert hints >= 8, hints                    # positive control: the recipe cells were found
     assert not unpinned, (
         "repository installs without the README's commit pin:\n  " + "\n  ".join(unpinned))

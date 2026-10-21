@@ -389,7 +389,7 @@ model;
 end;
 ```
 
-El bloque `model;` se analiza y se conserva en `HANKModel.dag` para inspección, pero no se resuelve: todos los backends de hogares se cierran con la curva de Phillips neokeynesiana $\pi_t = \beta \pi_{t+1} + \kappa Y_t$ y la regla de Taylor $i_t = \phi_\pi \pi_t + \varepsilon_{m,t}$ integradas (tasa real ex ante $r_t = i_t - \pi_{t+1}$; con dos activos se añade $dr^a_t = \alpha_{ab}\, dr^b_t$) evaluadas sobre los parámetros declarados `beta`, `kappa`, `phi_pi` (y `alpha_ab`), y el único choque es la trayectoria monetaria `magnitude * rho**t`; el argumento `shock` solo da nombre a la columna de `transition_paths`. Para cambiar el cierre, cambie los parámetros, no las ecuaciones.
+El bloque `model;` se analiza y se conserva en `HANKModel.dag` para inspección, pero no se resuelve: todos los backends de hogares se cierran con la curva de Phillips neokeynesiana $\pi_t = \beta \pi_{t+1} + \kappa Y_t$ y la regla de Taylor $i_t = \phi_\pi \pi_t + \varepsilon_{m,t}$ integradas (tasa real ex ante $r_t = i_t - \pi_{t+1}$; con dos activos se añade $dr^a_t = \alpha_{ab}\, dr^b_t$) evaluadas sobre los parámetros declarados `beta`, `kappa`, `phi_pi` (y `alpha_ab`), y el único choque es la trayectoria monetaria `magnitude * rho**t`; el argumento `shock` solo etiqueta el resultado (`shock_name`, más una columna de `transition_paths` con la trayectoria monetaria cuando el nombre es un `varexo` declarado); nunca selecciona otro choque. Para cambiar el cierre, cambie los parámetros, no las ecuaciones.
 
 #### Parámetros de configuración en `hetagent_block`
 
