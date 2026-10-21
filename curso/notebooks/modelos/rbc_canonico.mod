@@ -26,7 +26,7 @@ parameters alpha beta delta mu nu rho_a sigma_a;
 alpha   = 0.33;      // Participación del capital
 beta    = 0.99;      // Factor de descuento trimestral
 delta   = 0.025;     // Tasa de depreciación trimestral (10% anual)
-mu      = 0.822516;  // Calibrado analíticamente para objetivo l_ss = 0.33
+mu      = 1.455567;  // Calibrado analíticamente para objetivo l_ss = 0.33: mu = w/(c*(1-l)^(-nu)) en el EE
 nu      = 1.5;       // Curvatura del ocio (1/nu gobierna elasticidad de Frisch)
 rho_a   = 0.95;      // Persistencia trimestral de la PTF
 sigma_a = 0.007;     // Desviación estándar del choque a la PTF (0.7%)
@@ -70,7 +70,7 @@ c = 0.761184;
 i = 0.233874;
 k = 9.354978;
 l = 0.330000;
-w = 2.020299;
+w = 2.020270;
 r = 0.035101;
 a = 0.0;
 e_a = 0.0;
