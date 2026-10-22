@@ -16,8 +16,7 @@ sin volver a correrla) y qué hacer.
 
 ## 2026-10-22 — `STEADY_STATE()` usaba valores de la trayectoria, reproducido en 5.4.2
 
-**Corregido en el código de 5.5.0.** Consulte [PyPI](https://pypi.org/project/puremacro/)
-para verificar su publicación. En una trayectoria no lineal, `STEADY_STATE(expr)`
+**Corregido en la [versión 5.5.0 publicada](https://pypi.org/project/puremacro/5.5.0/).** En una trayectoria no lineal, `STEADY_STATE(expr)`
 podía evaluar la expresión con los valores corrientes de la trayectoria aunque
 su derivada se trataba como cero. Una regla como
 `tax = rate * STEADY_STATE(output)` podía cambiar su referencia al cambiar la

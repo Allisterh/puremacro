@@ -22,11 +22,20 @@ python -m pip install puremacro
 | **Simular políticas** | Declare un modelo de hogares con [programación dinámica](docs/es/dp.md), estudie la [transmisión monetaria](docs/es/monetary_transmission.md) o construya un [contrafactual comercial](docs/es/trade_accounting.md). |
 | **Aprender o enseñar** | Elija una [ruta de cuadernos](docs/es/notebooks.md) o use el [curso bilingüe y sus laboratorios interactivos](curso/README.md). El curso fija su propia versión del paquete. |
 
-**Versión de la documentación: 5.4.2.** Estos ejemplos describen la API de
-5.4.2, incluidas las adiciones y correcciones registradas de 5.3.0 a 5.4.2
-en el [historial de cambios](CHANGELOG.md). Consulte
-[PyPI](https://pypi.org/project/puremacro/) para conocer las versiones disponibles
-y use la documentación correspondiente a su versión instalada.
+**Versión publicada: [5.5.0](https://pypi.org/project/puremacro/5.5.0/).**
+Estos ejemplos describen la API de 5.5.0; consulte el
+[historial de cambios](CHANGELOG.md) y use la documentación correspondiente
+a su versión instalada.
+
+Novedades de 5.5.0: [inspección de `.mod` sin ejecución numérica y ejecución ordenada opcional](docs/es/dsge_mod_inspection.md),
+y [auditorías de resultados resueltos admitidos](docs/es/result_audits.md).
+La inspección comprueba sintaxis y soporte de comandos sin resolver el modelo.
+Las auditorías separan la convergencia de la evidencia sobre ecuaciones,
+Euler/KKT y distribuciones, e identifican casos no admitidos o no comprobados.
+Ninguna establece validez económica. Si usa `STEADY_STATE()` en trayectorias
+no lineales, consulte el [aviso de corrección](docs/es/ADVISORY.md) y vuelva
+a ejecutar los cálculos afectados.
+
 El curso mantiene su propio entorno y sus requisitos de versión.
 
 ## Inicio rápido y ejemplos desarrollados
@@ -859,11 +868,10 @@ verificación y la orden que reconstruye el archivo, se distribuye como
 
 ## Estado
 
-La versión **5.4.2** incluye `puremacro.trade` y sus módulos MRIO, reincorporados
+La versión publicada **5.5.0** incluye `puremacro.trade` y sus módulos MRIO, reincorporados
 en 5.2.0, junto con las adiciones y correcciones del
-[historial de cambios](CHANGELOG.md). Consulte
-[PyPI](https://pypi.org/project/puremacro/) para conocer las distribuciones
-disponibles. La versión 4.8.1 es la última con los estudios de investigación
+[historial de cambios](CHANGELOG.md). Instale la
+[distribución 5.5.0 de PyPI](https://pypi.org/project/puremacro/5.5.0/). La versión 4.8.1 es la última con los estudios de investigación
 retirados en 5.x (`pip install "puremacro<5"`). Los [niveles de estabilidad](ARCHITECTURE.md#stability-tiers)
 identifican las superficies estables, experimentales y de soporte limitado.
 Los cálculos estructurales tienen [límites de validación](docs/es/STRUCTURAL_VALIDATION_STATUS.md)

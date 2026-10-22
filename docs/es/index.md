@@ -22,11 +22,20 @@ python -m pip install puremacro
 | **Simular políticas** | Declare un modelo de hogares con [programación dinámica](dp.md), estudie la [transmisión monetaria](monetary_transmission.md) o construya un [contrafactual comercial](trade_accounting.md). |
 | **Aprender o enseñar** | Elija una [ruta de cuadernos](notebooks.md) o use el [curso bilingüe y sus laboratorios interactivos](https://github.com/jalonso1979/puremacro/tree/main/curso). El curso fija su propia versión del paquete. |
 
-**Versión de la documentación: 5.4.2.** Estos ejemplos describen la API de
-5.4.2, incluidas las adiciones y correcciones registradas de 5.3.0 a 5.4.2
-en el [historial de cambios](https://github.com/jalonso1979/puremacro/blob/main/CHANGELOG.md).
-Consulte [PyPI](https://pypi.org/project/puremacro/) para conocer las versiones
-disponibles y use la documentación correspondiente a su versión instalada.
+**Versión publicada: [5.5.0](https://pypi.org/project/puremacro/5.5.0/).**
+Estos ejemplos describen la API de 5.5.0; consulte el
+[historial de cambios](https://github.com/jalonso1979/puremacro/blob/main/CHANGELOG.md) y use la documentación correspondiente
+a su versión instalada.
+
+Novedades de 5.5.0: [inspección de `.mod` sin ejecución numérica y ejecución ordenada opcional](dsge_mod_inspection.md),
+y [auditorías de resultados resueltos admitidos](result_audits.md).
+La inspección comprueba sintaxis y soporte de comandos sin resolver el modelo.
+Las auditorías separan la convergencia de la evidencia sobre ecuaciones,
+Euler/KKT y distribuciones, e identifican casos no admitidos o no comprobados.
+Ninguna establece validez económica. Si usa `STEADY_STATE()` en trayectorias
+no lineales, consulte el [aviso de corrección](ADVISORY.md) y vuelva
+a ejecutar los cálculos afectados.
+
 El curso mantiene su propio entorno y sus requisitos de versión.
 
 ## ¿Qué es puremacro?
@@ -43,14 +52,14 @@ para conocer el alcance de la evidencia.
 ### Subsistemas Clave
 
 1. **Modelos DSGE Estructurales y Paridad con Dynare**:
-   - **Analizador Nativo de Archivos `.mod` de Dynare y CLI `puremacro-dynare`**: Carga y resolución de archivos `.mod` estándar directamente en Python puro.
+   - **Analizador Nativo de Archivos `.mod` de Dynare y CLI `puremacro-dynare`**: Inspección del soporte de comandos, seguida de carga y resolución del subconjunto `.mod` admitido en Python puro ([Inspección y límites](dsge_mod_inspection.md)).
    - **Scores de Verosimilitud**: Recursión analítica de Kalman para parámetros estructurales en la verosimilitud estacionaria de primer orden soportada; las derivadas estructurales de entrada pueden usar diferencias finitas. NUTS también ofrece gradientes numéricos y suministrados por el usuario; la interfaz de estimación determina su selección y las alternativas automáticas ([Guía](dsge_estimation.md)).
    - **HMC y NUTS en Python Puro**: Monte Carlo Hamiltoniano con adaptación dual averaging de tamaño de paso, adaptación de masa diagonal y diagnósticos de convergencia $\hat{R}$ divididos, sin normalización por rangos.
    - **Política Discrecional Óptima vs Compromiso**: Iteraciones matriciales de Riccati de Dennis (2007) para política discrecional perfecta en el sentido de Markov frente a compromiso en perspectiva atemporal, descomponiendo los sesgos de inflación y estabilización.
    - **Modelado Híbrido DSGE-VAR**: Optimización de previas e identificación estructural DSGE-VAR($\lambda$) de Del Negro y Schorfheide (2004).
    - **Choques Anticipados de Noticias**: Aumento del espacio de estados con operadores nilpotentes que preservan la determinancia de Blanchard-Kahn.
    - **Filtrado No Lineal de Partículas y MS-DSGE**: Filtros de partículas bootstrap y auxiliares con volatilidad estocástica y soluciones racionales con cambio de régimen de Markov de Foerster et al. (2016) con GIRFs analíticas cerradas.
-   - **Perturbación y Restricciones Ocasionalmente Activas**: Perturbación podada para modelos sin restricciones y OccBin lineal por partes para regímenes con restricciones activas ([Guía](dsge_build.md)). La función de desarrollo `solve_pruned_occbin` admite OccBin lineal, incluidos choques anticipados, y trayectorias de segundo orden sin restricciones activas con una sola innovación inicial; los episodios no lineales con restricciones activas y las innovaciones futuras anticipadas no lineales generan errores explícitos ([Límites soportados](dsge_higher_order.md)).
+   - **Perturbación y Restricciones Ocasionalmente Activas**: Perturbación podada para modelos sin restricciones y OccBin lineal por partes para regímenes con restricciones activas ([Guía](dsge_build.md)). La función `solve_pruned_occbin` admite OccBin lineal, incluidos choques anticipados, y trayectorias de segundo orden sin restricciones activas con una sola innovación inicial; los episodios no lineales con restricciones activas y las innovaciones futuras anticipadas no lineales generan errores explícitos ([Límites soportados](dsge_higher_order.md)).
 
 2. **Modelos de Agentes Heterogéneos (DP Declarativa y HANK)**:
    - **Modelos de Hogares como Ecuaciones**: Declare estados, decisiones, recompensas y restricciones con `dp.Model`, y elija VFI, EGM, HJB en tiempo continuo o una resolución de Krusell–Smith admitida ([Guía](dp.md)).

@@ -22,12 +22,19 @@ python -m pip install puremacro
 | **Simulate policy** | Declare a household model with [dynamic programming](dp.md), study [monetary transmission](monetary_transmission.md), or build a [trade counterfactual](trade_accounting.md). |
 | **Learn or teach** | Choose a [notebook learning path](notebooks.md) or use the [bilingual course and interactive labs](https://github.com/jalonso1979/puremacro/tree/main/curso). The course has its own pinned package version. |
 
-**Documentation version: 5.4.2.** These examples describe the 5.4.2 API,
-including the additions and fixes recorded from 5.3.0 through 5.4.2 in the
-[changelog](https://github.com/jalonso1979/puremacro/blob/main/CHANGELOG.md).
-Check [PyPI](https://pypi.org/project/puremacro/) for available releases and
-match your installed version to the documentation. The course maintains its
-own environment and version requirements.
+**Published version: [5.5.0](https://pypi.org/project/puremacro/5.5.0/).**
+These examples describe the 5.5.0 API; see the [changelog](https://github.com/jalonso1979/puremacro/blob/main/CHANGELOG.md)
+for additions and fixes. Match your installed version to the documentation.
+
+New in 5.5.0: [read-only `.mod` inspection and opt-in ordered execution](dsge_mod_inspection.md),
+and [audits of supported solved results](result_audits.md). Inspection
+checks syntax and command support without a numerical solve. Result audits
+separate convergence from equation, Euler/KKT and distribution evidence, and
+name unsupported or unchecked cases. Neither establishes economic validity.
+Users of `STEADY_STATE()` in nonlinear trajectories should review the
+[correctness advisory](ADVISORY.md) and re-run affected calculations.
+
+The course maintains its own environment and version requirements.
 
 ## What is puremacro?
 
@@ -42,14 +49,14 @@ for the scope of the evidence.
 ### Key Subsystems
 
 1. **Structural DSGE & Dynare Parity**:
-   - **Native Dynare `.mod` Parser & `puremacro-dynare` CLI**: Parse and solve standard `.mod` files directly in pure Python.
+   - **Native Dynare `.mod` Parser & `puremacro-dynare` CLI**: Inspect command support, then parse and solve the supported `.mod` subset in pure Python ([Inspection and limits](dsge_mod_inspection.md)).
    - **Likelihood Scores**: An analytic Kalman recursion for structural parameters in the supported first-order stationary likelihood; structural derivative inputs may use finite differences. NUTS also offers numerical and user-supplied gradients; the estimation interface determines gradient selection and fallback ([Guide](dsge_estimation.md)).
    - **Pure-Python HMC & NUTS**: Hamiltonian Monte Carlo with dual-averaging step-size adaptation, diagonal mass adaptation, and split-$\hat{R}$ diagnostics without rank normalization.
    - **Optimal Discretionary Policy vs Commitment**: Dennis (2007) Riccati matrix iterations for Markov-perfect discretionary policy vs timeless-perspective commitment, decomposing inflation and stabilization biases.
    - **DSGE-VAR Hybrid Modeling**: Del Negro & Schorfheide (2004) DSGE-VAR($\lambda$) prior optimization and structural identification.
    - **Anticipated News Shocks**: State-space companion augmentation with nilpotent shift operators preserving Blanchard-Kahn determinacy.
    - **Nonlinear Particle Filtering & MS-DSGE**: Bootstrap and auxiliary particle filters with stochastic volatility, and Foerster et al. (2016) Markov-switching rational expectations solutions with closed-form analytical GIRFs.
-   - **Perturbation and Occasionally Binding Constraints**: Pruned perturbation for unconstrained models and piecewise-linear OccBin for binding regimes ([Guide](dsge_build.md)). The development `solve_pruned_occbin` supports linear OccBin, including anticipated shocks, and slack second-order paths with one initial innovation; nonlinear binding episodes and nonlinear anticipated innovations raise explicit errors ([Supported limits](dsge_higher_order.md)).
+   - **Perturbation and Occasionally Binding Constraints**: Pruned perturbation for unconstrained models and piecewise-linear OccBin for binding regimes ([Guide](dsge_build.md)). `solve_pruned_occbin` supports linear OccBin, including anticipated shocks, and slack second-order paths with one initial innovation; nonlinear binding episodes and nonlinear anticipated innovations raise explicit errors ([Supported limits](dsge_higher_order.md)).
 
 2. **Heterogeneous-Agent Models (Declarative DP & HANK)**:
    - **Household Models as Equations**: Declare states, choices, rewards and constraints with `dp.Model`, then select VFI, EGM, continuous-time HJB or a supported Krusell–Smith solve ([Guide](dp.md)).

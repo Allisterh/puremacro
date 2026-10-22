@@ -16,8 +16,7 @@ without re-running it), and what to do.
 
 ## 2026-10-22 — `STEADY_STATE()` used trajectory values, reproduced in 5.4.2
 
-**Corrected in the source for 5.5.0.** Consult [PyPI](https://pypi.org/project/puremacro/)
-for publication status. In a nonlinear trajectory, `STEADY_STATE(expr)` could
+**Fixed in the published [5.5.0 release](https://pypi.org/project/puremacro/5.5.0/).** In a nonlinear trajectory, `STEADY_STATE(expr)` could
 evaluate the expression at current path values although its derivative was
 treated as zero. A rule such as `tax = rate * STEADY_STATE(output)` could then
 change its reference as output moved. Solver convergence did not establish

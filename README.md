@@ -21,10 +21,18 @@ python -m pip install puremacro
 | **Simulate policy** | Declare a household model with [dynamic programming](docs/dp.md), study [monetary transmission](docs/monetary_transmission.md), or build a [trade counterfactual](docs/trade_accounting.md). |
 | **Learn or teach** | Choose a [notebook learning path](docs/notebooks.md) or use the [bilingual course and interactive labs](curso/README.md). The course has its own pinned package version. |
 
-**Documentation version: 5.4.2.** These examples describe the 5.4.2 API,
-including the additions and fixes recorded from 5.3.0 through 5.4.2 in the
-[changelog](CHANGELOG.md). Check [PyPI](https://pypi.org/project/puremacro/)
-for available releases and match your installed version to the documentation.
+**Published version: [5.5.0](https://pypi.org/project/puremacro/5.5.0/).**
+These examples describe the 5.5.0 API; see the [changelog](CHANGELOG.md)
+for additions and fixes. Match your installed version to the documentation.
+
+New in 5.5.0: [read-only `.mod` inspection and opt-in ordered execution](docs/dsge_mod_inspection.md),
+and [audits of supported solved results](docs/result_audits.md). Inspection
+checks syntax and command support without a numerical solve. Result audits
+separate convergence from equation, Euler/KKT and distribution evidence, and
+name unsupported or unchecked cases. Neither establishes economic validity.
+Users of `STEADY_STATE()` in nonlinear trajectories should review the
+[correctness advisory](docs/ADVISORY.md) and re-run affected calculations.
+
 The course maintains its own environment and version requirements.
 
 ## Quickstart and worked examples
@@ -1131,9 +1139,9 @@ command that rebuilds the file, ships as `puremacro/trade/_datafiles/SOURCES.md`
 
 ## Status
 
-Version **5.4.2** includes `puremacro.trade` and its MRIO modules, restored in
+Published version **5.5.0** includes `puremacro.trade` and its MRIO modules, restored in
 5.2.0, plus the additions and fixes listed in the [changelog](CHANGELOG.md).
-See [PyPI](https://pypi.org/project/puremacro/) for available distributions.
+Install the [5.5.0 distribution from PyPI](https://pypi.org/project/puremacro/5.5.0/).
 Release 4.8.1 is the last one with the research
 studies removed in 5.x (`pip install "puremacro<5"`). The [stability tiers](ARCHITECTURE.md#stability-tiers)
 identify stable, experimental and best-effort surfaces. Structural calculations
