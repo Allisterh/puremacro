@@ -23,7 +23,7 @@ CURSO_WP = "https://jorgealonsoortiz.work/macro-avanzada/"
 # Mientras la página del curso no esté publicada en WordPress, los enlaces «El curso» apuntan a la
 # portada de laboratorios. Al publicarla, cambia esto a True y vuelve a correr el script.
 CURSO_PUBLICADO = True
-NOTEBOOKS_GH = "https://github.com/jalonso1979/puremacro/tree/main/curso/notebooks"
+NOTEBOOKS_GH = "https://github.com/jalonso1979/puremacro/tree/course-2026A-5.5.0/curso/notebooks"
 
 # Orden y resumen de cada laboratorio en la portada. El título y la unidad se leen del propio HTML.
 LABS = [
