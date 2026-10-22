@@ -277,7 +277,7 @@ m = dsge.load_mod(mod_macro)
     `load_mod` call does not validate compatibility with the entire file.
 
 - **Any Dynare name**: a parameter or variable named like a Python keyword (`lambda`, `yield`) parses and solves.
-- **Special Operators**: Supports `STEADY_STATE(x)` and `diff(x)`. `STEADY_STATE` uses a fixed reference during trajectory and derivative evaluation; its expression cannot contain exogenous variables. Perfect-foresight terminal assignments follow the distinction between literal `endval` and `endval` followed by `steady`; see the [correctness advisory](ADVISORY.md). `EXPECTATION(k)(x)` is parsed, but its compiled residual raises `NameError`, so a model that uses it cannot be solved yet.
+- **Special Operators**: Supports `STEADY_STATE(x)` and `diff(x)`. `STEADY_STATE` uses a fixed reference during trajectory and derivative evaluation; its expression cannot contain exogenous variables. Perfect-foresight terminal assignments follow the distinction between literal `endval` and `endval` followed by `steady` or `endval_steady`, both in direct solves and legacy `execute_mod_commands()` (including `simul`). Explicit Python `endval` or `y_end` overrides retain their documented precedence. Ordered command execution does not support perfect foresight. See the [correctness advisory](ADVISORY.md). `EXPECTATION(k)(x)` is parsed, but its compiled residual raises `NameError`, so a model that uses it cannot be solved yet.
 - **Transcendental Functions**: Full parsing and analytical differentiation for `exp`, `log`, `sin`, `cos`, `tan`, `normcdf`, `normpdf`, `erf`, `abs`, and `sign`.
 
 #### Symbolic Differentiation & Common Subexpression Elimination (CSE)

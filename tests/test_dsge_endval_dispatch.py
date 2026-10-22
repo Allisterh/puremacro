@@ -1,0 +1,96 @@
+"""Terminal-condition provenance across public .mod execution entry points."""
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from puremacro.dsge import ModCompatibilityError, load_mod, solve_perfect_foresight
+
+
+_FIXTURES = Path(__file__).parent / "fixtures" / "dynare_issue_177"
+
+
+def _source(terminal, command):
+    name = "endval_solved" if terminal == "steady" else "endval_literal"
+    source = (_FIXTURES / f"{name}.mod").read_text()
+    if terminal == "endval_steady":
+        source = source.replace("perfect_foresight_setup(periods=10)",
+                                "perfect_foresight_setup(periods=10, endval_steady)")
+    if command == "simul":
+        source = source[:source.index("perfect_foresight_setup")]
+        source += "simul(periods=10" + (", endval_steady" if terminal == "endval_steady" else "") + ");\n"
+    return source
+
+
+@pytest.mark.parametrize("terminal", ["literal", "steady", "endval_steady"])
+@pytest.mark.parametrize("command", ["setup_solver", "simul"])
+@pytest.mark.parametrize("command_mode", [None, "legacy"])
+def test_legacy_dispatch_preserves_parsed_terminal_provenance(terminal, command, command_mode):
+    source = _source(terminal, command)
+    model = load_mod(source, **({} if command_mode is None else {"command_mode": command_mode}))
+    direct = model.solve_perfect_foresight(periods=10)
+    dispatched = model.execute_mod_commands()
+    result = dispatched.perfect_foresight
+    assert direct.converged and result is not None and result.converged
+
+    # Native Dynare outputs distinguish the literal guess 3 from the solved
+    # terminal equilibrium 2. Direct/dispatcher parity alone cannot detect a
+    # shared wrong boundary or a missing permanent exogenous path.
+    name = "endval_literal" if terminal == "literal" else "endval_solved"
+    reference = pd.read_csv(_FIXTURES / f"{name}_dynare_out.csv").iloc[1:11]
+    np.testing.assert_allclose(result.path.to_numpy(), reference.to_numpy(), rtol=0, atol=1e-10)
+    np.testing.assert_allclose(result.path.to_numpy(), direct.path.to_numpy(), rtol=0, atol=1e-10)
+    np.testing.assert_allclose(result.path["y"], 2.0 - 0.5 ** np.arange(1, 11), rtol=0, atol=1e-10)
+    assert dispatched.endval == {"e": 0.5, "y": 3.0, "x": 3.0}
+    assert model.endval == dispatched.endval
+    assert dispatched.commands_executed == ("endval", "perfect_foresight_solver")
+
+
+def test_parsed_exogenous_only_endval_remains_literal_without_steady():
+    source = _source("literal", "setup_solver").replace("y = 3;\nx = 3;", "")
+    model = load_mod(source)
+    result = model.execute_mod_commands().perfect_foresight
+    assert result is not None and result.converged
+    # Parsed endval alone does not request the implicit static solve that an
+    # explicit Python exogenous-only endval mapping requests.
+    np.testing.assert_allclose(result.path["x"], 1.0, rtol=0, atol=1e-10)
+    np.testing.assert_allclose(result.path["y"], 2.0 - 0.5 ** np.arange(1, 11), rtol=0, atol=1e-10)
+    explicit = model.solve_perfect_foresight(periods=10, endval={"e": 0.5})
+    assert explicit.converged
+    np.testing.assert_allclose(explicit.path["x"], 2.0, rtol=0, atol=1e-10)
+
+
+@pytest.mark.parametrize("terminal", ["steady", "endval_steady"])
+@pytest.mark.parametrize("method", ["auto", "central", "complex"])
+@pytest.mark.parametrize("override,target,shock", [
+    ({"endval": {"e": 1.0, "y": 4.0, "x": 4.0}}, 4.0, 1.0),
+    ({"endval": {"e": 1.0}}, 3.0, 1.0),
+    ({"endval": {}}, 1.0, 0.0),
+    ({"y_end": np.array([5.0, 5.0])}, 5.0, 0.5),
+])
+def test_explicit_terminal_override_takes_precedence_over_parsed_steady(terminal, method, override, target, shock):
+    model = load_mod(_source(terminal, "setup_solver"))
+    result = solve_perfect_foresight(model, periods=10, method=method, **override)
+    assert result.converged
+    np.testing.assert_allclose(result.path["x"], target, rtol=0, atol=1e-9)
+    np.testing.assert_allclose(result.path["y"], 1.0 + 2.0 * shock * (1.0 - 0.5 ** np.arange(1, 11)),
+                               rtol=0, atol=1e-9)
+    # An override must not rewrite the model's parsed declaration for a later
+    # command invocation.
+    assert model.endval == {"e": 0.5, "y": 3.0, "x": 3.0}
+    dispatched = model.execute_mod_commands().perfect_foresight
+    assert dispatched is not None and dispatched.converged
+    np.testing.assert_allclose(dispatched.path["x"], 2.0, rtol=0, atol=1e-10)
+
+
+@pytest.mark.parametrize("terminal", ["literal", "steady", "endval_steady"])
+def test_ordered_mode_still_reports_perfect_foresight_as_unsupported(terminal):
+    source = _source(terminal, "setup_solver")
+    with pytest.raises(ModCompatibilityError) as loading:
+        load_mod(source, command_mode="ordered")
+    assert any(issue.code == "ORDERED_COMMAND_UNSUPPORTED" for issue in loading.value.report.issues)
+    model = load_mod(source)
+    with pytest.raises(ModCompatibilityError) as execution:
+        model.execute_mod_commands(ordered=True)
+    assert any(issue.code == "ORDERED_COMMAND_UNSUPPORTED" for issue in execution.value.report.issues)

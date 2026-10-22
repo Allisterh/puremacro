@@ -2316,11 +2316,13 @@ class LinearModel:
                             if 1 <= int(p_idx) <= periods_pf:
                                 exo_shocks[int(p_idx) - 1, j] = float(val)
 
+            # Read parsed endval from the model so the solver retains its
+            # command provenance (steady/endval_steady). Passing it as a
+            # Python override would instead make endogenous values literal.
             pf_res = self.perfect_foresight(
                 periods=periods_pf,
                 shocks=exo_shocks,
                 histval=histval_dict,
-                endval=endval_dict,
                 tol=tol_pf,
                 max_iter=max_iter_pf,
             )
