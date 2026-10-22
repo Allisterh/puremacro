@@ -276,7 +276,7 @@ def _draw_prior_particles(
                 for _ in range(50):
                     if not np.any(mask):
                         break
-                    draws[mask] = rng.normal(mean, std, size=np.sum(mask))
+                    draws[mask] = rng.normal(mean, std, size=int(np.sum(mask)))
                     mask = (draws < lb) | (draws > ub)
                 if np.any(mask):
                     draws[mask] = np.clip(draws[mask], lb if math.isfinite(lb) else mean - 3 * std,

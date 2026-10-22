@@ -68,7 +68,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any, Sequence, cast
 
 import numpy as np
 import pandas as pd
@@ -246,12 +246,14 @@ def _share_projection(A: np.ndarray, b: np.ndarray, tol: float = _COLLINEAR_TOL)
     n, K = A.shape
     norms = np.linalg.norm(A, axis=0)
     if n >= K and np.all(norms > 0):
-        R = np.linalg.qr(np.column_stack([A, b]), mode="r")
+        # NumPy < 2.5 stubs type every qr mode as QRResult; the Python 3.11
+        # CI leg resolves NumPy 2.4, so the cast is needed there and a no-op.
+        R = cast(np.ndarray, np.linalg.qr(np.column_stack([A, b]), mode="r"))
         if np.all(np.abs(np.diag(R)[:K]) > tol * norms):
             return np.ones(K, dtype=bool), solve_triangular(R[:K, :K], R[:K, K])
     keep = _independent_columns(A, tol)
     k = int(keep.sum())
-    R = np.linalg.qr(np.column_stack([A[:, keep], b]), mode="r")
+    R = cast(np.ndarray, np.linalg.qr(np.column_stack([A[:, keep], b]), mode="r"))  # NumPy < 2.5 stubs
     return keep, solve_triangular(R[:k, :k], R[:k, k])
 
 

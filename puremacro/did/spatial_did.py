@@ -192,7 +192,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Sequence, cast
 
 import numpy as np
 import pandas as pd
@@ -526,7 +526,9 @@ def _event_clock(code: np.ndarray, R: int) -> tuple:
     """
     n, T = code.shape
     exposed = (code >= 0) & (code <= R)
-    has_entry = exposed.any(axis=1)
+    # NumPy < 2.5 stubs type any(axis=...) as bool | ndarray; the cast is a
+    # no-op that keeps the Python 3.11 (NumPy 2.4) CI leg type-clean.
+    has_entry = cast(np.ndarray, exposed.any(axis=1))
     a_idx = np.where(has_entry, exposed.argmax(axis=1), -1)
     entry_ring = np.where(has_entry, code[np.arange(n), np.maximum(a_idx, 0)], -1)
     ev = np.where(has_entry[:, None],

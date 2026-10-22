@@ -281,6 +281,8 @@ class DynamicTariff:
         """Long table of the nonzero entries (source cell, destination, three rates)."""
         mask = (self.rates != 0) | (self.consumption_rates != 0) | (self.investment_rates != 0)
         rows, cols = np.nonzero(mask)
+        source: list[str] | list[int]
+        dest: list[str] | list[int]
         if calibration is not None and calibration.n_cells == self.n_cells:
             labels, countries = calibration.cell_labels, calibration.countries
             source = [labels[i] for i in rows]

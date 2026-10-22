@@ -21,8 +21,8 @@ python -m pip install puremacro
 | **Simulate policy** | Declare a household model with [dynamic programming](docs/dp.md), study [monetary transmission](docs/monetary_transmission.md), or build a [trade counterfactual](docs/trade_accounting.md). |
 | **Learn or teach** | Choose a [notebook learning path](docs/notebooks.md) or use the [bilingual course and interactive labs](curso/README.md). The course has its own pinned package version. |
 
-**Documentation version: 5.4.0.** These examples describe the 5.4.0 API,
-including the additions and fixes recorded under 5.3.0 and 5.4.0 in the
+**Documentation version: 5.4.1.** These examples describe the 5.4.1 API,
+including the additions and fixes recorded from 5.3.0 through 5.4.1 in the
 [changelog](CHANGELOG.md). Check [PyPI](https://pypi.org/project/puremacro/)
 for available releases and match your installed version to the documentation.
 The course maintains its own environment and version requirements.
@@ -1131,7 +1131,7 @@ command that rebuilds the file, ships as `puremacro/trade/_datafiles/SOURCES.md`
 
 ## Status
 
-Version **5.4.0** includes `puremacro.trade` and its MRIO modules, restored in
+Version **5.4.1** includes `puremacro.trade` and its MRIO modules, restored in
 5.2.0, plus the additions and fixes listed in the [changelog](CHANGELOG.md).
 See [PyPI](https://pypi.org/project/puremacro/) for available distributions.
 Release 4.8.1 is the last one with the research

@@ -1096,7 +1096,12 @@ class TestTier2BoundaryTrack2:
             lnk = tpath / "lnk.txt"
             lnk.symlink_to(real)
             assert lnk.is_symlink()
-            assert os.readlink(lnk) == str(real)
+            # Windows returns the extended-length form (\\?\C:\...) from
+            # os.readlink, and Path.resolve() keeps that prefix when the input
+            # already carries it, so resolve the link itself instead of its
+            # readlink target and confirm both names reach the same file.
+            assert lnk.resolve() == real.resolve()
+            assert os.path.samefile(lnk, real)
             dangling = tpath / "dangling.txt"
             dangling.symlink_to(tpath / "nonexistent.txt")
             assert dangling.is_symlink()

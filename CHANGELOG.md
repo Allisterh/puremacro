@@ -4,8 +4,51 @@ This file records user-visible changes per release. Internal refactors that don'
 
 This changelog describes versioned source changes. Check
 [PyPI](https://pypi.org/project/puremacro/) for published distributions.
-Version 5.3.0 was tagged but not published to PyPI; its additions are included
-in 5.4.0. See the [release procedure](RELEASING.md).
+Versions 5.3.0 and 5.4.0 were tagged but not published to PyPI; their additions
+are included in 5.4.1. See the [release procedure](RELEASING.md).
+
+## 5.4.1 (2026-10-20)
+
+**Python 3.11 typing and Windows CI compatibility.** This patch includes the
+5.3.0 and 5.4.0 feature set. The `v5.4.0` tag failed five of the nine CI legs
+and was never published: the type-checking gate failed on all three Python 3.11
+legs, where pip resolves NumPy 2.4 (NumPy 2.5 requires Python 3.12) and its
+stubs differ from NumPy 2.5's, and the three Windows legs also failed on
+Windows-only code paths. No numerical result changes.
+
+### Fixed
+
+- Make QR-only array returns, spatial Boolean reductions, tariff-export labels,
+  and plotting-axis containers explicit to the type checker across NumPy 2.4
+  and 2.5. Numerical algorithms and tolerances are unchanged.
+- Convert the bounded SMC rejection-draw count to a Python integer, preserving
+  the seeded draws and subsequent random-number sequence.
+- Guard the POSIX-only `resource` and `os.sysconf` fallbacks in the GPU memory
+  report and the runtime capability probe behind `sys.platform`, so mypy on
+  Windows no longer reports them. Windows already took the zero and `None`
+  paths through the caught exceptions.
+- Read and write the course-site build's HTML, JavaScript and JSON files as
+  UTF-8 explicitly. On Windows the default code page (cp1252) could not decode
+  the accented characters in the lab pages and the build failed.
+- Compare resolved paths in the research-guard symlink test; Windows returns
+  the extended-length `\\?\` form from `os.readlink`.
+
+### Documentation
+
+- Align the citation abstract with supported local execution and best-effort
+  browser execution through Pyodide.
+- Explain the native `.mod` runner's category-based dispatch, merged repeated
+  simulations, and possible omission of unrecognized outer statements in both
+  English and Spanish. Full source-order execution remains a future improvement.
+- Record in `RELEASING.md` the two gaps the local pre-tag gate left open: it ran
+  under one Python (3.13, NumPy 2.5 stubs) and one platform. The pre-tag recipe
+  now also runs mypy under the oldest supported interpreter and with
+  `--platform win32`.
+
+### Internal
+
+- The dedicated CI mypy step runs on Ubuntu/Python 3.11 as well as 3.12, so the
+  NumPy 2.4 stub line is type-checked outside the test suite too.
 
 ## 5.4.0 (2026-10-20)
 
