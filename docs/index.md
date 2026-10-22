@@ -20,7 +20,7 @@ python -m pip install puremacro
 |---|---|
 | **Analyze data** | Estimate a shock response with the [quickstart](quickstart.md), then explore [data sources](micro_data.md) and [research workflows](research_workflows.md). |
 | **Simulate policy** | Declare a household model with [dynamic programming](dp.md), study [monetary transmission](monetary_transmission.md), or build a [trade counterfactual](trade_accounting.md). |
-| **Learn or teach** | Choose a [notebook learning path](notebooks.md) or use the [bilingual course and interactive labs](https://github.com/jalonso1979/puremacro/tree/main/curso). The course has its own pinned package version. |
+| **Learn or teach** | Choose a [notebook learning path](notebooks.md) or use the [bilingual course and interactive labs](https://github.com/jalonso1979/puremacro/tree/main/curso). Use the pinned course edition below. |
 
 **Published version: [5.5.0](https://pypi.org/project/puremacro/5.5.0/).**
 These examples describe the 5.5.0 API; see the [changelog](https://github.com/jalonso1979/puremacro/blob/main/CHANGELOG.md)
@@ -34,7 +34,12 @@ name unsupported or unchecked cases. Neither establishes economic validity.
 Users of `STEADY_STATE()` in nonlinear trajectories should review the
 [correctness advisory](ADVISORY.md) and re-run affected calculations.
 
-The course maintains its own environment and version requirements.
+The bilingual [course edition `course-2026A-5.5.0`](https://github.com/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/README.md)
+pins `puremacro==5.5.0` and requires **Python 3.12 or later**. All 72 notebooks
+were executed with frozen data and cached language-model responses, including
+the required DP and text sections. Live data refreshes and live local models
+remain optional and were not part of that validation. Follow the edition's
+setup instructions; the library itself continues to support Python 3.11+.
 
 ## What is puremacro?
 

@@ -20,7 +20,7 @@ python -m pip install puremacro
 |---|---|
 | **Analizar datos** | Estime una respuesta a un choque con el [inicio rápido](docs/es/quickstart.md), luego explore las [fuentes de datos](docs/es/micro_data.md) y los [flujos de investigación](docs/es/research_workflows.md). |
 | **Simular políticas** | Declare un modelo de hogares con [programación dinámica](docs/es/dp.md), estudie la [transmisión monetaria](docs/es/monetary_transmission.md) o construya un [contrafactual comercial](docs/es/trade_accounting.md). |
-| **Aprender o enseñar** | Elija una [ruta de cuadernos](docs/es/notebooks.md) o use el [curso bilingüe y sus laboratorios interactivos](curso/README.md). El curso fija su propia versión del paquete. |
+| **Aprender o enseñar** | Elija una [ruta de cuadernos](docs/es/notebooks.md) o use el [curso bilingüe y sus laboratorios interactivos](curso/README.md). Use la edición fija del curso indicada abajo. |
 
 **Versión publicada: [5.5.0](https://pypi.org/project/puremacro/5.5.0/).**
 Estos ejemplos describen la API de 5.5.0; consulte el
@@ -36,7 +36,13 @@ Ninguna establece validez económica. Si usa `STEADY_STATE()` en trayectorias
 no lineales, consulte el [aviso de corrección](docs/es/ADVISORY.md) y vuelva
 a ejecutar los cálculos afectados.
 
-El curso mantiene su propio entorno y sus requisitos de versión.
+La [edición bilingüe del curso `course-2026A-5.5.0`](https://github.com/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/README.md)
+fija `puremacro==5.5.0` y requiere **Python 3.12 o posterior**. Se ejecutaron los
+72 cuadernos con datos congelados y respuestas de modelos de lenguaje en caché,
+incluidas las secciones obligatorias de DP y texto. Los refrescos de datos y
+los modelos locales en vivo siguen siendo opcionales y no formaron parte de
+esa validación. Siga las instrucciones de la edición; la biblioteca conserva
+el soporte de Python 3.11+.
 
 ## Inicio rápido y ejemplos desarrollados
 
