@@ -686,9 +686,14 @@ def solve_perfect_foresight(
         base_ss = np.array([float(ss_dict.get(v, 0.0)) for v in v_names_list], dtype=float)
 
         # Handle histval override
-        eff_histval = histval if histval is not None else getattr(
-            model, "_histval", getattr(model, "histval_values", None)
-        )
+        eff_histval = histval
+        if eff_histval is None:
+            eff_histval = getattr(model, "_histval", None)
+            if eff_histval is None:
+                eff_histval = getattr(model, "histval_values", None)
+            if eff_histval is None:
+                # The parsed builder exposes DAG declarations via this property.
+                eff_histval = getattr(model, "histval", None)
         if y_init is None:
             y_init_arr = base_ss.copy()
             if eff_histval:

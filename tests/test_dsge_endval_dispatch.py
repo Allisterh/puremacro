@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from puremacro.dsge import ModCompatibilityError, build_dynare, load_mod, parse_mod, solve_perfect_foresight
+from puremacro.dsge._parser import parse_mod_to_dag
 
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "dynare_issue_177"
@@ -109,3 +110,36 @@ def test_ordered_mode_still_reports_perfect_foresight_as_unsupported(terminal):
     with pytest.raises(ModCompatibilityError) as execution:
         model.execute_mod_commands(ordered=True)
     assert any(issue.code == "ORDERED_COMMAND_UNSUPPORTED" for issue in execution.value.report.issues)
+
+
+@pytest.mark.parametrize("loader", [load_mod, _build_from_parsed, parse_mod_to_dag],
+                         ids=["load_mod", "builder", "dag"])
+@pytest.mark.parametrize("terminal", ["literal", "steady"])
+@pytest.mark.parametrize("override,initial", [
+    ({}, 4.0),
+    ({"histval": {}}, 1.0),
+    ({"histval": {"y": 2.0}}, 2.0),
+    ({"y_init": np.array([6.0, 1.0])}, 6.0),
+    ({"histval": {"y": 2.0}, "y_init": np.array([6.0, 1.0])}, 6.0),
+])
+def test_historical_boundary_matches_across_construction_routes(loader, terminal, override, initial):
+    source = _source(terminal, "setup_solver").replace(
+        "endval;", "histval; y(0)=4; x(0)=1; end;\nendval;")
+    model = loader(source)
+    if loader is _build_from_parsed:
+        assert not hasattr(model, "_histval")
+        assert model.histval == {"y": 4.0, "x": 1.0}
+    result = solve_perfect_foresight(model, periods=10, **override)
+    assert result.converged
+    # Independent recurrence for permanent e=.5: y_t = 1 + .5*y_(t-1).
+    expected = 2.0 + (initial - 2.0) * 0.5 ** np.arange(1, 11)
+    np.testing.assert_allclose(result.path["y"], expected, rtol=0, atol=1e-10)
+    np.testing.assert_allclose(result.path["x"], 3.0 if terminal == "literal" else 2.0,
+                               rtol=0, atol=1e-10)
+    if loader is not parse_mod_to_dag:
+        # Explicit call arguments must not rewrite the source declaration.
+        dispatched = model.execute_mod_commands()
+        assert dispatched.histval == {"y": 4.0, "x": 1.0}
+        assert dispatched.perfect_foresight is not None and dispatched.perfect_foresight.converged
+        np.testing.assert_allclose(dispatched.perfect_foresight.path["y"],
+                                   2.0 + 2.0 * 0.5 ** np.arange(1, 11), rtol=0, atol=1e-10)
