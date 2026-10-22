@@ -47,7 +47,8 @@ invented expanded position. Included lines retain their include chain. Loop
 expansions have distinct instance identifiers even when they originate from
 the same source line. Columns are `null` when interpolation prevents an exact
 mapping; a statement spanning multiple origins also carries the individual
-origin spans. Input hashes use SHA-256 and reports contain no timestamps.
+origin spans. Input hashes use SHA-256 of the original UTF-8 bytes, including
+line endings; parsing normalizes LF, CRLF and CR separately. Reports contain no timestamps.
 
 Macro preprocessing is the only expression-evaluation step in inspection;
 it uses the existing macro engine with a work budget (`macro_limit=100_000`)

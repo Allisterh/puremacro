@@ -147,11 +147,13 @@ class ModInspectionReport:
 
 def _read_source(path_or_text: str | Path) -> tuple[str, str, Path]:
     value = str(path_or_text)
-    if isinstance(path_or_text, Path) or ("\n" not in value and ";" not in value):
+    if isinstance(path_or_text, Path) or ("\n" not in value and "\r" not in value and ";" not in value):
         path = Path(path_or_text).resolve()
         if path.stat().st_size > 2_000_000:
             raise ValueError("Inspection source size limit exceeded (2 MB)")
-        return path.read_text(encoding="utf-8"), str(path), path.parent
+        # Keep the exact UTF-8 source for provenance hashes. The inspection
+        # preprocessor normalizes newlines separately before parsing.
+        return path.read_bytes().decode("utf-8"), str(path), path.parent
     return value, "<text>", Path.cwd()
 
 
