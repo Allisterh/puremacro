@@ -138,6 +138,7 @@ KEYWORDS = {
     "varobs",
     "model",
     "initval",
+    "steady",
     "steady_state_model",
     "shocks",
     "estimated_params",
@@ -620,6 +621,39 @@ def _render_equations_hoisted(
     names: dict[Node, str] = {}
     ns = ("lead", "curr", "lag", "shocks", "params")
 
+    def emit_ss(node: Node, defining: bool = False) -> str:
+        if not defining and isinstance(node, _COMPOSITE):
+            t = names.get(node)
+            if t is not None:
+                return t
+        if isinstance(node, Param):
+            return pnames[node.name]
+        if isinstance(node, Const):
+            return str(node.value)
+        if isinstance(node, Var):
+            if shock_names and node.name in shock_names:
+                raise ModelError(f"STEADY_STATE() cannot contain exogenous variable {node.name!r}")
+            return _py_attr("steady_state", node.name)
+        if isinstance(node, UnaryOp):
+            return f"({node.op}{emit_ss(node.expr)})"
+        if isinstance(node, BinOp):
+            py_op = "**" if node.op == "^" else node.op
+            return f"({emit_ss(node.left)} {py_op} {emit_ss(node.right)})"
+        if isinstance(node, Call):
+            fn = node.func.lower()
+            if fn == "steady_state":
+                return emit_ss(node.args[0])
+            return node.python_call([emit_ss(a) for a in node.args])
+        return node.to_python(
+            "steady_state",
+            "steady_state",
+            "steady_state",
+            "shocks",
+            "params",
+            shock_names=shock_names,
+            steady_state_ns="steady_state",
+        )
+
     def emit(node: Node, defining: bool = False) -> str:
         if not defining and isinstance(node, _COMPOSITE):
             t = names.get(node)
@@ -633,6 +667,8 @@ def _render_equations_hoisted(
             py_op = "**" if node.op == "^" else node.op
             return f"({emit(node.left)} {py_op} {emit(node.right)})"
         if isinstance(node, Call):
+            if node.func.lower() == "steady_state":
+                return emit_ss(node.args[0])
             return node.python_call([emit(a) for a in node.args])
         return node.to_python(*ns, shock_names=shock_names)
 
@@ -837,10 +873,12 @@ class ParsedModelDAG:
     def compile_equations(self) -> Callable:
         """Compile AST equations into a Python callable compatible with legacy LinearModel.
 
-        The callable is ``eqs(lead, curr, lag, shocks, params)`` and reads
+        The callable is ``eqs(lead, curr, lag, shocks, params, steady_state=None)`` and reads
         every parameter, including those inside model-local variables, from
         ``params`` on each call. Names that are Python keywords (a parameter
         called ``lambda``) are read with ``getattr(params, 'lambda')``.
+        Dynamic callers supply a fixed ``steady_state`` namespace for
+        ``STEADY_STATE()``; static callers omit it to use ``curr``.
 
         Each parameter is read once per call, and every parameter-only
         sub-expression (typically an inlined ``#`` local such as SW07's
@@ -851,7 +889,11 @@ class ParsedModelDAG:
         prologue, py_exprs = _render_equations_hoisted(
             self.equations, set(self.shocks)
         )
-        code_body = "def _generated_equations(lead, curr, lag, shocks, params):\n"
+        code_body = (
+            "def _generated_equations(lead, curr, lag, shocks, params, steady_state=None):\n"
+            "    if steady_state is None:\n"
+            "        steady_state = curr\n"
+        )
         for line in prologue:
             code_body += f"    {line}\n"
         code_body += "    return [\n"
@@ -1103,6 +1145,12 @@ class Parser:
                 self._expect("LPAREN")
                 expr = self.parse_expression()
                 self._expect("RPAREN")
+                forbidden = {name for name, _ in expr.variables()} & set(self.shocks + self.det_shocks)
+                if forbidden:
+                    raise ModelError(
+                        "STEADY_STATE() cannot contain exogenous variables: "
+                        + ", ".join(sorted(forbidden))
+                    )
                 return Call("STEADY_STATE", (expr,))
 
             # Operator diff(expr) -> expr - expr(-1)
@@ -1727,6 +1775,10 @@ class Parser:
             self.commands.append(
                 {"command": "perfect_foresight_solver", "options": dict(self.perfect_foresight_options), "variables": var_list}
             )
+        else:
+            self.commands.append(
+                {"command": kw, "options": dict(self.perfect_foresight_options), "variables": var_list}
+            )
 
     def _parse_shock_groups_block(self) -> None:
         """Parse Dynare shock_groups; or shock_groups(name = ...); block."""
@@ -2075,6 +2127,9 @@ class Parser:
                     self.steady_state_defs = self._parse_assignment_block(
                         "steady_state_model"
                     )
+                elif t.value == "steady":
+                    opts, var_list = self._parse_command_options_and_vars("steady")
+                    self.commands.append({"command": "steady", "options": opts, "variables": var_list})
                 elif t.value == "shocks":
                     self._parse_shocks_block()
                 elif t.value == "stoch_simul":
@@ -2258,6 +2313,29 @@ class Parser:
                 self.planner_objective = _substitute_locals(
                     self.planner_objective, resolved_locals
                 ).simplify()
+
+        # Check after local expansion as well: a model-local shorthand may
+        # hide an exogenous variable inside STEADY_STATE. Native Dynare rejects
+        # this construct; silently using zero changes the declared model.
+        def validate_steady_state(node: Node) -> None:
+            if isinstance(node, Call):
+                if node.func.lower() == "steady_state":
+                    forbidden = {name for name, _ in node.variables()} & set(self.shocks + self.det_shocks)
+                    if forbidden:
+                        raise ModelError(
+                            "STEADY_STATE() cannot contain exogenous variables: "
+                            + ", ".join(sorted(forbidden))
+                        )
+                for arg in node.args:
+                    validate_steady_state(arg)
+            elif isinstance(node, BinOp):
+                validate_steady_state(node.left)
+                validate_steady_state(node.right)
+            elif isinstance(node, UnaryOp):
+                validate_steady_state(node.expr)
+
+        for equation in self.equations:
+            validate_steady_state(equation)
 
         # ---------------------------------------------------------------------
         # Post-Processing: Multi-Period Lead/Lag & Dated Exogenous Shock Expansion

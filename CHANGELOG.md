@@ -7,6 +7,12 @@ This changelog describes versioned source changes. Check
 Versions 5.3.0, 5.4.0 and 5.4.1 were tagged but not published to PyPI; their
 additions are included in 5.4.2. See the [release procedure](RELEASING.md).
 
+## Unreleased
+
+### Fixed
+
+- Fix `STEADY_STATE(expr)` in dynamic trajectory evaluation (`solve_perfect_foresight`, `simulate_surprise_shocks`, `extended_path`, OccBin, and `mcp=True`). Previously, `STEADY_STATE(expr)` evaluated to current path values instead of the model's steady state, while the Jacobian treated it as having zero derivative, leading to silently wrong simulation paths. Steady-state values are now correctly evaluated from the steady-state vector and match Dynare reference parity across all trajectory paths ([#177](https://github.com/jalonso1979/puremacro/issues/177)).
+
 ## 5.4.2 (2026-10-22)
 
 **Release of the 5.4.1 changes.** The `v5.4.1` tag was never published:
