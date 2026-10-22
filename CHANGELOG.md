@@ -4,8 +4,24 @@ This file records user-visible changes per release. Internal refactors that don'
 
 This changelog describes versioned source changes. Check
 [PyPI](https://pypi.org/project/puremacro/) for published distributions.
-Versions 5.3.0 and 5.4.0 were tagged but not published to PyPI; their additions
-are included in 5.4.1. See the [release procedure](RELEASING.md).
+Versions 5.3.0, 5.4.0 and 5.4.1 were tagged but not published to PyPI; their
+additions are included in 5.4.2. See the [release procedure](RELEASING.md).
+
+## 5.4.2 (2026-10-22)
+
+**Release of the 5.4.1 changes.** The `v5.4.1` tag was never published:
+python-dateutil 3.0.0 appeared on PyPI 26 minutes before the tag, and with it
+pandas 3.0.6 cannot localise any dateutil timezone (pandas reads a UTC offset
+that dateutil 3 returns as `None`), so a store test that builds a dateutil
+timestamp failed on the release run. No library code changes.
+
+### Internal
+
+- `test_dateutil_named_timestamp_retains_zone_offset_and_nanoseconds` skips, with
+  the reason, when the installed pandas cannot do arithmetic on a dateutil
+  timestamp. pandas fails before puremacro is involved, so the store path the
+  test covers is unreachable for that combination; it runs normally with
+  python-dateutil 2.x or a pandas release that supports dateutil 3.
 
 ## 5.4.1 (2026-10-20)
 
