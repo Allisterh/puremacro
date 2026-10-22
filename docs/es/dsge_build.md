@@ -213,7 +213,7 @@ m = dsge.load_mod(mod_macro)
     El ejecutor actual procesa los comandos por categoría; no es un intérprete general del orden del código fuente. Las declaraciones repetidas de `stoch_simul` combinan sus opciones en una sola invocación, sin conservar resultados separados para cada declaración. Algunas instrucciones de nivel superior no reconocidas pueden omitirse sin diagnóstico. Para realizar ejecuciones separadas o cambiar la calibración, use llamadas explícitas de Python admitidas y conserve cada resultado. Que `load_mod` cargue un archivo correctamente no valida la compatibilidad con todo su contenido.
 
 - **Cualquier nombre de Dynare**: un parámetro o una variable con nombre de palabra reservada de Python (`lambda`, `yield`) se analiza y se resuelve.
-- **Operadores Especiales**: Soporte para `STEADY_STATE(x)` y `diff(x)`. `EXPECTATION(k)(x)` se analiza sintácticamente, pero su residuo compilado lanza `NameError`, así que un modelo que lo use todavía no puede resolverse.
+- **Operadores especiales**: Soporte para `STEADY_STATE(x)` y `diff(x)`. `STEADY_STATE` usa una referencia fija al evaluar trayectorias y derivadas; su expresión no puede contener variables exógenas. Las condiciones terminales de previsión perfecta distinguen `endval` literal de `endval` seguido de `steady`; véase el [aviso de corrección](ADVISORY.md). `EXPECTATION(k)(x)` se analiza sintácticamente, pero su residuo compilado lanza `NameError`, así que un modelo que lo use todavía no puede resolverse.
 - **Funciones Trascendentes**: Análisis sintáctico y diferenciación analítica exacta para `exp`, `log`, `sin`, `cos`, `tan`, `normcdf`, `normpdf`, `erf`, `abs` y `sign`.
 
 #### Diferenciación Simbólica y Eliminación de Subexpresiones Comunes (CSE)

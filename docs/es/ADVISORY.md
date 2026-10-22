@@ -14,6 +14,34 @@ sin volver a correrla) y qué hacer.
 
 ---
 
+## 2026-10-22 — `STEADY_STATE()` usaba valores de la trayectoria, reproducido en 5.4.2
+
+**Corregido en el código de 5.5.0.** Consulte [PyPI](https://pypi.org/project/puremacro/)
+para verificar su publicación. En una trayectoria no lineal, `STEADY_STATE(expr)`
+podía evaluar la expresión con los valores corrientes de la trayectoria aunque
+su derivada se trataba como cero. Una regla como
+`tax = rate * STEADY_STATE(output)` podía cambiar su referencia al cambiar la
+producción. La convergencia del solucionador no demostraba que se hubieran
+resuelto las ecuaciones pretendidas.
+
+Vuelva a ejecutar los cálculos afectados de previsión perfecta, MCP, choques
+sorpresa, extended path y OccBin con la corrección. Los modelos sin este operador
+no están afectados por este defecto concreto. La referencia ahora permanece
+fija al evaluar la trayectoria y los jacobianos. Se rechazan variables exógenas
+dentro del operador, igual que en Dynare.
+
+Las asignaciones terminales también conservan su significado: un bloque
+`endval` de `.mod` fija valores literales de frontera; seguido de `steady`, o
+con la opción admitida `endval_steady`, solicita resolver un equilibrio terminal.
+Los casos de referencia ejecutados en Dynare distinguen valores terminales de
+3 y 2. En llamadas de Python, `y_end` explícito tiene prioridad; un `endval`
+con sólo valores exógenos solicita resolver el estado estacionario terminal.
+
+Véanse la [incidencia #177](https://github.com/jalonso1979/puremacro/issues/177) y
+los [casos de referencia versionados](https://github.com/jalonso1979/puremacro/tree/main/tests/fixtures/dynare_issue_177).
+
+---
+
 ## 2026-10-03 — la tabla ICIO incluida en las versiones hasta 4.8.1 colocaba mal la demanda final del resto del mundo, todas las versiones hasta 4.8.1
 
 **No es un defecto del solucionador; es un segundo defecto de los datos

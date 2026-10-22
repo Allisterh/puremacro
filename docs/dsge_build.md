@@ -268,7 +268,7 @@ m = dsge.load_mod(mod_macro)
     The current runner dispatches commands by category; it is not a general interpreter of source order. Repeated `stoch_simul` declarations merge their options into a single invocation, without retaining separate results for each declaration. Some unrecognized top-level statements may be skipped without a diagnostic. For separate runs or calibration changes, use supported explicit Python calls and retain each result. A successful `load_mod` call does not validate compatibility with the entire file.
 
 - **Any Dynare name**: a parameter or variable named like a Python keyword (`lambda`, `yield`) parses and solves.
-- **Special Operators**: Supports `STEADY_STATE(x)` and `diff(x)`. `EXPECTATION(k)(x)` is parsed, but its compiled residual raises `NameError`, so a model that uses it cannot be solved yet.
+- **Special Operators**: Supports `STEADY_STATE(x)` and `diff(x)`. `STEADY_STATE` uses a fixed reference during trajectory and derivative evaluation; its expression cannot contain exogenous variables. Perfect-foresight terminal assignments follow the distinction between literal `endval` and `endval` followed by `steady`; see the [correctness advisory](ADVISORY.md). `EXPECTATION(k)(x)` is parsed, but its compiled residual raises `NameError`, so a model that uses it cannot be solved yet.
 - **Transcendental Functions**: Full parsing and analytical differentiation for `exp`, `log`, `sin`, `cos`, `tan`, `normcdf`, `normpdf`, `erf`, `abs`, and `sign`.
 
 #### Symbolic Differentiation & Common Subexpression Elimination (CSE)
