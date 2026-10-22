@@ -14,6 +14,7 @@ Slice 6a adds:
 """
 from __future__ import annotations
 
+import functools
 import re
 from typing import Iterable, Iterator
 
@@ -103,6 +104,12 @@ def _is_negated(norm: str, hit_start: int, language: str) -> bool:
     return any(t in markers for t in tokens[-_NEG_WINDOW:])
 
 
+@functools.lru_cache(maxsize=1024)
+def _get_term_regex(term: str) -> re.Pattern[str]:
+    """Reuse escaped, whole-word patterns across document scoring calls."""
+    return re.compile(r"\b" + re.escape(term.lower()) + r"\b")
+
+
 def count_keywords(
     text: str,
     terms: frozenset[str],
@@ -126,8 +133,7 @@ def count_keywords(
             return sum(norm.count(t) for t in terms)
         n = 0
         for t in terms:
-            rx = r"\b" + re.escape(t.lower()) + r"\b"
-            n += len(re.findall(rx, norm))
+            n += len(_get_term_regex(t).findall(norm))
         return n
     # Negation-aware count: iterate matches and check the preceding window.
     n = 0
@@ -143,8 +149,7 @@ def count_keywords(
                 start = i + len(t)
         return n
     for t in terms:
-        rx = r"\b" + re.escape(t.lower()) + r"\b"
-        for m in re.finditer(rx, norm):
+        for m in _get_term_regex(t).finditer(norm):
             if not _is_negated(norm, m.start(), language):
                 n += 1
     return n
