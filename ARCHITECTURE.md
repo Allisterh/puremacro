@@ -350,6 +350,17 @@ These are the load-bearing imports. If you change one of these arrows, double-ch
 
 ---
 
+DSGE trajectory and numerical derivative callers share the private
+`dsge/_equations._steady_state_adapter`: only an explicitly declared
+`steady_state` callback parameter receives the fixed reference namespace.
+The adapter inspects the signature once and does not retry residual-body
+errors with another signature. Parsed equations use the contemporaneous
+vector only during static evaluation; perfect foresight, extended path,
+and OccBin freeze the reference while the trajectory or derivative probe
+changes. Perfect foresight distinguishes literal `endval` boundaries from
+an `endval` followed by `steady` or `endval_steady`, validated against native
+Dynare fixtures under `tests/fixtures/dynare_issue_177/`.
+
 ## Stability tiers
 
 | Module | Tier | Notes |

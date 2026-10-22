@@ -49,6 +49,7 @@ from puremacro.dsge.build import (
     _jacobian,
     _verify_jacobian,
 )
+from puremacro.dsge._equations import _steady_state_adapter
 from puremacro.dsge._estimated_params import (
     parse_estimated_params,
     parse_estimated_params_bounds,
@@ -146,45 +147,32 @@ def _lead_lag_jacobians(
     ss_arr = np.asarray(ss_arr, dtype=float)
     e_zero = np.zeros(n_shocks)
 
+    evaluate = _steady_state_adapter(equations)
+    ss_v = _Vec(variables, ss_arr)
+
     def f_lead(v):
         d = np.asarray(v).dtype
-        ss_v = _Vec(variables, ss_arr.astype(d))
-        try:
-            return equations(_Vec(variables, v), _Vec(variables, ss_arr.astype(d)),
-                             _Vec(variables, ss_arr.astype(d)), _Vec(shocks, e_zero.astype(d)), par_vec, ss_v)
-        except TypeError:
-            return equations(_Vec(variables, v), _Vec(variables, ss_arr.astype(d)),
-                             _Vec(variables, ss_arr.astype(d)), _Vec(shocks, e_zero.astype(d)), par_vec)
+        return evaluate(_Vec(variables, v), _Vec(variables, ss_arr.astype(d)),
+                        _Vec(variables, ss_arr.astype(d)), _Vec(shocks, e_zero.astype(d)),
+                        par_vec, steady_state=ss_v)
 
     def f_curr(v):
         d = np.asarray(v).dtype
-        ss_v = _Vec(variables, ss_arr.astype(d))
-        try:
-            return equations(_Vec(variables, ss_arr.astype(d)), _Vec(variables, v),
-                             _Vec(variables, ss_arr.astype(d)), _Vec(shocks, e_zero.astype(d)), par_vec, ss_v)
-        except TypeError:
-            return equations(_Vec(variables, ss_arr.astype(d)), _Vec(variables, v),
-                             _Vec(variables, ss_arr.astype(d)), _Vec(shocks, e_zero.astype(d)), par_vec)
+        return evaluate(_Vec(variables, ss_arr.astype(d)), _Vec(variables, v),
+                        _Vec(variables, ss_arr.astype(d)), _Vec(shocks, e_zero.astype(d)),
+                        par_vec, steady_state=ss_v)
 
     def f_lag(v):
         d = np.asarray(v).dtype
-        ss_v = _Vec(variables, ss_arr.astype(d))
-        try:
-            return equations(_Vec(variables, ss_arr.astype(d)), _Vec(variables, ss_arr.astype(d)),
-                             _Vec(variables, v), _Vec(shocks, e_zero.astype(d)), par_vec, ss_v)
-        except TypeError:
-            return equations(_Vec(variables, ss_arr.astype(d)), _Vec(variables, ss_arr.astype(d)),
-                             _Vec(variables, v), _Vec(shocks, e_zero.astype(d)), par_vec)
+        return evaluate(_Vec(variables, ss_arr.astype(d)), _Vec(variables, ss_arr.astype(d)),
+                        _Vec(variables, v), _Vec(shocks, e_zero.astype(d)),
+                        par_vec, steady_state=ss_v)
 
     def f_shock(e):
         d = np.asarray(e).dtype
-        ss_v = _Vec(variables, ss_arr.astype(d))
-        try:
-            return equations(_Vec(variables, ss_arr.astype(d)), _Vec(variables, ss_arr.astype(d)),
-                             _Vec(variables, ss_arr.astype(d)), _Vec(shocks, e), par_vec, ss_v)
-        except TypeError:
-            return equations(_Vec(variables, ss_arr.astype(d)), _Vec(variables, ss_arr.astype(d)),
-                             _Vec(variables, ss_arr.astype(d)), _Vec(shocks, e), par_vec)
+        return evaluate(_Vec(variables, ss_arr.astype(d)), _Vec(variables, ss_arr.astype(d)),
+                        _Vec(variables, ss_arr.astype(d)), _Vec(shocks, e),
+                        par_vec, steady_state=ss_v)
 
     A_plus = _jacobian(f_lead, ss_arr, n_vars, method)
     A_0 = _jacobian(f_curr, ss_arr, n_vars, method)

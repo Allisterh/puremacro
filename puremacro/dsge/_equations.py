@@ -13,8 +13,10 @@ def _steady_state_adapter(equations: Callable) -> Callable:
     an incompatible signature. Callables without an inspectable signature use
     the legacy calling convention.
     """
+    signature: inspect.Signature | None = None
     try:
-        parameter = inspect.signature(equations).parameters.get("steady_state")
+        signature = inspect.signature(equations)
+        parameter = signature.parameters.get("steady_state")
     except (TypeError, ValueError):
         parameter = None
 
@@ -25,8 +27,14 @@ def _steady_state_adapter(equations: Callable) -> Callable:
         def evaluate(*args: Any, steady_state: Any) -> Any:
             return equations(*args, steady_state=steady_state)
     elif parameter is not None and parameter.kind == inspect.Parameter.POSITIONAL_ONLY:
+        assert signature is not None
+        positional_signature = signature
+
         def evaluate(*args: Any, steady_state: Any) -> Any:
-            return equations(*args, steady_state)
+            bound = positional_signature.bind_partial(*args)
+            bound.arguments["steady_state"] = steady_state
+            bound.apply_defaults()
+            return equations(*bound.args, **bound.kwargs)
     else:
         def evaluate(*args: Any, steady_state: Any) -> Any:
             return equations(*args)

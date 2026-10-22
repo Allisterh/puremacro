@@ -844,32 +844,23 @@ class Call(Node):
     ) -> float:
         fn = self.func.lower()
         if fn == "steady_state":
-            ss_source = None
+            ss_source = var_values
             if "_steady_state" in var_values and isinstance(var_values["_steady_state"], Mapping):
                 ss_source = var_values["_steady_state"]
             elif "steady_state" in var_values and isinstance(var_values["steady_state"], Mapping):
                 ss_source = var_values["steady_state"]
-            if ss_source is not None:
-                ss_map: dict[tuple[str, int] | str, float] = {}
-                for k, v in ss_source.items():
-                    if isinstance(k, tuple):
-                        ss_map[k] = float(v)
-                        ss_map[k[0]] = float(v)
-                        ss_map[(k[0], 0)] = float(v)
-                    else:
-                        ss_map[k] = float(v)
-                        ss_map[(k, 0)] = float(v)
-                return self.args[0].eval(ss_map, param_values)
-
-            # For STEADY_STATE(expr), evaluate with coordinates mapped to lead=0 (steady-state values)
+            # All time indices, including nested STEADY_STATE calls, resolve
+            # to the contemporaneous reference. Lead/lag entries must not
+            # overwrite it according to arbitrary mapping insertion order.
             ss_var_values: dict[tuple[str, int] | str, float] = {}
-            for k, v in var_values.items():
-                if isinstance(k, tuple):
-                    ss_var_values[(k[0], 0)] = v
-                    ss_var_values[k[0]] = v
-                else:
+            for k, v in ss_source.items():
+                if isinstance(k, str) and not isinstance(v, Mapping):
                     ss_var_values[k] = v
                     ss_var_values[(k, 0)] = v
+            for k, v in ss_source.items():
+                if isinstance(k, tuple) and k[1] == 0:
+                    ss_var_values[k] = v
+                    ss_var_values[k[0]] = v
             return self.args[0].eval(ss_var_values, param_values)
 
         arg_vals = [a.eval(var_values, param_values) for a in self.args]

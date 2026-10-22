@@ -38,6 +38,9 @@ import scipy.sparse as sp
 import scipy.sparse.linalg as spla
 
 
+from ._equations import _steady_state_adapter
+
+
 # Relative tolerance on the Newton STEP.
 _STEP_TOL = 1e-10
 # Armijo sufficient-decrease constant for backtracking line search.
@@ -616,7 +619,15 @@ def solve_perfect_foresight(
     histval: Mapping[str, float] | None = None,
     endval: Mapping[str, float] | None = None,
 ) -> PerfectForesightResult | MCPResult:
-    r"""Solve dynamic non-linear model under perfect foresight using stacked Newton-Raphson or Semismooth Newton MCP."""
+    r"""Solve a nonlinear perfect-foresight path, optionally with MCP bounds.
+
+    ``y_end`` (or ``y_ss``) supplies the terminal boundary and the fixed
+    ``STEADY_STATE()`` reference. A parsed ``endval`` supplies literal terminal
+    values unless followed by ``steady`` or ``endval_steady``. For the Python
+    ``endval`` argument, endogenous values are literal; an exogenous-only
+    mapping requests a terminal steady-state solve. Residual callables may
+    explicitly declare a ``steady_state`` argument to receive this reference.
+    """
     from puremacro.dsge.build import _Vec
 
     # 1. Resolve horizon
@@ -661,18 +672,23 @@ def solve_perfect_foresight(
     if model is not None:
         v_names_list = list(variable_names or model.variables)
         s_names_list = list(model.shocks)
-        p_dict = model._params or getattr(model, "parameter_values", {}) or {}
+        p_dict = getattr(model, "_params", None) or getattr(model, "parameter_values", {}) or {}
         p_vec = _Vec(list(p_dict.keys()), list(p_dict.values()), what="parameter")
 
         dyn_eqs = getattr(model, "_dynare_equations", None)
         if dyn_eqs is None and hasattr(model, "compile_equations"):
             dyn_eqs = model.compile_equations()
 
-        ss_dict = model.steady_state.to_dict() if hasattr(model.steady_state, "to_dict") else dict(model.steady_state or {})
+        ss_source = getattr(model, "steady_state", None)
+        if ss_source is None:
+            ss_source = getattr(model, "guess", None)
+        ss_dict = ss_source.to_dict() if ss_source is not None and hasattr(ss_source, "to_dict") else dict(ss_source or {})
         base_ss = np.array([float(ss_dict.get(v, 0.0)) for v in v_names_list], dtype=float)
 
         # Handle histval override
-        eff_histval = histval or getattr(model, "_histval", None)
+        eff_histval = histval if histval is not None else getattr(
+            model, "_histval", getattr(model, "histval_values", None)
+        )
         if y_init is None:
             y_init_arr = base_ss.copy()
             if eff_histval:
@@ -683,16 +699,38 @@ def solve_perfect_foresight(
             y_init_arr = np.asarray(y_init, dtype=float).ravel()
 
         # Handle endval override / terminal steady state solve
-        eff_endval = endval or getattr(model, "_endval", None)
+        eff_endval = endval if endval is not None else getattr(
+            model, "_endval", getattr(model, "endval_values", None)
+        )
         if y_end is not None:
             y_ss_arr = np.asarray(y_end, dtype=float).ravel()
         elif y_ss is not None:
             y_ss_arr = np.asarray(y_ss, dtype=float).ravel()
         elif eff_endval:
-            try:
-                y_ss_arr = find_steady_state(model, exo_values=eff_endval, params=eff_endval, tol=tol)
-            except Exception:
-                y_ss_arr = np.array([float(eff_endval.get(v, base_ss[i])) for i, v in enumerate(v_names_list)], dtype=float)
+            terminal_guess = np.array([
+                float(eff_endval.get(v, base_ss[i])) for i, v in enumerate(v_names_list)
+            ], dtype=float)
+            solve_terminal = not any(v in eff_endval for v in v_names_list)
+            if endval is None:
+                # A bare .mod endval is a boundary assignment, not a request
+                # to silently replace that assignment by a static solution.
+                dag = getattr(model, "_dag", model)
+                solve_terminal = False
+                after_endval = False
+                for command in getattr(dag, "commands", ()):
+                    name = command.get("command")
+                    if name == "endval":
+                        after_endval = True
+                        solve_terminal = False
+                    elif after_endval and name == "steady":
+                        solve_terminal = True
+                    elif after_endval and name in ("perfect_foresight_setup", "perfect_foresight_solver", "simul"):
+                        solve_terminal |= bool(command.get("options", {}).get("endval_steady", False))
+            if solve_terminal:
+                y_ss_arr = find_steady_state(model, exo_values=eff_endval,
+                                            guess=terminal_guess.tolist(), tol=tol)
+            else:
+                y_ss_arr = terminal_guess
         else:
             y_ss_arr = base_ss.copy()
 
@@ -716,6 +754,9 @@ def solve_perfect_foresight(
             else:
                 raise ValueError(f"shocks length ({exo_arr.shape[0]}) must be at least n_periods ({eff_periods})")
 
+        if dyn_eqs is None:
+            raise ValueError("Model has no dynamic residual equations")
+        evaluate_model = _steady_state_adapter(dyn_eqs)
         ss_vec = _Vec(v_names_list, y_ss_arr, what="variable")
 
         def eq_wrapper(yp, yc, yl, eps):
@@ -723,10 +764,7 @@ def solve_perfect_foresight(
             yc_v = _Vec(v_names_list, yc, what="variable")
             yl_v = _Vec(v_names_list, yl, what="variable")
             eps_v = _Vec(s_names_list, np.atleast_1d(eps), what="shock")
-            try:
-                return dyn_eqs(yp_v, yc_v, yl_v, eps_v, p_vec, ss_vec)
-            except TypeError:
-                return dyn_eqs(yp_v, yc_v, yl_v, eps_v, p_vec)
+            return evaluate_model(yp_v, yc_v, yl_v, eps_v, p_vec, steady_state=ss_vec)
 
         eq_fn = eq_wrapper
         v_names = tuple(v_names_list)
@@ -753,13 +791,10 @@ def solve_perfect_foresight(
         else:
             v_names = tuple(f"y_{i}" for i in range(len(y_init_arr)))
 
-        orig_callable = eq_fn
+        evaluate_callable = _steady_state_adapter(eq_fn)
 
         def eq_wrapper_callable(yp, yc, yl, eps):
-            try:
-                return orig_callable(yp, yc, yl, eps, y_ss_arr)
-            except TypeError:
-                return orig_callable(yp, yc, yl, eps)
+            return evaluate_callable(yp, yc, yl, eps, steady_state=y_ss_arr)
 
         eq_fn = eq_wrapper_callable
 

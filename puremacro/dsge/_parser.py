@@ -138,6 +138,7 @@ KEYWORDS = {
     "varobs",
     "model",
     "initval",
+    "steady",
     "steady_state_model",
     "shocks",
     "estimated_params",
@@ -872,10 +873,12 @@ class ParsedModelDAG:
     def compile_equations(self) -> Callable:
         """Compile AST equations into a Python callable compatible with legacy LinearModel.
 
-        The callable is ``eqs(lead, curr, lag, shocks, params)`` and reads
+        The callable is ``eqs(lead, curr, lag, shocks, params, steady_state=None)`` and reads
         every parameter, including those inside model-local variables, from
         ``params`` on each call. Names that are Python keywords (a parameter
         called ``lambda``) are read with ``getattr(params, 'lambda')``.
+        Dynamic callers supply a fixed ``steady_state`` namespace for
+        ``STEADY_STATE()``; static callers omit it to use ``curr``.
 
         Each parameter is read once per call, and every parameter-only
         sub-expression (typically an inlined ``#`` local such as SW07's
@@ -1766,6 +1769,10 @@ class Parser:
             self.commands.append(
                 {"command": "perfect_foresight_solver", "options": dict(self.perfect_foresight_options), "variables": var_list}
             )
+        else:
+            self.commands.append(
+                {"command": kw, "options": dict(self.perfect_foresight_options), "variables": var_list}
+            )
 
     def _parse_shock_groups_block(self) -> None:
         """Parse Dynare shock_groups; or shock_groups(name = ...); block."""
@@ -2114,6 +2121,9 @@ class Parser:
                     self.steady_state_defs = self._parse_assignment_block(
                         "steady_state_model"
                     )
+                elif t.value == "steady":
+                    opts, var_list = self._parse_command_options_and_vars("steady")
+                    self.commands.append({"command": "steady", "options": opts, "variables": var_list})
                 elif t.value == "shocks":
                     self._parse_shocks_block()
                 elif t.value == "stoch_simul":
