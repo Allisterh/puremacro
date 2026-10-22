@@ -103,7 +103,9 @@ def _preprocess_with_provenance(text: str, *, source: str, base_dir: Path,
     trace.source(source, text)
     token = _TRACE.set(trace)
     try:
-        expanded = preprocess_macro(text, base_dir=base_dir)
+        # The trace retains original bytes (decoded losslessly as UTF-8),
+        # while tokenization uses the universal-newline form of file input.
+        expanded = preprocess_macro(text.replace("\r\n", "\n").replace("\r", "\n"), base_dir=base_dir)
         return expanded, trace
     except Exception as exc:
         # Preserve already read source hashes and include provenance on failure.
@@ -1266,10 +1268,13 @@ class IncludeStmt(Stmt):
         trace = _TRACE.get()
         if trace is not None and resolved_path.stat().st_size > trace.max_bytes:
             raise DynareMacroError("Inspection include size limit exceeded", self.line, self.col)
-        sub_text = resolved_path.read_text(encoding="utf-8")
+        sub_text = resolved_path.read_bytes().decode("utf-8")
         if trace is not None:
             trace.charge()
             trace.source(str(resolved_path), sub_text)
+        # Match read_text's existing universal-newline parsing semantics,
+        # after recording the exact source that was read for inspection.
+        sub_text = sub_text.replace("\r\n", "\n").replace("\r", "\n")
         sub_preprocessed = _preprocess_macro_internal(
             text=sub_text,
             base_dir=resolved_path.parent,

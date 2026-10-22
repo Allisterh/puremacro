@@ -132,6 +132,49 @@ def test_macro_include_loop_provenance_and_unavailable_columns(tmp_path):
     assert {p: p.read_bytes() for p in before} == before
 
 
+@pytest.mark.parametrize("root_newline", ["\n", "\r\n", "\r"], ids=["lf", "crlf", "cr"])
+@pytest.mark.parametrize("include_newline", ["\n", "\r\n", "\r"], ids=["lf", "crlf", "cr"])
+def test_file_hashes_preserve_bytes_across_newlines(tmp_path, root_newline, include_newline):
+    inc = tmp_path / "part.mod"
+    source = tmp_path / "main.mod"
+    inc_text = '// résumé\n@#for v in ["y","x"]\nvar @{v};\n@#endfor\n'
+    root_text = ('@#include "part.mod"\nvarexo e;\n'
+                 'model; y=.5*y(-1)+e; x=.3*x(-1); end;\nstoch_simul(order=1);\n')
+    originals = {
+        inc: inc_text.replace("\n", include_newline).encode("utf-8"),
+        source: root_text.replace("\n", root_newline).encode("utf-8"),
+    }
+    for path, raw in originals.items():
+        path.write_bytes(raw)
+    report = inspect_mod(source, ordered=True)
+    assert report.exit_code == 0
+    assert report.source_hashes == {
+        str(path): hashlib.sha256(raw).hexdigest() for path, raw in originals.items()
+    }
+    assert {path: path.read_bytes() for path in originals} == originals
+    declarations = [s for s in report.statements if s.name == "var"]
+    assert len(declarations) == 2
+    assert {s.location.line for s in declarations} == {3}
+    assert {s.location.source for s in declarations} == {str(inc)}
+    assert all(s.location.include_chain == (str(source), str(inc)) for s in declarations)
+    equations = [s for s in report.statements if s.category == "equation"]
+    assert len(equations) == 2
+    assert {s.location.line for s in equations} == {3}
+    assert {s.location.source for s in equations} == {str(source)}
+    command = next(s for s in report.statements if s.name == "stoch_simul")
+    assert (command.location.line, command.location.column) == (4, 1)
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n", "\r"], ids=["lf", "crlf", "cr"])
+def test_inline_macro_only_source_preserves_hash_and_line_numbers(newline):
+    source = '@#define n = 1\n@#define m = 2\n'.replace("\n", newline)
+    report = inspect_mod(source)
+    assert report.coverage == "complete"
+    assert report.source_hashes == {"<text>": hashlib.sha256(source.encode("utf-8")).hexdigest()}
+    assert codes(report) == {"MISSING_MODEL"}
+    assert [s.location.line for s in report.statements] == [1, 2]
+
+
 @pytest.mark.parametrize("tail", ['@#include "missing.mod"', '@#for i in 1:1000000000\nvar y@{i};\n@#endfor', '@#define huge = [1,2]^10000', '@#define huge = "x" * 1000000000'])
 def test_failed_or_excessive_macro_expansion_is_incomplete(tail, tmp_path):
     report = inspect_mod(BASE + tail + "\n", base_dir=tmp_path, macro_limit=100)
@@ -139,12 +182,20 @@ def test_failed_or_excessive_macro_expansion_is_incomplete(tail, tmp_path):
     assert "INSPECTION_INCOMPLETE" in codes(report)
 
 
-def test_nested_failed_include_preserves_read_hashes(tmp_path):
-    (tmp_path / "a.mod").write_text('@#include "b.mod"\n')
-    (tmp_path / "b.mod").write_text('@#include "missing.mod"\n')
+@pytest.mark.parametrize("newline", ["\n", "\r\n", "\r"], ids=["lf", "crlf", "cr"])
+def test_nested_failed_include_preserves_read_hashes(tmp_path, newline):
+    originals = {
+        tmp_path / "a.mod": ('@#include "b.mod"' + newline).encode("utf-8"),
+        tmp_path / "b.mod": ('@#include "missing.mod"' + newline).encode("utf-8"),
+    }
+    for path, raw in originals.items():
+        path.write_bytes(raw)
     report = inspect_mod(tmp_path / "a.mod")
     assert report.exit_code == 2
-    assert set(report.source_hashes) == {str(tmp_path / "a.mod"), str(tmp_path / "b.mod")}
+    assert report.source_hashes == {
+        str(path): hashlib.sha256(raw).hexdigest() for path, raw in originals.items()
+    }
+    assert {path: path.read_bytes() for path in originals} == originals
 
 
 def test_macro_unary_and_inactive_branch_inventory():
