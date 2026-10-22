@@ -91,6 +91,7 @@ class Node:
         shock_ns: str = "shocks",
         param_ns: str = "params",
         shock_names: set[str] | Sequence[str] | None = None,
+        steady_state_ns: str = "steady_state",
     ) -> str:
         """Generate executable Python expression string."""
         raise NotImplementedError
@@ -176,6 +177,7 @@ class Const(Node):
         shock_ns: str = "shocks",
         param_ns: str = "params",
         shock_names: set[str] | Sequence[str] | None = None,
+        steady_state_ns: str = "steady_state",
     ) -> str:
         return str(self.value)
 
@@ -226,6 +228,7 @@ class Param(Node):
         shock_ns: str = "shocks",
         param_ns: str = "params",
         shock_names: set[str] | Sequence[str] | None = None,
+        steady_state_ns: str = "steady_state",
     ) -> str:
         return _py_attr(param_ns, self.name)
 
@@ -286,9 +289,14 @@ class Var(Node):
         shock_ns: str = "shocks",
         param_ns: str = "params",
         shock_names: set[str] | Sequence[str] | None = None,
+        steady_state_ns: str = "steady_state",
     ) -> str:
         if shock_names and self.name in shock_names:
+            if lead_ns == steady_state_ns and curr_ns == steady_state_ns and lag_ns == steady_state_ns:
+                return "0.0"
             return _py_attr(shock_ns, self.name)
+        if lead_ns == steady_state_ns and curr_ns == steady_state_ns and lag_ns == steady_state_ns:
+            return _py_attr(steady_state_ns, self.name)
         if self.lead == 1:
             ns = lead_ns
         elif self.lead > 1:
@@ -381,9 +389,10 @@ class UnaryOp(Node):
         shock_ns: str = "shocks",
         param_ns: str = "params",
         shock_names: set[str] | Sequence[str] | None = None,
+        steady_state_ns: str = "steady_state",
     ) -> str:
         s = self.expr.to_python(
-            lead_ns, curr_ns, lag_ns, shock_ns, param_ns, shock_names
+            lead_ns, curr_ns, lag_ns, shock_ns, param_ns, shock_names, steady_state_ns
         )
         return f"({self.op}{s})"
 
@@ -622,12 +631,13 @@ class BinOp(Node):
         shock_ns: str = "shocks",
         param_ns: str = "params",
         shock_names: set[str] | Sequence[str] | None = None,
+        steady_state_ns: str = "steady_state",
     ) -> str:
         l_str = self.left.to_python(
-            lead_ns, curr_ns, lag_ns, shock_ns, param_ns, shock_names
+            lead_ns, curr_ns, lag_ns, shock_ns, param_ns, shock_names, steady_state_ns
         )
         r_str = self.right.to_python(
-            lead_ns, curr_ns, lag_ns, shock_ns, param_ns, shock_names
+            lead_ns, curr_ns, lag_ns, shock_ns, param_ns, shock_names, steady_state_ns
         )
         py_op = "**" if self.op == "^" else self.op
         return f"({l_str} {py_op} {r_str})"
@@ -834,6 +844,23 @@ class Call(Node):
     ) -> float:
         fn = self.func.lower()
         if fn == "steady_state":
+            ss_source = None
+            if "_steady_state" in var_values and isinstance(var_values["_steady_state"], Mapping):
+                ss_source = var_values["_steady_state"]
+            elif "steady_state" in var_values and isinstance(var_values["steady_state"], Mapping):
+                ss_source = var_values["steady_state"]
+            if ss_source is not None:
+                ss_map: dict[tuple[str, int] | str, float] = {}
+                for k, v in ss_source.items():
+                    if isinstance(k, tuple):
+                        ss_map[k] = float(v)
+                        ss_map[k[0]] = float(v)
+                        ss_map[(k[0], 0)] = float(v)
+                    else:
+                        ss_map[k] = float(v)
+                        ss_map[(k, 0)] = float(v)
+                return self.args[0].eval(ss_map, param_values)
+
             # For STEADY_STATE(expr), evaluate with coordinates mapped to lead=0 (steady-state values)
             ss_var_values: dict[tuple[str, int] | str, float] = {}
             for k, v in var_values.items():
@@ -915,9 +942,27 @@ class Call(Node):
         shock_ns: str = "shocks",
         param_ns: str = "params",
         shock_names: set[str] | Sequence[str] | None = None,
+        steady_state_ns: str = "steady_state",
     ) -> str:
+        fn = self.func.lower()
+        if fn == "steady_state":
+            args_py = [
+                a.to_python(
+                    steady_state_ns,
+                    steady_state_ns,
+                    steady_state_ns,
+                    shock_ns,
+                    param_ns,
+                    shock_names,
+                    steady_state_ns,
+                )
+                for a in self.args
+            ]
+            return self.python_call(args_py)
         args_py = [
-            a.to_python(lead_ns, curr_ns, lag_ns, shock_ns, param_ns, shock_names)
+            a.to_python(
+                lead_ns, curr_ns, lag_ns, shock_ns, param_ns, shock_names, steady_state_ns
+            )
             for a in self.args
         ]
         return self.python_call(args_py)

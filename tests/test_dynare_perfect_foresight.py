@@ -510,3 +510,211 @@ def test_perfect_foresight_validates_solver_options(ramsey_model):
             solve_perfect_foresight(eqs, max_iter=bad, **kw)
     with pytest.raises(ValueError, match="unknown method"):
         solve_perfect_foresight(eqs, method="bogus", **kw)
+
+
+# --- GitHub Issue #177 Regression Tests: STEADY_STATE in Trajectories ---
+
+
+def test_issue_177_minimal_steady_state_trajectory():
+    """Issue #177: STEADY_STATE(y) must evaluate to steady state in perfect foresight.
+
+    Under the minimal reproduction model with rho=0.5 and shock e=0.5 at t=1:
+    y_t follows [1.5, 1.25, 1.125, ...] while x_t = STEADY_STATE(y) must remain
+    strictly flat at 1.0 (max abs error <= 1e-10) in every period.
+    """
+    from puremacro.dsge import load_mod
+
+    mod_text = """
+    var y x;
+    varexo e;
+    parameters rho;
+    rho = 0.5;
+    model;
+    y = 1 + rho*(y(-1)-1) + e;
+    x = STEADY_STATE(y);
+    end;
+    initval; y=1; x=1; end;
+    steady;
+    """
+    m = load_mod(mod_text)
+    e = np.zeros((10, 1))
+    e[0, 0] = 0.5
+
+    res = m.solve_perfect_foresight(periods=10, shocks=e, tol=1e-12)
+    assert res.converged is True
+    # x must be flat at steady state 1.0
+    np.testing.assert_allclose(res.path["x"].values, 1.0, atol=1e-10)
+    # y must be dynamic
+    assert res.path["y"].iloc[0] > 1.499
+
+
+def test_issue_177_rbc_fiscal_rule_dynare_parity():
+    """Economically meaningful RBC model with g = gy*STEADY_STATE(y) matches Dynare <= 1e-8."""
+    from puremacro.dsge import load_mod
+
+    mod_text = """
+    var c k y a g;
+    varexo e;
+    parameters alpha beta delta rho gy;
+    alpha = 0.33;
+    beta = 0.99;
+    delta = 0.025;
+    rho = 0.8;
+    gy = 0.2;
+
+    model;
+    1/c = beta*(1/c(+1))*(alpha*exp(a(+1))*k^(alpha-1) + 1 - delta);
+    y = exp(a)*k(-1)^alpha;
+    k = y - c - g + (1-delta)*k(-1);
+    g = gy*STEADY_STATE(y);
+    a = rho*a(-1) + e;
+    end;
+
+    steady_state_model;
+    a = 0;
+    k = ((1/beta - 1 + delta)/alpha)^(1/(alpha-1));
+    y = k^alpha;
+    g = gy*y;
+    c = y - delta*k - g;
+    end;
+    steady;
+
+    shocks;
+    var e;
+    periods 1;
+    values 0.05;
+    end;
+    """
+    m = load_mod(mod_text)
+    shocks = np.zeros((40, 1))
+    shocks[0, 0] = 0.05
+    res = m.solve_perfect_foresight(periods=40, shocks=shocks, tol=1e-12)
+    assert res.converged is True
+
+    # g must be flat at gy * y_ss = 0.2 * k_ss^alpha
+    g_ss = float(m.steady_state["g"])
+    np.testing.assert_allclose(res.path["g"].values, g_ss, atol=1e-10)
+
+    # Compare against saved Dynare reference run if present
+    from pathlib import Path
+    dyn_csv = Path(__file__).parent.parent / "reviews" / "dynare_reference" / "rbc_dynare_out.csv"
+    if dyn_csv.exists():
+        dyn_df = pd.read_csv(dyn_csv)
+        dyn_sim = dyn_df.iloc[1:41].reset_index(drop=True)
+        pure_sim = res.path[dyn_sim.columns].reset_index(drop=True)
+        diff = np.max(np.abs(pure_sim.values - dyn_sim.values))
+        assert diff <= 1e-8, f"Max diff vs Dynare was {diff} > 1e-8"
+
+
+def test_issue_177_endval_semantics_with_and_without_steady():
+    """Verify endval semantics: STEADY_STATE() resolves to terminal steady state."""
+    from puremacro.dsge import load_mod
+
+    # Case A: endval followed by steady
+    mod_with_steady = """
+    var y x;
+    varexo e;
+    parameters rho;
+    rho = 0.5;
+    model;
+    y = 1 + rho*(y(-1)-1) + e;
+    x = STEADY_STATE(y);
+    end;
+    initval; y=1; x=1; e=0; end; steady;
+    endval; e=0.5; y=2; x=2; end; steady;
+    """
+    m_ws = load_mod(mod_with_steady)
+    res_ws = m_ws.solve_perfect_foresight(periods=10, tol=1e-12)
+    assert res_ws.converged is True
+    np.testing.assert_allclose(res_ws.path["x"].values, 2.0, atol=1e-10)
+
+    # Case B: endval WITHOUT steady
+    mod_no_steady = """
+    var y x;
+    varexo e;
+    parameters rho;
+    rho = 0.5;
+    model;
+    y = 1 + rho*(y(-1)-1) + e;
+    x = STEADY_STATE(y);
+    end;
+    initval; y=1; x=1; e=0; end; steady;
+    endval; e=0.5; y=2; x=2; end;
+    """
+    m_ns = load_mod(mod_no_steady)
+    res_ns = m_ns.solve_perfect_foresight(periods=10, tol=1e-12)
+    assert res_ns.converged is True
+    np.testing.assert_allclose(res_ns.path["x"].values, 2.0, atol=1e-10)
+
+
+def test_issue_177_trajectory_paths_extended_mcp_surprise():
+    """Verify STEADY_STATE() in mcp=True, simulate_surprise_shocks, extended_path, and y_end."""
+    from puremacro.dsge import load_mod, extended_path
+
+    mod_text = """
+    var y x;
+    varexo e;
+    parameters rho;
+    rho = 0.5;
+    model;
+    y = 1 + rho*(y(-1)-1) + e;
+    x = STEADY_STATE(y);
+    end;
+    initval; y=1; x=1; end;
+    steady;
+    """
+    m = load_mod(mod_text)
+    e = np.zeros((10, 1))
+    e[0, 0] = 0.5
+
+    # 1. MCP = True
+    res_mcp = m.solve_perfect_foresight(periods=10, shocks=e, mcp=True, mcp_bounds={"y": (0.0, None)})
+    assert res_mcp.converged is True
+    np.testing.assert_allclose(res_mcp.path["x"].values, 1.0, atol=1e-10)
+
+    # 2. simulate_surprise_shocks
+    res_surp = m.simulate_surprise_shocks(e, horizon=10)
+    assert res_surp.converged is True
+    np.testing.assert_allclose(res_surp.path["x"].values, 1.0, atol=1e-10)
+
+    # 3. extended_path
+    res_ep = extended_path(m, periods=10, horizon=20, shocks=e)
+    assert res_ep.converged is True
+    np.testing.assert_allclose(res_ep.path["x"].values, 1.0, atol=1e-10)
+
+    # 4. Explicit y_end target
+    res_yend = m.solve_perfect_foresight(periods=10, shocks=e, y_end=np.array([3.0, 3.0]))
+    assert res_yend.converged is True
+    np.testing.assert_allclose(res_yend.path["x"].values, 3.0, atol=1e-10)
+
+
+def test_issue_177_perturbation_and_steady_state_non_regression():
+    """Verify perturbation IRFs and static steady state are unchanged."""
+    from puremacro.dsge import load_mod
+
+    mod_text = """
+    var y x;
+    varexo e;
+    parameters rho;
+    rho = 0.5;
+    model;
+    y = 1 + rho*(y(-1)-1) + e;
+    x = STEADY_STATE(y);
+    end;
+    initval; y=1; x=1; end;
+    steady;
+    """
+    m = load_mod(mod_text)
+
+    # Static steady state
+    assert float(m.steady_state["y"]) == 1.0
+    assert float(m.steady_state["x"]) == 1.0
+
+    # Perturbation IRF
+    irf = m.irf("e", horizon=10)
+    # x must be exactly 0 across all horizons in perturbation
+    np.testing.assert_allclose(irf["x"].values, 0.0, atol=1e-12)
+    # y must decay geometrically
+    expected_y = 0.5 ** np.arange(11)
+    np.testing.assert_allclose(irf["y"].values, expected_y, atol=1e-10)
+

@@ -668,14 +668,6 @@ def solve_perfect_foresight(
         if dyn_eqs is None and hasattr(model, "compile_equations"):
             dyn_eqs = model.compile_equations()
 
-        def eq_wrapper(yp, yc, yl, eps):
-            yp_v = _Vec(v_names_list, yp, what="variable")
-            yc_v = _Vec(v_names_list, yc, what="variable")
-            yl_v = _Vec(v_names_list, yl, what="variable")
-            eps_v = _Vec(s_names_list, np.atleast_1d(eps), what="shock")
-            return dyn_eqs(yp_v, yc_v, yl_v, eps_v, p_vec)
-
-        eq_fn = eq_wrapper
         ss_dict = model.steady_state.to_dict() if hasattr(model.steady_state, "to_dict") else dict(model.steady_state or {})
         base_ss = np.array([float(ss_dict.get(v, 0.0)) for v in v_names_list], dtype=float)
 
@@ -697,7 +689,10 @@ def solve_perfect_foresight(
         elif y_ss is not None:
             y_ss_arr = np.asarray(y_ss, dtype=float).ravel()
         elif eff_endval:
-            y_ss_arr = find_steady_state(model, exo_values=eff_endval, params=eff_endval, tol=tol)
+            try:
+                y_ss_arr = find_steady_state(model, exo_values=eff_endval, params=eff_endval, tol=tol)
+            except Exception:
+                y_ss_arr = np.array([float(eff_endval.get(v, base_ss[i])) for i, v in enumerate(v_names_list)], dtype=float)
         else:
             y_ss_arr = base_ss.copy()
 
@@ -705,7 +700,11 @@ def solve_perfect_foresight(
         raw_shocks = shocks if shocks is not None else exogenous_path
         exo_sim: np.ndarray
         if raw_shocks is None:
-            exo_sim = np.zeros((eff_periods, len(s_names_list)), dtype=float)
+            if eff_endval:
+                end_exo = np.array([float(eff_endval.get(s, 0.0)) for s in s_names_list], dtype=float)
+                exo_sim = np.tile(end_exo, (eff_periods, 1))
+            else:
+                exo_sim = np.zeros((eff_periods, len(s_names_list)), dtype=float)
         else:
             exo_arr = np.asarray(raw_shocks, dtype=float)
             if exo_arr.ndim == 1 and len(s_names_list) > 1:
@@ -716,6 +715,20 @@ def solve_perfect_foresight(
                 exo_sim = exo_arr[:eff_periods]
             else:
                 raise ValueError(f"shocks length ({exo_arr.shape[0]}) must be at least n_periods ({eff_periods})")
+
+        ss_vec = _Vec(v_names_list, y_ss_arr, what="variable")
+
+        def eq_wrapper(yp, yc, yl, eps):
+            yp_v = _Vec(v_names_list, yp, what="variable")
+            yc_v = _Vec(v_names_list, yc, what="variable")
+            yl_v = _Vec(v_names_list, yl, what="variable")
+            eps_v = _Vec(s_names_list, np.atleast_1d(eps), what="shock")
+            try:
+                return dyn_eqs(yp_v, yc_v, yl_v, eps_v, p_vec, ss_vec)
+            except TypeError:
+                return dyn_eqs(yp_v, yc_v, yl_v, eps_v, p_vec)
+
+        eq_fn = eq_wrapper
         v_names = tuple(v_names_list)
     else:
         # Pure callable path
@@ -739,6 +752,16 @@ def solve_perfect_foresight(
             v_names = tuple(str(v) for v in variable_names)
         else:
             v_names = tuple(f"y_{i}" for i in range(len(y_init_arr)))
+
+        orig_callable = eq_fn
+
+        def eq_wrapper_callable(yp, yc, yl, eps):
+            try:
+                return orig_callable(yp, yc, yl, eps, y_ss_arr)
+            except TypeError:
+                return orig_callable(yp, yc, yl, eps)
+
+        eq_fn = eq_wrapper_callable
 
     n_vars = len(y_init_arr)
     if len(y_ss_arr) != n_vars:

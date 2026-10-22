@@ -913,7 +913,10 @@ def _extract_model_matrices(model: Any, ref_model: Any | None = None) -> tuple:
                 par_vec = _Vec(list(par_dict.keys()), list(par_dict.values()), what="parameter")
                 y_ss_v = _Vec(variables, ref_ss)
                 e_0_v = _Vec(shocks, np.zeros(n_shocks))
-                res = model._dynare_equations(y_ss_v, y_ss_v, y_ss_v, e_0_v, par_vec)
+                try:
+                    res = model._dynare_equations(y_ss_v, y_ss_v, y_ss_v, e_0_v, par_vec, y_ss_v)
+                except TypeError:
+                    res = model._dynare_equations(y_ss_v, y_ss_v, y_ss_v, e_0_v, par_vec)
                 c = np.asarray(res, dtype=float)
             else:
                 c = np.zeros(n_vars)
@@ -994,56 +997,101 @@ def _differentiate_dynare_eqs(
     A_minus = np.zeros((n_vars, n_vars))
     B_u = np.zeros((n_vars, n_shocks))
 
+    ss_v = _Vec(variables, eval_ss)
+
     for j in range(n_vars):
         pert_p = base_ss.copy()
         pert_p[j] += 1j * step
-        out_p = equations(
-            _Vec(variables, pert_p),
-            _Vec(variables, base_ss),
-            _Vec(variables, base_ss),
-            _Vec(shocks, base_e),
-            par_vec,
-        )
+        try:
+            out_p = equations(
+                _Vec(variables, pert_p),
+                _Vec(variables, base_ss),
+                _Vec(variables, base_ss),
+                _Vec(shocks, base_e),
+                par_vec,
+                ss_v,
+            )
+        except TypeError:
+            out_p = equations(
+                _Vec(variables, pert_p),
+                _Vec(variables, base_ss),
+                _Vec(variables, base_ss),
+                _Vec(shocks, base_e),
+                par_vec,
+            )
         A_plus[:, j] = np.asarray(out_p, dtype=complex).imag / step
 
         pert_0 = base_ss.copy()
         pert_0[j] += 1j * step
-        out_0 = equations(
-            _Vec(variables, base_ss),
-            _Vec(variables, pert_0),
-            _Vec(variables, base_ss),
-            _Vec(shocks, base_e),
-            par_vec,
-        )
+        try:
+            out_0 = equations(
+                _Vec(variables, base_ss),
+                _Vec(variables, pert_0),
+                _Vec(variables, base_ss),
+                _Vec(shocks, base_e),
+                par_vec,
+                ss_v,
+            )
+        except TypeError:
+            out_0 = equations(
+                _Vec(variables, base_ss),
+                _Vec(variables, pert_0),
+                _Vec(variables, base_ss),
+                _Vec(shocks, base_e),
+                par_vec,
+            )
         A_0[:, j] = np.asarray(out_0, dtype=complex).imag / step
 
         pert_m = base_ss.copy()
         pert_m[j] += 1j * step
-        out_m = equations(
-            _Vec(variables, base_ss),
-            _Vec(variables, base_ss),
-            _Vec(variables, pert_m),
-            _Vec(shocks, base_e),
-            par_vec,
-        )
+        try:
+            out_m = equations(
+                _Vec(variables, base_ss),
+                _Vec(variables, base_ss),
+                _Vec(variables, pert_m),
+                _Vec(shocks, base_e),
+                par_vec,
+                ss_v,
+            )
+        except TypeError:
+            out_m = equations(
+                _Vec(variables, base_ss),
+                _Vec(variables, base_ss),
+                _Vec(variables, pert_m),
+                _Vec(shocks, base_e),
+                par_vec,
+            )
         A_minus[:, j] = np.asarray(out_m, dtype=complex).imag / step
 
     for j in range(n_shocks):
         pert_e = base_e.copy()
         pert_e[j] += 1j * step
-        out_e = equations(
-            _Vec(variables, base_ss),
-            _Vec(variables, base_ss),
-            _Vec(variables, base_ss),
-            _Vec(shocks, pert_e),
-            par_vec,
-        )
+        try:
+            out_e = equations(
+                _Vec(variables, base_ss),
+                _Vec(variables, base_ss),
+                _Vec(variables, base_ss),
+                _Vec(shocks, pert_e),
+                par_vec,
+                ss_v,
+            )
+        except TypeError:
+            out_e = equations(
+                _Vec(variables, base_ss),
+                _Vec(variables, base_ss),
+                _Vec(variables, base_ss),
+                _Vec(shocks, pert_e),
+                par_vec,
+            )
         B_u[:, j] = np.asarray(out_e, dtype=complex).imag / step
 
     # Constant / residual evaluated at reference steady state
     y_ss_real = _Vec(variables, eval_ss)
     e_zero_real = _Vec(shocks, np.zeros(n_shocks))
-    res_ss = equations(y_ss_real, y_ss_real, y_ss_real, e_zero_real, par_vec)
+    try:
+        res_ss = equations(y_ss_real, y_ss_real, y_ss_real, e_zero_real, par_vec, ss_v)
+    except TypeError:
+        res_ss = equations(y_ss_real, y_ss_real, y_ss_real, e_zero_real, par_vec)
     const = np.asarray(res_ss, dtype=float)
 
     return A_plus, A_0, A_minus, B_u, const, eval_ss, variables, shocks

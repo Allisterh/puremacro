@@ -164,6 +164,7 @@ def extended_path(
         s_names = ("e_1",)
 
     n_shocks = len(s_names)
+    y_ss_arr: np.ndarray | None = None
 
     # 3. Pre-Compile Equations Function (one-time compilation)
     if model is not None and hasattr(model, "compile_equations") and hasattr(model, "variables"):
@@ -178,7 +179,11 @@ def extended_path(
             yc_v = _Vec(v_list, yc, what="variable")
             yl_v = _Vec(v_list, yl, what="variable")
             eps_v = _Vec(s_list, np.atleast_1d(eps), what="shock")
-            return compiled_raw(yp_v, yc_v, yl_v, eps_v, p_vec)
+            ss_v = _Vec(v_list, y_ss_arr, what="variable") if y_ss_arr is not None else None
+            try:
+                return compiled_raw(yp_v, yc_v, yl_v, eps_v, p_vec, ss_v)
+            except TypeError:
+                return compiled_raw(yp_v, yc_v, yl_v, eps_v, p_vec)
 
         eq_fn = precompiled_eq_ast
 
@@ -194,7 +199,11 @@ def extended_path(
             yc_v = _Vec(v_list, yc, what="variable")
             yl_v = _Vec(v_list, yl, what="variable")
             eps_v = _Vec(s_list, np.atleast_1d(eps), what="shock")
-            return dyn_eqs(yp_v, yc_v, yl_v, eps_v, p_vec)
+            ss_v = _Vec(v_list, y_ss_arr, what="variable") if y_ss_arr is not None else None
+            try:
+                return dyn_eqs(yp_v, yc_v, yl_v, eps_v, p_vec, ss_v)
+            except TypeError:
+                return dyn_eqs(yp_v, yc_v, yl_v, eps_v, p_vec)
 
         eq_fn = precompiled_eq_dyn
 
@@ -211,7 +220,15 @@ def extended_path(
         eq_fn = precompiled_eq_linear
 
     elif callable(model_or_equations):
-        eq_fn = model_or_equations
+        orig_call = model_or_equations
+
+        def precompiled_eq_callable(yp, yc, yl, eps):
+            try:
+                return orig_call(yp, yc, yl, eps, y_ss_arr)
+            except TypeError:
+                return orig_call(yp, yc, yl, eps)
+
+        eq_fn = precompiled_eq_callable
     else:
         raise ValueError("model_or_equations must be a DSGE model or callable residual function")
 

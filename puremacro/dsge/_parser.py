@@ -620,6 +620,39 @@ def _render_equations_hoisted(
     names: dict[Node, str] = {}
     ns = ("lead", "curr", "lag", "shocks", "params")
 
+    def emit_ss(node: Node, defining: bool = False) -> str:
+        if not defining and isinstance(node, _COMPOSITE):
+            t = names.get(node)
+            if t is not None:
+                return t
+        if isinstance(node, Param):
+            return pnames[node.name]
+        if isinstance(node, Const):
+            return str(node.value)
+        if isinstance(node, Var):
+            if shock_names and node.name in shock_names:
+                return "0.0"
+            return _py_attr("steady_state", node.name)
+        if isinstance(node, UnaryOp):
+            return f"({node.op}{emit_ss(node.expr)})"
+        if isinstance(node, BinOp):
+            py_op = "**" if node.op == "^" else node.op
+            return f"({emit_ss(node.left)} {py_op} {emit_ss(node.right)})"
+        if isinstance(node, Call):
+            fn = node.func.lower()
+            if fn == "steady_state":
+                return emit_ss(node.args[0])
+            return node.python_call([emit_ss(a) for a in node.args])
+        return node.to_python(
+            "steady_state",
+            "steady_state",
+            "steady_state",
+            "shocks",
+            "params",
+            shock_names=shock_names,
+            steady_state_ns="steady_state",
+        )
+
     def emit(node: Node, defining: bool = False) -> str:
         if not defining and isinstance(node, _COMPOSITE):
             t = names.get(node)
@@ -633,6 +666,8 @@ def _render_equations_hoisted(
             py_op = "**" if node.op == "^" else node.op
             return f"({emit(node.left)} {py_op} {emit(node.right)})"
         if isinstance(node, Call):
+            if node.func.lower() == "steady_state":
+                return emit_ss(node.args[0])
             return node.python_call([emit(a) for a in node.args])
         return node.to_python(*ns, shock_names=shock_names)
 
@@ -851,7 +886,11 @@ class ParsedModelDAG:
         prologue, py_exprs = _render_equations_hoisted(
             self.equations, set(self.shocks)
         )
-        code_body = "def _generated_equations(lead, curr, lag, shocks, params):\n"
+        code_body = (
+            "def _generated_equations(lead, curr, lag, shocks, params, steady_state=None):\n"
+            "    if steady_state is None:\n"
+            "        steady_state = curr\n"
+        )
         for line in prologue:
             code_body += f"    {line}\n"
         code_body += "    return [\n"
