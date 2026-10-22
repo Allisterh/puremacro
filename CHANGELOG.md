@@ -7,11 +7,77 @@ This changelog describes versioned source changes. Check
 Versions 5.3.0, 5.4.0 and 5.4.1 were tagged but not published to PyPI; their
 additions are included in 5.4.2. See the [release procedure](RELEASING.md).
 
-## Unreleased
+## 5.5.0 (2026-10-22)
+
+**Inspect model compatibility and numerical accuracy, and correct steady-state trajectory references.**
+
+### Added
+
+- `puremacro.dsge.inspect_mod` and `puremacro-dynare inspect` report supported,
+  ignored, unresolved and unsupported syntax without numerical evaluation or
+  solving. Deterministic JSON/text reports retain source locations, include and
+  macro-loop provenance, data requirements and bounded preprocessing failures.
+- Opt-in `load_mod(command_mode="ordered")` and
+  `model.execute_mod_commands(ordered=True)` preserve separate fixed-calibration
+  simulation, smoother and shock-decomposition invocations, their explicit and
+  effective options, variable selections and full result snapshots. Unsupported
+  programs fail preflight; numerical failures retain completed invocation evidence.
+  The default legacy runner is unchanged.
+- `puremacro.validation.audit_result` separates solver convergence, recomputed
+  equations, distribution stationarity, derivative checks and refinement evidence.
+  Initial adapters cover stationary one- and two-asset EGM, first-order DSGE and
+  existing dynamic-trade certificates. Reports export DataFrames, Markdown and
+  strict JSON with explicit `not_checked`/`unsupported` states.
+- Household audits expose budget and Euler/KKT maps, worst-state coordinates,
+  stationary-weighted error quantiles and mass at artificial grid bounds.
+  `DerivativeCheck`, `ResidualCheck` and `RefinementCheck` support explicit
+  experiments; default audits never re-solve, refine or use the network.
 
 ### Fixed
 
-- Fix `STEADY_STATE(expr)` in dynamic trajectory evaluation (`solve_perfect_foresight`, `simulate_surprise_shocks`, `extended_path`, OccBin, and `mcp=True`). Previously, `STEADY_STATE(expr)` evaluated to current path values instead of the model's steady state, while the Jacobian treated it as having zero derivative, leading to silently wrong simulation paths. Steady-state values are now correctly evaluated from the steady-state vector and match Dynare reference parity across all trajectory paths ([#177](https://github.com/jalonso1979/puremacro/issues/177)).
+- `STEADY_STATE(expr)` now uses a fixed reference in nonlinear trajectory and
+  derivative evaluation, including perfect foresight/MCP, surprise shocks,
+  extended path and OccBin. It previously used current path values despite its
+  zero derivative, potentially producing wrong paths ([#177](https://github.com/jalonso1979/puremacro/issues/177)).
+  Native Dynare fixtures cover the reported example, an RBC fiscal rule and
+  terminal assignments; see the bilingual correctness advisory.
+- A bare `.mod` `endval` retains literal terminal values; following `steady` or
+  the supported `endval_steady` option requests a terminal equilibrium solve.
+  Residual callbacks retain unrelated defaults and propagate their own errors.
+  Exogenous variables inside `STEADY_STATE()` are explicitly rejected, as in Dynare.
+- Two-asset EGM recognizes its supported resource equation structurally, binds
+  asset roles and parameter aliases consistently, and reads discount/curvature
+  parameters from the declaration. Arbitrary budget functions cannot be accepted
+  solely because they match a finite set of probes.
+- Empty Bartik base-year shares avoid pandas/PyArrow's empty-key join failure
+  while retaining key dtypes and the numeric share schema.
+- Flat-cache migration commits bounded insertion batches before removing any
+  original files; existing database keys retain their source files, and a
+  transaction failure leaves all originals available for recovery.
+- Colab offload links show keyboard focus and hover states. CSV downloads in
+  the teaching labs have descriptive English and Spanish accessible labels.
+
+### Performance and maintenance
+
+- Quarterly-to-monthly panel projection batches repeated work while preserving
+  mixed date formats, local calendar dates, numeric conversion, output columns
+  and duplicate precedence.
+- VAR bootstrap lag stacks and BVAR-SV forecast buffers avoid repeated
+  concatenation, preserving seeded results. Narrative keyword scoring reuses a
+  bounded cache of escaped, whole-word patterns without changing overlap or
+  negation rules.
+- Consolidated regression coverage for weighted statistics, country codes,
+  Markov closed classes and transient states, cache migration and panel projection.
+  Broad refactors and a slower document-store batching proposal were not adopted.
+
+### Scope
+
+- Ordered `.mod` execution supports literal options and fixed calibration;
+  policy, perfect-foresight, HANK and interleaved state changes require their
+  explicit Python workflows. Compatibility inspection is not numerical validation.
+- Audit tolerances describe individual checks, not an overall accuracy guarantee.
+  Coarse household grids can pass budget/stationarity checks while failing moment
+  refinement. Expensive derivative and grid/horizon experiments require opt-in.
 
 ## 5.4.2 (2026-10-22)
 

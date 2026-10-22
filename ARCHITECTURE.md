@@ -31,6 +31,16 @@ The package was significantly extended in **Phase 5** (April–early-May 2026, c
   supplementing existing validation/replication galleries. Model/estimator imports
   occur inside cases. Analytical, numerical-oracle, external-software and official
   data evidence are distinguished from published empirical model replication.
+- `validation/audit.py`: scoped audits of already solved stationary EGM household,
+  first-order DSGE and dynamic-trade results. Immutable report records retain
+  per-check evidence, tolerances, coordinates and residual maps. Default checks
+  evaluate equations and one distribution transition without re-solving or using
+  the network; derivatives and grid/horizon experiments require explicit opt-in.
+  Solver convergence, equation accuracy, stationarity and refinement are separate
+  claims. Missing adapters/evidence remain `unsupported` or `not_checked`.
+  Two-asset household declarations use `dp/_two_asset_spec.py` to recognize the
+  supported resource/cost identity and bind asset roles and parameter aliases;
+  arbitrary functions cannot establish a budget identity through finite probes.
 
 `examples/structural_irf_matching.py` exports complete input/assumption/result
 manifests and figures for a synthetic parameter-recovery exercise; see
@@ -129,6 +139,13 @@ puremacro/
 │                            and hands the matrices to klein_solve.
 │                            stacked_newton.py: opt-in matrix-free stacked-time
 │                            Newton-Krylov for perfect-foresight systems.
+│                            inspection.py: read-only syntax collection with
+│                            bounded macro expansion and source provenance;
+│                            it stops before numerical evaluation/compilation.
+│                            _mod_execution.py: opt-in ordered fixed-calibration
+│                            command subset with complete compatibility preflight
+│                            and one retained result per invocation. The legacy
+│                            category runner remains the default.
 ├── connectedness/         ← Diebold-Yilmaz spillover
 ├── forecast/              ← Diebold-Mariano, Giacomini-White, density eval
 ├── tests/                 ← Bai-Perron breaks + unit-root tests

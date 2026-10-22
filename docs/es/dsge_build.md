@@ -210,7 +210,17 @@ m = dsge.load_mod(mod_macro)
 - **Bloques dependientes de parámetros y evaluación analítica de `steady_state_model`**: `load_mod(..., params={...})` vuelve a evaluar `steady_state_model` e `initval` con los parámetros combinados (Dynare vuelve a ejecutar `steady_state_model` en cada vector de parámetros). Los bloques `steady_state_model; ... end;` se compilan en un evaluador analítico $O(1)$ (admitiendo asignaciones locales secuenciales incluso cuando una variable auxiliar comparte nombre con una expresión local `#`); `compute_steady_state()` verifica el candidato analítico frente a los residuos dinámicos (`||f(y_ss)||_inf < tol`) y recurre automáticamente a la búsqueda de raíces no lineal o continuación por homotopía (`solve_algo`, `homotopy`) si los residuos superan `tol`. Las asignaciones de primer nivel como `beta = 1/(1+r);` se evalúan una sola vez al leer el archivo, como en Dynare, y no cambian si se sobrescribe `r`.
 - **Ejecución Nativa de Comandos `.mod` (`execute_mod_commands`)**: `m.execute_mod_commands(data=...)` ejecuta los comandos de política óptima, suavizado, descomposición y simulación determinista declarados en el archivo `.mod`—`planner_objective;` + `ramsey_policy;` (vía `solve_ramsey_lq`), `optim_weights;` + `osr_params;` + `osr_params_bounds;` + `osr;` (vía `solve_osr`), `histval;` + `endval;` (vía `solve_perfect_foresight`), `calib_smoother;` (vía `kalman_smoother`) y `shock_decomposition;` (vía `historical_decomposition`)—devolviendo un objeto `DynareCommandResults` (`.ramsey`, `.osr`, `.smoother`, `.decomposition`, `.perfect_foresight`, `.commands_executed`).
 
-    El ejecutor actual procesa los comandos por categoría; no es un intérprete general del orden del código fuente. Las declaraciones repetidas de `stoch_simul` combinan sus opciones en una sola invocación, sin conservar resultados separados para cada declaración. Algunas instrucciones de nivel superior no reconocidas pueden omitirse sin diagnóstico. Para realizar ejecuciones separadas o cambiar la calibración, use llamadas explícitas de Python admitidas y conserve cada resultado. Que `load_mod` cargue un archivo correctamente no valida la compatibilidad con todo su contenido.
+    El ejecutor heredado, que sigue siendo el predeterminado, procesa comandos
+    por categoría. Las declaraciones repetidas de `stoch_simul` se combinan en
+    una invocación y algunas instrucciones externas pueden omitirse. Use
+    [`inspect_mod`](dsge_mod_inspection.md) para un informe de compatibilidad sin
+    resolver el modelo. Las opciones explícitas
+    `load_mod(..., command_mode="ordered")` y
+    `m.execute_mod_commands(ordered=True, data=...)` conservan cada invocación
+    admitida de simulación, suavizado y descomposición con calibración fija.
+    Los cambios de estado no admitidos se rechazan antes de resolver; para
+    cambiar calibraciones u otros programas use llamadas explícitas de Python.
+    Cargar un archivo con el modo heredado no valida todo su contenido.
 
 - **Cualquier nombre de Dynare**: un parámetro o una variable con nombre de palabra reservada de Python (`lambda`, `yield`) se analiza y se resuelve.
 - **Operadores especiales**: Soporte para `STEADY_STATE(x)` y `diff(x)`. `STEADY_STATE` usa una referencia fija al evaluar trayectorias y derivadas; su expresión no puede contener variables exógenas. Las condiciones terminales de previsión perfecta distinguen `endval` literal de `endval` seguido de `steady`; véase el [aviso de corrección](ADVISORY.md). `EXPECTATION(k)(x)` se analiza sintácticamente, pero su residuo compilado lanza `NameError`, así que un modelo que lo use todavía no puede resolverse.
