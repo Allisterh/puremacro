@@ -41,6 +41,20 @@ def audit_dsge(out, result, model):
             scale = np.maximum(np.max(np.abs(lead), axis=1)
                                + np.max(np.abs(current), axis=1)
                                + np.max(np.abs(lag), axis=1), 1e-30)
+            if controls:
+                omitted_lags = lag[:, controls]
+                # A nonzero lag cannot be discarded merely because the reduced
+                # rule solves the remaining columns. This is structural coverage,
+                # separate from numerical residual tolerance; retain coefficients.
+                out.residual(
+                    "equations", "unrepresented_lag_terms", omitted_lags, 0.,
+                    units="original lag Jacobian coefficients",
+                    source="recomputed_dynare_lag_coverage",
+                    control_names=list(context.controls),
+                    offending_controls=[name for j, name in enumerate(context.controls)
+                                        if np.any(omitted_lags[:, j] != 0)],
+                    reason="all nonzero lag columns must be represented in the state vector",
+                )
             rule = lead @ gx @ sol.G + current @ gx + lag[:, states]
             impact = lead @ gx @ sol.N + current @ gu + shock
             equation_source = "recomputed_dynare_lead_lag_equations"

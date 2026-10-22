@@ -38,6 +38,12 @@ selección explícita. Las funciones del usuario deben respetar el mismo contrat
 | Estado estacionario o transición de comercio dinámico | Conserva los valores, tolerancias y procedencia del certificado original de 17 pruebas. `model=economia_dinamica` permite reconstruir el certificado estacionario en el `z` suministrado. Los certificados de transición registrados describen el resultado al resolverlo; no verifican automáticamente trayectorias modificadas. |
 | `HorizonComparisonResult` de comercio dinámico | Con `checks=("refinement",)`, conserva el alcance de ventana, bienestar y prueba terminal elegida, incluido el modo más débil de riqueza descontada. |
 
+Las declaraciones de estados Dynare se contrastan con todas las columnas de
+rezagos originales. `unrepresented_lag_terms` falla si un control tiene algún
+coeficiente rezagado distinto de cero, aunque la regla truncada tenga residuo
+cero. El mapa conserva los coeficientes e identifica los controles afectados;
+esta comprobación estructural usa tolerancia cero, independiente de `equations`.
+
 Los certificados de comercio conservan `max(1e-8, result.tol)`; la tolerancia
 `equations` general no cambia la afirmación de un certificado heredado.
 Otros métodos se identifican como no admitidos. Una función explícita permite

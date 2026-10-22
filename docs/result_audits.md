@@ -38,6 +38,12 @@ must respect the same no-mutation/no-network contract.
 | Dynamic trade steady state or transition | Original 17-check certificate, values, original tolerance and provenance. With `model=dynamic_economy`, the steady-state certificate is independently rebuilt at the supplied `z`. Recorded transition certificates describe the solve-time result; they are not silently represented as new checks of altered paths. |
 | Dynamic trade `HorizonComparisonResult` | With `checks=("refinement",)`, preserves window, welfare and selected terminal-test scope, including the weaker discounted-wealth mode. |
 
+Dynare state declarations are also checked against every original lag column.
+`unrepresented_lag_terms` fails if a control has any nonzero lag coefficient,
+even when the truncated decision rule has zero residual. The map retains those
+coefficients and names the offending controls; this structural check uses zero
+tolerance independently of the numerical `equations` tolerance.
+
 Trade certificate rows retain the certificate's `max(1e-8, result.tol)` tolerance;
 the generic `equations` override does not change an inherited certificate's claim.
 Unsupported solvers are reported explicitly. Supply a `ResidualCheck` for an

@@ -573,3 +573,49 @@ def test_trade_horizon_scope_and_original_certificate_tolerances():
     assert report.metadata['original_status'] == 'verified_window_and_welfare'
     assert report.metadata['validation_scope'] == comparison.validation_scope
     assert report.to_dataframe().attrs['original_metadata'] == comparison.metadata
+
+
+@pytest.mark.parametrize("with_shock", [False, True])
+def test_dynare_audit_rejects_lagged_variable_omitted_from_declared_states(with_shock):
+    from puremacro.dsge import build_dynare
+
+    def equations(lead, now, lag, shock, parameters):
+        innovation = shock.e if with_shock else 0.
+        return np.array([now.x - .8*lag.x - innovation,
+                         now.c - .3*lag.c - .5*now.x])
+
+    kwargs = dict(variables=["c", "x"], shocks=["e"] if with_shock else [],
+                  steady_state={"c": 0., "x": 0.})
+    omitted = build_dynare(equations, states=["x"], **kwargs)
+    bad = audit_result(omitted)
+    check = rows(bad)["unrepresented_lag_terms"]
+    assert check.status == "failed"
+    assert check.evidence_source == "recomputed_dynare_lag_coverage"
+    assert check.details["offending_controls"] == ["c"]
+    assert check.details["control_names"] == ["c"]
+    np.testing.assert_allclose(bad.maps["unrepresented_lag_terms"], [[0.], [-.3]])
+    # The truncated rule solves the truncated matrix; this alone is insufficient.
+    assert rows(bad)["decision_rule_residual"].status == "passed"
+    # State coverage remains structural even with a loose numerical tolerance.
+    loose = audit_result(omitted, tolerances={"equations": 1.})
+    assert rows(loose)["unrepresented_lag_terms"].status == "failed"
+
+    automatic = build_dynare(equations, **kwargs)
+    assert automatic.states == ("c", "x")
+    np.testing.assert_allclose(automatic.solution.G, [[.3, .4], [0., .8]], atol=1e-14)
+    good = audit_result(automatic)
+    assert all(row.status == "passed" for row in good.records if row.category == "equations")
+
+
+def test_dynare_audit_valid_unlagged_control_coverage_is_zero():
+    from puremacro.dsge import build_dynare
+
+    def equations(lead, now, lag, shock, parameters):
+        return np.array([now.x - .8*lag.x, now.c - .5*now.x])
+
+    model = build_dynare(equations, variables=["c", "x"], shocks=[],
+                         steady_state={"c": 0., "x": 0.}, states=["x"])
+    report = audit_result(model)
+    check = rows(report)["unrepresented_lag_terms"]
+    assert check.status == "passed" and check.details["offending_controls"] == []
+    np.testing.assert_array_equal(report.maps["unrepresented_lag_terms"], np.zeros((2, 1)))
