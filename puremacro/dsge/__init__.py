@@ -28,7 +28,7 @@ from ._moments import one_sided_hp_filter
 from ._results import (
     DSGEPosteriorResult, SW07PosteriorResult, NUTSResult, HANKResult,
     DynareDR, Dynare2ndDR, TheoreticalMomentsResult,
-    StochSimulResult,
+    StochSimulResult, DynareCommandResults, DynareCommandInvocation,
     SmootherResult, DSGEForecastResult, ModeCheckResult,
     DiagnosticFinding, EigenvalueTable, ModelDiagnosticsResult,
     IdentificationResult,
@@ -69,6 +69,8 @@ from .dynare import (
     build_dynare, parse_mod, load_mod, load_dynare_mod, solve_dynare_2nd_order,
     _orig_stoch_simul, _linear_model_stoch_simul,
 )
+from .inspection import inspect_mod, ModInspectionReport, ModStatement, ModIssue, ModSourceSpan
+from ._mod_execution import ModCompatibilityError, ModExecutionError
 from .perfect_foresight import PerfectForesightResult, solve_perfect_foresight
 from .extended_path import extended_path
 from .stacked_newton import (
@@ -165,6 +167,8 @@ from . import marginal, mode, observation, smoother, news
 
 
 __all__ = [
+    "inspect_mod", "ModInspectionReport", "ModStatement", "ModIssue", "ModSourceSpan",
+    "ModCompatibilityError", "ModExecutionError", "DynareCommandResults", "DynareCommandInvocation",
     "klein_solve", "KleinSolution", "BlanchardKahnError",
     "build", "LinearModel", "ModelError", "SteadyStateError",
     "steady", "StructuralSingularityError", "StructuralSingularityWarning",

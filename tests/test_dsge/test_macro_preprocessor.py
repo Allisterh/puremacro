@@ -945,7 +945,8 @@ def test_pyodide_compliance():
     tree = ast.parse(macro_path.read_text(encoding="utf-8"))
 
     stdlib_modules = {
-        "__future__", "itertools", "math", "pathlib", "re", "typing", "sys", "os", "collections"
+        "__future__", "itertools", "math", "pathlib", "re", "typing", "sys", "os", "collections",
+        "contextvars", "dataclasses"
     }
 
     for node in ast.walk(tree):

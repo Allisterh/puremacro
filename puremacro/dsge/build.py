@@ -2140,6 +2140,7 @@ class LinearModel:
         data: pd.DataFrame | None = None,
         *,
         sigma: float | Mapping[str, float] | None = None,
+        ordered: bool = False,
     ) -> DynareCommandResults:
         """Execute all native Dynare command blocks declared in the ``.mod`` file.
 
@@ -2155,6 +2156,13 @@ class LinearModel:
             contains ``calib_smoother`` or ``shock_decomposition`` commands.
         sigma : float or Mapping[str, float], optional
             Optional shock standard deviation override.
+        ordered : bool, default False
+            Execute each supported invocation in source order, preserving its
+            options, variable selection and result snapshot. Supported options
+            persist within the study; omitted stoch_simul order resets to 2
+            and variable selections reset each call.
+            Use ``load_mod(command_mode="ordered")`` to reject incompatible
+            programs before any solve. Legacy category aggregation is the default.
 
         Returns
         -------
@@ -2163,6 +2171,10 @@ class LinearModel:
             ``.ramsey``, ``.osr``, ``.smoother``, ``.shock_decomposition``,
             ``.histval``, ``.endval``, and ``.perfect_foresight``.
         """
+        if ordered:
+            from ._mod_execution import _execute_ordered
+            return _execute_ordered(self, data, sigma)
+
         dag = getattr(self, "_dag", None)
         cmd_list = self.mod_commands
         cmd_names = [c.get("command") for c in cmd_list]

@@ -3975,6 +3975,27 @@ class ParityDashboardResult:
 
 
 @dataclass(frozen=True)
+class DynareCommandInvocation:
+    """One ordered command snapshot with full and selected numerical results.
+
+    ``result`` retains the complete solver state/output; ``selected_result``
+    narrows presentation to the requested variables. Decision rules always keep
+    the full state system. A failed entry has ``error`` and no result.
+    """
+    index: int
+    command: str
+    source: Any
+    requested_variables: tuple[str, ...]
+    explicit_options: dict[str, Any]
+    effective_options: dict[str, Any]
+    input_fingerprint: str
+    status: str
+    result: Any = None
+    selected_result: Any = None
+    error: str | None = None
+
+
+@dataclass(frozen=True)
 class DynareCommandResults:
     """Structured container for executed Dynare .mod file commands.
 
@@ -4011,6 +4032,7 @@ class DynareCommandResults:
     endval: dict[str, float] | None = None
     perfect_foresight: Any | None = None
     commands_executed: tuple[str, ...] = ()
+    invocations: tuple[DynareCommandInvocation, ...] = ()
 
     @property
     def calib_smoother(self) -> SmootherResult | None:
@@ -4030,6 +4052,13 @@ class DynareCommandResults:
             "ramsey_model": "ramsey",
             "perfect_foresight_solver": "perfect_foresight",
         }
+        if self.invocations:
+            return pd.DataFrame([{
+                "command": entry.command,
+                "result_type": type(entry.result).__name__ if entry.result is not None else "None",
+                "executed": entry.status == "success", "status": entry.status,
+                "invocation": entry.index,
+            } for entry in self.invocations])
         rows = []
         for cmd in self.commands_executed:
             val = getattr(self, attr_map.get(cmd, cmd), None)

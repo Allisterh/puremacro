@@ -20,6 +20,8 @@ Features:
 from __future__ import annotations
 
 import itertools
+from contextvars import ContextVar
+from dataclasses import dataclass, field
 import math
 from pathlib import Path
 import re
@@ -50,6 +52,65 @@ class DynareMacroError(Exception):
     def col(self) -> int | None:
         """Alias for column."""
         return self.column
+
+
+@dataclass
+class _MacroTrace:
+    """Inspection-only bounded expansion and original-source provenance."""
+    root: str
+    limit: int = 100_000
+    max_bytes: int = 2_000_000
+    steps: int = 0
+    offset: int = 0
+    sources: dict[str, str] = field(default_factory=dict)
+    spans: list[dict[str, Any]] = field(default_factory=list)
+
+    def charge(self, amount: int = 1) -> None:
+        self.steps += max(amount, 1)
+        if self.steps > self.limit:
+            raise DynareMacroError("Inspection macro expansion resource limit exceeded")
+
+    def source(self, name: str, text: str) -> None:
+        existing_size = sum(len(value.encode("utf-8")) for key, value in self.sources.items() if key != name)
+        if existing_size + len(text.encode("utf-8")) > self.max_bytes:
+            raise DynareMacroError("Inspection cumulative source size limit exceeded")
+        self.sources[name] = text
+
+    def emit(self, original: str, expanded: str, line: int, stack: list[Path]) -> None:
+        self.charge()
+        if self.offset + len(expanded) > self.max_bytes:
+            raise DynareMacroError("Inspection expanded source size limit exceeded")
+        self.spans.append(dict(start=self.offset, end=self.offset + len(expanded),
+            source=str(stack[-1]) if stack else self.root, line=line,
+            exact_columns=original == expanded,
+            include_chain=[self.root] + [str(p) for p in stack],
+            expansion_instance=len(self.spans)))
+        self.offset += len(expanded)
+
+
+_TRACE: ContextVar[_MacroTrace | None] = ContextVar("puremacro_macro_trace", default=None)
+
+
+def _inspection_charge(amount: int = 1) -> None:
+    trace = _TRACE.get()
+    if trace is not None:
+        trace.charge(amount)
+
+
+def _preprocess_with_provenance(text: str, *, source: str, base_dir: Path,
+                                limit: int = 100_000) -> tuple[str, _MacroTrace]:
+    trace = _MacroTrace(source, limit=limit)
+    trace.source(source, text)
+    token = _TRACE.set(trace)
+    try:
+        expanded = preprocess_macro(text, base_dir=base_dir)
+        return expanded, trace
+    except Exception as exc:
+        # Preserve already read source hashes and include provenance on failure.
+        setattr(exc, "macro_trace", trace)
+        raise
+    finally:
+        _TRACE.reset(token)
 
 
 class Scope:
@@ -245,6 +306,22 @@ class BinaryOpNode(ExprNode):
         l_val = self.left.eval(scope, line, col)
         r_val = self.right.eval(scope, line, col)
 
+        if _TRACE.get() is not None:
+            if self.op == "+" and isinstance(l_val, (list, tuple, str)):
+                _inspection_charge(len(l_val) + (len(r_val) if isinstance(r_val, (list, tuple, str)) else 1))
+            elif self.op == "*":
+                if isinstance(l_val, (list, tuple, str)):
+                    _inspection_charge(len(l_val) * (len(r_val) if isinstance(r_val, (list, tuple, str)) else max(1, int(r_val))))
+                elif isinstance(r_val, (list, tuple, str)):
+                    _inspection_charge(len(r_val) * max(1, int(l_val)))
+            elif self.op == "^" and isinstance(r_val, (int, float)):
+                if abs(r_val) > 10000:
+                    raise DynareMacroError("Inspection macro exponent resource limit exceeded", line, col)
+                if isinstance(l_val, list):
+                    _inspection_charge(len(l_val) ** max(0, int(r_val)))
+                elif isinstance(l_val, int) and isinstance(r_val, int):
+                    _inspection_charge(l_val.bit_length() * max(0, r_val))
+
         if self.op == "+":
             if isinstance(l_val, list) and isinstance(r_val, list):
                 return l_val + r_val
@@ -346,6 +423,7 @@ class RangeNode(ExprNode):
         s, e, st = int(s), int(e), int(st)
         if st == 0:
             raise DynareMacroError("Range step cannot be 0", line, col)
+        _inspection_charge(max(0, (e - s) // st + 1))
         res = []
         if st > 0:
             curr = s
@@ -504,6 +582,7 @@ class ComprehensionNode(ExprNode):
         res = []
         comp_scope = Scope(parent=scope)
         for item in iterable:
+            _inspection_charge()
             _bind_targets(comp_scope, self.targets, item, line, col)
             if self.cond_expr is not None:
                 cond_val = self.cond_expr.eval(comp_scope, line, col)
@@ -1008,7 +1087,11 @@ class TextStmt(Stmt):
         output: list[str],
     ) -> None:
         for line_num, text in self.lines:
-            output.append(_interpolate_text(text, scope, line_num))
+            expanded = _interpolate_text(text, scope, line_num)
+            trace = _TRACE.get()
+            if trace is not None:
+                trace.emit(text, expanded, line_num, include_stack)
+            output.append(expanded)
 
 
 class DefineStmt(Stmt):
@@ -1104,6 +1187,7 @@ class ForStmt(Stmt):
         # Lexical scoping frame with restoration on exit
         loop_scope = Scope(parent=scope)
         for item in iterable:
+            _inspection_charge()
             _bind_targets(loop_scope, self.targets, item, self.line, self.col)
             if self.cond_expr is not None:
                 cond_val = self.cond_expr.eval(loop_scope, self.line, self.col)
@@ -1179,7 +1263,13 @@ class IncludeStmt(Stmt):
                 f"circular @#include detected: {cycle}", self.line, self.col
             )
 
+        trace = _TRACE.get()
+        if trace is not None and resolved_path.stat().st_size > trace.max_bytes:
+            raise DynareMacroError("Inspection include size limit exceeded", self.line, self.col)
         sub_text = resolved_path.read_text(encoding="utf-8")
+        if trace is not None:
+            trace.charge()
+            trace.source(str(resolved_path), sub_text)
         sub_preprocessed = _preprocess_macro_internal(
             text=sub_text,
             base_dir=resolved_path.parent,
@@ -1238,7 +1328,8 @@ class EchoStmt(Stmt):
     ) -> None:
         val = self.expr.eval(scope, self.line, self.col)
         # Diagnostic print
-        print(f"[Dynare Macro Echo] {val}")
+        if _TRACE.get() is None:
+            print(f"[Dynare Macro Echo] {val}")
 
 
 class ErrorStmt(Stmt):
@@ -1275,7 +1366,8 @@ class EchoMacroVarsStmt(Stmt):
         output: list[str],
     ) -> None:
         vars_dict = scope.all_vars()
-        print(f"[Dynare Macro Vars] {vars_dict}")
+        if _TRACE.get() is None:
+            print(f"[Dynare Macro Vars] {vars_dict}")
 
 
 def _resolve_include_file(
@@ -1842,15 +1934,22 @@ def _preprocess_macro_internal(
     include_stack: list[Path],
     scope: Scope,
 ) -> str:
-    raw_items = _split_into_items(text)
-    parser = DirectiveParser(raw_items)
-    ast = parser.parse_all()
+    try:
+        raw_items = _split_into_items(text)
+        parser = DirectiveParser(raw_items)
+        ast = parser.parse_all()
 
-    output_lines: list[str] = []
-    for stmt in ast:
-        stmt.execute(scope, base_dir, include_paths, include_stack, output_lines)
+        output_lines: list[str] = []
+        for stmt in ast:
+            stmt.execute(scope, base_dir, include_paths, include_stack, output_lines)
 
-    return "".join(output_lines)
+        return "".join(output_lines)
+    except Exception as exc:
+        trace = _TRACE.get()
+        if trace is not None and not hasattr(exc, "macro_source"):
+            setattr(exc, "macro_source", str(include_stack[-1]) if include_stack else trace.root)
+            setattr(exc, "macro_chain", [trace.root] + [str(p) for p in include_stack])
+        raise
 
 
 # ---------------------------------------------------------------------------

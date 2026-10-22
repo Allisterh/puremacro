@@ -180,7 +180,9 @@ KEYWORDS = {
 class Tokenizer:
     """Pure-Python character-by-character tokenizer for Dynare .mod source text."""
 
-    def __init__(self, text: str):
+    def __init__(self, text: str, *, strict: bool = False):
+        self.strict = strict
+        self.comments: list[dict[str, Any]] = []
         self.text = text
         self.n = len(text)
         self.pos = 0
@@ -217,12 +219,16 @@ class Tokenizer:
 
             # Line comments: // or %
             if (ch == "/" and self._peek(1) == "/") or ch == "%":
+                comment_start = (self.line, self.col)
                 while self.pos < self.n and self._peek() != "\n":
                     self._advance()
+                self.comments.append(dict(name="comment", category="comment", line=comment_start[0],
+                    col=comment_start[1], end_line=self.line, end_col=self.col))
                 continue
 
             # Block comments: /* ... */
             if ch == "/" and self._peek(1) == "*":
+                comment_start = (self.line, self.col)
                 self._advance()  # /
                 self._advance()  # *
                 while self.pos < self.n and not (
@@ -232,6 +238,10 @@ class Tokenizer:
                 if self.pos < self.n:
                     self._advance()  # *
                     self._advance()  # /
+                elif self.strict:
+                    raise DynareParseError("Unclosed block comment", *comment_start)
+                self.comments.append(dict(name="comment", category="comment", line=comment_start[0],
+                    col=comment_start[1], end_line=self.line, end_col=self.col))
                 continue
 
             start_line = self.line
@@ -260,15 +270,19 @@ class Tokenizer:
             # String literal: "..." or '...'
             if ch in ('"', "'"):
                 quote_char = self._advance()
+                closed = False
                 buf = []
                 while self.pos < self.n:
                     c = self._advance()
                     if c == quote_char:
+                        closed = True
                         break
                     if c == "\\" and self.pos < self.n:
                         buf.append(self._advance())
                     else:
                         buf.append(c)
+                if self.strict and not closed:
+                    raise DynareParseError("Unclosed quoted string", start_line, start_col)
                 tokens.append(Token("STRING", "".join(buf), start_line, start_col))
                 continue
 
@@ -748,6 +762,7 @@ class ParsedModelDAG:
     shock_decomposition_options: dict[str, Any] = field(default_factory=dict)
     perfect_foresight_options: dict[str, Any] = field(default_factory=dict)
     commands: list[dict[str, Any]] = field(default_factory=list)
+    source_statements: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def varexo_det(self) -> list[str]:
@@ -965,10 +980,14 @@ class ParsedModelDAG:
 class Parser:
     """Recursive-descent parser building expression DAGs from token streams."""
 
-    def __init__(self, tokens: list[Token], raw_text: str = ""):
+    def __init__(self, tokens: list[Token], raw_text: str = "", *, collect_only: bool = False):
         self.tokens = tokens
         self.pos = 0
         self.raw_text = raw_text
+        self.collect_only = collect_only
+        self.source_statements: list[dict[str, Any]] = []
+        self._skipped = False
+        self._pending_command: tuple[dict[str, Any], list[str]] | None = None
 
         # Symbol tables
         self.variables: list[str] = []
@@ -1344,6 +1363,7 @@ class Parser:
                     saw_end = True
                     break
 
+                statement_start = self.pos
                 # Parse optional tags [name='...']
                 tags = self._parse_equation_tags()
 
@@ -1359,6 +1379,7 @@ class Parser:
                     expr = self.parse_expression()
                     self._expect("SEMI")
                     self.local_var_defs[name] = expr
+                    self._record_statement(statement_start, "model-local")
                     continue
 
                 # Regular model equation: lhs = rhs; or expr;
@@ -1375,6 +1396,7 @@ class Parser:
                 if tags:
                     self.equation_tags[eq_idx] = tags
                 self.equations.append(eq_node)
+                self._record_statement(statement_start, "equation")
 
             if not saw_end:
                 raise DynareParseError(
@@ -1411,6 +1433,8 @@ class Parser:
                 self._expect("SEMI")
                 defs[name] = expr
             else:
+                if self.collect_only:
+                    raise DynareParseError("Unhandled token in recognized block", self._curr().line, self._curr().col)
                 self._advance()
         return defs
 
@@ -1425,9 +1449,15 @@ class Parser:
                     val2 = int(self._expect("NUMBER").value)
                     if self._match("COLON"):
                         val3 = int(self._expect("NUMBER").value)
-                        periods.extend(list(range(val1, val3 + 1, val2)))
+                        period_range = range(val1, val3 + 1, val2)
+                        if self.collect_only and len(period_range) > 100_000:
+                            raise DynareParseError("Inspection period range resource limit exceeded", self._curr().line, self._curr().col)
+                        periods.extend(period_range)
                     else:
-                        periods.extend(list(range(val1, val2 + 1)))
+                        period_range = range(val1, val2 + 1)
+                        if self.collect_only and len(period_range) > 100_000:
+                            raise DynareParseError("Inspection period range resource limit exceeded", self._curr().line, self._curr().col)
+                        periods.extend(period_range)
                 else:
                     periods.append(val1)
             elif self._match("COMMA"):
@@ -1450,6 +1480,10 @@ class Parser:
         has_bracket = bool(self._match("LBRACKET") or self._match("LPAREN"))
         while self._curr().type not in ("SEMI", "RBRACKET", "RPAREN", "EOF"):
             expr = self.parse_expression()
+            if self.collect_only:
+                values.append(0.0)  # shape-only placeholder, never returned as calibration
+                self._match("COMMA")
+                continue
             try:
                 val = float(expr.eval({}, self.param_values))
             except (ValueError, ArithmeticError, np.linalg.LinAlgError, KeyError, LookupError, AssertionError, TypeError, RuntimeError, OSError, ConnectionError, Exception):
@@ -1594,6 +1628,8 @@ class Parser:
             elif self._match("SEMI"):
                 continue
             else:
+                if self.collect_only:
+                    raise DynareParseError("Unhandled token in recognized block", self._curr().line, self._curr().col)
                 self._advance()
 
     def _parse_command_options_and_vars(
@@ -1606,7 +1642,11 @@ class Parser:
             while self._curr().type != "RPAREN" and self._curr().type != "EOF":
                 if self._curr().type in ("IDENT", "KEYWORD"):
                     opt_name = str(self._advance().value)
+                    if self.collect_only and opt_name in opts:
+                        raise DynareParseError(f"Repeated option {opt_name!r}", self._curr().line, self._curr().col)
                     if self._match("ASSIGN"):
+                        if self.collect_only and self._curr().type not in {"LPAREN", "LBRACKET", "MINUS", "NUMBER", "IDENT", "KEYWORD", "STRING"}:
+                            raise DynareParseError(f"Missing value for option {opt_name!r}", self._curr().line, self._curr().col)
                         if self._match("LPAREN") or self._match("LBRACKET"):
                             items: list[Any] = []
                             while self._curr().type not in ("RPAREN", "RBRACKET", "EOF"):
@@ -1637,6 +1677,8 @@ class Parser:
                     else:
                         opts[opt_name] = True
                 else:
+                    if self.collect_only:
+                        raise DynareParseError("Malformed command option", self._curr().line, self._curr().col)
                     self._advance()
                 self._match("COMMA")
             self._expect("RPAREN")
@@ -1646,8 +1688,11 @@ class Parser:
             if self._curr().type in ("IDENT", "KEYWORD"):
                 var_list.append(str(self._advance().value))
             else:
+                if self.collect_only:
+                    raise DynareParseError("Unhandled token in recognized block", self._curr().line, self._curr().col)
                 self._advance()
         self._expect("SEMI")
+        self._pending_command = (dict(opts), list(var_list))
         return opts, var_list
 
     def _parse_stoch_simul(self) -> None:
@@ -2002,6 +2047,7 @@ class Parser:
 
     def _skip_unrecognised_statement(self) -> None:
         """Safely skip MATLAB scripting or unhandled commands outside model blocks."""
+        self._skipped = True
         t = self._curr()
         # Handle MATLAB loops/conditionals like 'while ... end' or 'if ... end'
         if t.type in ("KEYWORD", "IDENT") and t.value in ("while", "if", "for"):
@@ -2027,8 +2073,21 @@ class Parser:
     # Main Parsing Entry Point
     # -------------------------------------------------------------------------
 
+    def _record_statement(self, start: int, category: str, **metadata: Any) -> None:
+        first, last = self.tokens[start], self.tokens[max(start, self.pos - 1)]
+        self.source_statements.append(dict(
+            name=str(first.value), category=category,
+            line=first.line, col=first.col, end_line=last.line,
+            end_col=last.col + (1 if last.type == "SEMI" else len(str(last.value))),
+            **metadata,
+        ))
+
     def parse(self) -> ParsedModelDAG:
         while self._curr().type != "EOF":
+            start = self.pos
+            self._skipped = False
+            self._pending_command = None
+            before_commands = len(self.commands)
             t = self._curr()
 
             if t.type == "KEYWORD":
@@ -2197,6 +2256,37 @@ class Parser:
                 self._advance()
             else:
                 self._skip_unrecognised_statement()
+
+            category = "declaration"
+            if self._skipped:
+                category = "external/script statement"
+            elif t.type == "IDENT":
+                category = "calibration assignment"
+            elif len(self.commands) > before_commands or self._pending_command is not None:
+                category = "command"
+            elif t.type == "SEMI":
+                category = "empty statement"
+            metadata = {}
+            if self._pending_command is not None:
+                explicit_options, requested_variables = self._pending_command
+                metadata = {"command": str(t.value), "options": explicit_options,
+                            "variables": requested_variables}
+            elif len(self.commands) > before_commands:
+                metadata = {"command": self.commands[-1].get("command"),
+                            "options": dict(self.commands[-1].get("options", {})),
+                            "variables": list(self.commands[-1].get("variables", []))}
+            self._record_statement(start, category, **metadata)
+
+        if self.collect_only:
+            # Syntax collection only: never evaluate calibration, steady state,
+            # shock expressions, local definitions, or compile derivatives.
+            return ParsedModelDAG(
+                variables=self.variables, shocks=self.shocks,
+                parameters=self.parameters, parameter_values={}, equations=self.equations,
+                is_linear=self.is_linear, varobs=self.varobs, det_shocks=self.det_shocks,
+                commands=self.commands, source_statements=self.source_statements,
+                hetagent_block=self.hetagent_config, local_variables=self.local_var_defs,
+            )
 
         # ---------------------------------------------------------------------
         # Post-Processing: Parameter Evaluation
@@ -2644,6 +2734,7 @@ class Parser:
             shock_decomposition_options=self.shock_decomposition_options,
             perfect_foresight_options=self.perfect_foresight_options,
             commands=self.commands,
+            source_statements=self.source_statements,
         )
 
 

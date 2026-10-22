@@ -1,0 +1,49 @@
+{
+  "dynare_version": "7.0",
+  "evidence": "Generated MATLAB driver only; no numerical runtime comparison claimed.",
+  "command": "dynare-preprocessor lifetimes.mod",
+  "driver_sha256": "28f02106ca9198caa3127bcf683ca9aff6a21558874b25e390e5c884d348406d",
+  "driver_excerpt": "options_.ar = 1;\noptions_.irf = 3;\noptions_.nograph = true;\noptions_.order = 1;\nvar_list_ = {'y'};\n[info, oo_, options_, M_] = stoch_simul(M_, options_, oo_, var_list_);\noptions_.irf = 7;\noptions_.nograph = true;\noptions_.order = 2;\nvar_list_ = {'x'};\n[info, oo_, options_, M_] = stoch_simul(M_, options_, oo_, var_list_);\noptions_.first_obs = 2;\noptions_.nobs = 4;\noptions_.prefilter = 1;\noptions_.parameter_set = 'calibration';\nvar_list_ = {};\noptions_.smoother = true;\noptions_.order = 1;\n[oo_, M_, options_, bayestopt_] = evaluate_smoother(options_.parameter_set, var_list_, M_, oo_, options_, bayestopt_, estim_params_);\noptions_.parameter_set = 'calibration';\nvar_list_ = {};\noptions_.smoother = true;\noptions_.order = 1;\n[oo_, M_, options_, bayestopt_] = evaluate_smoother(options_.parameter_set, var_list_, M_, oo_, options_, bayestopt_, estim_params_);\noptions_.first_obs = 3;\noptions_.nobs = 4;\nvar_list_ = {'y'};\noo_ = shock_decomposition(M_,oo_,options_,var_list_,bayestopt_,estim_params_);\nvar_list_ = {'y'};\noo_ = shock_decomposition(M_,oo_,options_,var_list_,bayestopt_,estim_params_);",
+  "expected": [
+    {
+      "command": "stoch_simul",
+      "order": 1,
+      "ar": 1,
+      "irf": 3,
+      "variables": [
+        "y"
+      ]
+    },
+    {
+      "command": "stoch_simul",
+      "order": 2,
+      "ar": 1,
+      "irf": 7,
+      "variables": [
+        "x"
+      ]
+    },
+    {
+      "command": "calib_smoother",
+      "prefilter": 1,
+      "first_obs": 2,
+      "nobs": 4
+    },
+    {
+      "command": "calib_smoother",
+      "prefilter": 1,
+      "first_obs": 2,
+      "nobs": 4
+    },
+    {
+      "command": "shock_decomposition",
+      "first_obs": 3,
+      "nobs": 4
+    },
+    {
+      "command": "shock_decomposition",
+      "first_obs": 3,
+      "nobs": 4
+    }
+  ]
+}
