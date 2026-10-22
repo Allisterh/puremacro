@@ -201,7 +201,7 @@ def test_migration_does_not_materialize_all_bodies_before_writing(fresh_db, monk
         return read(path)
 
     def trace(statement):
-        if statement.startswith("INSERT INTO http_cache"):
+        if statement.startswith("INSERT") and "http_cache" in statement:
             reads_at_insert.append(len(reads))
 
     monkeypatch.setattr(Path, "read_bytes", tracked_read)
