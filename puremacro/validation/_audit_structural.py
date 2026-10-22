@@ -23,20 +23,43 @@ def audit_dsge(out, result, model):
         return
     if "equations" in out.checks:
         n = sol.G.shape[0]
-        A, B, C = context.A, context.B, context.C
-        scale = np.maximum(np.max(np.abs(A), axis=1) + np.max(np.abs(B), axis=1), 1e-30)
-        common = A[:, :n] + A[:, n:] @ sol.F
-        rule = common @ sol.G - B[:, :n] - B[:, n:] @ sol.F
-        impact = common @ sol.N - B[:, n:] @ sol.L - C
+        if context.timing == "dynare":
+            # Dynare's public solution is reduced to original state/control
+            # variables, while A/B/C retain the augmented lag-state pencil.
+            # Rebuild the ORIGINAL lead/current/lag equations from this supplied
+            # solution, including a possibly tampered bare KleinSolution.
+            variables = list(context.variables)
+            states = [variables.index(name) for name in context.states]
+            controls = [variables.index(name) for name in context.controls]
+            gx = np.empty((len(variables), n))
+            gu = np.empty((len(variables), len(context.shocks)))
+            gx[states], gx[controls] = sol.G, sol.F
+            gu[states], gu[controls] = sol.N, sol.L
+            lead, current, lag, shock = (
+                context._A_plus, context._A_0, context._A_minus, context._B_u
+            )
+            scale = np.maximum(np.max(np.abs(lead), axis=1)
+                               + np.max(np.abs(current), axis=1)
+                               + np.max(np.abs(lag), axis=1), 1e-30)
+            rule = lead @ gx @ sol.G + current @ gx + lag[:, states]
+            impact = lead @ gx @ sol.N + current @ gu + shock
+            equation_source = "recomputed_dynare_lead_lag_equations"
+        else:
+            A, B, C = context.A, context.B, context.C
+            scale = np.maximum(np.max(np.abs(A), axis=1) + np.max(np.abs(B), axis=1), 1e-30)
+            common = A[:, :n] + A[:, n:] @ sol.F
+            rule = common @ sol.G - B[:, :n] - B[:, n:] @ sol.F
+            impact = common @ sol.N - B[:, n:] @ sol.L - C
+            equation_source = "recomputed_klein_equations"
         if rule.size:
             out.residual("equations", "decision_rule_residual", rule / scale[:, None], out.tol["equations"],
-                         units="row-scaled equation residual", source="recomputed_klein_equations")
+                         units="row-scaled equation residual", source=equation_source)
         else:
             out.add("equations", "decision_rule_residual", status="not_checked",
                     reason="no predetermined states; dynamic state block is empty")
         if impact.size:
             out.residual("equations", "shock_loading_residual", impact / scale[:, None], out.tol["equations"],
-                         units="row-scaled equation residual", source="recomputed_klein_equations")
+                         units="row-scaled equation residual", source=equation_source)
         if context._equations is not None or context._dynare_equations is not None:
             residual = resid(context)
             out.residual("equations", "steady_state_residual", residual.to_numpy(), out.tol["equations"],

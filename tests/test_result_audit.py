@@ -506,6 +506,37 @@ def test_static_dsge_has_no_dynamic_rule_but_shock_and_level_checks():
     assert rows(report)['jacobian_current'].status == 'passed'
 
 
+@pytest.mark.parametrize('with_shock', [False, True])
+def test_dynare_compact_rule_audits_original_equations_and_supplied_solution(with_shock):
+    from puremacro.dsge import build_dynare
+
+    def equations(lead, now, lag, shock, parameters):
+        innovation = shock.e if with_shock else 0.
+        return np.array([now.x - .8*lag.x - innovation,
+                         now.c - .5*lead.c - .3*now.x])
+
+    # Analytically x_t=.8*x_{t-1}+e_t and c_t=.5*x_t. Put the
+    # control before the state to exercise the original variable ordering.
+    model = build_dynare(equations, variables=['c', 'x'], shocks=['e'] if with_shock else [],
+                         steady_state={'c': 0., 'x': 0.})
+    np.testing.assert_allclose(model.solution.G, [[.8]])
+    np.testing.assert_allclose(model.solution.F, [[.4]])
+    if with_shock:
+        np.testing.assert_allclose(model.solution.N, [[1.]])
+        np.testing.assert_allclose(model.solution.L, [[.5]])
+    report = audit_result(model)
+    assert rows(report)['decision_rule_residual'].status == 'passed'
+    assert rows(report)['decision_rule_residual'].evidence_source == 'recomputed_dynare_lead_lag_equations'
+    assert rows(report)['steady_state_residual'].status == 'passed'
+    if with_shock:
+        assert rows(report)['shock_loading_residual'].status == 'passed'
+    corrupted = replace(model.solution, F=model.solution.F + .02)
+    bad = audit_result(corrupted, model=model)
+    assert rows(bad)['decision_rule_residual'].status == 'failed'
+    # The model context remains correct; the bare result must actually be used.
+    assert rows(audit_result(model))['decision_rule_residual'].status == 'passed'
+
+
 def test_default_audit_does_not_access_network(household, monkeypatch):
     import socket
     def forbidden(*args, **kwargs):
