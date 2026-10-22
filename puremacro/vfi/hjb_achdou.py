@@ -7,6 +7,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, fields
 from typing import Any, ClassVar
 
+from puremacro._warnings import _caller_stacklevel
+
 import numpy as np
 import pandas as pd
 import scipy.optimize as opt
@@ -632,6 +634,13 @@ def solve_hjb_achdou(
         ``a_grid[0] <= 0``, or (with ``compute_kfe=True``) the generator admits no
         unique stationary distribution (a reducible ``A_z``, or the degenerate
         ``w_rate == 0`` benchmark; pass ``compute_kfe=False`` for the HJB alone).
+
+    Warns
+    -----
+    RuntimeWarning
+        If ``max_iter`` is exhausted before the sup-norm falls below ``tol``. The
+        returned ``HJBSolution`` then holds the last iterate with ``converged=False``;
+        the solver does not raise.
     """
     t_start = time.time()
 
@@ -832,6 +841,12 @@ def solve_hjb_achdou(
 
     elapsed = time.time() - t_start
     converged = bool(dist < tol)
+    if not converged:
+        warnings.warn(
+            f"solve_hjb_achdou did not converge in {max_iter} iterations "
+            f"(sup-norm {dist:.3e} > tol {tol:.1e}); the returned HJBSolution has converged=False",
+            RuntimeWarning, stacklevel=_caller_stacklevel(),
+        )
 
     g_dist = None
     mass_residual = 0.0

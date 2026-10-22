@@ -271,7 +271,7 @@ print(f"Initial Consumption Multiplier in RANK: {res_tf.irf_consumption_rank[0]:
 | `tariff_revenue_prime`| `np.ndarray (N,)` | Counterfactual tariff revenue collection by country $R_n'$. |
 | `welfare_decomposition`| `dict[str, np.ndarray]` | Domestic-share statistics `'terms_of_trade'` and `'input_output'`, residual `'tariff_revenue'`, and log-welfare `'total'`; see section 1.2. |
 | `market_clearing_residual`| `float` | Maximum goods and factor market clearing residual across countries, in the units of the baseline flows ($< 10^{-6}$ on convergence). The `tol` argument is relative to each country's labour income, so this absolute residual can exceed `tol`. |
-| `converged` | `bool` | Whether wage tatonnement converged within tolerance. |
+| `converged` | `bool` | Whether wage tatonnement converged within tolerance. A `RuntimeWarning` is issued when the solver stops at `max_iter` without converging. |
 | `country(code)` | `code: str \| int -> pd.Series` | Return the equilibrium outcome series for a specific country. |
 | `__getitem__(key)` | `key: str \| int -> pd.Series` | Subscript access delegating to `country(key)`. |
 | `summary()` | `-> pd.DataFrame` | Country-level summary table of equilibrium changes. |

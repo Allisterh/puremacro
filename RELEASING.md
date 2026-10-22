@@ -45,7 +45,7 @@ If you ever see two PyPI workflows again, one of them is wrong.
 | 3 public API snapshot | regenerated API == `tests/fixtures/public_api_snapshot.json` | the fixture is the count (404 modules with `__all__`, 285 result classes at 3.4.0); the gate prints every symbol that moved |
 | 4 version sync | `pyproject.toml` == `puremacro/__init__.py` == `CHANGELOG.md` == `CITATION.cff` == the wheel pin in `playground/jupyter_lite_config.json` | all five |
 | 7 min-Python syntax | every `.py` under `puremacro/`, `tools/` and `tests/` parses on the `requires-python` floor (3.11) | `ast.parse(feature_version=(3, 11))` plus a PEP 701 f-string scan (quote reuse, backslashes and comments inside `{...}`), and a real `compile()` under `python3.11` when one is on PATH. Gates 1–6 run under whatever interpreter invokes the script, so a 3.11-only SyntaxError passed all of them while every 3.11 CI leg died at collection. `notebooks/` is not scanned: jupytext sources may carry bare `%magics`. Seconds |
-| 5 examples gallery | `--examples` | reads `docs/examples_gallery.json` |
+| 5 examples gallery | `--examples` | reads `docs/examples_gallery.json`. A FAIL entry listed in `tests/known_example_failures.json` whose recorded reason starts with the entry's `reason_prefix` is reported as a known, documented FAIL and does not fail the gate; any other FAIL, including a listed example whose reason drifted, still fails it, and a listed example that now passes is reported for removal. The one entry is the RR2010 example, whose published t-statistic rounding miss is documented in `docs/research_benchmarks.md`; the example still exits nonzero and the gallery still records it as FAIL |
 | 6 Pyodide smoke | `--pyodide` | builds the wheel and boots a real Pyodide kernel |
 
 ```bash

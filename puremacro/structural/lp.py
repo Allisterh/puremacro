@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from typing import Any
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -10,6 +11,54 @@ import pandas as pd
 from puremacro._linalg import inv_xtx
 from puremacro.inference._ols_helpers import ols_hac
 from .bridge import MomentTargets
+
+# pandas 2.2 renamed the period-end offset aliases and pandas 3 removed the old
+# spellings for offsets (DatetimeIndex) while still requiring them for Period.
+_OFFSET_RENAMES = {"A": "YE", "Y": "YE", "Q": "QE", "M": "ME",
+                   "BA": "BYE", "BY": "BYE", "BQ": "BQE", "BM": "BME"}
+
+
+def _pandas_has_end_aliases() -> bool:
+    try:
+        pd.tseries.frequencies.to_offset("QE")
+    except ValueError:  # pandas < 2.2
+        return False
+    return True
+
+
+_HAS_END_ALIASES = _pandas_has_end_aliases()
+
+
+def _expected_grid(index: pd.Index, frequency: str) -> pd.Index:
+    """Regular grid of ``len(index)`` points from ``index[0]`` at the declared frequency."""
+    if isinstance(index, pd.PeriodIndex):
+        try:
+            return pd.period_range(index[0], periods=len(index), freq=frequency)
+        except (ValueError, AttributeError):
+            # pandas < 2.2 reaches Period(start, freq) with a non-period offset such as
+            # 'QS'/'MS' and fails on _period_dtype_code (AttributeError) instead of ValueError.
+            raise ValueError(
+                f"frequency {frequency!r} is not a pandas period alias; a PeriodIndex declares "
+                "its frequency as 'Q', 'M', 'Y', ... (not 'QE'/'QS')") from None
+    base, dash, anchor = frequency.partition("-")
+    candidates = [frequency]
+    if base.upper() in _OFFSET_RENAMES:
+        candidates.append(_OFFSET_RENAMES[base.upper()] + dash + anchor)
+    for candidate in candidates:
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", FutureWarning)  # pandas 2.2 alias deprecation
+                # Build the grid at the index's own resolution: pandas 2.x date_range is
+                # always datetime64[ns] and DatetimeIndex.equals compares dtypes.
+                return pd.date_range(index[0], periods=len(index), freq=candidate,
+                                     unit=getattr(index, "unit", None))
+        except ValueError:
+            continue
+    hint = ("quarterly: 'Q'/'QE' quarter-end or 'QS' quarter-start; monthly: 'M'/'ME' or 'MS'"
+            if _HAS_END_ALIASES else
+            "quarterly: 'Q' quarter-end or 'QS' quarter-start; monthly: 'M' or 'MS'; "
+            "the 'QE'/'ME'/'YE' spellings need pandas 2.2 or later")
+    raise ValueError(f"frequency {frequency!r} is not a pandas offset alias for a DatetimeIndex ({hint})")
 
 
 def lp_moment_targets(
@@ -47,6 +96,11 @@ def lp_moment_targets(
     Rows must represent consecutive, equally spaced observations at
     ``frequency``. For DatetimeIndex/PeriodIndex a regular grid is checked;
     other ordered indices use the caller's explicit frequency declaration.
+    ``frequency`` uses pandas aliases: period aliases ('Q', 'M', 'Y') for a
+    PeriodIndex; for a DatetimeIndex both the pandas-2 ('Q', 'M', 'Y') and
+    pandas-3 ('QE', 'ME', 'YE', which need pandas 2.2 or later, or 'QS'/'MS'/'YS')
+    offset spellings are accepted, and the grid is compared at the index's own
+    resolution.
     Missing/nonfinite data are refused, rather than silently collapsing time.
     All quantities are in supplied units; no name-based percent conversion.
     """
@@ -66,12 +120,9 @@ def lp_moment_targets(
         raise ValueError("response_units must specify exactly the response columns")
     if any(not isinstance(x, str) or not x.strip() for x in (*response_units.values(), shock_unit, frequency)):
         raise ValueError("response units, shock_unit and frequency must be explicit nonempty strings")
-    if isinstance(data.index, pd.PeriodIndex) and len(data) > 1:
-        if not data.index.equals(pd.period_range(data.index[0], periods=len(data), freq=frequency)):
-            raise ValueError("PeriodIndex must be consecutive at the declared frequency")
-    if isinstance(data.index, pd.DatetimeIndex) and len(data) > 1:
-        if not data.index.equals(pd.date_range(data.index[0], periods=len(data), freq=frequency)):
-            raise ValueError("DatetimeIndex must be consecutive at the declared frequency")
+    if isinstance(data.index, (pd.PeriodIndex, pd.DatetimeIndex)) and len(data) > 1:
+        if not data.index.equals(_expected_grid(data.index, frequency)):
+            raise ValueError(f"{type(data.index).__name__} must be consecutive at the declared frequency")
     if not isinstance(lags, (int, np.integer)) or isinstance(lags, (bool, np.bool_)) or lags < 0:
         raise ValueError("lags must be a nonnegative integer")
     horizons = tuple(horizons)

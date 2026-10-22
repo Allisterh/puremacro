@@ -8,6 +8,8 @@ Si bien las técnicas de linealización basadas en jacobianos en el espacio de s
 
 `solve_nonlinear_transition` calcula la **trayectoria de transición no lineal exacta** de todos los agregados macroeconómicos y distribuciones de agentes en equilibrio general empleando el algoritmo cuasi-Newton de Broyden con actualizaciones analíticas de rango 1 de Sherman-Morrison.
 
+A través del puente `.mod`, `HANKModel.simulate(..., nonlinear=True)` y `solve_hank_bridge(..., nonlinear=True)` llegan a este solucionador solo para el hogar de un activo integrado; un `hetagent_block` de dos activos (`assets = 2`) y cualquier puente `household_model` lanzan `NotImplementedError`, y su transición lineal en el espacio de secuencias (`nonlinear=False`) sigue disponible.
+
 ---
 
 ## 1. Equilibrio general en el espacio de secuencias
@@ -193,7 +195,7 @@ Cualquier `puremacro.dp.Model` de horizonte infinito con un estado (o `DPSolutio
 
 - **`dp_sequence_jacobian(model_or_sol, inputs, outputs=None, T=300, dx=1e-4)`**: calcula los jacobianos de noticias falsas (*Fake-News*) `J[Y][X]` de dimensión `(T, T)` para cualquier parámetro o precio de equilibrio `X` y salida agregada, política, estado o variable local `Y` (`"A"`, `"C"`, etc.).
 - **`dp_nonlinear_transition(model_or_sol, input_paths, outputs=None)`**: evalúa trayectorias de transición no lineales exactas ante choques MIT `Y_t - Y*` mediante iteración hacia atrás del método de mallas endógenas (EGM) en $t = T-1, \dots, 0$ seguida de propagación hacia adelante de la distribución por loterías en $t = 0, \dots, T-1$.
-- **`HANKModel(..., household_model=dp_model)`**, **`load_hank_mod(mod_text, household_model=dp_model)`** y **`solve_hank_bridge(mod_text, ..., household_model=dp_model)`**: aceptan directamente un `dp.Model` declarativo o una `DPSolution` en `puremacro.dsge.hank`.
+- **`HANKModel(..., household_model=dp_model)`**, **`load_hank_mod(mod_text, household_model=dp_model)`** y **`solve_hank_bridge(mod_text, ..., household_model=dp_model)`**: aceptan directamente un `dp.Model` declarativo o una `DPSolution` en `puremacro.dsge.hank`. En todos los casos el bloque `model;` del archivo `.mod` se analiza y se conserva en `HANKModel.dag`, pero no se resuelve: el cierre es la NKPC + regla de Taylor integradas sobre los parámetros declarados `beta`, `kappa`, `phi_pi` con la trayectoria del choque monetario `magnitude * rho**t`, y el argumento `shock` solo etiqueta el resultado (`shock_name`, más una columna de `transition_paths` con la trayectoria monetaria cuando el nombre es un `varexo` declarado); nunca selecciona otro choque.
 
 ```python
 from puremacro import dp

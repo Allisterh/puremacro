@@ -13,6 +13,8 @@ Verifies:
 """
 from __future__ import annotations
 
+import warnings
+
 import matplotlib.figure
 import numpy as np
 import pandas as pd
@@ -368,3 +370,28 @@ def test_plot_kinds_and_error(sim_nafta_china: TradePolicySimulator) -> None:
 
     with pytest.raises(ValueError, match="Unknown plot kind"):
         res.plot(kind="invalid_kind")
+
+
+def test_simulator_warns_when_wage_tatonnement_stops_early(sim_nafta_china: TradePolicySimulator) -> None:
+    """Both simulate_* wrappers surface the solver's RuntimeWarning on non-convergence."""
+    with pytest.warns(RuntimeWarning, match="did not converge"):
+        res = sim_nafta_china.simulate_bilateral_tariff("USA", "CHN", tariff_rate=0.25, max_iter=1)
+    assert res.converged is False
+    assert res.iterations == 1
+    assert "not converged" in repr(res)
+
+    with pytest.warns(RuntimeWarning, match="did not converge"):
+        res_war = sim_nafta_china.simulate_trade_war(["USA"], ["CHN"], tariff_rate_a=0.25, max_iter=1)
+    assert res_war.converged is False
+    assert res_war.iterations == 1
+
+
+def test_converged_simulation_is_warning_free(sim_nafta_china: TradePolicySimulator) -> None:
+    """Converged shocks and the identity short-circuit emit no warning at all."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        res = sim_nafta_china.simulate_bilateral_tariff("USA", "CHN", tariff_rate=0.25, tol=1e-10)
+        ident = sim_nafta_china.simulate_tariff_counterfactual()
+    assert res.converged
+    assert ident.converged
+    assert ident.iterations == 0

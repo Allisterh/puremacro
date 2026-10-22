@@ -244,9 +244,20 @@ def test_two_asset_custom_outputs_and_registered_functions(two_asset_dp_model):
 
 
 def test_two_asset_reports_nonconvergence(two_asset_dp_model):
-    with pytest.warns(RuntimeWarning, match="did not converge"):
+    # Contract shared with the Krusell-Smith and HJB solvers: running out of max_iter
+    # warns and returns the last iterate with converged=False (the one-asset vfi/egm
+    # kernels raise instead), and both sequence-space bridges refuse that household.
+    with pytest.warns(RuntimeWarning,
+                      match=r"two-asset EGM did not converge: policy residual .* after 1 iterations"):
         sol = two_asset_dp_model.solve(method="egm", tol=1e-10, max_iter=1)
-    assert not sol.raw.converged
+    assert sol.raw.converged is False
+    assert sol.raw.hh_block.converged is False
+    assert sol.raw.n_iter == 1
+    assert sol.raw.sup_norm > 1e-10
+    with pytest.raises(RuntimeError, match="require a converged household"):
+        dp_sequence_jacobian(sol, inputs=["w"], outputs=["C"], T=2)
+    with pytest.raises(RuntimeError, match="require a converged household"):
+        dp_nonlinear_transition(sol, {"w": np.full(3, 1e-5)}, outputs=["C"])
 
 
 def test_two_asset_periodic_reducible_stationary_failure():

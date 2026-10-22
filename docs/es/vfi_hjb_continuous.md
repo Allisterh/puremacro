@@ -243,7 +243,7 @@ for Delta in (1e4, 1e2, 10.0, 1.0):
 print("Delta = 1, max_iter = 1000:", solve_hjb_achdou(Delta=1.0, max_iter=1000).n_iter)
 ```
 
-Esta es la fuente de la tabla de la Sección 1.3: 9, 14, 50 y 100 iteraciones para $\Delta = 10^4, 10^2, 10, 1$, con `converged=False` en $\Delta = 1$ bajo el `max_iter=100` por defecto (la función de valor aún está a $6.7 \times 10^{-2}$ de la referencia) y 360 iteraciones cuando el tope se eleva a 1000. Compruebe siempre `converged` después de reducir `Delta`.
+Esta es la fuente de la tabla de la Sección 1.3: 9, 14, 50 y 100 iteraciones para $\Delta = 10^4, 10^2, 10, 1$, con `converged=False` en $\Delta = 1$ bajo el `max_iter=100` por defecto (la función de valor aún está a $6.7 \times 10^{-2}$ de la referencia) y 360 iteraciones cuando el tope se eleva a 1000. Compruebe siempre `converged` después de reducir `Delta`; la corrida no convergida con `Delta = 1` también emite un `RuntimeWarning`.
 
 ---
 
@@ -307,7 +307,7 @@ solve_aiyagari_continuous_hjb(
 | `a_grid` | Malla explícita; anula `Na`, `a_min`, `a_max`. Puede ser no uniforme; la KFE pondera cada nodo por el ancho de su celda (Sección 1.4). Debe ser unidimensional, finita y estrictamente creciente, con al menos dos puntos (`ValueError` en caso contrario). |
 | `e_grid` | Estados de productividad, forma `(Ne,)`; por defecto `[0.2, 1.0]`. |
 | `A_z` | Generador del ingreso, forma `(Ne, Ne)`, entradas finitas, fuera de la diagonal no negativas y sumas por fila iguales a cero — todo ello validado, con `ValueError` ante cualquier incumplimiento. Por defecto: intensidad simétrica $0.1$ para dos estados, $0.2/(N_e - 1)$ fuera de la diagonal con $-0.2$ en ella en otro caso, `[[0.]]` para un solo estado. |
-| `max_iter`, `tol` | Tope de iteraciones (entero $\ge 1$, `ValueError` en caso contrario) y tolerancia en norma del supremo sobre $v^{n+1} - v^n$. `converged` es `False` cuando se alcanza el tope. |
+| `max_iter`, `tol` | Tope de iteraciones (entero $\ge 1$, `ValueError` en caso contrario) y tolerancia en norma del supremo sobre $v^{n+1} - v^n$. `converged` es `False` cuando se alcanza el tope, y el solucionador emite un `RuntimeWarning` que indica el tope y la norma del supremo final. |
 | `Delta` | Paso implícito $\Delta$ (Sección 1.3). |
 | `compute_kfe` | Resolver la KFE adjunta tras la convergencia y rellenar `g_dist` y `mass_residual`. |
 | `v_prime_boundary` | Derivadas de Neumann `(v'_min, v'_max)`; cualquiera de las dos entradas puede ser `None`. |
@@ -380,7 +380,7 @@ Métodos: `summary()` (once filas: precios, oferta y demanda de capital, error d
 ## 7. Advertencias y limitaciones
 
 - **`g_dist` es una densidad, no un vector de masas nodales.** Multiplique por los pesos de ancho de celda antes de sumar: la masa nodal es $g_{i,j} w_i$, y $w_i = \Delta a$ solo en una malla uniforme. Los ejemplos de esta página hacen exactamente eso. Esto importa sobre todo en mallas no uniformes: en la malla cuadrática `np.linspace(0, 1, 100)**2 * 30` la oferta de capital ponderada es $5.9155$, y leer `g_dist` como un vector de masas daría un resultado equivocado por el ancho local de la celda en cada nodo.
-- **El número de iteraciones depende de `Delta`.** Con `Delta=1` el `max_iter=100` por defecto no basta (Sección 4.5). `converged` es el campo que hay que comprobar; el solucionador no emite advertencias.
+- **El número de iteraciones depende de `Delta`.** Con `Delta=1` el `max_iter=100` por defecto no basta (Sección 4.5). `converged` es el campo que hay que comprobar; el solucionador también emite un `RuntimeWarning` cuando se alcanza el tope pero no lanza una excepción, de modo que la solución devuelta es la última iteración.
 - **El presupuesto de iteraciones de Brent es por pasada.** `max_iter_ge` acota cada pasada de acotamiento, y `n_iter_ge` reporta la suma sobre las pasadas, de modo que el número total de resoluciones del hogar puede superar `max_iter_ge` cuando `tol_ge` fuerza un reacotamiento. Las soluciones HJB se almacenan en caché por $r$, así que repetir una tasa tentativa no cuesta nada.
 - **`mass_residual` se mide tras la renormalización** y por ello es del orden de $10^{-16}$ con independencia de la exactitud de la resolución lineal; certifica la normalización, no el residuo de la KFE. Calcule `A_generator.T @ (g_dist * w[:, None]).ravel(order="F")` —el generador actúa sobre masas nodales— si desea este último.
 - **El orden de los estados es por columnas.** `A_generator` indexa el estado $(i, j)$ como $j N_a + i$; reorganice los vectores con `order="F"`, como hace `solve_kfe_achdou`.

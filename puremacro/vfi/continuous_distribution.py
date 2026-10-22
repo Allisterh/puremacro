@@ -26,6 +26,8 @@ import warnings
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Sequence, Tuple, Union
 
+from puremacro._warnings import _caller_stacklevel
+
 if TYPE_CHECKING:
     import matplotlib.figure
 
@@ -1361,27 +1363,6 @@ class _ContinuousHouseholdEGMResult:
                     out[mask] = np.interp(k_pts[mask], self.a_grid, self.policy_a[:, m])
             return out
         raise ValueError(f"Invalid state evaluation shape {s_arr.shape}")
-
-
-_PUREMACRO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + os.sep
-
-
-def _caller_stacklevel() -> int:
-    """``stacklevel`` for ``warnings.warn`` pointing at the first frame outside puremacro.
-
-    Called from the function that issues the warning. The wrappers
-    (``AiyagariContinuousModel.solve``, ``AiyagariContinuousEquilibrium.solve``)
-    and ``continuous_transition`` forward to ``solve_aiyagari_continuous``, so a
-    fixed ``stacklevel=2`` would attribute the warning to library code.
-    """
-    frame: Any = sys._getframe(1)  # the function calling warnings.warn: stacklevel 1
-    level = 1
-    while frame is not None:
-        if not os.path.abspath(frame.f_code.co_filename).startswith(_PUREMACRO_DIR):
-            return level
-        frame = frame.f_back
-        level += 1
-    return 2
 
 
 def _positive_finite(name: str, value: Any) -> float:

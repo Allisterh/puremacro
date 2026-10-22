@@ -36,7 +36,7 @@ PY
 echo "==> 2/5 assemble content/ (showcase notebooks + style + offline config)"
 rm -rf "$PG/content"; mkdir -p "$PG/content"
 cp "$ROOT"/notebooks/[0-9][0-9]_*.ipynb "$PG/content/"
-cp "$ROOT"/notebooks/course/[0-9]*.ipynb "$PG/content/" 2>/dev/null || true   # course companion lessons (EN/ES)
+cp "$ROOT"/notebooks/course/[0-9]*.ipynb "$PG/content/" 2>/dev/null || true   # course companion lessons (Spanish)
 cp "$ROOT"/notebooks/_nbstyle.py "$PG/content/"
 cp "$ROOT"/notebooks/course/_tutor.py "$PG/content/" 2>/dev/null || true       # offline AI-tutor helper (graceful in-browser)
 # Course lessons resolve their data as `_nb/"course"/"data"`, and in the flat

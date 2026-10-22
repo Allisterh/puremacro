@@ -82,6 +82,17 @@ c = sol.policy("c")                 # (150, 5)
 print(sol.mean("c"), sol.mean("a")) # consumo y activos medios
 ```
 
+**Cuando se agota `max_iter`.** El resultado depende del motor. Los motores de
+un activo `"vfi"` y `"egm"` (incluida la EGM con decisión discreta) no
+devuelven ningún campo `converged`, así que lanzan
+`RuntimeError("... did not converge ...")` y no entregan una solución parcial.
+El solucionador EGM de dos activos y el solucionador `"hjb"` emiten un
+`RuntimeWarning` y devuelven la última iteración con
+`sol.raw.converged = False`; el bucle de Krusell-Smith hace lo mismo al llegar
+a `max_outer` (`sol.equilibrium.converged`). Revise la bandera antes de usar la
+política: `dp_sequence_jacobian` y `dp_nonlinear_transition` rechazan un hogar
+de dos activos no convergido con `RuntimeError`.
+
 ## Ciclo de vida
 
 `horizon(T, survival=..., terminal=..., newborns=...)` vuelve finito el

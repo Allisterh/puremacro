@@ -9,12 +9,13 @@ are included in 5.4.1. See the [release procedure](RELEASING.md).
 
 ## 5.4.1 (2026-10-20)
 
-**Python 3.11 typing and Windows CI compatibility.** This patch includes the
-5.3.0 and 5.4.0 feature set. The `v5.4.0` tag failed five of the nine CI legs
+**Python 3.11 typing and Windows CI compatibility, plus the defect fixes from the
+20 October 2026 review.** This patch includes the 5.3.0 and 5.4.0 feature set. The `v5.4.0` tag failed five of the nine CI legs
 and was never published: the type-checking gate failed on all three Python 3.11
 legs, where pip resolves NumPy 2.4 (NumPy 2.5 requires Python 3.12) and its
 stubs differ from NumPy 2.5's, and the three Windows legs also failed on
-Windows-only code paths. No numerical result changes.
+Windows-only code paths. No numerical result changes in the library; the course
+model `rbc_canonico.mod` is recalibrated (see Fixed).
 
 ### Fixed
 
@@ -30,8 +31,52 @@ Windows-only code paths. No numerical result changes.
 - Read and write the course-site build's HTML, JavaScript and JSON files as
   UTF-8 explicitly. On Windows the default code page (cp1252) could not decode
   the accented characters in the lab pages and the build failed.
-- Compare resolved paths in the research-guard symlink test; Windows returns
-  the extended-length `\\?\` form from `os.readlink`.
+- Resolve the symlink itself, not its `os.readlink` target, in the research-guard
+  symlink test; Windows returns the extended-length `\\?\` form from `os.readlink`
+  and `Path.resolve()` keeps that prefix when the input already carries it.
+- `lp_moment_targets` accepts both the pandas 2 (`'Q'`, `'M'`, `'Y'`) and pandas 3
+  (`'QE'`, `'ME'`, `'YE'`, which need pandas 2.2 or later, or `'QS'`/`'MS'`/`'YS'`)
+  offset spellings of `frequency` for a `DatetimeIndex`, builds the comparison
+  grid at the index's own resolution (a regular index stored at second or
+  microsecond resolution was refused as non-consecutive on pandas 2.x), and
+  reports an unrecognised alias with its own `ValueError` naming the index kind
+  instead of pandas' internal message, including the `AttributeError` pandas
+  2.0/2.1 raise for an offset alias such as `'QS'` on a `PeriodIndex`.
+  `PeriodIndex` callers using period aliases and the `structural_irf_matching`
+  example were already correct.
+- `HANKModel.simulate(nonlinear=True)` and `solve_hank_bridge(..., nonlinear=True)`
+  on the built-in two-asset household (`hetagent_block` with `assets = 2`, no
+  `household_model`) now raise `NotImplementedError` instead of silently
+  returning the linear sequence-space transition with `converged=True`. The
+  Broyden solver covers the built-in one-asset household only; the DP-bridge
+  rejection already existed.
+- `CaliendoParroModel.solve_counterfactual` and the `TradePolicySimulator.simulate_*`
+  methods that call it issue a `RuntimeWarning` when the wage tatonnement stops
+  at `max_iter` without converging; they used to return `converged=False`
+  silently. Returned values are unchanged. `max_iter` must be an integer >= 1
+  (`ValueError`); `max_iter <= 0` used to crash with an `UnboundLocalError`. This
+  warning and the HJB one below point at the caller's line, as the Krusell-Smith
+  warning does.
+- `solve_hjb_achdou` (and `dp.Model.solve(method="hjb")`) emits a `RuntimeWarning`
+  naming the iteration cap and the final sup-norm when `max_iter` is exhausted
+  instead of setting `converged=False` silently; the returned `HJBSolution` is
+  unchanged.
+- The course model `curso/notebooks/modelos/rbc_canonico.mod` sets `mu = 1.455567`,
+  the value its header, `initval` block and lesson T02_B derive for `l_ss = 0.33`.
+  The shipped `0.822516` made `steady;` walk away from the `initval` to
+  steady-state hours of 0.443 and a 0.285% impact response of hours to a
+  one-standard-deviation TFP innovation, instead of the 0.393% the RBC lab and
+  T02_B report; the `initval` `w` moves to the analytic 2.020270. The notebooks
+  and the lab were unaffected because they recalibrate `mu` themselves.
+- `tools/release_check.py --examples` (Gate 5) accepts a FAIL listed in the new
+  `tests/known_example_failures.json` when the reason recorded in
+  `docs/examples_gallery.json` still starts with the entry's `reason_prefix`,
+  reporting it as `known FAIL (documented)`; an unlisted FAIL or a drifted reason
+  still fails the gate, and a listed example that now passes is reported for
+  removal, mirroring `tests/known_failures.json`. The only entry is the RR2010
+  example's published t-statistic rounding miss; the example still exits
+  nonzero and the gallery still records it as FAIL, so the gate can now pass
+  without hiding anything.
 
 ### Documentation
 
@@ -44,11 +89,76 @@ Windows-only code paths. No numerical result changes.
   under one Python (3.13, NumPy 2.5 stubs) and one platform. The pre-tag recipe
   now also runs mypy under the oldest supported interpreter and with
   `--platform win32`.
+- The README, `docs/dsge_v3.md`, `docs/hank_nonlinear.md` (English and Spanish) and
+  the `puremacro.dsge.hank` docstrings state that the HANK bridge's `model;`
+  block is parsed onto `HANKModel.dag` but not solved: the closure is the
+  built-in Phillips curve and Taylor rule on the declared `beta`, `kappa`,
+  `phi_pi` (`alpha_ab` for two-asset) with a single monetary shock path, and the
+  `shock` argument only labels the result (a `transition_paths` column appears
+  only for a declared `varexo`). A test in
+  `tests/test_v300_hank.py` pins this so the docs and the behaviour move in step.
+- `docs/dp.md`, `docs/es/dp.md` and the `dp.Model.solve()` docstring describe the
+  household-solver non-convergence contract: the one-asset `vfi`/`egm` engines
+  and DC-EGM carry no `converged` field and raise `RuntimeError` when `max_iter`
+  is exhausted; the two-asset EGM solver and `solve_hjb_achdou` emit a
+  `RuntimeWarning` and return the last iterate with `converged=False`, as does
+  the Krusell-Smith loop at `max_outer`; `dp_sequence_jacobian` and
+  `dp_nonlinear_transition` refuse an unconverged two-asset household.
+  `docs/vfi_hjb_continuous.md` and its Spanish twin no longer say the HJB solver
+  does not warn.
+- `docs/structural_bridge.md` and its Spanish twin state which `frequency`
+  aliases `lp_moment_targets` accepts for a `PeriodIndex` and a `DatetimeIndex`;
+  `docs/policy_simulators.md` and its twin note the new non-convergence warning.
+- `RELEASING.md` (Gate 5 row) and `CONTRIBUTING.md` (Gate 5 section) describe
+  `tests/known_example_failures.json` and the pinned reason prefix.
+- Course text pass: the syllabus table in `T00_syllabus{,_es}.ipynb` lists the
+  labs that exist (`T04_C`, `T02_E`/`T02_F`, `T05_G`, `T00_B`; no `T04_B`) with its
+  stored output re-rendered in step; the Colab hints for `puremacro.text` (T03_D,
+  T03_E, T03_F, T09_B) and the comments around the `puremacro.dp` fallback
+  (T03_A, T06_A, T06_B) name the pinned development commit `4a726629` the course
+  README declares instead of an unpinned repository install, and no longer call
+  5.x unpublished; the browser playground's start page describes the companion
+  lessons as Spanish-only and the notebooks as network-free rather than "fully
+  synthetic"; the inline `multi_shock_mod` in `T02_B` (EN/ES) now carries the
+  same `mu = 1.455567` as the model file (the notebook already overrode it
+  through `params=`, so its outputs are unchanged).
 
 ### Internal
 
 - The dedicated CI mypy step runs on Ubuntu/Python 3.11 as well as 3.12, so the
   NumPy 2.4 stub line is type-checked outside the test suite too.
+- `tests/test_curso_models.py` loads all seven course `.mod` files under
+  `curso/notebooks/modelos`, solves the six determinate ones with
+  `stoch_simul(order=1, irf=40)` (the horizon four of the files use;
+  `new_keynesian_3eq.mod` ships `irf=20` and `nk_zlb_ref.mod` carries no
+  `stoch_simul` line), treats `nk_zlb_cons.mod` as the documented
+  `BlanchardKahnError` / `strict=False` regime, checks every `initval` block
+  against the solved steady state and pins the calibration targets the files
+  document. Previously no test loaded any course model.
+- `release_check.gate_examples_gallery` gained a `known_failures_path` keyword
+  (default `None`, previous behaviour) and `load_known_example_failures`;
+  `tests/test_release_check.py` gained eleven regression tests, including one
+  that runs Gate 5 on the committed gallery with the repo allowlist.
+- `tests/test_course_text_consistency.py` parses the course notebooks and
+  `playground/00_start_here.py` statically: every lab id the syllabus names has a
+  notebook, every shipped lab is in a module row, the stored table output matches
+  the source, the start page names only notebooks the build copies, and every
+  `git+` install hint in the course pins the README's commit.
+- Regenerated `curso/site/diapositivas/index.html` and the trade lab's cache-busting
+  hash from the committed sources: the slide index still listed the page counts
+  and sizes of the PDFs replaced on 18 October, so every course-site build (and
+  every `tests/test_e2e_upgrade.py` run) rewrote both tracked files.
+- Six pre-existing HJB tests that exhaust `max_iter` on purpose now expect the
+  new warning or use a converging iteration budget; `_caller_stacklevel` moved
+  to the dependency-free `puremacro/_warnings.py` so the trade and HJB solvers
+  can use it without importing the continuous-time VFI module.
+
+### Known limitations
+
+- Nonlinear general-equilibrium transitions (`nonlinear=True`) are implemented
+  for the built-in one-asset household only; two-asset models, built-in or
+  through the DP bridge, raise `NotImplementedError` and keep the linear
+  transition (`nonlinear=False`).
 
 ## 5.4.0 (2026-10-20)
 

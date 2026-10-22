@@ -273,6 +273,15 @@ class Model:
         (one state with a ``drift`` linear in one ``control``); ``tol`` and
         ``max_iter`` go to the HJB iteration.
 
+        When ``max_iter`` is exhausted the outcome depends on the engine: the
+        one-asset ``"vfi"`` and ``"egm"`` engines (discrete-choice EGM included)
+        return no ``converged`` field and raise ``RuntimeError``; the two-asset
+        EGM solver and ``"hjb"`` emit a ``RuntimeWarning`` and return the last
+        iterate with ``sol.raw.converged = False``, as does the Krusell-Smith
+        loop at ``max_outer`` (``sol.equilibrium.converged``).
+        ``dp_sequence_jacobian`` and ``dp_nonlinear_transition`` refuse an
+        unconverged two-asset household with ``RuntimeError``.
+
         With an ``aggregate_state`` the household VFI sits inside the
         Krusell-Smith loop; ``ks`` holds its options (``T``, ``burn_in``,
         ``seed``, ``damping``, ``tol``, ``max_outer``, initial ``mu0``, ``b0``,

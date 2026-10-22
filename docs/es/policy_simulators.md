@@ -271,7 +271,7 @@ print(f"Multiplicador inicial de consumo en RANK: {res_tf.irf_consumption_rank[0
 | `tariff_revenue_prime`| `np.ndarray (N,)` | Recaudación arancelaria contrafactual por país $R_n'$. |
 | `welfare_decomposition`| `dict[str, np.ndarray]` | Estadísticas de cuotas domésticas `'terms_of_trade'` e `'input_output'`, residual `'tariff_revenue'` y cambio logarítmico del bienestar `'total'`; véase la sección 1.2. |
 | `market_clearing_residual`| `float` | Máximo residual de vaciado de mercados en todos los países, en las unidades de los flujos de base ($< 10^{-6}$ al converger). El argumento `tol` es relativo a la renta laboral de cada país, así que este residual absoluto puede superar `tol`. |
-| `converged` | `bool` | Indica si el tanteo salarial convergió dentro de la tolerancia. |
+| `converged` | `bool` | Indica si el tanteo salarial convergió dentro de la tolerancia. Se emite un `RuntimeWarning` cuando el solucionador se detiene en `max_iter` sin converger. |
 | `country(code)` | `code: str \| int -> pd.Series` | Retorna la serie de resultados de equilibrio para un país específico. |
 | `__getitem__(key)` | `key: str \| int -> pd.Series` | Acceso por corchetes delegando en `country(key)`. |
 | `summary()` | `-> pd.DataFrame` | Tabla resumen a nivel país con los cambios de equilibrio. |

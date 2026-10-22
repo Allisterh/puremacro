@@ -476,7 +476,8 @@ def test_max_iter_must_be_positive():
             solve_hjb_achdou(Na=10, max_iter=bad)
     with pytest.raises(ValueError, match="max_iter must be an integer >= 1"):
         solve_aiyagari_continuous_hjb(Na=10, max_iter_hjb=0)
-    sol = solve_hjb_achdou(Na=10, max_iter=1)
+    with pytest.warns(RuntimeWarning, match="did not converge in 1 iterations"):
+        sol = solve_hjb_achdou(Na=10, max_iter=1)
     assert sol.n_iter == 1
     assert sol.converged is False
 

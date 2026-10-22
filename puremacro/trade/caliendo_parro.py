@@ -10,6 +10,7 @@ Reference:
 """
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
@@ -18,6 +19,8 @@ if TYPE_CHECKING:
     import matplotlib.figure
 
 import numpy as np
+
+from puremacro._warnings import _caller_stacklevel
 import pandas as pd
 from scipy import linalg
 
@@ -54,6 +57,7 @@ class CaliendoParroResult:
         Counterfactual tariff revenue by country (R_n'), shape (N,).
     converged : bool
         Whether the equilibrium wage iteration converged within tolerance.
+        A ``RuntimeWarning`` is issued by the solver when this is False.
     iterations : int
         Number of wage tatonnement iterations performed.
     max_residual : float
@@ -617,7 +621,22 @@ class CaliendoParroModel:
         -------
         CaliendoParroResult
             Frozen dataclass containing counterfactual equilibrium outcomes.
+
+        Raises
+        ------
+        ValueError
+            If ``max_iter`` is not an integer >= 1, or the tariff/deficit inputs
+            have the wrong shape.
+
+        Warns
+        -----
+        RuntimeWarning
+            When the wage tatonnement stops at ``max_iter`` without converging;
+            the result then has ``converged=False`` and its fields are the last
+            iterate.
         """
+        if isinstance(max_iter, bool) or not isinstance(max_iter, (int, np.integer)) or max_iter < 1:
+            raise ValueError(f"solve_counterfactual: max_iter must be an integer >= 1, got {max_iter!r}")
         N, J = self.N, self.J
 
         # Determine counterfactual tariffs tau_prime and relative changes tau_hat
@@ -680,6 +699,7 @@ class CaliendoParroModel:
         converged = False
         iteration = 0
         max_residual = 1.0
+        max_abs_residual = float("inf")
 
         # Precompute baseline total world labor income
         world_base_inc = np.sum(self.labor_income)
@@ -757,6 +777,15 @@ class CaliendoParroModel:
             # Numeraire normalization: keep world labor income constant
             norm_factor = world_base_inc / np.sum(w_hat_new * self.labor_income)
             w_hat = w_hat_new * norm_factor
+
+        if not converged:
+            warnings.warn(
+                f"CaliendoParroModel.solve_counterfactual did not converge in {max_iter} iterations "
+                f"(max relative excess labour demand {max_residual:.3g}, tol {tol:g}; absolute excess "
+                f"{max_abs_residual:.3g}, floor 1e-6). The returned result has converged=False and its "
+                "w_hat, prices and welfare are the last iterate. Raise max_iter or lower damping.",
+                RuntimeWarning, stacklevel=_caller_stacklevel(),
+            )
 
         # Final calculations of aggregate outcomes
         P_index_hat = np.prod(P_hat ** self.alpha, axis=1)

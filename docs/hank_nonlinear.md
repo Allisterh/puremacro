@@ -8,6 +8,8 @@ While first-order sequence-space Jacobian methods (the "Fake News" algorithm) pr
 
 `solve_nonlinear_transition` computes the **exact non-linear transition path** of all aggregate and distributional variables in general equilibrium using a specialized Broyden Quasi-Newton method with Sherman-Morrison rank-1 inverse Jacobian updates.
 
+Through the `.mod` bridge, `HANKModel.simulate(..., nonlinear=True)` and `solve_hank_bridge(..., nonlinear=True)` reach this solver for the built-in one-asset household only; a two-asset `hetagent_block` (`assets = 2`) and any `household_model` bridge raise `NotImplementedError`, and their linear sequence-space transition (`nonlinear=False`) stays available.
+
 ---
 
 ## 1. Sequence-Space Equilibrium Framework
@@ -193,7 +195,7 @@ Any infinite-horizon single-state `puremacro.dp.Model` (or pre-solved `DPSolutio
 
 - **`dp_sequence_jacobian(model_or_sol, inputs, outputs=None, T=300, dx=1e-4)`**: computes Fake-News sequence-space Jacobians `J[Y][X]` of shape `(T, T)` for any declared parameter or equilibrium price `X` and aggregate/policy/state/local output `Y` (`"A"`, `"C"`, etc.).
 - **`dp_nonlinear_transition(model_or_sol, input_paths, outputs=None)`**: evaluates exact non-linear MIT-shock transition paths `Y_t - Y*` by backward Endogenous Grid Method (EGM) iteration over $t = T-1, \dots, 0$ followed by forward lottery distribution propagation over $t = 0, \dots, T-1$.
-- **`HANKModel(..., household_model=dp_model)`**, **`load_hank_mod(mod_text, household_model=dp_model)`**, and **`solve_hank_bridge(mod_text, ..., household_model=dp_model)`**: accept a declarative `dp.Model` or `DPSolution` directly in `puremacro.dsge.hank`.
+- **`HANKModel(..., household_model=dp_model)`**, **`load_hank_mod(mod_text, household_model=dp_model)`**, and **`solve_hank_bridge(mod_text, ..., household_model=dp_model)`**: accept a declarative `dp.Model` or `DPSolution` directly in `puremacro.dsge.hank`. In every case the `.mod` file's `model;` block is parsed and kept on `HANKModel.dag` but not solved: the closure is the built-in NKPC + Taylor rule on the declared `beta`, `kappa`, `phi_pi` parameters with the monetary shock path `magnitude * rho**t`, and the `shock` argument only labels the result (`shock_name`, plus a `transition_paths` column holding the monetary path when the name is a declared `varexo`); it never selects a different shock.
 
 ```python
 from puremacro import dp

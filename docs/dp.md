@@ -78,6 +78,16 @@ c = sol.policy("c")                 # (150, 5)
 print(sol.mean("c"), sol.mean("a")) # mean consumption and assets
 ```
 
+**When `max_iter` runs out.** The outcome depends on the engine. The one-asset
+`"vfi"` and `"egm"` engines (discrete-choice EGM included) return no
+`converged` field, so they raise `RuntimeError("... did not converge ...")` and
+hand back no partial solution. The two-asset EGM solver and the `"hjb"` solver
+emit a `RuntimeWarning` and return the last iterate with
+`sol.raw.converged = False`; the Krusell-Smith loop does the same at
+`max_outer` (`sol.equilibrium.converged`). Check the flag before using the
+policy: `dp_sequence_jacobian` and `dp_nonlinear_transition` refuse an
+unconverged two-asset household with `RuntimeError`.
+
 ## Life cycles
 
 `horizon(T, survival=..., terminal=..., newborns=...)` makes the problem finite.

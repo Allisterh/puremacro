@@ -1,4 +1,6 @@
 """Joint LP covariance against a dense, independently assembled kernel oracle."""
+import warnings
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -111,3 +113,78 @@ def test_collinear_design_is_refused():
     d["z"] = d["x"]
     with pytest.raises(np.linalg.LinAlgError):
         targets(d)
+
+
+def _on_timestamps(d, period_freq="Q", how="end"):
+    """Re-key ``d`` on a DatetimeIndex built through Period.to_timestamp, so the
+    grid is constructed without any pandas-3-only offset alias ('QE', 'ME')."""
+    grid = pd.period_range("1980-01", periods=len(d), freq=period_freq).to_timestamp(how=how)
+    return d.set_axis(grid.normalize())
+
+
+def _pandas_has_end_aliases():
+    try:
+        pd.tseries.frequencies.to_offset("QE")
+    except ValueError:  # pandas < 2.2
+        return False
+    return True
+
+
+@pytest.mark.parametrize("period_freq, how, declared", [
+    ("Q", "end", "Q"), ("Q", "end", "Q-DEC"), ("M", "end", "M"), ("Y", "end", "Y"),  # pandas-2 spellings
+    ("Q", "start", "QS"), ("M", "start", "MS"),  # start anchors, unchanged across pandas generations
+])
+def test_datetime_index_accepts_pandas2_offset_aliases(period_freq, how, declared):
+    d = panel()
+    ref = targets(d)
+    out = targets(_on_timestamps(d, period_freq, how), frequency=declared)
+    assert_allclose(out.values, ref.values)
+    assert_allclose(out.covariance, ref.covariance)
+    assert out.metadata["frequency"] == declared
+
+
+@pytest.mark.skipif(not _pandas_has_end_aliases(), reason="'QE'/'ME'/'YE' arrived in pandas 2.2")
+@pytest.mark.parametrize("period_freq, declared", [("Q", "QE"), ("M", "ME"), ("Y", "YE")])
+def test_datetime_index_accepts_pandas3_offset_aliases(period_freq, declared):
+    d = panel()
+    out = targets(_on_timestamps(d, period_freq, "end"), frequency=declared)
+    assert_allclose(out.values, targets(d).values)
+
+
+def test_pandas2_alias_on_datetime_index_emits_no_future_warning():
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", FutureWarning)  # pandas 2.2 deprecates 'Q' for offsets
+        targets(_on_timestamps(panel()), frequency="Q")
+
+
+def test_datetime_index_still_refuses_wrong_anchor_and_gaps():
+    d = panel()
+    quarter_end = _on_timestamps(d, "Q", "end")
+    with pytest.raises(ValueError, match="DatetimeIndex must be consecutive"):
+        targets(_on_timestamps(d, "Q", "start"), frequency="Q")  # 'Q' keeps its quarter-end meaning
+    with pytest.raises(ValueError, match="DatetimeIndex must be consecutive"):
+        targets(quarter_end.drop(quarter_end.index[30]), frequency="Q")
+    with pytest.raises(ValueError, match="DatetimeIndex must be consecutive"):
+        targets(quarter_end, frequency="M")  # recognised alias, wrong spacing
+
+
+@pytest.mark.parametrize("on_timestamps, frequency, message", [
+    (False, "QE", "PeriodIndex .*'Q'"),
+    (False, "QS", "PeriodIndex .*'Q'"),
+    (False, "bananas", "period alias"),
+    (True, "bananas", "offset alias"),
+])
+def test_unrecognised_frequency_alias_reports_the_index_kind(on_timestamps, frequency, message):
+    d = _on_timestamps(panel()) if on_timestamps else panel()
+    with pytest.raises(ValueError, match=message):
+        targets(d, frequency=frequency)
+
+
+@pytest.mark.parametrize("unit", ["s", "ms", "us"])
+def test_datetime_index_at_coarser_resolution_is_accepted(unit):
+    """pandas 2.x builds date_range grids at nanosecond resolution; a regular
+    index stored at another unit must not be refused as 'not consecutive'."""
+    d = _on_timestamps(panel())
+    coarse = d.set_axis(d.index.as_unit(unit))
+    out = targets(coarse, frequency="Q")
+    assert_allclose(out.values, targets(d).values)

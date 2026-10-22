@@ -141,7 +141,7 @@ git commit -m "chore: refresh examples gallery"
 python tools/release_check.py --examples
 ```
 
-The `--examples` flag activates Gate 5, which fails on any example with status FAIL. The render step is slow; the gate itself just reads the committed JSON. Use `--only NAME` to re-render a single example if you only edited one.
+The `--examples` flag activates Gate 5, which fails on any example with status FAIL, unless the example is listed in `tests/known_example_failures.json` and its recorded reason starts with the entry's `reason_prefix`: such an entry is a deliberate, documented FAIL (today only the RR2010 published-rounding miss) and is reported without failing the gate. A listed example whose reason changed still fails the gate; one that now passes is reported for removal. The render step is slow; the gate itself just reads the committed JSON. Use `--only NAME` to re-render a single example if you only edited one.
 
 ### Opt-in: real Pyodide smoke (Gate 6)
 
