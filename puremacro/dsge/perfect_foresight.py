@@ -699,9 +699,15 @@ def solve_perfect_foresight(
             y_init_arr = np.asarray(y_init, dtype=float).ravel()
 
         # Handle endval override / terminal steady state solve
-        eff_endval = endval if endval is not None else getattr(
-            model, "_endval", getattr(model, "endval_values", None)
-        )
+        eff_endval = endval
+        if eff_endval is None:
+            eff_endval = getattr(model, "_endval", None)
+            if eff_endval is None:
+                eff_endval = getattr(model, "endval_values", None)
+            if eff_endval is None:
+                # parse_mod -> build_dynare retains declarations on the DAG;
+                # LinearModel.endval exposes them without a copied _endval.
+                eff_endval = getattr(model, "endval", None)
         if y_end is not None:
             y_ss_arr = np.asarray(y_end, dtype=float).ravel()
         elif y_ss is not None:

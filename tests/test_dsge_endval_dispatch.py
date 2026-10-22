@@ -1,14 +1,26 @@
 """Terminal-condition provenance across public .mod execution entry points."""
+from functools import partial
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from puremacro.dsge import ModCompatibilityError, load_mod, solve_perfect_foresight
+from puremacro.dsge import ModCompatibilityError, build_dynare, load_mod, parse_mod, solve_perfect_foresight
 
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "dynare_issue_177"
+
+
+def _build_from_parsed(source):
+    parsed = parse_mod(source)
+    model = build_dynare(parsed["equations"], variables=parsed["variables"],
+                         shocks=parsed["shocks"], params=parsed["params"], guess=parsed["guess"])
+    # The builder carries the parsed DAG through the compiled callable. Unlike
+    # load_mod, it does not copy boundary declarations onto private attributes.
+    assert not hasattr(model, "_endval")
+    assert model.endval == parsed["endval"]
+    return model
 
 
 def _source(terminal, command):
@@ -25,10 +37,11 @@ def _source(terminal, command):
 
 @pytest.mark.parametrize("terminal", ["literal", "steady", "endval_steady"])
 @pytest.mark.parametrize("command", ["setup_solver", "simul"])
-@pytest.mark.parametrize("command_mode", [None, "legacy"])
-def test_legacy_dispatch_preserves_parsed_terminal_provenance(terminal, command, command_mode):
+@pytest.mark.parametrize("loader", [load_mod, partial(load_mod, command_mode="legacy"), _build_from_parsed],
+                         ids=["default", "legacy", "builder"])
+def test_legacy_dispatch_preserves_parsed_terminal_provenance(terminal, command, loader):
     source = _source(terminal, command)
-    model = load_mod(source, **({} if command_mode is None else {"command_mode": command_mode}))
+    model = loader(source)
     direct = model.solve_perfect_foresight(periods=10)
     dispatched = model.execute_mod_commands()
     result = dispatched.perfect_foresight
@@ -47,9 +60,10 @@ def test_legacy_dispatch_preserves_parsed_terminal_provenance(terminal, command,
     assert dispatched.commands_executed == ("endval", "perfect_foresight_solver")
 
 
-def test_parsed_exogenous_only_endval_remains_literal_without_steady():
+@pytest.mark.parametrize("loader", [load_mod, _build_from_parsed], ids=["load_mod", "builder"])
+def test_parsed_exogenous_only_endval_remains_literal_without_steady(loader):
     source = _source("literal", "setup_solver").replace("y = 3;\nx = 3;", "")
-    model = load_mod(source)
+    model = loader(source)
     result = model.execute_mod_commands().perfect_foresight
     assert result is not None and result.converged
     # Parsed endval alone does not request the implicit static solve that an
@@ -62,6 +76,7 @@ def test_parsed_exogenous_only_endval_remains_literal_without_steady():
 
 
 @pytest.mark.parametrize("terminal", ["steady", "endval_steady"])
+@pytest.mark.parametrize("loader", [load_mod, _build_from_parsed], ids=["load_mod", "builder"])
 @pytest.mark.parametrize("method", ["auto", "central", "complex"])
 @pytest.mark.parametrize("override,target,shock", [
     ({"endval": {"e": 1.0, "y": 4.0, "x": 4.0}}, 4.0, 1.0),
@@ -69,8 +84,8 @@ def test_parsed_exogenous_only_endval_remains_literal_without_steady():
     ({"endval": {}}, 1.0, 0.0),
     ({"y_end": np.array([5.0, 5.0])}, 5.0, 0.5),
 ])
-def test_explicit_terminal_override_takes_precedence_over_parsed_steady(terminal, method, override, target, shock):
-    model = load_mod(_source(terminal, "setup_solver"))
+def test_explicit_terminal_override_takes_precedence_over_parsed_steady(terminal, loader, method, override, target, shock):
+    model = loader(_source(terminal, "setup_solver"))
     result = solve_perfect_foresight(model, periods=10, method=method, **override)
     assert result.converged
     np.testing.assert_allclose(result.path["x"], target, rtol=0, atol=1e-9)
