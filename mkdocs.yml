@@ -51,6 +51,7 @@ nav:
       - Overview: index.md
       - Quickstart: quickstart.md
       - Research workflows: research_workflows.md
+      - Auditing solved results: result_audits.md
       - Real-data published replication: empirical_research.md
       - Showcase Notebooks: notebooks.md
       - Correctness advisories: ADVISORY.md
@@ -91,6 +92,7 @@ nav:
           - Gertler-Karadi (2011) DSGE: gertler_karadi.md
           - Climate Macro (DICE): climate.md
           - DSGE Sketchpad & Dynare: dsge_build.md
+          - Inspecting and running .mod commands: dsge_mod_inspection.md
           - DSGE Higher-Order & Constraints: dsge_higher_order.md
           - DSGE Parity & Surface Area: dsge_parity_surface.md
           - DSGE Gradients, NUTS & HANK Bridge: dsge_v3.md
@@ -139,6 +141,7 @@ nav:
       - Inicio: es/index.md
       - Inicio rápido: es/quickstart.md
       - Flujos de investigación: es/research_workflows.md
+      - Auditoría de resultados resueltos: es/result_audits.md
       - Replicación publicada con datos reales: es/empirical_research.md
       - Cuadernos de demostración: es/notebooks.md
       - Avisos de corrección: es/ADVISORY.md
@@ -179,6 +182,7 @@ nav:
           - DSGE de Gertler-Karadi (2011): es/gertler_karadi.md
           - Macroeconomía del clima (DICE): es/climate.md
           - Cuaderno de bocetos DSGE y Dynare: es/dsge_build.md
+          - Inspección y ejecución de comandos .mod: es/dsge_mod_inspection.md
           - DSGE de orden superior y restricciones: es/dsge_higher_order.md
           - Paridad y superficie operativa DSGE: es/dsge_parity_surface.md
           - DSGE Gradientes, NUTS y Puente HANK: es/dsge_v3.md

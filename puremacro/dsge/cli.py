@@ -61,10 +61,21 @@ class DynareParser(argparse.ArgumentParser):
             help="Suppress terminal summary output.",
         )
         self._parity_parser.set_defaults(command="parity")
+        self._inspect_parser = argparse.ArgumentParser(
+            prog="puremacro-dynare inspect", description="Inspect .mod compatibility without solving.")
+        self._inspect_parser.add_argument("model")
+        self._inspect_parser.add_argument("--entry-point", choices=["load_mod", "execute_mod_commands", "load_hank_mod"], default="execute_mod_commands")
+        self._inspect_parser.add_argument("--ordered", action="store_true")
+        self._inspect_parser.add_argument("--format", choices=["text", "json"], default="text")
+        self._inspect_parser.add_argument("--output", help="Explicit path to write the report; default stdout only")
+        self._inspect_parser.add_argument("--macro-limit", type=int, default=100000)
+        self._inspect_parser.set_defaults(command="inspect")
 
     def parse_args(self, args=None, namespace=None):
         if args is None:
             args = sys.argv[1:]
+        if args and args[0] == "inspect":
+            return self._inspect_parser.parse_args(args[1:], namespace=namespace)
         if args and args[0] == "parity":
             return self._parity_parser.parse_args(args[1:], namespace=namespace)
         ns = super().parse_args(args, namespace=namespace)
@@ -196,6 +207,20 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
     parser = create_parser()
     args = parser.parse_args(argv)
 
+    if getattr(args, "command", None) == "inspect":
+        from .inspection import inspect_mod
+        try:
+            report = inspect_mod(Path(args.model), entry_point=args.entry_point,
+                                 ordered=args.ordered, macro_limit=args.macro_limit)
+            output = report.to_json() if args.format == "json" else report.summary()
+            if args.output:
+                Path(args.output).write_text(output + "\n", encoding="utf-8")
+            else:
+                sys.stdout.write(output + "\n")
+            return report.exit_code
+        except (ValueError, OSError) as exc:
+            sys.stderr.write(f"Error inspecting model: {exc}\n")
+            return 2
     if getattr(args, "command", None) == "parity":
         return run_parity_cli(args)
 

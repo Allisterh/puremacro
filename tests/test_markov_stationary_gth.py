@@ -71,3 +71,17 @@ def test_several_closed_classes_raise(markov_stationary):
                   [0.0, 0.0, 0.2, 0.8], [0.0, 0.0, 0.6, 0.4]])
     with pytest.raises(ValueError, match="not unique"):
         markov_stationary(P)
+
+
+@pytest.mark.parametrize("permutation", [[0, 1, 2], [2, 0, 1], [1, 2, 0]])
+def test_transient_state_feeds_nontrivial_closed_class(permutation):
+    from puremacro._linalg import markov_stationary_gth
+
+    P = np.array([[0.5, 0.25, 0.25], [0.0, 0.6, 0.4], [0.0, 0.3, 0.7]])
+    P = P[np.ix_(permutation, permutation)]
+    before = P.copy()
+    # Closed class switches at rates 0.4 and 0.3; transient mass must be zero.
+    expected = np.array([0.0, 3 / 7, 4 / 7])[permutation]
+    for solve in (markov_stationary_gth, ms_vfi, ms_dsge):
+        np.testing.assert_allclose(solve(P), expected, rtol=0, atol=1e-15)
+        np.testing.assert_array_equal(P, before)

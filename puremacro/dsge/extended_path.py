@@ -16,6 +16,7 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
+from ._equations import _steady_state_adapter
 from ._results import ExtendedPathResult
 from .build import _Vec
 from .perfect_foresight import solve_perfect_foresight
@@ -164,10 +165,12 @@ def extended_path(
         s_names = ("e_1",)
 
     n_shocks = len(s_names)
+    y_ss_arr: np.ndarray | None = None
 
     # 3. Pre-Compile Equations Function (one-time compilation)
     if model is not None and hasattr(model, "compile_equations") and hasattr(model, "variables"):
         compiled_raw = model.compile_equations()
+        evaluate_model = _steady_state_adapter(compiled_raw)
         p_dict = dict(getattr(model, "parameter_values", {}) or getattr(model, "_params", {}) or {})
         p_vec = _Vec(list(p_dict.keys()), list(p_dict.values()), what="parameter")
         v_list = list(v_names)
@@ -178,12 +181,14 @@ def extended_path(
             yc_v = _Vec(v_list, yc, what="variable")
             yl_v = _Vec(v_list, yl, what="variable")
             eps_v = _Vec(s_list, np.atleast_1d(eps), what="shock")
-            return compiled_raw(yp_v, yc_v, yl_v, eps_v, p_vec)
+            ss_v = _Vec(v_list, y_ss_arr, what="variable") if y_ss_arr is not None else None
+            return evaluate_model(yp_v, yc_v, yl_v, eps_v, p_vec, steady_state=ss_v)
 
         eq_fn = precompiled_eq_ast
 
     elif model is not None and getattr(model, "_dynare_equations", None) is not None:
         dyn_eqs = model._dynare_equations
+        evaluate_model = _steady_state_adapter(dyn_eqs)
         p_dict = dict(getattr(model, "_params", {}) or {})
         p_vec = _Vec(list(p_dict.keys()), list(p_dict.values()), what="parameter")
         v_list = list(v_names)
@@ -194,7 +199,8 @@ def extended_path(
             yc_v = _Vec(v_list, yc, what="variable")
             yl_v = _Vec(v_list, yl, what="variable")
             eps_v = _Vec(s_list, np.atleast_1d(eps), what="shock")
-            return dyn_eqs(yp_v, yc_v, yl_v, eps_v, p_vec)
+            ss_v = _Vec(v_list, y_ss_arr, what="variable") if y_ss_arr is not None else None
+            return evaluate_model(yp_v, yc_v, yl_v, eps_v, p_vec, steady_state=ss_v)
 
         eq_fn = precompiled_eq_dyn
 
@@ -211,7 +217,12 @@ def extended_path(
         eq_fn = precompiled_eq_linear
 
     elif callable(model_or_equations):
-        eq_fn = model_or_equations
+        evaluate_callable = _steady_state_adapter(model_or_equations)
+
+        def precompiled_eq_callable(yp, yc, yl, eps):
+            return evaluate_callable(yp, yc, yl, eps, steady_state=y_ss_arr)
+
+        eq_fn = precompiled_eq_callable
     else:
         raise ValueError("model_or_equations must be a DSGE model or callable residual function")
 

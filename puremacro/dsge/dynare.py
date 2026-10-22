@@ -49,6 +49,7 @@ from puremacro.dsge.build import (
     _jacobian,
     _verify_jacobian,
 )
+from puremacro.dsge._equations import _steady_state_adapter
 from puremacro.dsge._estimated_params import (
     parse_estimated_params,
     parse_estimated_params_bounds,
@@ -146,25 +147,32 @@ def _lead_lag_jacobians(
     ss_arr = np.asarray(ss_arr, dtype=float)
     e_zero = np.zeros(n_shocks)
 
+    evaluate = _steady_state_adapter(equations)
+    ss_v = _Vec(variables, ss_arr)
+
     def f_lead(v):
         d = np.asarray(v).dtype
-        return equations(_Vec(variables, v), _Vec(variables, ss_arr.astype(d)),
-                         _Vec(variables, ss_arr.astype(d)), _Vec(shocks, e_zero.astype(d)), par_vec)
+        return evaluate(_Vec(variables, v), _Vec(variables, ss_arr.astype(d)),
+                        _Vec(variables, ss_arr.astype(d)), _Vec(shocks, e_zero.astype(d)),
+                        par_vec, steady_state=ss_v)
 
     def f_curr(v):
         d = np.asarray(v).dtype
-        return equations(_Vec(variables, ss_arr.astype(d)), _Vec(variables, v),
-                         _Vec(variables, ss_arr.astype(d)), _Vec(shocks, e_zero.astype(d)), par_vec)
+        return evaluate(_Vec(variables, ss_arr.astype(d)), _Vec(variables, v),
+                        _Vec(variables, ss_arr.astype(d)), _Vec(shocks, e_zero.astype(d)),
+                        par_vec, steady_state=ss_v)
 
     def f_lag(v):
         d = np.asarray(v).dtype
-        return equations(_Vec(variables, ss_arr.astype(d)), _Vec(variables, ss_arr.astype(d)),
-                         _Vec(variables, v), _Vec(shocks, e_zero.astype(d)), par_vec)
+        return evaluate(_Vec(variables, ss_arr.astype(d)), _Vec(variables, ss_arr.astype(d)),
+                        _Vec(variables, v), _Vec(shocks, e_zero.astype(d)),
+                        par_vec, steady_state=ss_v)
 
     def f_shock(e):
         d = np.asarray(e).dtype
-        return equations(_Vec(variables, ss_arr.astype(d)), _Vec(variables, ss_arr.astype(d)),
-                         _Vec(variables, ss_arr.astype(d)), _Vec(shocks, e), par_vec)
+        return evaluate(_Vec(variables, ss_arr.astype(d)), _Vec(variables, ss_arr.astype(d)),
+                        _Vec(variables, ss_arr.astype(d)), _Vec(shocks, e),
+                        par_vec, steady_state=ss_v)
 
     A_plus = _jacobian(f_lead, ss_arr, n_vars, method)
     A_0 = _jacobian(f_curr, ss_arr, n_vars, method)
@@ -2948,6 +2956,7 @@ def load_mod(
     strict: bool = True,
     qz_criterium: float = 1.0 + 1e-8,
     allow_singular: bool | None = None,
+    command_mode: str = "legacy",
 ) -> LinearModel | PrunedDSGESolution:
     """Load and solve a Dynare .mod file directly in puremacro.
 
@@ -3009,6 +3018,13 @@ def load_mod(
         ambient :func:`~puremacro.dsge.steady.allow_structural_singularity`
         setting.
 
+    command_mode : {"legacy", "ordered"}, default "legacy"
+        ``ordered`` runs read-only compatibility preflight before loading and
+        rejects unsupported state-changing command sequences before any solve.
+        Then call ``model.execute_mod_commands(ordered=True, data=...)``.
+        Missing data may be supplied at execution. Ordered loading returns a
+        first-order model; each invocation chooses its own perturbation order.
+
     Returns
     -------
     LinearModel | PrunedDSGESolution | Order3PrunedSolution
@@ -3030,6 +3046,21 @@ def load_mod(
     BlanchardKahnError
         No unique stable solution (when ``strict``).
     """
+    if command_mode not in {"legacy", "ordered"}:
+        raise ValueError("command_mode must be 'legacy' or 'ordered'")
+    ordered_report = None
+    if command_mode == "ordered":
+        from .inspection import inspect_mod
+        from ._mod_execution import _require_supported
+        ordered_report = inspect_mod(path_or_text, ordered=True)
+        _require_supported(ordered_report, loading=True)
+        # A first-order model exposes the adapter; individual commands request
+        # their own higher-order solution through the existing numerical API.
+        if order is None:
+            order = 1
+        elif order != 1:
+            raise ValueError("Load ordered programs at order=1; set higher orders on stoch_simul commands")
+
     text_str = str(path_or_text)
     looks_like_path = isinstance(path_or_text, Path) or (
         "\n" not in text_str and ";" not in text_str
@@ -3046,6 +3077,9 @@ def load_mod(
     else:
         base_dir = Path.cwd()
         text = text_str
+
+    if ordered_report is not None:
+        text = getattr(ordered_report, "_expanded_source")
 
     parsed = parse_mod(text, base_dir=base_dir)
 
@@ -3241,6 +3275,11 @@ def load_mod(
             object.__setattr__(model, "_varexo_det", parsed["varexo_det"])
         if parsed.get("det_shocks"):
             object.__setattr__(model, "_det_shocks", parsed["det_shocks"])
+
+    object.__setattr__(model, "_mod_source_text", text)
+    object.__setattr__(model, "_mod_base_dir", str(base_dir))
+    if ordered_report is not None:
+        object.__setattr__(model, "_ordered_inspection", ordered_report)
 
     return model
 

@@ -34,6 +34,10 @@ def build_base_year_shares(
     base = industry_panel[industry_panel["year"] == base_year].copy()
     base = base[~base["suppressed"].astype(bool)]
     annual = base.groupby(["county_fips", "naics"], as_index=False)["emp_avg"].mean()
+    if annual.empty:
+        # Empty Arrow-backed string keys cannot be joined on some pandas/PyArrow
+        # versions. Preserve the grouped key dtypes and the numeric share schema.
+        return annual.rename(columns={"emp_avg": "share"}).reset_index(drop=True)
     totals = annual.groupby("county_fips")["emp_avg"].sum().rename("total")
     annual = annual.join(totals, on="county_fips")
     # Drop zero-denominator counties to avoid silent NaN shares

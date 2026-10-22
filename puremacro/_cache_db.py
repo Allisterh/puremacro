@@ -224,49 +224,77 @@ def migrate_from_flat_files(
 ) -> int:
     """Walk ``flat_cache_dir`` for ``*.bin`` + ``*.json`` sidecar pairs.
 
-    Inserts each into ``http_cache`` with ``INSERT OR IGNORE`` semantics
-    (idempotent). If ``remove=True``, unlinks each migrated file pair
-    after successful insert. Returns the count actually migrated.
+    Inserts missing keys into ``http_cache`` (idempotent), in bounded batches
+    within one write transaction. If ``remove=True``, unlinks each migrated
+    file pair only after commit. Existing keys keep both their database value
+    and their original files. Returns the count actually migrated.
 
-    Failures on a per-file basis are warned-and-skipped, not raised —
-    migration is opportunistic.
+    Unreadable or malformed file pairs are warned-and-skipped. Database errors
+    roll back the migration and retain the original files.
     """
     import json
     import warnings
 
     if not flat_cache_dir.exists():
         return 0
+    from itertools import islice
+
+    paths = iter(flat_cache_dir.glob("*.bin"))
     migrated = 0
-    for bin_path in flat_cache_dir.glob("*.bin"):
-        sidecar = bin_path.with_suffix(".json")
-        if not sidecar.exists():
-            continue
-        try:
-            meta = json.loads(sidecar.read_text(encoding="utf-8"))
-            url = meta["url"]
-            fetched_at = int(float(meta["fetched_at"]))
-            content_type = meta.get("content_type")
-            body = bin_path.read_bytes()
-            key = bin_path.stem
-            cur = conn.execute(
-                "INSERT OR IGNORE INTO http_cache "
-                "(key, url, fetched_at, content_type, body) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (key, url, fetched_at, content_type, body),
-            )
-            if cur.rowcount > 0:
-                migrated += 1
+    removals: list[tuple[Path, Path]] = []
+    try:
+        # The singleton uses autocommit. One explicit transaction avoids an
+        # fsync for every body and keeps existence checks valid across writers.
+        if not conn.in_transaction:
+            conn.execute("BEGIN IMMEDIATE")
+        else:
+            # Acquire the write lock even if the caller began a deferred txn.
+            conn.execute("UPDATE http_cache SET key = key WHERE 0")
+        while batch := list(islice(paths, 128)):
+            placeholders = ",".join("?" * len(batch))
+            existing = {row[0] for row in conn.execute(
+                f"SELECT key FROM http_cache WHERE key IN ({placeholders})",
+                [path.stem for path in batch],
+            )}
+            records = []
+            for bin_path in batch:
+                sidecar = bin_path.with_suffix(".json")
+                if bin_path.stem in existing or not sidecar.exists():
+                    continue
+                try:
+                    meta = json.loads(sidecar.read_text(encoding="utf-8"))
+                    record = (bin_path.stem, meta["url"], int(float(meta["fetched_at"])),
+                              meta.get("content_type"), bin_path.read_bytes())
+                except (OSError, ValueError, KeyError) as exc:
+                    warnings.warn(
+                        f"puremacro._cache_db: skipping {bin_path.name}: {exc}",
+                        UserWarning, stacklevel=2,
+                    )
+                    continue
+                records.append(record)
                 if remove:
-                    bin_path.unlink(missing_ok=True)
-                    sidecar.unlink(missing_ok=True)
-        except (OSError, ValueError, KeyError) as e:
-            warnings.warn(
-                f"puremacro._cache_db: skipping {bin_path.name}: {e}",
-                UserWarning,
-                stacklevel=2,
+                    removals.append((bin_path, sidecar))
+            # The write lock rules out insertion between SELECT and INSERT.
+            # Do not count ignored rows or delete a file that was not imported.
+            conn.executemany(
+                "INSERT INTO http_cache (key, url, fetched_at, content_type, body) "
+                "VALUES (?, ?, ?, ?, ?)", records,
             )
-            continue
-    conn.commit()
+            migrated += len(records)
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    # Files are expendable only after SQLite has committed their bodies.
+    for bin_path, sidecar in removals:
+        try:
+            bin_path.unlink(missing_ok=True)
+            sidecar.unlink(missing_ok=True)
+        except OSError as exc:
+            warnings.warn(
+                f"puremacro._cache_db: could not remove {bin_path.name}: {exc}",
+                UserWarning, stacklevel=2,
+            )
     return migrated
 
 

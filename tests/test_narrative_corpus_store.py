@@ -316,3 +316,58 @@ def test_connector_submodule_is_imported_on_demand(tmp_path, monkeypatch):
     assert report["status"] == "ok" and len(docs) == 1
     sys.modules.pop("fakesrc_pkg.fed_decision", None)
     sys.modules.pop("fakesrc_pkg", None)
+
+
+def test_upsert_preserves_duplicate_revision_history(tmp_path):
+    with CorpusStore(tmp_path / "batches.db") as st:
+        original = _doc("same", "first")
+        middle = _doc("same", "second", title="Second", metadata={"n": 2})
+        final = _doc("same", "third", title="Third", metadata={"n": 3})
+        docs = [original, middle, middle] + [_doc(str(i)) for i in range(898)]
+        docs += [final, final]
+        counts = st.upsert(iter(docs), fetched_at=123)
+        assert counts == {"new": 899, "updated": 2, "unchanged": 2}
+        row = st._conn.execute(
+            "SELECT title, text, metadata_json, n_revisions, previous_content_hash, "
+            "content_hash, first_fetched_at, last_fetched_at, revised_at "
+            "FROM documents WHERE doc_id = 'same'"
+        ).fetchone()
+        assert row == ("Third", "third", '{"n": 3}', 2, middle.content_hash,
+                       final.content_hash, 123, 123, 123)
+
+
+def test_upsert_snapshots_reused_mutable_document(tmp_path):
+    doc = _doc("reused", "initial")
+
+    def revisions():
+        for i in range(3):
+            doc.text = str(i)
+            doc.metadata["n"] = i
+            yield doc
+
+    with CorpusStore(tmp_path / "mutable.db") as st:
+        assert st.upsert(revisions(), fetched_at=9) == {
+            "new": 1, "updated": 2, "unchanged": 0,
+        }
+        row = st._conn.execute(
+            "SELECT text, metadata_json, n_revisions FROM documents"
+        ).fetchone()
+        assert row[0] == "2" and row[2] == 2
+        assert json.loads(row[1])["n"] == 2
+
+
+def test_upsert_rolls_back_large_iteration_when_iterator_fails(tmp_path):
+    with CorpusStore(tmp_path / "rollback.db") as st:
+        st.upsert([_doc("keep", "original")], fetched_at=1)
+        before = st._conn.execute("SELECT * FROM documents").fetchall()
+
+        def broken():
+            yield _doc("keep", "changed")
+            for i in range(1801):
+                yield _doc(str(i))
+            raise RuntimeError("connector failed after many documents")
+
+        with pytest.raises(RuntimeError, match="after many documents"):
+            st.upsert(broken(), fetched_at=2)
+        assert st._conn.execute("SELECT * FROM documents").fetchall() == before
+        assert not st._conn.in_transaction

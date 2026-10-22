@@ -72,30 +72,9 @@ class TwoAssetEGMPlan:
                 "equilibrium prices, and at most one productivity shock"
             )
         self.comp = comp
-        s0, s1 = comp.state_names[0], comp.state_names[1]
-
-        # Determine which state is illiquid (subject to adjustment cost) and which is liquid
-        # Check model locals / expressions for mention of chi, adjustment cost, or d
-        all_local_exprs = " ".join(e for _, e in m._locals).lower()
-        if "chi" in all_local_exprs or "a_bar" in m._params or "b_bar" in m._params:
-            if f"({s1}(+1)" in all_local_exprs or f"{s1}_bar" in m._params or f"chi_{s1}" in all_local_exprs:
-                illiquid_name = s1
-                liquid_name = s0
-            else:
-                illiquid_name = s0
-                liquid_name = s1
-        else:
-            # Default convention: if state names are 'a' and 'b', 'a' is illiquid and 'b' is liquid
-            # (or if r_a > r_b in params, 'a' is illiquid).
-            if s0 == "b" and s1 == "a":
-                liquid_name = s0
-                illiquid_name = s1
-            elif s0 == "a" and s1 == "b":
-                illiquid_name = s0
-                liquid_name = s1
-            else:
-                illiquid_name = s0
-                liquid_name = s1
+        from puremacro.dp._two_asset_spec import recognize
+        self.cname = self._find_consumption_local()
+        illiquid_name, liquid_name, self.parameter_bindings = recognize(comp, self.cname)
 
         self.illiquid_name = illiquid_name
         self.liquid_name = liquid_name
@@ -145,46 +124,25 @@ class TwoAssetEGMPlan:
         raise ModelSpecError("two-asset EGM requires a consumption local named c, cons or consumption")
 
     def _extract_params(self, params: dict[str, Any]) -> dict[str, float]:
-        comp = self.comp
-        beta = float(params[f"p_{comp.model._beta}"])
-        gamma = float(params.get("gamma", params.get("p_gamma", 1.0)))
-
-        # Rates: check r_a, r_b or r, r_liquid, r_illiquid
-        r_b = float(
-            params.get(
-                "r_b",
-                params.get(
-                    "r_b_ss",
-                    params.get("r", params.get("r_ss", params.get("p_r_b", params.get("p_r", 0.005)))),
-                ),
-            )
-        )
-        r_a = float(
-            params.get(
-                "r_a",
-                params.get(
-                    "r_a_ss",
-                    params.get("p_r_a", params.get("r_k", r_b + 0.0075)),
-                ),
-            )
-        )
-        w = float(params.get("w", params.get("w_ss", params.get("z", params.get("p_w", 1.0)))))
-        chi_0 = float(params.get("chi_0", params.get("p_chi_0", 1.0)))
-        chi_1 = float(params.get("chi_1", params.get("p_chi_1", 1.0)))
-        a_bar = float(
-            params.get("a_bar", params.get("b_bar", params.get("p_a_bar", params.get("p_b_bar", 0.25))))
-        )
-
-        return {
-            "beta": beta,
-            "gamma": gamma,
-            "r_b": r_b,
-            "r_a": r_a,
-            "w": w,
-            "chi_0": chi_0,
-            "chi_1": chi_1,
-            "a_bar": a_bar,
-        }
+        # Normalize compiled p_ names and aliases once; use the same recognized
+        # parameter bindings as the model equation and nonlinear/Jacobian bridge.
+        normalized = {name.removeprefix("p_"): value for name, value in params.items()}
+        missing = set(self.parameter_bindings.values()) | {self.comp.model._beta}
+        missing -= normalized.keys()
+        if missing:
+            raise ModelSpecError(f"two-asset EGM missing parameter bindings: {sorted(missing)}")
+        values = {role: float(normalized[name]) for role, name in self.parameter_bindings.items()}
+        values["beta"] = float(normalized[self.comp.model._beta])
+        from puremacro.dsge._ast import Const, Param
+        reward = self.comp.reward
+        if reward.func.lower() in ("log", "ln"):
+            values["gamma"] = 1.0
+        else:
+            gamma = reward.args[1]
+            if isinstance(gamma, Param) and gamma.name not in normalized:
+                raise ModelSpecError(f"two-asset EGM curvature must bind a declared parameter: {gamma.name}")
+            values["gamma"] = float(gamma.value if isinstance(gamma, Const) else normalized[gamma.name])
+        return values
 
     def _call(self, fn, ap, bp, a, b, s, params):
         nxt, cur = ([ap, bp], [a, b]) if self.illiquid_idx == 0 else ([bp, ap], [b, a])
@@ -193,9 +151,9 @@ class TwoAssetEGMPlan:
     def _validate_model(self, params: dict[str, Any]) -> None:
         """Reject declarations outside the built-in CRRA/convex-cost problem.
 
-        As in the one-asset compiler, check the budget and feasible set on
-        state/choice probes. This backend must never silently substitute its
-        built-in equations for different user equations.
+        Structural recognition already established the resource/cost identity.
+        These state/choice probes are a second numerical/domain check, not the
+        basis for accepting arbitrary user budget functions.
         """
         p = self._extract_params(params)
         if not all(np.isfinite(v) for v in p.values()):

@@ -14,6 +14,33 @@ without re-running it), and what to do.
 
 ---
 
+## 2026-10-22 — `STEADY_STATE()` used trajectory values, reproduced in 5.4.2
+
+**Corrected in the source for 5.5.0.** Consult [PyPI](https://pypi.org/project/puremacro/)
+for publication status. In a nonlinear trajectory, `STEADY_STATE(expr)` could
+evaluate the expression at current path values although its derivative was
+treated as zero. A rule such as `tax = rate * STEADY_STATE(output)` could then
+change its reference as output moved. Solver convergence did not establish
+that the intended equations had been solved.
+
+Re-run affected perfect-foresight, MCP, surprise-shock, extended-path and OccBin
+calculations with the correction. Models without this operator are unaffected
+by this particular defect. The correction fixes the reference during path and
+Jacobian evaluation. Exogenous variables inside the operator are rejected,
+matching Dynare.
+
+Terminal assignments also now retain their intended meaning: a bare `.mod`
+`endval` supplies literal boundary values; `endval` followed by `steady` or the
+supported `endval_steady` option requests a terminal equilibrium solve. The
+native Dynare fixtures distinguish these cases with terminal values 3 and 2.
+For Python calls, explicit `y_end` takes precedence; `endval` containing only
+exogenous values requests a terminal steady-state solve.
+
+See [issue #177](https://github.com/jalonso1979/puremacro/issues/177) and the
+[committed reference fixtures](https://github.com/jalonso1979/puremacro/tree/main/tests/fixtures/dynare_issue_177).
+
+---
+
 ## 2026-10-03 — the bundled ICIO table of versions up to 4.8.1 misplaced rest-of-world final demand, all versions to 4.8.1
 
 **Not a solver defect; a second defect of the bundled data, found while

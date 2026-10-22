@@ -1,0 +1,16 @@
+var y x;
+varexo e u;
+parameters rho;
+rho=.8;
+model(linear);
+y=rho*y(-1)+e;
+x=.4*x(-1)+u;
+end;
+varobs y x;
+shocks; var e; stderr 1; var u; stderr 1; end;
+stoch_simul(order=1,irf=3,ar=1,nograph) y;
+stoch_simul(irf=7,nograph) x;
+calib_smoother(prefilter=1,first_obs=2,nobs=4);
+calib_smoother;
+shock_decomposition(first_obs=3,nobs=4) y;
+shock_decomposition y;

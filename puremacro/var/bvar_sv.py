@@ -692,7 +692,8 @@ class BVAR_SVResult:
             y = np.einsum("dk,dkn->dn", x, self.beta_draws) + u
             paths[:, j] = y
             h_paths[:, j] = h_t
-            lag_buf = np.concatenate([lag_buf[:, 1:, :], y[:, None, :]], axis=1)
+            lag_buf[:, :-1] = lag_buf[:, 1:]
+            lag_buf[:, -1] = y
             h_prev = h_t
 
         return BVAR_SVForecast(

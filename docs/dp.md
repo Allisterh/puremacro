@@ -351,9 +351,23 @@ endogenous equilibrium price, at most one Markov productivity shock, at least
 two nodes per asset, nonnegative illiquid holdings, `0 < beta < 1`, positive
 `gamma`, `w`, `chi_0`, `a_bar`, `chi_1 >= 1`, and positive gross returns.
 Consumption must be a local named `c`, `cons`, or `consumption`; utility is
-`crra(consumption, gamma)` or `log(consumption)` when `gamma=1`. Parameter names
-in the example specify the calibration. Extra budget terms, constraints,
-life cycles, and discrete choices are rejected.
+`crra(consumption, gamma)` (including a named curvature parameter or constant)
+or `log(consumption)`. Log utility always has curvature one, irrespective of an
+unrelated parameter named `gamma`. The budget is recognized structurally after
+inlining locals; reordered sums/products, expanded products, renamed assets and
+the equivalent cost forms `chi_0*abs(d)^(1+chi_1)/((1+chi_1)*(a+a_bar)^chi_1)` and
+`chi_0/(1+chi_1)*(abs(d)/(a+a_bar))^(1+chi_1)*(a+a_bar)` are supported.
+Asset roles follow the recognized cost, including reversed declarations.
+
+Price bindings accept `r_b`/`rb`/`r`/`r_b_ss`/`r_ss`/`r_liquid`,
+`r_a`/`ra`/`r_a_ss`/`r_k`/`r_illiquid`, and `w`/`w_ss`/`z`/`y` (one used parameter
+per role); `a_bar` also accepts `b_bar`. These same bindings apply to stationary
+solutions, price paths and Jacobians. Discounting may use `discount("patience")`.
+Cost parameters remain explicitly named `chi_0`, `chi_1`, and `a_bar`/`b_bar`.
+Arbitrary registered functions in the budget, unsupported denominators or real
+powers, extra budget terms, constraints, life cycles and discrete choices are
+rejected before solving. Numerical probes are a second check, not the proof of
+the budget identity. Registered functions in aggregates remain supported.
 
 Arrays use `(illiquid asset, liquid asset, productivity)` order. `policy("a")`
 returns current assets; `policy("a(+1)")` returns the saving policy. Inspect
@@ -362,6 +376,12 @@ warns, and an infeasible consumption floor raises an error. Refine and enlarge
 asset grids to check numerical accuracy and top-grid mass.
 `converged` also requires the distribution's stationarity residual to be below
 `1e-10`; finite, normalized mass alone is insufficient.
+
+[`audit_result(sol)`](result_audits.md) exposes budget and Euler/KKT maps, locations,
+stationary-weighted percentiles, separate mass/stationarity checks and upper-bound
+mass. Grid or horizon refinement requires explicit callbacks. The first-order
+bridge permits price changes to the recognized liquid return, illiquid return and
+income parameters; it does not authorize arbitrary cost or preference shocks.
 
 `dp_sequence_jacobian(sol, inputs=["r_b", "r_a", "w"], outputs=["C", "COST"], T=24)`
 and `dp_nonlinear_transition` evaluate declared aggregates, including registered

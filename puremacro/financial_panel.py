@@ -132,36 +132,41 @@ def _project_quarterly_to_monthly(
     if df_q.empty:
         return _EMPTY.copy()
 
-    records: list[dict[str, object]] = []
-
-    for _, row in df_q.iterrows():
-        base_date = pd.Timestamp(row["date"])
-        yr = base_date.year
-        q_month = base_date.month
-        val = float(row["value"])
-        var_name = str(row["variable"])
-        m_var = _norm_var_name(var_name, "M")
-        src = f"resampled_from_Q:{row['source']}"
-        sa = row["sa_source"]
-
-        for offset in (0, 1, 2):
-            m = q_month + offset
-            if m > 12:
-                break
-            records.append({
-                "code": row["code"],
-                "date": pd.Timestamp(f"{yr}-{m:02d}-01"),
-                "variable": m_var,
-                "value": val,
-                "sa_source": "quarterly_ffill" if offset != 0 else sa,
-                "source": src,
-                "is_imputed": offset != 0,
-            })
-
-    if not records:
-        return _EMPTY.copy()
-
-    out = pd.DataFrame(records)
+    dates = df_q["date"]
+    if dates.isna().any():
+        raise ValueError("quarterly dates must be valid timestamps")
+    if pd.api.types.is_datetime64_any_dtype(dates.dtype):
+        years = dates.dt.year.to_numpy()
+        months = dates.dt.month.to_numpy()
+    else:
+        # Preserve Timestamp's scalar parsing for mixed valid date formats
+        # and local calendar months for mixed timezone offsets.
+        codes, unique_dates = pd.factorize(dates, sort=False)
+        parsed = [pd.Timestamp(value) for value in unique_dates]
+        years = np.array([date.year for date in parsed])[codes]
+        months = np.array([date.month for date in parsed])[codes]
+    positions = np.repeat(np.arange(len(df_q)), 3)
+    offsets = np.tile(np.arange(3), len(df_q))
+    projected_months = months[positions] + offsets
+    # Quarter starts cannot cross December. Retain the previous truncation
+    # behavior for out-of-contract November/December observations as well.
+    valid = projected_months <= 12
+    positions, offsets = positions[valid], offsets[valid]
+    projected_months = projected_months[valid]
+    names = df_q["variable"].astype(str)
+    normalized = {name: _norm_var_name(name, "M") for name in names.unique()}
+    out = pd.DataFrame({
+        "code": df_q["code"].to_numpy()[positions],
+        "date": pd.to_datetime({
+            "year": years[positions], "month": projected_months, "day": 1,
+        }),
+        "variable": names.map(normalized).to_numpy()[positions],
+        "value": df_q["value"].astype(float).to_numpy()[positions],
+        "sa_source": np.where(offsets != 0, "quarterly_ffill",
+                              df_q["sa_source"].to_numpy()[positions]),
+        "source": ("resampled_from_Q:" + df_q["source"].astype(str)).to_numpy()[positions],
+        "is_imputed": offsets != 0,
+    })
     return out.drop_duplicates(subset=["code", "date", "variable"], keep="first")
 
 

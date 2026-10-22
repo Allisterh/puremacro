@@ -139,3 +139,11 @@ def test_show_colab_offload_dialog_html_card(tmp_path, monkeypatch):
     assert html.count('target="_blank"') == html.count('rel="noopener noreferrer"') == 2
     assert html.count("(opens in a new tab)") == 2
     assert '<span style="font-size: 24px; margin-right: 10px;" aria-hidden="true">' in html
+    # Both keyboard targets receive an explicit visible outline; the inline
+    # text link remains underlined before interaction for discoverability.
+    assert 'class="pm-colab-link"' in html
+    assert 'class="pm-colab-btn"' in html
+    assert '.pm-colab-btn:focus-visible, .pm-colab-link:focus-visible' in html
+    assert 'outline: 2px solid #1a73e8 !important' in html
+    assert 'outline-offset: 2px !important' in html
+    assert 'font-weight: bold; text-decoration: underline;' in html

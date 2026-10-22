@@ -1814,9 +1814,9 @@ _TA_GRID_TOP_TOL = 1e-8
 _TA_INPUTS = ("r_b", "r_a", "z")
 _TA_OUTPUTS = ("C", "D", "A", "B", "CHI")
 _TA_INPUT_ALIASES = {
-    "r_b": "r_b", "rb": "r_b", "r": "r_b",
-    "r_a": "r_a", "ra": "r_a",
-    "z": "z", "w": "z", "y": "z",
+    "r_b": "r_b", "rb": "r_b", "r": "r_b", "r_b_ss": "r_b", "r_ss": "r_b", "r_liquid": "r_b",
+    "r_a": "r_a", "ra": "r_a", "r_a_ss": "r_a", "r_k": "r_a", "r_illiquid": "r_a",
+    "z": "z", "w": "z", "y": "z", "w_ss": "z",
 }
 
 

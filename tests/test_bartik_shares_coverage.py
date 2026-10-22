@@ -359,6 +359,23 @@ class TestBuildBaseYearSharesSuppressionHandling:
 
 
 class TestBuildBaseYearSharesEdgeCases:
+    @pytest.mark.parametrize("all_suppressed", [False, True])
+    def test_empty_arrow_keys_preserve_share_schema(self, all_suppressed):
+        """No usable employment rows still yields typed keys and numeric shares."""
+        pytest.importorskip("pyarrow")
+        from puremacro.bartik.shares import build_base_year_shares
+
+        panel = _simple_panel(years=(2000,))
+        for name in ("county_fips", "naics"):
+            panel[name] = panel[name].astype("string[pyarrow]")
+        panel["suppressed"] = all_suppressed
+        result = build_base_year_shares(panel, base_year=2000 if all_suppressed else 1999)
+        assert result.empty
+        assert list(result.columns) == ["county_fips", "naics", "share"]
+        assert result["share"].dtype.kind == "f"
+        for name in ("county_fips", "naics"):
+            assert result[name].dtype == panel[name].dtype
+
     def test_wrong_base_year_returns_empty_dataframe(self):
         """When no rows match base_year, return an empty DataFrame with correct columns."""
         from puremacro.bartik.shares import build_base_year_shares
