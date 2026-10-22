@@ -158,6 +158,9 @@
       const on = parts.table.classList.contains("on");
       parts.tableBtn.setAttribute("aria-expanded", String(on));
       parts.tableBtn.textContent = MAV.t(on ? { es: "Ocultar tabla", en: "Hide table" } : { es: "Tabla", en: "Table" });
+      const csvLabel = MAV.t({ es: "Descargar datos en CSV", en: "Download CSV data" });
+      parts.csvBtn.setAttribute("aria-label", csvLabel);
+      parts.csvBtn.title = csvLabel;
     };
     parts.tableBtn.addEventListener("click", () => { parts.table.classList.toggle("on"); paintTableBtn(); });
     MAV.onLang(paintTableBtn);
