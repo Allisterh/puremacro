@@ -632,7 +632,7 @@ def _render_equations_hoisted(
             return str(node.value)
         if isinstance(node, Var):
             if shock_names and node.name in shock_names:
-                return "0.0"
+                raise ModelError(f"STEADY_STATE() cannot contain exogenous variable {node.name!r}")
             return _py_attr("steady_state", node.name)
         if isinstance(node, UnaryOp):
             return f"({node.op}{emit_ss(node.expr)})"
@@ -1145,6 +1145,12 @@ class Parser:
                 self._expect("LPAREN")
                 expr = self.parse_expression()
                 self._expect("RPAREN")
+                forbidden = {name for name, _ in expr.variables()} & set(self.shocks + self.det_shocks)
+                if forbidden:
+                    raise ModelError(
+                        "STEADY_STATE() cannot contain exogenous variables: "
+                        + ", ".join(sorted(forbidden))
+                    )
                 return Call("STEADY_STATE", (expr,))
 
             # Operator diff(expr) -> expr - expr(-1)
@@ -2307,6 +2313,29 @@ class Parser:
                 self.planner_objective = _substitute_locals(
                     self.planner_objective, resolved_locals
                 ).simplify()
+
+        # Check after local expansion as well: a model-local shorthand may
+        # hide an exogenous variable inside STEADY_STATE. Native Dynare rejects
+        # this construct; silently using zero changes the declared model.
+        def validate_steady_state(node: Node) -> None:
+            if isinstance(node, Call):
+                if node.func.lower() == "steady_state":
+                    forbidden = {name for name, _ in node.variables()} & set(self.shocks + self.det_shocks)
+                    if forbidden:
+                        raise ModelError(
+                            "STEADY_STATE() cannot contain exogenous variables: "
+                            + ", ".join(sorted(forbidden))
+                        )
+                for arg in node.args:
+                    validate_steady_state(arg)
+            elif isinstance(node, BinOp):
+                validate_steady_state(node.left)
+                validate_steady_state(node.right)
+            elif isinstance(node, UnaryOp):
+                validate_steady_state(node.expr)
+
+        for equation in self.equations:
+            validate_steady_state(equation)
 
         # ---------------------------------------------------------------------
         # Post-Processing: Multi-Period Lead/Lag & Dated Exogenous Shock Expansion

@@ -293,7 +293,7 @@ class Var(Node):
     ) -> str:
         if shock_names and self.name in shock_names:
             if lead_ns == steady_state_ns and curr_ns == steady_state_ns and lag_ns == steady_state_ns:
-                return "0.0"
+                raise ValueError(f"STEADY_STATE() cannot contain exogenous variable {self.name!r}")
             return _py_attr(shock_ns, self.name)
         if lead_ns == steady_state_ns and curr_ns == steady_state_ns and lag_ns == steady_state_ns:
             return _py_attr(steady_state_ns, self.name)

@@ -158,3 +158,27 @@ def test_nested_steady_state_renderers_match_ast_with_explicit_reference():
     prologue, expressions = _render_equations_hoisted([expr], set())
     exec("\n".join(prologue), namespace)
     assert eval(expressions[0], namespace) == expected
+
+
+@pytest.mark.parametrize("loader", [parse_mod_to_dag, load_mod])
+@pytest.mark.parametrize("expression,local", [
+    ("STEADY_STATE(e)", ""),
+    ("STEADY_STATE(STEADY_STATE(e))", ""),
+    ("STEADY_STATE(local_shock)", "#local_shock = e;"),
+])
+def test_steady_state_exogenous_is_rejected_like_native_dynare(loader, expression, local):
+    text = (_FIXTURES / "exo_steady.mod").read_text()
+    text = text.replace("model;", "model;\n" + local)
+    text = text.replace("STEADY_STATE(e)", expression)
+    with pytest.raises(ValueError, match="STEADY_STATE.*exogenous"):
+        loader(text)
+
+
+def test_steady_state_exogenous_manual_ast_is_not_silently_zero():
+    from puremacro.dsge._parser import _render_equations_hoisted
+
+    expression = Call("STEADY_STATE", (Var("e"),))
+    with pytest.raises(ValueError, match="STEADY_STATE.*exogenous"):
+        expression.to_python(shock_names={"e"})
+    with pytest.raises(ValueError, match="STEADY_STATE.*exogenous"):
+        _render_equations_hoisted([expression], {"e"})

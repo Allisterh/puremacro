@@ -34,6 +34,13 @@ solution for both cases and print terminal reference vectors `[3; 3]`
 and `[2; 2]`. MATLAB subsequently crashed during process shutdown; both
 complete reference outputs had already been written.
 
+`exo_steady.mod` is a negative reference. The same native Dynare preprocessor
+rejects an exogenous variable inside `STEADY_STATE`, before simulation.
+`exo_steady_dynare_error.txt` preserves its diagnostic. Regenerate it with
+`dynare-preprocessor exo_steady.mod`; the expected process exit code is 1.
+puremacro rejects this construct too, including shocks hidden by model-local
+variables, rather than assigning them an artificial zero steady state.
+
 The terminal interpretation follows the official
 [Dynare reference manual](https://www.dynare.org/manual/the-model-file.html),
 sections on the `STEADY_STATE` operator and initial/terminal conditions.
