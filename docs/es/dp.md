@@ -365,10 +365,25 @@ endógeno, como máximo un choque de productividad Markov y al menos dos nodos
 por activo. Se requiere riqueza ilíquida no negativa, `0 < beta < 1`, valores
 positivos de `gamma`, `w`, `chi_0`, `a_bar`, `chi_1 >= 1` y rendimientos brutos
 positivos. El consumo debe ser una variable local `c`, `cons` o `consumption`;
-la utilidad es `crra(consumo, gamma)` o `log(consumo)` si `gamma=1`. Los nombres
-de parámetros del ejemplo especifican la calibración. Se rechazan términos
-adicionales del presupuesto, restricciones distintas, ciclos de vida y
-elecciones discretas.
+la utilidad es `crra(consumo, gamma)` (también con otro nombre de parámetro o una
+constante) o `log(consumo)`. La utilidad logarítmica tiene curvatura uno aunque
+exista otro parámetro `gamma`. El presupuesto se reconoce simbólicamente tras
+expandir las variables locales. Se admiten sumas/productos reordenados, productos
+expandidos, activos renombrados y las formas equivalentes del costo
+`chi_0*abs(d)^(1+chi_1)/((1+chi_1)*(a+a_bar)^chi_1)` y
+`chi_0/(1+chi_1)*(abs(d)/(a+a_bar))^(1+chi_1)*(a+a_bar)`.
+El costo reconocido determina los roles, incluso con declaraciones invertidas.
+
+Se admiten los alias de precio `r_b`/`rb`/`r`/`r_b_ss`/`r_ss`/`r_liquid`,
+`r_a`/`ra`/`r_a_ss`/`r_k`/`r_illiquid` y `w`/`w_ss`/`z`/`y`, con un parámetro usado
+por rol. `a_bar` también admite `b_bar`. Las mismas asociaciones se aplican a la
+solución, trayectorias y Jacobianos. El descuento puede usar `discount("patience")`.
+Los costos requieren `chi_0`, `chi_1` y `a_bar`/`b_bar` explícitos. Se rechazan antes
+de resolver funciones arbitrarias en el presupuesto, denominadores o potencias
+reales no admitidas, términos adicionales, otras restricciones, ciclos de vida y
+elecciones discretas. Las pruebas numéricas son una segunda comprobación, no una
+demostración de identidad del presupuesto. Los agregados sí admiten funciones
+registradas.
 
 Los arreglos siguen el orden `(activo ilíquido, activo líquido, productividad)`.
 `policy("a")` devuelve activos actuales y `policy("a(+1)")` la política de
@@ -378,6 +393,13 @@ un error. Amplía y refina las mallas para comprobar la precisión y la masa en
 su extremo superior.
 `converged` también exige un residuo de estacionariedad de la distribución
 menor que `1e-10`; una masa finita y normalizada no basta.
+
+[`audit_result(sol)`](result_audits.md) expone mapas y ubicaciones de residuos
+presupuestarios y Euler/KKT, percentiles ponderados, comprobaciones separadas de
+masa/estacionariedad y masa en extremos superiores. Refinar mallas u horizontes
+requiere funciones explícitas. El puente de primer orden permite cambios en
+rendimientos e ingreso reconocidos; no autoriza choques arbitrarios a costos o
+preferencias.
 
 `dp_sequence_jacobian(sol, inputs=["r_b", "r_a", "w"], outputs=["C", "COST"], T=24)`
 y `dp_nonlinear_transition` evalúan los agregados declarados, incluidas

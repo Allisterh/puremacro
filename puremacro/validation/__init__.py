@@ -18,8 +18,11 @@ from .research import (
     research_benchmarks,
     run_research_benchmarks,
 )
+from .audit import audit_result
+from ._audit_report import AuditCheck, AuditReport, DerivativeCheck, RefinementCheck, ResidualCheck
 
 __all__ = [
+    "audit_result", "AuditCheck", "AuditReport", "DerivativeCheck", "RefinementCheck", "ResidualCheck",
     "BenchmarkResult",
     "ResearchBenchmark",
     "ResearchBenchmarkReport",
