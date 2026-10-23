@@ -1,0 +1,53 @@
+{
+  "date": "2026-10-22",
+  "scope": "T02_D bilingual update; frozen edition unchanged",
+  "puremacro": "5.5.0",
+  "python": "3.12.13",
+  "runtime_source": "Published 5.5.0 package; runtime files copied unchanged into an isolated import directory",
+  "verified_platform": "local Python, fresh offline IPython process per notebook",
+  "notebooks": [
+    {
+      "notebook": "T02_D_occbin_zlb_regimes_es.ipynb",
+      "source_sha256": "d00832d4e64a4725699f92884140a9d387c988ea5908dafd2b624abee3160e6f",
+      "ok": true,
+      "code_cells": 20,
+      "figures": 8,
+      "seconds": 124.83,
+      "warnings": [],
+      "errors": [],
+      "output_sha256": "062744f779987e0df4e748b0a76e9d8745705346988658caf6de8973355f7deb",
+      "girf_tables_equal_5_3_0_reference": true,
+      "girf_tables_sha256": "1e12cc5e8f0cadbf1a4ad6ceec56c63154223f4abbc236d2e03abe0f8c9288e1",
+      "teaching_cells_equal_local_master": true
+    },
+    {
+      "notebook": "T02_D_occbin_zlb_regimes.ipynb",
+      "source_sha256": "480a19be244351777a5baf63b835c39e58737a125c6c7e9e9920f3fa6c9f22e4",
+      "ok": true,
+      "code_cells": 20,
+      "figures": 8,
+      "seconds": 123.64,
+      "warnings": [],
+      "errors": [],
+      "output_sha256": "d3bb5704e840f85ff5217bc0b8eee0e478f845f14faacee1dd14efa1c5c46f3a",
+      "girf_tables_equal_5_3_0_reference": true,
+      "girf_tables_sha256": "9bace479eda1a08f1c4be8827fffd527a24dd943127de35f6eac7401b06e0649",
+      "teaching_cells_equal_local_master": true
+    }
+  ],
+  "frozen_inputs": {
+    "curso/notebooks/_datos.py": "3087c2917e7daa5eedd47ce32de8b4efb80fd6b5928f3ce4c5006b1e074e32f6",
+    "curso/notebooks/_tutor.py": "3159bd9059cb3e0df65a10a0bc66ff9ed52f013c9de6514e64786333cc07afb1",
+    "curso/notebooks/_llm.py": "f828a0b03158a06d86d56e1c22f4541cb32a3373a8393b91ed1ba1380ff1effe",
+    "curso/notebooks/_nbstyle.py": "fbd473bb99478db735ea617468836349db357fe20c7f6b8cd0769589cb3f3322",
+    "curso/notebooks/modelos/nk_zlb_cons.mod": "0b63669ef7b20d93a73ab352c5131d889d51b1a2dc77038d7e83565ff06a46ce",
+    "curso/notebooks/modelos/merz_andolfatto.mod": "a95f55aa436b746a35ecf93c67da9e25b41aeaae90923a0746f18c10a44d8f5a",
+    "curso/notebooks/modelos/nk_zlb_ref.mod": "9e87c64d683763d93707620e2e0e2560f619abeb6dc5d85b88564b3529c13dea",
+    "curso/notebooks/modelos/rbc_mexico_dual.mod": "1f1504c19322af11e8ce13e317b0d1450d2873f38f5f28f9f5104f37f4a1f06e",
+    "curso/notebooks/modelos/neoclasico_prevision_perfecta.mod": "3f6f94a13d64481e7727da2d7a8782c1c7ae6e30362a0b305280c23d27c3cbed",
+    "curso/notebooks/modelos/new_keynesian_3eq.mod": "8db0aca0eb6bb14197fc64e330be6600575b4c17196e9bdc9b72d87e7838e460",
+    "curso/notebooks/modelos/rbc_canonico.mod": "eced7732daf169dcd7de336eb20a201a5866e303ba8e69cd29588bb4055797d0"
+  },
+  "runtime_tree_sha256": "a9f764432eacb6834100cf5f91bf005d48cbd4dbfd1d31dcea4125ff38de17d3",
+  "runtime_files": 912
+}

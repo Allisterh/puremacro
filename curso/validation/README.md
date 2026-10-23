@@ -26,3 +26,21 @@ and use [`scripts/ejecutar_edicion.py`](../scripts/ejecutar_edicion.py). The run
 writes detailed per-cell timing and execution evidence into the chosen audit
 directory. Generated QNA exports stay in each notebook's `generated/qna/`
 directory, separate from frozen inputs.
+
+## RBC uncertainty update — 22 October 2026
+
+The original 72-notebook record above applies to the immutable
+`course-2026A-5.5.0` edition. The two T02_D notebooks on `main` now add
+irreversible RBC investment and stochastic volatility; their revised source
+and output hashes are recorded separately in
+[`rbc-uncertainty-2026-10-22.json`](rbc-uncertainty-2026-10-22.json).
+
+Both updated notebooks were executed in fresh, offline IPython processes with
+the published puremacro 5.5.0 runtime, Python 3.12 and the edition's frozen
+helpers and model files. Each executed 20 code cells and produced eight figures.
+The checks cover Bellman residuals, feasible choices, complementarity, Euler
+residuals at states between grid nodes, grid refinement and interpolation bounds.
+The slide figure retains the independently checked 5.3.0 reference calculation;
+the new 5.5.0 run checks compatibility and numerical agreement. Local Python is
+the verified route; this update does not claim a new Colab, Juno or browser run.
+The original tag and its execution manifest were not changed.
