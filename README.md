@@ -2,7 +2,7 @@
 
 # puremacro
 
-**In development:** [DP models in `.mod` files](docs/dp_modfiles.md), [reproducible studies](docs/studies.md), [editable HANK equations](docs/hank_model_closure.md) and [runnable workflows](docs/study_workflows.md). These features require the development source; they are not included in the published 5.5.0 wheel.
+**New in 5.6.0:** [DP models in `.mod` files](docs/dp_modfiles.md), [reproducible studies](docs/studies.md), [editable HANK equations](docs/hank_model_closure.md) and [runnable workflows](docs/study_workflows.md). Check the [published releases](https://pypi.org/project/puremacro/#history) before installing; these additions require 5.6.0 or this source tree.
 
 **Macroeconometrics and structural modeling on the core scientific-Python stack.**
 
@@ -23,11 +23,11 @@ python -m pip install puremacro
 | **Simulate policy** | Declare a household model with [dynamic programming](docs/dp.md), study [monetary transmission](docs/monetary_transmission.md), or build a [trade counterfactual](docs/trade_accounting.md). |
 | **Learn or teach** | Choose a [notebook learning path](docs/notebooks.md) or use the [bilingual course and interactive labs](curso/README.md). Use the pinned course edition below. |
 
-**Published version: [5.5.0](https://pypi.org/project/puremacro/5.5.0/).**
-These examples describe the 5.5.0 API; see the [changelog](CHANGELOG.md)
+**Documentation for version 5.6.0.** Check [available PyPI releases](https://pypi.org/project/puremacro/#history).
+These examples describe the 5.6.0 API; see the [changelog](CHANGELOG.md)
 for additions and fixes. Match your installed version to the documentation.
 
-New in 5.5.0: [read-only `.mod` inspection and opt-in ordered execution](docs/dsge_mod_inspection.md),
+Since 5.5.0: [read-only `.mod` inspection and opt-in ordered execution](docs/dsge_mod_inspection.md),
 and [audits of supported solved results](docs/result_audits.md). Inspection
 checks syntax and command support without a numerical solve. Result audits
 separate convergence from equation, Euler/KKT and distribution evidence, and

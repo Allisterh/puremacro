@@ -22,11 +22,13 @@ python -m pip install puremacro
 | **Simulate policy** | Declare a household model with [dynamic programming](dp.md), study [monetary transmission](monetary_transmission.md), or build a [trade counterfactual](trade_accounting.md). |
 | **Learn or teach** | Choose a [notebook learning path](notebooks.md) or use the [bilingual course and interactive labs](https://github.com/jalonso1979/puremacro/tree/main/curso). Use the pinned course edition below. |
 
-**Published version: [5.5.0](https://pypi.org/project/puremacro/5.5.0/).**
-These examples describe the 5.5.0 API; see the [changelog](https://github.com/jalonso1979/puremacro/blob/main/CHANGELOG.md)
+**Documentation for version 5.6.0.** Check [available PyPI releases](https://pypi.org/project/puremacro/#history).
+These examples describe the 5.6.0 API; see the [changelog](https://github.com/jalonso1979/puremacro/blob/main/CHANGELOG.md)
 for additions and fixes. Match your installed version to the documentation.
 
-New in 5.5.0: [read-only `.mod` inspection and opt-in ordered execution](dsge_mod_inspection.md),
+New in 5.6.0: [DP in `.mod` files](dp_modfiles.md), [reproducible studies](studies.md), [editable HANK equations](hank_model_closure.md) and [three complete applications](study_workflows.md). Review the [experimental inference limits](dependence_bootstrap.md).
+
+Since 5.5.0: [read-only `.mod` inspection and opt-in ordered execution](dsge_mod_inspection.md),
 and [audits of supported solved results](result_audits.md). Inspection
 checks syntax and command support without a numerical solve. Result audits
 separate convergence from equation, Euler/KKT and distribution evidence, and

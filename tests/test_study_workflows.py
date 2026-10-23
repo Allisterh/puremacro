@@ -26,6 +26,28 @@ def test_mexico_observations_are_consecutive_and_use_declared_units(workflows):
     assert "assumption" in result.inputs.attrs["identification_note"]
 
 
+def test_mexico_data_rights_survive_archive_and_report(workflows, tmp_path):
+    result = workflows[0]
+    source = result.inputs.attrs["source"]
+    assert source["retrieval_date"] == "not recorded in original course snapshot"
+    rights = source["data_rights"]
+    assert rights["code_license_applies"] is False
+    assert rights["terms_url"] == "https://www.oecd.org/en/about/terms-conditions.html"
+    assert rights["terms_section"] == "3. Data"
+    assert "later recipients" in rights["downstream_requirement"]
+    assert "not the unrecorded date" in rights["review_date_note"]
+    for details in source["files"].values():
+        assert details["dataset"] == "Main Economic Indicators"
+        assert "OECD" in details["citation"]
+        assert details["series"] in details["citation"]
+        assert details["source_url"] in details["citation"]
+    restored = load_study(save_study(result))
+    assert restored.inputs.attrs["source"] == source
+    result.write_report(tmp_path / "mexico")
+    exported = load_study(tmp_path / "mexico" / "study.pmstudy")
+    assert exported.inputs.attrs["source"] == source
+
+
 def test_household_transfer_preserves_resource_timing(workflows):
     result = workflows[1]
     frame = result.to_frame().pivot(index="horizon", columns="response", values="estimate")

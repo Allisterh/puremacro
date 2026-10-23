@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use puremacro in your research or teaching, please cite it as below."
 title: "puremacro: Macroeconometrics and structural modeling in Python"
-version: 5.5.0
+version: 5.6.0
 date-released: 2026-10-22
 license: MIT
 repository-code: "https://github.com/jalonso1979/puremacro"

@@ -22,17 +22,21 @@ acotado hacia una aplicación más amplia.
 | ¿Cómo resuelvo y estimo modelos estructurales? | 21 → 41 → 42 → 43 | Residuos de equilibrio, identificación y diagnóstico del muestreo |
 | ¿Qué método numérico necesita mi modelo? | 22 → 51 → 52 → 53 → 56 | Error de aproximación, sensibilidad a la malla y convergencia |
 | ¿Cómo se propagan los aranceles? | 55 → 61 → 62 → 63 → 65; después 64 | Calibración, contabilidad, definición de bienestar y límites del solucionador |
+| ¿Cómo conservo un experimento empírico o de modelo completo? | 69 → 06 → 55 | Unidades y supuestos explícitos, auditorías, archivos verificables y límites de escenarios |
 | ¿Cómo verifico un solucionador contra un resultado publicado? | 66 → 67 → 68 → 12 | Formas cerradas, rutas de solución independientes, tolerancias y criterio de evaluación |
 
-Para una primera sesión, elija 06, 10, 11 o 34. Cada uno plantea una pregunta
+Para una primera sesión, elija 06, 10, 11 o 34. Elija 69 para el tutorial
+de tres flujos y exportación de estudios (Puremacro 5.6.0). Cada uno plantea una pregunta
 concreta antes de pasar a ejercicios amplios de política.
 
 Este catálogo corresponde a la biblioteca de la copia del repositorio. La
-[edición del curso MAV](https://github.com/jalonso1979/puremacro/blob/main/curso/notebooks/README.md)
-conserva un entorno base `puremacro>=4.8.1,<5` hasta validar sus cuadernos para
-5.x; siga sus instrucciones, incluidas las secciones con un commit de
-desarrollo fijado, en un entorno separado. Su numeración y sus
-laboratorios HTML/JavaScript son independientes de este catálogo.
+[edición del curso MAV](https://github.com/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/README.md)
+fija `puremacro==5.5.0`, Python 3.12+ y la etiqueta inmutable
+`course-2026A-5.5.0`. La [evidencia de los 72 cuadernos](https://github.com/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/validation/README.md)
+identifica el archivo candidato ejecutado; la equivalencia con el paquete
+público pertenece al registro de la versión. Use las instrucciones propias
+de esa edición en un entorno separado. Su numeración y sus laboratorios
+HTML/JavaScript son independientes de este catálogo.
 
 ## Ejecute y modifique un ejemplo
 
@@ -205,4 +209,5 @@ Cada título abre un cuaderno ejecutado; «fuente» abre su archivo `.py` editab
 | [66_optimal_policy_cgg1999_replication_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/66_optimal_policy_cgg1999_replication_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/66_optimal_policy_cgg1999_replication_es.py) | Replicación de Clarida, Galí y Gertler (1999): discreción, regla simple y compromiso atemporal frente a formas cerradas, y el criterio de pérdida | [66_optimal_policy_cgg1999_replication](https://github.com/jalonso1979/puremacro/blob/main/notebooks/66_optimal_policy_cgg1999_replication.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/66_optimal_policy_cgg1999_replication.py) |
 | [67_bewley_classics_replication_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/67_bewley_classics_replication_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/67_bewley_classics_replication_es.py) | Replicación de Huggett (1993) y Aiyagari (1994): Tabla I exacta, ordenamientos de las tablas de equilibrio, sus decimales frente al error numérico y la cadena de Markov | [67_bewley_classics_replication](https://github.com/jalonso1979/puremacro/blob/main/notebooks/67_bewley_classics_replication.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/67_bewley_classics_replication.py) |
 | [68_third_order_perturbation_trust_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/68_third_order_perturbation_trust_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/68_third_order_perturbation_trust_es.py) | Perturbación de tercer orden verificada con formas cerradas y Dynare 7.0 en vivo, un error tensorial que ninguna trayectoria ve, y lo que dice el tercer orden verificado | [68_third_order_perturbation_trust](https://github.com/jalonso1979/puremacro/blob/main/notebooks/68_third_order_perturbation_trust.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/68_third_order_perturbation_trust.py) |
+| [69_reproducible_studies_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies_es.py) | VAR mexicano, transferencia a hogares y arancel OCDE reproducibles: supuestos, auditorías, figuras y archivos portátiles | [69_reproducible_studies](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies.py) |
 | [local_llm_uncertainty_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty_es.py) | Inferencia local con motores opcionales de escritorio; respaldo simulado sin conexión | [local_llm_uncertainty](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty.py) |

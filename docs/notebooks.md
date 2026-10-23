@@ -22,17 +22,20 @@ from a focused example to a broader application.
 | How do I solve and estimate structural models? | 21 → 41 → 42 → 43 | Equilibrium residuals, identification and sampling diagnostics |
 | Which numerical method fits my model? | 22 → 51 → 52 → 53 → 56 | Approximation error, grid sensitivity and convergence |
 | How do tariffs propagate through production? | 55 → 61 → 62 → 63 → 65; then 64 | Calibration provenance, accounting, welfare definition and solver limits |
+| How do I preserve a complete empirical or model experiment? | 69 → 06 → 55 | Explicit units and assumptions, retained audits, archive round-trips and scenario limits |
 | How do I check a solver against a published result? | 66 → 67 → 68 → 12 | Closed forms, independent solution routes, tolerances and the evaluation criterion |
 
-For a first session, choose one of 06, 10, 11 or 34. Each gives a specific
+For a first session, choose one of 06, 10, 11 or 34. Choose 69 for a complete
+three-workflow study/export tutorial (Puremacro 5.6.0). Each gives a specific
 question to answer before moving to a larger policy exercise.
 
 This catalog follows the library in the repository checkout. The separate
-[MAV course edition](https://github.com/jalonso1979/puremacro/blob/main/curso/notebooks/README.md)
-retains a `puremacro>=4.8.1,<5` base environment until its notebooks are
-validated for 5.x; use its own setup instructions, including the pinned
-development sections, in a separate environment. Its numbering and
-HTML/JavaScript labs are separate from this showcase catalog.
+[MAV course edition](https://github.com/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/README.md)
+pins `puremacro==5.5.0` with Python 3.12+ and immutable course tag
+`course-2026A-5.5.0`. Its [72-notebook execution evidence](https://github.com/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/validation/README.md)
+identifies the candidate archive actually executed; public-wheel equivalence
+belongs to the release record. Use that edition's own setup in a separate
+environment. Its numbering and HTML/JavaScript labs are separate from this catalog.
 
 ## Run and change an example
 
@@ -202,4 +205,5 @@ Each title opens an executed notebook; “source” opens its editable `.py` fil
 | [66_optimal_policy_cgg1999_replication](https://github.com/jalonso1979/puremacro/blob/main/notebooks/66_optimal_policy_cgg1999_replication.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/66_optimal_policy_cgg1999_replication.py) | Replication of Clarida–Galí–Gertler (1999): discretion, simple-rule and timeless commitment against closed forms, and the loss criterion | [66_optimal_policy_cgg1999_replication_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/66_optimal_policy_cgg1999_replication_es.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/66_optimal_policy_cgg1999_replication_es.py) |
 | [67_bewley_classics_replication](https://github.com/jalonso1979/puremacro/blob/main/notebooks/67_bewley_classics_replication.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/67_bewley_classics_replication.py) | Replication of Huggett (1993) and Aiyagari (1994): Table I exactly, the equilibrium tables' orderings, their decimals against numerical error, and the Markov chain | [67_bewley_classics_replication_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/67_bewley_classics_replication_es.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/67_bewley_classics_replication_es.py) |
 | [68_third_order_perturbation_trust](https://github.com/jalonso1979/puremacro/blob/main/notebooks/68_third_order_perturbation_trust.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/68_third_order_perturbation_trust.py) | Third-order perturbation checked against closed forms and live Dynare 7.0, a tensor error no path can see, and what the checked third order says | [68_third_order_perturbation_trust_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/68_third_order_perturbation_trust_es.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/68_third_order_perturbation_trust_es.py) |
+| [69_reproducible_studies](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies.py) | Reproducible Mexico VAR, household transfer and OECD tariff studies: assumptions, audits, figures and portable archives | [69_reproducible_studies_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies_es.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies_es.py) |
 | [local_llm_uncertainty](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty.py) | Local inference with optional desktop engines; offline mock fallback | [local_llm_uncertainty_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty_es.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty_es.py) |

@@ -2,10 +2,15 @@
 
 # Plantillas ejecutables de estudios y escenarios
 
-Estos ejemplos del código de desarrollo funcionan sin conexión con las
+Estos ejemplos requieren Puremacro 5.6.0 y funcionan sin conexión con sus
 dependencias estándar. Conectan datos o declaraciones del modelo, estimación o
 solución, diagnósticos e informes archivables. Demuestran métodos y supuestos;
 no replican un resultado causal publicado de política económica.
+
+El [cuaderno ejecutado 69 en español](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies_es.ipynb)
+y su [fuente editable](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies_es.py) recorren los tres
+experimentos, con figuras, auditorías, archivos verificables y ejercicios.
+Requieren Python 3.11+, Puremacro 5.6.0 y `_nbstyle.py` junto al cuaderno.
 
 ```bash
 python -m puremacro.examples.study_workflows --output study_output
@@ -25,6 +30,11 @@ e [inflación interanual del IPC](https://fred.stlouisfed.org/series/CPALTT01MXM
 El manifiesto guarda fuentes, unidades y hashes. No se registró la fecha de
 descarga original; no son vintages en tiempo real. La ventana común es enero de
 2000–diciembre de 2023, mensual, sin eliminar ni interpolar meses interiores.
+
+Los datos OCDE distribuidos por FRED son de terceros y no están cubiertos por
+la licencia MIT del código. Cite a la OCDE y conserve la atribución al compartir.
+El manifiesto incluido conserva fuentes, hashes, citas y
+[condiciones OCDE](https://www.oecd.org/en/about/terms-conditions.html).
 
 El VAR recursivo tiene seis rezagos, ordena inflación antes de la tasa y muestra
 horizontes 0–18 ante un aumento de 0.25 puntos porcentuales de la tasa

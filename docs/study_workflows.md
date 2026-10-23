@@ -2,10 +2,15 @@
 
 # Runnable study and scenario templates
 
-These development-source examples run offline with the standard dependencies.
+These examples require Puremacro 5.6.0 and run offline with its standard dependencies.
 They connect data or model declarations, estimation or solution, diagnostics,
 and a portable report archive. They demonstrate methods and their assumptions;
 they do not reproduce a published causal policy finding.
+
+The [executed English notebook 69](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies.ipynb)
+and its [editable source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies.py) walk through all
+three experiments with figures, audits, archive checks and exercises. They
+require Python 3.11+, Puremacro 5.6.0 and `_nbstyle.py` beside the notebook.
 
 ```bash
 python -m puremacro.examples.study_workflows --output study_output
@@ -26,6 +31,11 @@ The packaged manifest records the source URLs, units and exact input hashes.
 The original retrieval date was not recorded; these are not real-time vintages.
 The common monthly window is explicitly January 2000–December 2023. No interior
 missing month is deleted or interpolated.
+
+These OECD observations distributed by FRED are third-party data outside the
+code's MIT license. Cite OECD and retain attribution when sharing. The packaged
+manifest preserves source URLs, hashes, citations and
+[OECD reuse terms](https://www.oecd.org/en/about/terms-conditions.html).
 
 The recursive VAR uses six lags, orders inflation before the rate, and reports
 horizons 0–18 after a 0.25 percentage-point increase in the **annualized** rate.

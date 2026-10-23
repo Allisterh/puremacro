@@ -7,7 +7,9 @@ This changelog describes versioned source changes. Check
 Versions 5.3.0, 5.4.0 and 5.4.1 were tagged but not published to PyPI; their
 additions are included in 5.4.2. See the [release procedure](RELEASING.md).
 
-## Unreleased
+## 5.6.0 (2026-10-22)
+
+**Write dynamic programs in `.mod` files and preserve complete empirical studies and model scenarios.**
 
 ### Added
 
@@ -40,6 +42,8 @@ additions are included in 5.4.2. See the [release procedure](RELEASING.md).
 - Three offline workflow templates: a frozen OECD/FRED Mexican recursive VAR,
   a DP household transfer experiment, and an OECD ICIO tariff counterfactual.
   Inputs, units, assumptions and audit limits are retained in report archives.
+  Executed English/Spanish notebook 69 covers all three studies, response plots,
+  report exports, archive reloads and seeded reproducibility checks.
 - Perfect-foresight and nonlinear HANK path audits, plus explicit finite
   refinement ladders with solve/cost budgets. Missing paths or Euler evidence
   remain visible; default auditing never re-solves a model.
@@ -48,9 +52,18 @@ additions are included in 5.4.2. See the [release procedure](RELEASING.md).
   fallback. Workload scaling benchmarks record numerical checks, repeated
   timings, environment and the scope of memory measurements.
 
-These additions are development-source features, not part of the published
-5.5.0 wheel. New model closures and statistical workflows have explicitly
-bounded contracts; numerical convergence does not establish economic validity.
+### Known limits
+
+- The new spatial and GVAR bootstrap references are experimental and specific to
+  their stated nulls and sampling assumptions. Preset simulations show spatial
+  simultaneous undercoverage (88.5% in one design with nominal 95% coverage) and
+  weak GVAR power against one integrated leakage alternative (3%). See the
+  bilingual dependence-bootstrap guide for the full results and uncertainty.
+- Editable HANK closures require homogeneous affine aggregate equations, even
+  when household transitions are nonlinear. DP `.mod` files use PureMacro's
+  own supported dialect, not a Dynare dynamic-programming extension.
+- Numerical convergence and reproducible archives do not establish economic
+  validity or causal identification.
 
 ## 5.5.0 (2026-10-22)
 
