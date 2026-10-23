@@ -356,6 +356,8 @@ def _household_transition(
     hh: _HouseholdBlock,
     rr_seq: np.ndarray,
     w_seq: np.ndarray,
+    *,
+    audit_paths: dict[str, np.ndarray] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Non-linear household block along a path.
 
@@ -375,7 +377,7 @@ def _household_transition(
     a_path = np.empty((T, n_a, n_s))
     # Date-T policy: steady-state continuation, but the realised return r_T is whatever
     # the GE block set at T - 1 (this is exactly what the Fake News column s = T perturbs).
-    V_next, _, _ = _egm_step(
+    V_next, terminal_c, _ = _egm_step(
         hh.V_ss, hh.a_grid, hh.s_grid, hh.pi_s, hh.beta, hh.gamma, float(rr_seq[T]),
         hh.net_wage(float(rr_seq[T]), hh.w_ss),
     )
@@ -386,9 +388,19 @@ def _household_transition(
         )
     D = hh.D_ss.copy()
     C = np.empty(T)
+    distributions = np.empty((T + 1, n_a, n_s)) if audit_paths is not None else None
+    if distributions is not None:
+        distributions[0] = D
     for t in range(T):
         C[t] = float(np.sum(D * c_path[t]))
         D = _forward_step(D, a_path[t], hh.a_grid, hh.pi_s)
+        if distributions is not None:
+            distributions[t + 1] = D
+    if audit_paths is not None and distributions is not None:
+        # Retain the already computed final pass, without another household solve.
+        audit_paths.update(consumption=c_path, assets=a_path, distributions=distributions,
+                           terminal_consumption=terminal_c, realized_returns=rr_seq.copy(),
+                           gross_wages=w_seq.copy())
     return C, c_path, a_path
 
 
@@ -919,6 +931,7 @@ class NonlinearHANKResult:
     tol: float = 1e-6
     jacobian_c_r: np.ndarray = field(default_factory=lambda: np.zeros((0, 0)))
     jacobian_c_y: np.ndarray = field(default_factory=lambda: np.zeros((0, 0)))
+    _audit_context: Any = field(default=None, repr=False, compare=False)
 
     def summary(self) -> str:
         """Produce academic text summary of non-linear transition dynamics."""
@@ -1483,6 +1496,8 @@ def solve_nonlinear_transition(
     max_iter: int = 100,
     tol: float = 1e-6,
     backtracking: bool = True,
+    *,
+    retain_audit_paths: bool = False,
     **kwargs: Any,
 ) -> NonlinearHANKResult:
     """Solve Non-Linear General Equilibrium Transition Dynamics for large MIT shocks.
@@ -1542,6 +1557,11 @@ def solve_nonlinear_transition(
     backtracking : bool, default True
         Whether to perform the monotone line search (``False`` takes full Broyden
         steps and may diverge, which is reported by the warning).
+    retain_audit_paths : bool, default False
+        Retain the final household policy/distribution pass for independent
+        ``validation.audit_result`` checks, without another solve. Storage is
+        approximately ``8 * (3*T + 2) * n_a * n_s`` bytes plus small input arrays.
+        Effective GE parameters are retained regardless of this option.
     **kwargs : Any
         Parameter overrides. With ``ss_model=None`` or a dict they go to
         ``solve_hank_sequence_space``. With a pre-solved ``ss_model``, ``phi_pi``
@@ -1556,6 +1576,8 @@ def solve_nonlinear_transition(
         Structured result containing linear vs non-linear general equilibrium paths,
         residuals, iterations, convergence status, and .plot().
     """
+    if not isinstance(retain_audit_paths, (bool, np.bool_)):
+        raise TypeError("retain_audit_paths must be a boolean")
     if not isinstance(shock_var, str):
         raise TypeError(f"shock_var must be a string ('r' or 'G'), got {type(shock_var).__name__}")
     s_var = shock_var.lower().strip()
@@ -1623,11 +1645,11 @@ def solve_nonlinear_transition(
     shock_r = shock_seq_full if is_monetary else np.zeros(horizon)
     shock_G = shock_seq_full if is_fiscal else np.zeros(horizon)
 
-    def compute_C(dY: np.ndarray) -> np.ndarray:
+    def compute_C(dY: np.ndarray, audit_paths: dict[str, np.ndarray] | None = None) -> np.ndarray:
         dr = M_r_Y @ dY + shock_r
         rr_seq = np.concatenate(([r_ss], r_ss + dr))          # realised returns r_0..r_T
         w_seq = np.maximum(w_ss * (1.0 + dY / Y_ss), 1e-6)
-        C, _, _ = _household_transition(hh, rr_seq, w_seq)
+        C, _, _ = _household_transition(hh, rr_seq, w_seq, audit_paths=audit_paths)
         return C
 
     def H_func(dY: np.ndarray) -> np.ndarray:
@@ -1697,7 +1719,8 @@ def solve_nonlinear_transition(
 
     # 7. Non-linear paths
     dY_nonlinear = U.copy()
-    dC_nonlinear = compute_C(dY_nonlinear) - C_ss
+    retained_paths: dict[str, np.ndarray] | None = {} if retain_audit_paths else None
+    dC_nonlinear = compute_C(dY_nonlinear, retained_paths) - C_ss
     dpi_nonlinear = K_pi @ dY_nonlinear
     dr_nonlinear = M_r_Y @ dY_nonlinear + shock_r
 
@@ -1724,6 +1747,16 @@ def solve_nonlinear_transition(
         tol=tol,
         jacobian_c_r=J_C_r,
         jacobian_c_y=J_C_Y,
+        _audit_context={
+            "phi_pi": phi_pi, "kappa": kappa, "beta": beta,
+            "r_ss": r_ss, "w_ss": w_ss, "C_ss": C_ss,
+            "paths": retained_paths,
+            "household": None if retained_paths is None else {
+                "asset_grid": hh.a_grid.copy(), "productivity": hh.s_grid.copy(),
+                "transition": hh.pi_s.copy(), "initial_distribution": hh.D_ss.copy(),
+                "gamma": hh.gamma, "debt": hh.B, "labour": hh.N_ss,
+            },
+        },
     )
 
 
@@ -2686,6 +2719,8 @@ def _two_asset_transition(
     r_a_path: np.ndarray,
     z_path: np.ndarray,
     transfer_path: np.ndarray | None = None,
+    *,
+    diagnostics: dict[str, float] | None = None,
 ) -> dict[str, np.ndarray]:
     """Non-linear household block along realised input paths (direct method).
 
@@ -2701,6 +2736,7 @@ def _two_asset_transition(
     Va, Vb = hh.Va_ss, hh.Vb_ss
     pols: list[dict[str, np.ndarray]] = [None] * T  # type: ignore[list-item]
     n_floor = 0
+    budget_error = 0.0
     for t in range(T - 1, -1, -1):
         step = _two_asset_backward(hh, Va, Vb, r_b=r_b_path[t], r_a=r_a_path[t], z=z_path[t],
                                    transfer=float(transfer_path[t]))
@@ -2710,6 +2746,13 @@ def _two_asset_transition(
             hh.a_grid, hh.b_grid, hh.s_grid, float(r_b_path[t]), float(r_a_path[t]), float(z_path[t]),
             step[3], step[4], step[6], float(transfer_path[t]),
         )
+        if diagnostics is not None:
+            resources = ((1+r_a_path[t])*hh.a_grid[:, None, None]
+                         + (1+r_b_path[t])*hh.b_grid[None, :, None]
+                         + z_path[t]*hh.s_grid[None, None, :] + transfer_path[t])
+            budget_error = max(budget_error, float(np.max(np.abs(step[2]+step[3]+step[4]+step[6]-resources))))
+            if not all(np.all(np.isfinite(value)) for value in step) or np.any(step[2] <= 0) or n_floor or budget_error > 1e-8:
+                raise ValueError("nonlinear two-asset household trial violates feasibility or its budget")
     if n_floor:
         warnings.warn(
             f"two-asset transition: the consumption floor binds in {n_floor} (state, date) pairs, so the "
@@ -2718,11 +2761,17 @@ def _two_asset_transition(
             stacklevel=2,
         )
     D = hh.D_ss.copy()
+    mass_error = float(abs(np.sum(D) - 1.0))
     agg = {o: np.empty(T) for o in _TA_OUTPUTS}
     for t in range(T):
         for o in _TA_OUTPUTS:
             agg[o][t] = float(np.sum(D * pols[t][o]))
         D = _two_asset_forward(D, pols[t]["A"], pols[t]["B"], hh.a_grid, hh.b_grid, hh.pi_s)
+        mass_error = max(mass_error, float(abs(np.sum(D)-1.0)))
+        if diagnostics is not None and (not np.all(np.isfinite(D)) or np.min(D) < -1e-12 or mass_error > 1e-10):
+            raise ValueError("nonlinear two-asset household trial has an invalid distribution")
+    if diagnostics is not None:
+        diagnostics.update(household_budget_max_abs=budget_error, distribution_mass_max_abs=mass_error)
     return agg
 
 
@@ -2733,6 +2782,8 @@ def _two_asset_closed_transition(
     r_a_path: np.ndarray,
     tol: float = 1e-13,
     max_iter: int = 200,
+    *,
+    diagnostics: dict[str, float] | None = None,
 ) -> dict[str, np.ndarray]:
     """Non-linear household block under the income closure (direct method).
 
@@ -2755,7 +2806,7 @@ def _two_asset_closed_transition(
     z = (Y_path - r_b_path * B_lag - r_a_path * A_lag) / N
     step = float("inf")
     for _ in range(int(max_iter)):
-        agg = _two_asset_transition(hh, r_b_path, r_a_path, z)
+        agg = _two_asset_transition(hh, r_b_path, r_a_path, z, diagnostics=diagnostics)
         B_lag[1:], A_lag[1:] = agg["B"][:-1], agg["A"][:-1]
         z_new = (Y_path - r_b_path * B_lag - r_a_path * A_lag) / N
         step = float(np.max(np.abs(z_new - z)))
@@ -2765,7 +2816,7 @@ def _two_asset_closed_transition(
     else:
         warnings.warn(f"two-asset closed transition: z fixed point not reached (step {step:.1e})",
                       RuntimeWarning, stacklevel=2)
-    agg = _two_asset_transition(hh, r_b_path, r_a_path, z)
+    agg = _two_asset_transition(hh, r_b_path, r_a_path, z, diagnostics=diagnostics)
     agg["z"] = z
     return agg
 
@@ -3639,6 +3690,30 @@ def dp_nonlinear_transition(
     T = lengths.pop()
 
     blk = _prepare_dp_household_block(model_or_sol, inputs=inputs_list, outputs=outputs)
+    return _dp_transition_from_block(blk, paths_arr)
+
+
+def _dp_transition_from_block(
+    blk: dict[str, Any], paths_arr: Mapping[str, np.ndarray], *, check_feasibility: bool = False,
+    diagnostics: dict[str, float] | None = None,
+) -> dict[str, np.ndarray]:
+    """Evaluate a previously prepared block; used repeatedly by editable GE.
+
+    The public transition keeps its existing behavior. GE requests strict
+    budget/consumption checks so a floored household path cannot clear markets.
+    """
+    from puremacro.vfi.distribution import lottery_push
+
+    T = len(next(iter(paths_arr.values())))
+    checks = {"distribution_mass_max_abs": 0.0, "household_budget_max_abs": 0.0}
+
+    def check_mass(mass):
+        error = float(abs(np.sum(mass) - 1.0))
+        checks["distribution_mass_max_abs"] = max(checks["distribution_mass_max_abs"], error)
+        if check_feasibility and (not np.all(np.isfinite(mass)) or np.min(mass) < -1e-12 or error > 1e-10):
+            raise ValueError("nonlinear household trial has an invalid distribution")
+
+    check_mass(blk["D_ss"])
     if blk.get("is_two_asset"):
         hh = blk["hh_block"]
         out_names = blk["outputs"]
@@ -3652,7 +3727,22 @@ def dp_nonlinear_transition(
         steps: list[tuple | None] = [None] * T
         Va_next, Vb_next = hh.Va_ss, hh.Vb_ss
         for t in range(T - 1, -1, -1):
+            if check_feasibility and (input_levels["r_b"][t] <= -1 or input_levels["r_a"][t] <= -1 or input_levels["z"][t] <= 0):
+                raise ValueError("nonlinear household trial has nonpositive gross returns or income")
             step_t = _two_asset_backward(hh, Va_next, Vb_next, **{k: arr[t] for k, arr in input_levels.items()})
+            if check_feasibility and (not all(np.all(np.isfinite(value)) for value in step_t)
+                    or _two_asset_floored_states(hh.a_grid, hh.b_grid, hh.s_grid,
+                        float(input_levels["r_b"][t]), float(input_levels["r_a"][t]), float(input_levels["z"][t]),
+                        step_t[3], step_t[4], step_t[6])):
+                raise ValueError("nonlinear household trial is nonfinite or binds the consumption floor")
+            if check_feasibility:
+                resources = ((1+input_levels["r_a"][t])*hh.a_grid[:, None, None]
+                             + (1+input_levels["r_b"][t])*hh.b_grid[None, :, None]
+                             + input_levels["z"][t]*hh.s_grid[None, None, :])
+                error = float(np.max(np.abs(step_t[2]+step_t[3]+step_t[4]+step_t[6]-resources)))
+                checks["household_budget_max_abs"] = max(checks["household_budget_max_abs"], error)
+                if error > 1e-8:
+                    raise ValueError("nonlinear household trial violates its budget")
             steps[t] = step_t
             Va_next, Vb_next = step_t[:2]
         out_paths_ta = {name: np.empty(T) for name in out_names}
@@ -3663,6 +3753,9 @@ def dp_nonlinear_transition(
             for name in out_names:
                 out_paths_ta[name][t] = float(np.sum(D_t * values[name])) - steady_means[name]
             D_t = _two_asset_forward(D_t, step_t[3], step_t[4], hh.a_grid, hh.b_grid, hh.pi_s)
+            check_mass(D_t)
+        if diagnostics is not None:
+            diagnostics.update(checks)
         return out_paths_ta
 
     a_grid = blk["a_grid"]
@@ -3691,7 +3784,17 @@ def dp_nonlinear_transition(
         for k, arr in paths_arr.items():
             p_t[f"p_{k}"] = float(params_ss[f"p_{k}"] + arr[t])
         params_path[t] = p_t
+        if check_feasibility:
+            gross_return, income = blk["plan"].budget(p_t)
+            resources = gross_return * a_grid[:, None] + np.asarray(income)[None, :]
+            if gross_return <= 0 or np.any(resources - a_grid[0] <= 0):
+                raise ValueError("nonlinear household trial has nonpositive feasible consumption or return")
         V_next, c_path[t], ap_path[t] = step_fn(V_next, p_t)
+        if check_feasibility and (not np.all(np.isfinite(c_path[t])) or np.any(c_path[t] <= 1e-10)
+                or np.max(np.abs(c_path[t] + ap_path[t] - resources)) > 1e-8):
+            raise ValueError("nonlinear household trial is nonfinite or violates its budget")
+        if check_feasibility:
+            checks["household_budget_max_abs"] = max(checks["household_budget_max_abs"], float(np.max(np.abs(c_path[t]+ap_path[t]-resources))))
 
     out_paths = {y_name: np.empty(T, dtype=float) for y_name in out_names}
     D_t = D_ss.copy()
@@ -3700,7 +3803,10 @@ def dp_nonlinear_transition(
             val_t = float(np.sum(D_t * out_evals[y_name](ap_path[t], c_path[t], params_path[t])))
             out_paths[y_name][t] = val_t - y_ss_val[y_name]
         D_t = lottery_push(D_t, ap_path[t], a_grid, P)
+        check_mass(D_t)
 
+    if diagnostics is not None:
+        diagnostics.update(checks)
     return out_paths
 
 

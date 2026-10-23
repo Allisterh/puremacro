@@ -6,11 +6,13 @@ Sequence-Space Jacobian (SSJ) engine from Auclert, Bardóczy, Rognlie & Straub
 
 Key Features
 ------------
-1. Parses `hetagent_block; ... end;` in .mod files. The `model;` block is
-   parsed and kept on `HANKModel.dag` for inspection but is not solved: the
+1. Parses `hetagent_block; ... end;` in .mod files. By default the `model;` block is
+   kept on `HANKModel.dag` for inspection but is not solved: the
    general-equilibrium closure is the built-in New Keynesian Phillips curve and
    Taylor rule on the declared `beta`, `kappa`, `phi_pi` (and `alpha_ab` for
    two-asset) parameters, see `_ge_matrices` in `models.hank_sequence_space`.
+   Opt-in `closure='model'` solves homogeneous affine aggregate equations with
+   explicitly mapped household responses, linear or nonlinear in the household.
 2. Computes microeconomic stationary distributions D*(a) and consumption Jacobians
    (J_C_r, J_C_Y) via the Fake-News Algorithm.
 3. Solves coupled general equilibrium MIT transition paths in sequence space
@@ -342,6 +344,13 @@ class HANKModel:
         rho: float = 0.5,
         horizon: int = 40,
         nonlinear: bool = False,
+        *,
+        closure: str = "builtin",
+        household_inputs: Mapping[str, str] | None = None,
+        household_outputs: Mapping[str, str] | None = None,
+        shock_paths: Mapping[str, Sequence[float]] | None = None,
+        closure_tol: float = 1e-9,
+        closure_max_iter: int = 100,
     ) -> HANKResult:
         """Simulate general equilibrium transition dynamics for an MIT shock.
 
@@ -351,9 +360,33 @@ class HANKModel:
         the .mod file is not read, and ``shock`` only labels the result
         (``shock_name``, plus a ``transition_paths`` column holding the monetary
         path when the name is a declared ``varexo``). ``nonlinear=True`` (Broyden quasi-Newton)
-        is implemented for the built-in one-asset household only: a two-asset
+        with the default closure is implemented for the built-in one-asset household only: a two-asset
         ``hetagent_block`` or a dp ``household_model`` raises ``NotImplementedError``.
+
+        Opt in to ``closure='model'`` to solve homogeneous affine ``model(linear)``
+        equations in level deviations. Explicit ``household_inputs`` and
+        ``household_outputs`` map household names to declared aggregate names;
+        ``shock_paths`` supplies declared exogenous deviation paths. Leads and
+        lags outside the horizon have zero deviations. The rank check certifies
+        finite-horizon solvability, not economic determinacy. See the editable
+        HANK closure guide for household units and timing conventions.
+        With ``nonlinear=True``, those aggregate equations are coupled to exact
+        nonlinear household transitions, using monotone Broyden iterations.
+        ``closure_max_iter`` bounds iterations; unsuccessful solves warn and
+        return ``converged=False`` with the last path and residual diagnostics.
         """
+        if closure not in ("builtin", "model"):
+            raise ValueError("closure must be 'builtin' or 'model'")
+        if closure == "model":
+            from ._hank_closure import solve_model_closure
+            return solve_model_closure(
+                self, horizon=horizon, shock=shock, magnitude=magnitude, rho=rho,
+                household_inputs=household_inputs, household_outputs=household_outputs,
+                shock_paths=shock_paths, tol=closure_tol, nonlinear=nonlinear, max_iter=closure_max_iter,
+            )
+        if (household_inputs is not None or household_outputs is not None or shock_paths is not None
+                or closure_tol != 1e-9 or closure_max_iter != 100):
+            raise ValueError("household mappings and shock_paths require closure='model'")
         if nonlinear and self.household_model is not None:
             raise NotImplementedError("nonlinear general-equilibrium simulation for a dp household_model "
                                       "is not implemented; dp_nonlinear_transition computes household "
@@ -583,6 +616,13 @@ def solve_hank_bridge(
     horizon: int = 40,
     nonlinear: bool = False,
     household_model: Any = None,
+    *,
+    closure: str = "builtin",
+    household_inputs: Mapping[str, str] | None = None,
+    household_outputs: Mapping[str, str] | None = None,
+    shock_paths: Mapping[str, Sequence[float]] | None = None,
+    closure_tol: float = 1e-9,
+    closure_max_iter: int = 100,
     **param_overrides: Any,
 ) -> HANKResult:
     """High-level interface to solve a HANK .mod model and return transition dynamics."""
@@ -593,6 +633,12 @@ def solve_hank_bridge(
         rho=rho,
         horizon=horizon,
         nonlinear=nonlinear,
+        closure=closure,
+        household_inputs=household_inputs,
+        household_outputs=household_outputs,
+        shock_paths=shock_paths,
+        closure_tol=closure_tol,
+        closure_max_iter=closure_max_iter,
     )
 
 

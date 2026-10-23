@@ -63,6 +63,7 @@ Issues = "https://github.com/jalonso1979/puremacro/issues"
 
 [project.scripts]
 puremacro-dynare = "puremacro.dsge.cli:main"
+puremacro-dp = "puremacro.dp.cli:main"
 
 [project.optional-dependencies]
 # File-format engines. pyarrow is the parquet engine behind pandas.read_parquet /
@@ -141,6 +142,8 @@ include = ["puremacro*"]
 
 [tool.setuptools.package-data]
 "puremacro" = ["py.typed"]
+"puremacro.dp" = ["_examples/*.mod"]
+"puremacro.examples" = ["_study_data/*.csv", "_study_data/*.json"]
 # _references/dynare_live and the Dynare 8 moments file: byte-identical copies of
 # tests/fixtures/dynare_live/ and tests/fixtures/dynare_order3_pruned_moments.json
 # (live Dynare 7.0 and Dynare 8 output), shipped so that notebook 68's Dynare
@@ -188,6 +191,8 @@ exclude_lines = [
 ]
 
 [tool.pytest.ini_options]
+# Match the release gate's public test roots when no paths are supplied.
+testpaths = ["puremacro/tests", "tests"]
 addopts = ["-m", "not slow and not network and not reference and not replication and not benchmark"]
 markers = [
     "network: tests requiring live network access (opt-in via `pytest -m network`)",

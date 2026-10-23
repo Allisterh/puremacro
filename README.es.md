@@ -2,6 +2,8 @@
 
 # puremacro
 
+**En desarrollo:** [modelos DP en archivos `.mod`](docs/es/dp_modfiles.md), [estudios reproducibles](docs/es/studies.md), [ecuaciones HANK editables](docs/es/hank_model_closure.md) y [plantillas ejecutables](docs/es/study_workflows.md). Requieren el código fuente de desarrollo; no están incluidos en la distribución 5.5.0 publicada.
+
 **Macroeconometría y modelos estructurales sobre el núcleo científico de Python.**
 
 Estime efectos de política, compare modelos económicos y exporte resultados

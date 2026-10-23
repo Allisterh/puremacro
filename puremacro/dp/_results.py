@@ -112,7 +112,12 @@ class DPSolution:
         and cannot be recorded); by default the states, the shocks and the
         controls (the ``c`` local, any ``control()`` and the discrete choice).
         They are checked before anything is drawn. VFI states stay on grid nodes; EGM interpolates
-        the next-asset policy linearly between nodes. Shocks move by ``sol.P``.
+        the next-asset policy linearly between nodes, or bilinearly in the two
+        asset coordinates for two-asset EGM. Two-asset panels preserve the
+        declared state order and evaluate consumption from the budget using
+        the interpolated choices. Stationary initialization draws grid mass;
+        subsequent continuous policies need not preserve that discretized
+        lottery distribution exactly. Shocks move by ``sol.P``.
 
         The same ``seed`` gives bit-identical panels (one PCG64 generator).
         ``n_agents * periods`` above 5e8 raises ``ValueError``. Continuous-time

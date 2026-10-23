@@ -10,6 +10,10 @@ the same parser as `.mod` files. `Model.solve()` compiles them to the
 `puremacro.vfi` engines, so you never write a return-function closure, broadcast
 grids by hand or pass positional parameter lists.
 
+You can also write the declarations in a [Dynare-style DP `.mod` file](dp_modfiles.md)
+and call `dp.solve_mod("household.mod")`. It uses these same solvers and returns
+the same solution object; it is Puremacro DP syntax, not a Dynare DSGE file.
+
 | `solve(method=...)` | engine | what it handles |
 |---|---|---|
 | `"vfi"` (default without a drift) | `VFIProblem`, `FiniteHorizonProblem` | any discrete-time model on grids; several states |

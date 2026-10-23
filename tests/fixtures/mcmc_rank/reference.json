@@ -1,0 +1,70 @@
+{
+  "reference": "ArviZ public rhat/ess/mcse, executed on recorded input arrays",
+  "reference_version": "0.22.0",
+  "numpy": "2.5.4",
+  "scipy": "1.18.1",
+  "python": "3.12.13",
+  "diagnostics_source_sha256": "08e4f2d9ce513808ab0802bf50da3b9109e080def599a0513f0cb9e1975a6ca1",
+  "source": "https://github.com/arviz-devs/arviz/blob/v0.22.0/arviz/stats/diagnostics.py",
+  "paper": "https://doi.org/10.1214/20-BA1221",
+  "draws_sha256": "1bef38ec84eae7a4bcf5b16c17d2eba7cdb569e514dd2772bb726d3bbfb8e672",
+  "scope": "Finite nondegenerate inputs; constant-tail/constant-draw policies tested separately",
+  "results": {
+    "iid_odd": {
+      "rhat": 1.0016109015993842,
+      "bulk": 1425.5440119922378,
+      "tail": 1506.187102173866,
+      "mean": 1408.9328540283568,
+      "mcse_mean": 0.026887252159249718
+    },
+    "shifted": {
+      "rhat": 2.23366162413473,
+      "bulk": 5.141101415615674,
+      "tail": 33.7995242385936,
+      "mean": 4.837820435741203,
+      "mcse_mean": 1.1160298307898664
+    },
+    "different_scales": {
+      "rhat": 1.6515729214829473,
+      "bulk": 1442.088070259681,
+      "tail": 31.475521516017942,
+      "mean": 1330.8775298317375,
+      "mcse_mean": 0.05546943222075057
+    },
+    "cauchy": {
+      "rhat": 1.0024185182039893,
+      "bulk": 1971.7440911849108,
+      "tail": 1990.461303427724,
+      "mean": 2094.039068469607,
+      "mcse_mean": 0.7578367736226257
+    },
+    "ties": {
+      "rhat": 1.0009590432265854,
+      "bulk": 885.6288073924577,
+      "tail": 849.2165085204658,
+      "mean": 889.2683484927156,
+      "mcse_mean": 0.07840641016300026
+    },
+    "one_chain": {
+      "rhat": null,
+      "bulk": 409.7320256754683,
+      "tail": 358.90289102233123,
+      "mean": 407.6528912103537,
+      "mcse_mean": 0.05234798261558471
+    },
+    "ar_positive": {
+      "rhat": 1.0108691244131378,
+      "bulk": 233.69119025935618,
+      "tail": 424.3178412104328,
+      "mean": 232.75149629210864,
+      "mcse_mean": 0.10730930703402683
+    },
+    "ar_negative": {
+      "rhat": 1.0019964027553836,
+      "bulk": 6602.059991327962,
+      "tail": 1550.721568190999,
+      "mean": 6602.059991327962,
+      "mcse_mean": 0.01667588228766263
+    }
+  }
+}

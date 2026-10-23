@@ -12,8 +12,8 @@ Key Features
 3. Nesterov / Hoffman-Gelman dual averaging step size adaptation targeting delta* = 0.80.
 4. Welford online diagonal mass matrix adaptation M^{-1} ≈ Var(theta) with Stan-style
    staged warmup schedule (fast buffer, doubling slow windows, final fast buffer).
-5. Comprehensive MCMC diagnostics: split-R_hat, bulk and tail ESS (single-chain
-   Geyer ESS summed over chains, not rank-normalised), E-BFMI, and
+5. MCMC diagnostics: rank-normalized split R-hat in result summaries,
+   multichain bulk and tail ESS, E-BFMI, and
    NUTSResult container with visualization methods.
 """
 from __future__ import annotations
@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 
 from puremacro.dsge._results import NUTSResult
-from puremacro.mcmc import autocorrelations, effective_sample_size, gelman_rubin
+from puremacro.mcmc import gelman_rubin, multichain_ess
 
 
 # ---------------------------------------------------------------------------
@@ -42,53 +42,30 @@ def compute_split_rhat(chains: np.ndarray) -> float:
     chains = np.asarray(chains, dtype=float)
     if chains.ndim == 1:
         chains = chains[None, :]
-    if chains.shape[1] < 4:
-        return 1.0
+    if chains.ndim != 2:
+        raise ValueError("chains must have shape (chains, draws)")
+    if chains.shape[0] < 1 or chains.shape[1] < 4 or not np.all(np.isfinite(chains)):
+        return float("nan")
+    half = chains.shape[1] // 2
+    halves = np.concatenate((chains[:, :half], chains[:, -half:]), axis=0)
+    if np.all(halves == halves[:, :1]):
+        return float("nan") if np.all(halves == halves.flat[0]) else float("inf")
     res = gelman_rubin(chains, split=True)
     W = res["W"]
     var_plus = res["var_plus"]
     if W <= 0.0 or not np.isfinite(W) or not np.isfinite(var_plus):
-        return 1.0
+        return float("nan")
     return float(np.sqrt(max(1.0, var_plus / W)))
 
 
 def compute_bulk_ess(chains: np.ndarray) -> float:
-    r"""Effective sample size summed over chains.
-
-    The sum of the single-chain ESS of each chain, each from Geyer's initial
-    monotone sequence (:func:`puremacro.mcmc.effective_sample_size`). There
-    is no rank normalisation and no multi-chain between-variance term, so
-    this is **not** the bulk ESS of Vehtari et al. (2021, eq. 10) nor arviz's
-    ``ess_bulk``; for well-mixed chains the two are close, while chains
-    stuck in different regions are not penalised here.
-    """
-    chains = np.asarray(chains, dtype=float)
-    if chains.ndim == 1:
-        chains = chains[None, :]
-    n_chains = chains.shape[0]
-    ess_list = [effective_sample_size(chains[c]) for c in range(n_chains)]
-    return float(np.sum(ess_list))
+    """Rank-normalized split multichain bulk ESS; penalizes between-chain disagreement."""
+    return multichain_ess(chains, method="bulk")
 
 
 def compute_tail_ess(chains: np.ndarray) -> float:
-    r"""Tail effective sample size from the 5% and 95% quantile indicators.
-
-    The smaller of :func:`compute_bulk_ess` of the indicators
-    ``1{theta <= q_0.05}`` and ``1{theta <= q_0.95}`` (quantiles of the pooled
-    draws), i.e. summed single-chain ESS without rank normalisation; like
-    :func:`compute_bulk_ess`, not arviz's ``ess_tail``.
-    """
-    chains = np.asarray(chains, dtype=float)
-    if chains.ndim == 1:
-        chains = chains[None, :]
-    flat = chains.ravel()
-    q05 = float(np.quantile(flat, 0.05))
-    q95 = float(np.quantile(flat, 0.95))
-    ind05 = (chains <= q05).astype(float)
-    ind95 = (chains <= q95).astype(float)
-    ess05 = compute_bulk_ess(ind05)
-    ess95 = compute_bulk_ess(ind95)
-    return float(min(ess05, ess95))
+    """Minimum split multichain ESS of the pooled 5% and 95% quantile indicators."""
+    return multichain_ess(chains, method="tail")
 
 
 def compute_ebfmi(energy_trace: np.ndarray) -> float:
@@ -99,12 +76,14 @@ def compute_ebfmi(energy_trace: np.ndarray) -> float:
     """
     E = np.asarray(energy_trace, dtype=float).ravel()
     N = len(E)
-    if N < 2:
-        return 1.0
+    if N < 2 or not np.all(np.isfinite(E)) or np.all(E == E[0]):
+        return float("nan")
+    from puremacro._mcmc_rank import _center_scale
+    E, _ = _center_scale(E)
     numerator = float(np.sum(np.diff(E) ** 2)) / (N - 1.0)
     denominator = float(np.var(E, ddof=1))
-    if denominator <= 1e-12 or not np.isfinite(denominator):
-        return 1.0
+    if denominator <= 0 or not np.isfinite(denominator):
+        return float("nan")
     return float(numerator / denominator)
 
 

@@ -51,7 +51,11 @@ nav:
       - Overview: index.md
       - Quickstart: quickstart.md
       - Research workflows: research_workflows.md
+      - Reproducible studies and scenarios: studies.md
+      - Runnable workflow templates: study_workflows.md
       - Auditing solved results: result_audits.md
+      - Path audits and bounded refinement: result_audits_extended.md
+      - Workload scaling: performance_scaling.md
       - Real-data published replication: empirical_research.md
       - Showcase Notebooks: notebooks.md
       - Correctness advisories: ADVISORY.md
@@ -77,7 +81,9 @@ nav:
           - Double ML for Treatment Effects & IV (IRM & DML-IV): dml_irm_iv.md
           - Spatial Econometrics: spatial.md
           - Global VAR (GVAR): gvar.md
+          - Dependence-aware bootstrap inference: dependence_bootstrap.md
           - DSGE Estimation & Diagnostics: dsge_estimation.md
+          - Multichain MCMC diagnostics: mcmc_diagnostics.md
           - GDP Nowcasting: nowcast.md
           - Latin America Real-Time Nowcasting & News: nowcast_latam_news.md
           - Penalized Forecasting: forecast.md
@@ -87,6 +93,7 @@ nav:
           - Empirical-to-structural estimation: structural_bridge.md
           - Sequence-Space HANK: models.md
           - Non-Linear HANK Transitions: hank_nonlinear.md
+          - Editable HANK equations and panels: hank_model_closure.md
           - Monetary Transmission Simulator: monetary_transmission.md
           - Macroeconomic Policy Simulators & Browser Labs: policy_simulators.md
           - Gertler-Karadi (2011) DSGE: gertler_karadi.md
@@ -101,6 +108,7 @@ nav:
           - Stacked-Time Newton-Krylov (Perfect Foresight): dsge_stacked_newton.md
       - Continuous Dynamic Programming & Projection Solvers:
           - Declarative dynamic programming (dp): dp.md
+          - Dynamic programming in .mod files: dp_modfiles.md
           - Continuous Projection Solvers: vfi_continuous_projection.md
           - Splines & Sparse Grids: vfi_splines_and_sparse_grids.md
           - Discrete Choice EGM (DC-EGM): dcegm.md
@@ -141,7 +149,11 @@ nav:
       - Inicio: es/index.md
       - Inicio rápido: es/quickstart.md
       - Flujos de investigación: es/research_workflows.md
+      - Estudios y escenarios reproducibles: es/studies.md
+      - Plantillas ejecutables: es/study_workflows.md
       - Auditoría de resultados resueltos: es/result_audits.md
+      - Auditoría de trayectorias y refinamiento acotado: es/result_audits_extended.md
+      - Escalamiento de cargas de trabajo: es/performance_scaling.md
       - Replicación publicada con datos reales: es/empirical_research.md
       - Cuadernos de demostración: es/notebooks.md
       - Avisos de corrección: es/ADVISORY.md
@@ -167,7 +179,9 @@ nav:
           - Doble ML para efectos de tratamiento e instrumentos (IRM y DML-IV): es/dml_irm_iv.md
           - Econometría espacial: es/spatial.md
           - VAR global (GVAR): es/gvar.md
+          - Inferencia bootstrap con dependencia: es/dependence_bootstrap.md
           - Estimación y diagnósticos DSGE: es/dsge_estimation.md
+          - Diagnósticos MCMC entre cadenas: es/mcmc_diagnostics.md
           - Nowcasting del PIB: es/nowcast.md
           - Nowcasting en tiempo real de América Latina y descomposición de noticias: es/nowcast_latam_news.md
           - Pronóstico penalizado: es/forecast.md
@@ -177,6 +191,7 @@ nav:
           - Estimación empírica-estructural: es/structural_bridge.md
           - HANK en el espacio de secuencias: es/models.md
           - Transiciones no lineales en HANK: es/hank_nonlinear.md
+          - Ecuaciones HANK editables y paneles: es/hank_model_closure.md
           - Simulador de transmisión monetaria: es/monetary_transmission.md
           - Simuladores de política macroeconómica y laboratorios interactivos: es/policy_simulators.md
           - DSGE de Gertler-Karadi (2011): es/gertler_karadi.md
@@ -191,6 +206,7 @@ nav:
           - Newton-Krylov apilado en el tiempo (previsión perfecta): es/dsge_stacked_newton.md
       - Programación dinámica continua y solucionadores de proyección:
           - Programación dinámica declarativa (dp): es/dp.md
+          - Programación dinámica en archivos .mod: es/dp_modfiles.md
           - Solucionadores de proyección continua: es/vfi_continuous_projection.md
           - Splines y mallas dispersas: es/vfi_splines_and_sparse_grids.md
           - DC-EGM de elección discreta: es/dcegm.md

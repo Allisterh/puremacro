@@ -7,6 +7,8 @@ Agents are advanced with each solution's own policy representation:
   shape only when values are recorded.
 - EGM: a continuous asset value, the next-asset policy ``aprime[:, z]``
   interpolated linearly between grid nodes and clipped to the grid ends.
+  With two assets both policies are interpolated bilinearly, in canonical
+  illiquid/liquid grid order, then recorded in the model's declaration order.
 
 Exogenous shocks move by the solution's Markov matrix ``sol.P``, one uniform
 per agent and period drawn by inverse CDF. One ``numpy.random.Generator``
@@ -526,6 +528,95 @@ def _simulate_ks(sol, n_agents: int, periods: int, *, rng: np.random.Generator,
 
 
 # ----------------------------------------------------------------------------- driver
+def _simulate_two_asset(sol, n_agents: int, periods: int, *, rng: np.random.Generator,
+                        init, burn_in: int, compiled) -> Panel:
+    """Continuous two-asset policies; no random rounding of portfolio choices."""
+    from puremacro.dp._egm_two_asset import TwoAssetEGMPlan
+
+    c = sol._c
+    plan = TwoAssetEGMPlan(c)
+    grids = (plan.a_grid, plan.b_grid)
+    names = (plan.illiquid_name, plan.liquid_name)
+    if isinstance(init, str):
+        if init != "stationary":
+            raise ValueError("two-asset init must be 'stationary' or a dict giving every state")
+        if sol.distribution is None:
+            raise ValueError("init='stationary' needs sol.distribution; solve with distribution=True or pass state values")
+        shape = (plan.n_a, plan.n_b, plan.n_s)
+        mass = np.asarray(sol.distribution)
+        if mass.shape != shape:
+            raise ValueError(f"two-asset stationary distribution must have canonical shape {shape}")
+        cells = _draw_cells(rng, mass.ravel(), n_agents)
+        ia, ib, z = np.unravel_index(cells, shape)
+        state = np.array([grids[0][ia], grids[1][ib]])
+    else:
+        if not isinstance(init, Mapping):
+            raise ValueError("two-asset init must be 'stationary' or a dict giving every state")
+        unknown = set(init) - set(c.state_names) - set(c.shock_names)
+        missing = set(c.state_names) - set(init)
+        if unknown or missing:
+            raise ValueError(f"init must give every state and only declared state/shock names; missing={sorted(missing)}, unknown={sorted(unknown)}")
+
+        def values(name):
+            value = np.asarray(init[name], dtype=float)
+            if value.ndim == 0:
+                value = np.full(n_agents, float(value))
+            if value.shape != (n_agents,) or not np.all(np.isfinite(value)):
+                raise ValueError(f"init[{name!r}] must be finite and scalar or shape ({n_agents},)")
+            return value
+
+        coordinates = []
+        for name, grid in zip(names, grids):
+            raw = values(name)
+            value = np.clip(raw, grid[0], grid[-1])
+            if np.any(raw != value):
+                warnings.warn(f"init: values of {name!r} outside the grid [{grid[0]:g}, {grid[-1]:g}] were clipped to it", UserWarning, stacklevel=4)
+            coordinates.append(value)
+        state = np.array(coordinates)
+        z = _draw_cells(rng, markov_stationary(np.asarray(sol.P)), n_agents)
+        if c.shock_names and c.shock_names[0] in init:
+            value = values(c.shock_names[0])
+            z = _nearest(plan.s_grid, value)
+            if not np.allclose(plan.s_grid[z], value, rtol=1e-9, atol=1e-12):
+                raise ValueError(f"init[{c.shock_names[0]!r}] must take values on the shock grid")
+
+    def step(current, shocks):
+        a, b = current
+        ia = np.clip(np.searchsorted(grids[0], a, side="right") - 1, 0, len(grids[0]) - 2)
+        ib = np.clip(np.searchsorted(grids[1], b, side="right") - 1, 0, len(grids[1]) - 2)
+        wa = (a - grids[0][ia]) / (grids[0][ia + 1] - grids[0][ia])
+        wb = (b - grids[1][ib]) / (grids[1][ib + 1] - grids[1][ib])
+        out = []
+        for policy, grid in zip((sol.raw.aprime, sol.raw.bprime), grids):
+            value = ((1-wa)*(1-wb)*policy[ia, ib, shocks] + wa*(1-wb)*policy[ia+1, ib, shocks]
+                     + (1-wa)*wb*policy[ia, ib+1, shocks] + wa*wb*policy[ia+1, ib+1, shocks])
+            out.append(np.clip(value, grid[0], grid[-1]))
+        return np.array(out)
+
+    S = np.empty((2, n_agents, periods + 1))
+    Z = np.empty((n_agents, periods), dtype=np.intp)
+    total = burn_in + periods
+    for t in range(total):
+        nxt = step(state, z)
+        k = t - burn_in
+        if k >= 0:
+            S[:, :, k], Z[:, k] = state, z
+        if t < total - 1:
+            z = _draw_markov(rng, np.asarray(sol.P), z)
+        state = nxt
+    S[:, :, periods] = state
+    order = (0, 1) if plan.illiquid_idx == 0 else (1, 0)
+    current_values = [S[i, :, :-1] for i in order]
+    next_values = [S[i, :, 1:] for i in order]
+    args = next_values + current_values + [plan.s_grid[Z]] + [sol.params[f"p_{name}"] for name in c.param_names]
+    arrays = {}
+    for name, fn in compiled:
+        value = np.asarray(fn(*args, xp=np), dtype=float)
+        arrays[name] = np.array(np.broadcast_to(value, (n_agents, periods)))
+    return Panel(arrays, age=None, alive=None, source=f"puremacro.dp simulation of {sol.model_name!r} (two-asset egm)",
+                 functions=c.model._functions)
+
+
 def simulate(sol, n_agents: int, periods: int | None, *, seed, init, burn_in: int,
              record: Sequence[str] | None) -> Panel:
     """Body of ``DPSolution.simulate``; see its docstring."""
@@ -547,9 +638,6 @@ def simulate(sol, n_agents: int, periods: int | None, *, seed, init, burn_in: in
                           f"the {J} ages of the horizon", UserWarning, stacklevel=3)
             periods_int = J
 
-    if sol.method == "egm" and len(c.state_names) == 2:
-        raise NotImplementedError("two-asset EGM panel simulation is not implemented; "
-                                  "use policy(), distribution, or dp_nonlinear_transition()")
     compiled = _compile_record(sol, record)
     if n_agents * periods_int > MAX_CELLS:
         nbytes = 8 * n_agents * periods_int * len(compiled)
@@ -558,6 +646,8 @@ def simulate(sol, n_agents: int, periods: int | None, *, seed, init, burn_in: in
                          f"({nbytes / 1e9:.1f} GB); simulate fewer agents or periods")
 
     rng = np.random.Generator(np.random.PCG64(seed))
+    if sol.method == "egm" and len(c.state_names) == 2:
+        return _simulate_two_asset(sol, n_agents, periods_int, rng=rng, init=init, burn_in=burn_in, compiled=compiled)
     if sol.method == "hjb":
         return _simulate_hjb(sol, n_agents, periods_int, rng=rng, init=init, burn_in=burn_in, compiled=compiled)
     if sol.method.endswith("+ks"):

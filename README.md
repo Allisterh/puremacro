@@ -2,6 +2,8 @@
 
 # puremacro
 
+**In development:** [DP models in `.mod` files](docs/dp_modfiles.md), [reproducible studies](docs/studies.md), [editable HANK equations](docs/hank_model_closure.md) and [runnable workflows](docs/study_workflows.md). These features require the development source; they are not included in the published 5.5.0 wheel.
+
 **Macroeconometrics and structural modeling on the core scientific-Python stack.**
 
 Estimate policy effects, compare economic models, and export results for a

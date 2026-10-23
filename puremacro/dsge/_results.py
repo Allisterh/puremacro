@@ -199,16 +199,23 @@ class NUTSResult:
             "mean_accept_rate": float(np.mean(self.accept_rates)),
             "step_sizes": self.step_sizes,
             "ebfmi": ebfmi_vals,
+            "rhat_method": "rank_normalized_folded_split",
+            "ess_method": "split_multichain_bulk_and_tail",
         }
 
     def summary(self) -> pd.DataFrame:
-        """Per-parameter mean, std, quantiles, split-R_hat, and bulk/tail ESS."""
-        from puremacro.dsge.nuts import compute_split_rhat, compute_bulk_ess, compute_tail_ess
+        """Per-parameter summaries with rank-normalized R-hat and multichain ESS.
+
+        R-hat is unavailable (NaN) with one chain. Monte Carlo standard error
+        measures simulation error in the posterior mean, not parameter uncertainty.
+        """
+        from puremacro.dsge.nuts import compute_bulk_ess, compute_tail_ess
+        from puremacro.mcmc import mcse_mean, rank_normalized_rhat
 
         flat = self.draws.reshape(-1, len(self.param_names))
         n_params = len(self.param_names)
 
-        r_hats = [compute_split_rhat(self.draws[:, :, i]) for i in range(n_params)]
+        r_hats = [rank_normalized_rhat(self.draws[:, :, i]) for i in range(n_params)]
         ess_bulks = [compute_bulk_ess(self.draws[:, :, i]) for i in range(n_params)]
         ess_tails = [compute_tail_ess(self.draws[:, :, i]) for i in range(n_params)]
 
@@ -221,11 +228,16 @@ class NUTSResult:
             "r_hat": r_hats,
             "ess_bulk": ess_bulks,
             "ess_tail": ess_tails,
+            "mcse_mean": [mcse_mean(self.draws[:, :, i]) for i in range(n_params)],
         }
         if self.mode is not None:
             data["mode"] = [self.mode.get(n, float("nan")) for n in self.param_names]
 
-        return pd.DataFrame(data, index=list(self.param_names))
+        frame = pd.DataFrame(data, index=list(self.param_names))
+        frame.attrs.update(rhat_method="rank_normalized_folded_split",
+                           ess_method="split_multichain",
+                           mcse_scope="simulation error of the posterior mean")
+        return frame
 
     def to_frame(self) -> pd.DataFrame:
         """Return summary statistics as a DataFrame."""
@@ -452,6 +464,9 @@ class HANKResult:
     horizon: int = 40
     model_name: str = "hank_sequence_space"
     converged: bool = True
+    closure: str = "builtin"
+    diagnostics: dict[str, Any] = field(default_factory=dict)
+    _audit_context: dict[str, Any] | None = field(default=None, repr=False, compare=False)
 
     def summary(self) -> pd.DataFrame:
         """Summary table of peak and on-impact responses across variables."""

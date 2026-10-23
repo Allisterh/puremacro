@@ -443,12 +443,14 @@ class RiskIndex:
 
     def as_instrument(self) -> Instrument:
         from ..instruments import Instrument
+        signal_metadata = self.metadata.get("signal_draws", {})
+        frequency = signal_metadata.get("frequency", "Q") if isinstance(signal_metadata, dict) else "Q"
         return Instrument(
             series=self.series,
             name=self.name,
             source=f"narrative.indices.{self.method}",
             category="text_index",
-            frequency="Q",
+            frequency=frequency,
             metadata={
                 "corpus": self.corpus,
                 "language": self.language,
@@ -459,24 +461,42 @@ class RiskIndex:
         )
 
 
-# --- Signal-quality report (Slice 1: sparsity-only fields populated; the
-# kernel_agreement / multilingual_parity / *_sd / corpus_loo_max_swing
-# fields wire up in Slice 2 — 0.66.0. The calibration fields use Any
-# placeholders here; the BenchmarkScore / EventPanelScore / SurveyScore
-# dataclasses arrive in Slice 3 — 0.67.0.) ---
-BenchmarkScore = Any   # placeholder, replaced in 0.67.0
-EventPanelScore = Any  # placeholder, replaced in 0.67.0
-SurveyScore = Any      # placeholder, replaced in 0.67.0
+@dataclass(frozen=True)
+class BenchmarkScore:
+    """Held-out agreement, not causal validity; undefined correlations are None."""
+    n_obs: int
+    pearson: float | None
+    spearman: float | None
+    rmse: float
+    mae: float
+    mean_bias: float
+    unit: str
+
+
+@dataclass(frozen=True)
+class SurveyScore(BenchmarkScore):
+    """Held-out agreement with a survey series in explicitly supplied units."""
+
+
+@dataclass(frozen=True)
+class EventPanelScore:
+    """Declared evaluation-date ranking, with tie-aware AUC and top-decile hits."""
+    n_obs: int
+    n_events: int
+    spearman: float | None
+    auc: float | None
+    top_decile_hit_rate: float
+    top_n: int
+    polarity: int
 
 
 @dataclass
 class SignalQualityReport:
     """Signal-quality companion to RiskIndex.
 
-    Slice 1 (0.65.0): sparsity / coverage fields only. Stability and
-    calibration fields are declared in the schema (default-None / empty
-    dict / None) so Slice 2 (draws) and Slice 3 (calibration) can fill
-    them in-place without re-versioning the dataclass.
+    Existing index constructors optionally fill sparsity/coverage. The explicit
+    ``narrative.signals`` workflow fills resampling, sensitivity and held-out
+    calibration diagnostics without changing those constructors' defaults.
     """
     n_docs_per_period: pd.Series                       # date -> int
     avg_doc_length:    pd.Series                       # date -> float (tokens)

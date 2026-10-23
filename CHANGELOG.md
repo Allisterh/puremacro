@@ -7,6 +7,51 @@ This changelog describes versioned source changes. Check
 Versions 5.3.0, 5.4.0 and 5.4.1 were tagged but not published to PyPI; their
 additions are included in 5.4.2. See the [release procedure](RELEASING.md).
 
+## Unreleased
+
+### Added
+
+- Dynare-style dynamic-programming files: `dp.load_mod`, `dp.solve_mod` and
+  `puremacro-dp` compile explicit state grids, income processes, objectives,
+  constraints and aggregates to the existing VFI, EGM and HJB engines. Loading
+  validates without solving; scripts/macros/includes are unsupported. Packaged
+  growth, household and lifecycle examples and English/Spanish guides are included.
+- `puremacro.study` records explicit LP/recursive-VAR specifications, input
+  transforms and units, identification assumptions, effective samples and audit
+  evidence. Portable checksum-verified archives and Markdown/LaTeX/Typst reports
+  retain inputs; model scenarios remain distinct from statistical estimates.
+- Editable HANK aggregate equations with `closure="model"`, explicit household
+  input/output mappings and declared shock paths. Homogeneous affine aggregate
+  equations can use linear household Jacobians or nonlinear household transitions
+  with bounded Broyden iterations. Two-asset EGM solutions now simulate joint
+  household panels with bilinear policies and consumption from the budget.
+- Rank-normalized folded split R-hat, between-chain bulk/tail ESS and mean MCSE,
+  integrated into NUTS summaries. Frozen actual ArviZ reference outputs cover
+  offsets, scale differences, ties, heavy tails and serial dependence. Degenerate
+  draws are unavailable rather than reported as healthy convergence.
+- Narrative signal document/cluster draws, separately labelled specification
+  sensitivity, train/holdout calibration and full-path callback propagation.
+  Measurement uncertainty remains distinct from estimator sampling uncertainty.
+- Optional spatial-LP circular block-pairs bootstrap-t inference with explicit
+  stationarity and common-support estimates; a separate GVAR bootstrap reference
+  for the stronger independent-country null, refitting both estimation stages.
+  Default asymptotic diagnostics remain unchanged. Reproducible size/coverage/power
+  experiments retain failures and Monte Carlo uncertainty.
+- Three offline workflow templates: a frozen OECD/FRED Mexican recursive VAR,
+  a DP household transfer experiment, and an OECD ICIO tariff counterfactual.
+  Inputs, units, assumptions and audit limits are retained in report archives.
+- Perfect-foresight and nonlinear HANK path audits, plus explicit finite
+  refinement ladders with solve/cost budgets. Missing paths or Euler evidence
+  remain visible; default auditing never re-solves a model.
+- `linear_solver="krylov"` in standard perfect-foresight and extended-path calls,
+  with validated options, retained diagnostics and no silent direct-solver
+  fallback. Workload scaling benchmarks record numerical checks, repeated
+  timings, environment and the scope of memory measurements.
+
+These additions are development-source features, not part of the published
+5.5.0 wheel. New model closures and statistical workflows have explicitly
+bounded contracts; numerical convergence does not establish economic validity.
+
 ## 5.5.0 (2026-10-22)
 
 **Inspect model compatibility and numerical accuracy, and correct steady-state trajectory references.**

@@ -503,3 +503,6 @@ Two more identification notes. `γ` is identified purely off the cross-sectional
 - Ord, J. K. (1975). Estimation methods for models of spatial interaction. *Journal of the American Statistical Association* 70(349), 120–126.
 - Pace, R. K. and LeSage, J. P. (2004). Chebyshev approximation of log-determinants of spatial weight matrices. *Computational Statistics & Data Analysis* 45(2), 179–196.
 - Yu, J., de Jong, R. and Lee, L.-F. (2008). Quasi-maximum likelihood estimators for spatial dynamic panel data models with fixed effects when both n and T are large. *Journal of Econometrics* 146(1), 118–134.
+
+
+[Opt-in dependence-aware bootstrap methods and their restricted assumptions](dependence_bootstrap.md).

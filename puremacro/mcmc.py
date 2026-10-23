@@ -30,6 +30,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from ._mcmc_rank import mcse_mean, multichain_ess, rank_normalized_rhat
+
 
 def _autocovariance(x: np.ndarray) -> np.ndarray:
     """Sample autocovariances ``gamma_0 .. gamma_{n-1}`` of a 1-D series.
@@ -622,4 +624,5 @@ __all__ = [
     "autocorrelations", "effective_sample_size",
     "trace_summary",
     "random_walk_metropolis",
+    "rank_normalized_rhat", "multichain_ess", "mcse_mean",
 ]

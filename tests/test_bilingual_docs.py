@@ -9,6 +9,15 @@ ROOT = Path(__file__).resolve().parents[1]  # package root (README.md, docs/, no
 
 # User-facing docs that get a docs/es/<same-name> Spanish version (exact case).
 _USER_DOCS = [
+    "dp_modfiles.md",
+    "studies.md",
+    "study_workflows.md",
+    "hank_model_closure.md",
+    "mcmc_diagnostics.md",
+    "performance_scaling.md",
+    "result_audits_extended.md",
+    "dependence_bootstrap.md",
+
     "empirical_research.md",
     "research_workflows.md",
     "research_benchmarks.md",

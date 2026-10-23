@@ -1480,10 +1480,25 @@ def _resolve_preconditioner(problem: StackedProblem, preconditioner: Any, time_b
                              f"{_PRECONDITIONER_NAMES}, a LinearOperator, a preconditioner object "
                              "or a factory callable")
         if preconditioner == "current_block_tridiagonal":
+            cached_blocks: tuple[np.ndarray, ...] | None = None
+            cached_operator: spla.LinearOperator | None = None
+
             def factory_current(x):
+                nonlocal cached_blocks, cached_operator
                 A, B, C = problem.current_blocks(x)
+                blocks = (A, B, C)
+                # Reuse only identical numerical systems, never model identity or
+                # approximate equality. Copies prevent mutable block callbacks
+                # from changing the cache key underneath a factorization.
+                if cached_blocks is not None and all(
+                    a.dtype == b.dtype and a.shape == b.shape and np.array_equal(a, b)
+                    for a, b in zip(blocks, cached_blocks)
+                ):
+                    return cached_operator
                 pre, _ = _build_block_preconditioner(A, B, C, T, "thomas", time_block)
-                return pre.as_linear_operator()
+                cached_blocks = tuple(a.copy() for a in blocks)
+                cached_operator = pre.as_linear_operator()
+                return cached_operator
             return "current_block_tridiagonal", factory_current
         A, B, C = problem.steady_blocks()
         if preconditioner == "steady_block_tridiagonal":
@@ -1532,6 +1547,7 @@ def solve_stacked_newton_krylov(
     krylov_maxiter: int = 35,
     side: str = "right",
     max_log_move: float | None = 0.75,
+    dampening: float = 1.0,
     line_search: bool = True,
     max_backtracks: int = 23,
     step_tol: float | None = _STEP_TOL,
@@ -1587,6 +1603,9 @@ def solve_stacked_newton_krylov(
     line_search : bool
         Armijo backtracking on ``|F|_2^2`` (``False`` takes the bounded full step
         as long as the residual is finite).
+    dampening : float
+        Maximum initial step fraction in ``(0, 1]``, additionally limited by
+        ``max_log_move``. Acceptance still checks the full Newton direction.
     max_backtracks : int
         Halvings of the step in the line search (default 23, i.e. 24 trial
         evaluations).
@@ -1635,6 +1654,9 @@ def solve_stacked_newton_krylov(
     if not isinstance(problem, StackedProblem):
         raise TypeError("problem must be a StackedProblem")
     tol = _check_positive_float(tol, "tol")
+    dampening = _check_positive_float(dampening, "dampening")
+    if dampening > 1.0:
+        raise ValueError("dampening must lie in (0, 1]")
     if step_tol is None or (isinstance(step_tol, (int, float, np.floating)) and not isinstance(step_tol, bool)
                             and float(step_tol) == float("inf")):
         step_tol = None      # residual-only acceptance
@@ -1699,6 +1721,7 @@ def solve_stacked_newton_krylov(
             "forcing": (eta_min, eta_max), "krylov_method": krylov_method, "inner_m": inner_m,
             "outer_k": outer_k, "krylov_maxiter": krylov_maxiter, "side": side,
             "max_log_move": max_log_move, "line_search": bool(line_search),
+            "dampening": dampening,
             "max_backtracks": max_backtracks, "direct_below": direct_below,
             "jvp_method": problem.jvp_method, "n_periods": T, "n_vars": n,
             "y_init": _readonly(problem.y_init), "y_end": _readonly(problem.y_end),
@@ -1816,10 +1839,10 @@ def solve_stacked_newton_krylov(
             break
         # Bound the move in path units (scaled by max(1, |Y|_inf)); never clip the path.
         if max_log_move is None:
-            step = 1.0
+            step = dampening
         else:
             bound = max_log_move * y_scale
-            step = min(1.0, bound / max(bound, step_norm))
+            step = min(dampening, bound / max(bound, step_norm))
         merit = float(f @ f)
         accepted = False
         backtracks = 0

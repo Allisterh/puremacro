@@ -214,8 +214,11 @@ def test_two_asset_current_states_and_discount_parameter(two_asset_dp_model):
     np.testing.assert_array_equal(sol.policy("a(+1)"), sol.raw.aprime)
     np.testing.assert_allclose(sol.policy("c"), sol.raw.c, atol=1e-12)
     np.testing.assert_allclose(sol.policy("d"), sol.raw.d, atol=1e-12)
-    with pytest.raises(NotImplementedError, match="two-asset EGM panel simulation"):
-        sol.simulate(10, 2)
+    panel = sol.simulate(10, 2, record=["a", "b", "a(+1)", "b(+1)", "c"])
+    assert panel["c"].shape == (10, 2)
+    assert np.all(panel["c"] > 0)
+    np.testing.assert_array_equal(panel["a"][:, 1], panel["a(+1)"][:, 0])
+    np.testing.assert_array_equal(panel["b"][:, 1], panel["b(+1)"][:, 0])
 
 
 def test_two_asset_custom_outputs_and_registered_functions(two_asset_dp_model):

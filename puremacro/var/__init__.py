@@ -22,8 +22,10 @@ from .gvar import (
     WeakExogeneityResult,
 )
 from ._results import VarEstimateResult  # noqa: F401
+from ._gvar_null_bootstrap import GVARIndependentNullResult
 
 __all__ = [
+    "GVARIndependentNullResult",
     "fit_var", "lag_select", "companion", "is_stable",
     "irf", "fevd", "gfevd", "historical_decomp", "bootstrap_bands",
     "minnesota_posterior", "minnesota_gibbs",

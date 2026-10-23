@@ -47,6 +47,57 @@ _STEP_TOL = 1e-10
 _ARMIJO_C = 1e-4
 
 
+def _validate_linear_solver(linear_solver: str, krylov_options: Mapping[str, Any] | None,
+                            mcp: bool, mcp_bounds: Mapping | None) -> dict[str, Any]:
+    """Reject unsupported backend combinations before evaluating the model."""
+    if linear_solver not in ("direct", "krylov"):
+        raise ValueError("linear_solver must be 'direct' or 'krylov'")
+    if linear_solver == "direct":
+        if krylov_options is not None:
+            raise ValueError("krylov_options requires linear_solver='krylov'")
+        return {}
+    if mcp or mcp_bounds:
+        raise NotImplementedError("linear_solver='krylov' does not support MCP bounds")
+    if krylov_options is not None and not isinstance(krylov_options, Mapping):
+        raise TypeError("krylov_options must be a mapping or None")
+    options = dict(krylov_options or {})
+    allowed = {"preconditioner", "forcing", "krylov_method", "inner_m", "outer_k",
+               "krylov_maxiter", "side", "max_log_move", "time_block", "progress", "checkpoint"}
+    unknown = set(options) - allowed
+    if unknown:
+        raise ValueError(f"unsupported krylov_options: {sorted(map(str, unknown))}")
+    from .stacked_newton import _check_positive_int, _check_positive_float, _PRECONDITIONER_NAMES
+
+    for name in ("inner_m", "outer_k", "krylov_maxiter", "time_block"):
+        if name in options and not (name == "time_block" and options[name] is None):
+            _check_positive_int(options[name], name, minimum=0 if name == "outer_k" else 1)
+    if options.get("max_log_move") is not None:
+        _check_positive_float(options["max_log_move"], "max_log_move")
+    if options.get("krylov_method", "lgmres") not in ("lgmres", "gmres"):
+        raise ValueError("krylov_method must be 'lgmres' or 'gmres'")
+    if options.get("side", "right") not in ("left", "right"):
+        raise ValueError("side must be 'left' or 'right'")
+    pre = options.get("preconditioner")
+    if isinstance(pre, str) and pre != "none" and pre not in _PRECONDITIONER_NAMES:
+        raise ValueError(f"unknown preconditioner {pre!r}")
+    if pre is not None and not (isinstance(pre, (str, np.ndarray, spla.LinearOperator))
+                               or sp.issparse(pre) or callable(pre)
+                               or hasattr(pre, "as_linear_operator")):
+        raise TypeError("preconditioner must be a name, operator, array, callable or None")
+    if "forcing" in options:
+        try:
+            lo, hi = options["forcing"]
+            valid = 0.0 < float(lo) <= float(hi) < 1.0
+        except (ValueError, TypeError) as exc:
+            raise ValueError("forcing must be a pair with 0 < eta_min <= eta_max < 1") from exc
+        if not valid:
+            raise ValueError("forcing must satisfy 0 < eta_min <= eta_max < 1")
+    for name in ("progress", "checkpoint"):
+        if options.get(name) is not None and not callable(options[name]):
+            raise TypeError(f"{name} must be callable")
+    return options
+
+
 @dataclass(frozen=True)
 class PerfectForesightResult:
     """Result of deterministic non-linear perfect foresight simulation.
@@ -77,6 +128,9 @@ class PerfectForesightResult:
     terminal_error: float
     variable_names: tuple[str, ...] = ()
     initial_residual_norm: float = float("nan")
+    linear_solver: str = "direct"
+    solver_diagnostics: Mapping[str, Any] = field(default_factory=dict)
+    _audit_context: Mapping[str, Any] | None = field(default=None, repr=False, compare=False)
 
     def to_frame(self) -> pd.DataFrame:
         """Return the simulated trajectory as a DataFrame."""
@@ -110,6 +164,7 @@ class PerfectForesightResult:
             "PERFECT FORESIGHT SIMULATION RESULT",
             "=" * 72,
             f"Convergence status  : {'CONVERGED' if self.converged else 'FAILED'}",
+            f"Linear solver       : {self.linear_solver}",
             f"Iterations          : {self.iterations}",
             f"Residual norm       : {self.residual_norm:.4e}"
             + (
@@ -537,6 +592,8 @@ def simulate_surprise_shocks(
     total_iter = 0
     max_res = 0.0
     all_binding: dict[str, list[int]] = {}
+    all_converged = True
+    rolling_diagnostics = []
 
     for t in range(T_surprise):
         exo_path_t = base_exo.copy()
@@ -561,6 +618,8 @@ def simulate_surprise_shocks(
         realized_path[t, :] = current_state
         total_iter += res_t.iterations
         max_res = max(max_res, getattr(res_t, "residual_norm", 0.0))
+        all_converged = all_converged and res_t.converged
+        rolling_diagnostics.append(getattr(res_t, "solver_diagnostics", {}))
 
         if mcp and hasattr(res_t, "binding_periods"):
             for v_name, b_periods in res_t.binding_periods.items():
@@ -576,7 +635,7 @@ def simulate_surprise_shocks(
     if mcp:
         return MCPResult(
             path=path_df,
-            converged=True,
+            converged=all_converged,
             iterations=total_iter,
             residuals=np.zeros((T_surprise, n_vars)),
             binding_periods=all_binding,
@@ -587,11 +646,13 @@ def simulate_surprise_shocks(
 
     return PerfectForesightResult(
         path=path_df,
-        converged=True,
+        converged=all_converged,
         iterations=total_iter,
         residual_norm=max_res,
         terminal_error=float(np.max(np.abs(realized_path[-1] - ss_val))),
         variable_names=tuple(v_list),
+        linear_solver=kwargs.get("linear_solver", "direct"),
+        solver_diagnostics={"mode": "surprise", "rolling_solves": tuple(rolling_diagnostics)},
     )
 
 
@@ -618,6 +679,8 @@ def solve_perfect_foresight(
     surprise: bool = False,
     histval: Mapping[str, float] | None = None,
     endval: Mapping[str, float] | None = None,
+    linear_solver: str = "direct",
+    krylov_options: Mapping[str, Any] | None = None,
 ) -> PerfectForesightResult | MCPResult:
     r"""Solve a nonlinear perfect-foresight path, optionally with MCP bounds.
 
@@ -627,8 +690,20 @@ def solve_perfect_foresight(
     ``endval`` argument, endogenous values are literal; an exogenous-only
     mapping requests a terminal steady-state solve. Residual callables may
     explicitly declare a ``steady_state`` argument to receive this reference.
+
+    ``linear_solver='direct'`` retains the sparse Newton engine. ``'krylov'``
+    uses the matrix-free stacked Newton-Krylov engine with the same prepared
+    equations, boundaries and shocks. Its convergence requires both a small
+    residual (scaled by the terminal Jacobian blocks) and a small full Newton
+    direction. Numerical failures warn and return ``converged=False`` with
+    ``solver_diagnostics``; there is no silent direct fallback. MCP is unsupported.
+    ``krylov_options`` accepts preconditioner, forcing, krylov_method, inner_m,
+    outer_k, krylov_maxiter, side, max_log_move, time_block, progress and checkpoint.
+    Tolerances and initial-step dampening remain the named arguments above.
     """
     from puremacro.dsge.build import _Vec
+
+    krylov_settings = _validate_linear_solver(linear_solver, krylov_options, mcp, mcp_bounds)
 
     # 1. Resolve horizon
     if periods is not None:
@@ -640,6 +715,8 @@ def solve_perfect_foresight(
 
     if eff_periods < 1:
         raise ValueError(f"n_periods must be at least 1, got {eff_periods}")
+    if krylov_settings.get("time_block") is not None and krylov_settings["time_block"] > eff_periods:
+        raise ValueError("time_block cannot exceed n_periods")
     if not isinstance(max_iter, (int, np.integer)) or int(max_iter) < 1:
         raise ValueError(f"solve_perfect_foresight: max_iter must be an integer >= 1, got {max_iter!r}")
     max_iter = int(max_iter)
@@ -768,6 +845,7 @@ def solve_perfect_foresight(
         if dyn_eqs is None:
             raise ValueError("Model has no dynamic residual equations")
         evaluate_model = _steady_state_adapter(dyn_eqs)
+        y_ss_arr = y_ss_arr.copy()
         ss_vec = _Vec(v_names_list, y_ss_arr, what="variable")
 
         def eq_wrapper(yp, yc, yl, eps):
@@ -783,7 +861,7 @@ def solve_perfect_foresight(
         # Pure callable path
         y_init_arr = np.asarray(y_init, dtype=float).ravel()
         y_end_target = y_end if y_end is not None else y_ss
-        y_ss_arr = np.asarray(y_end_target, dtype=float).ravel()
+        y_ss_arr = np.asarray(y_end_target, dtype=float).ravel().copy()
         raw_shocks = shocks if shocks is not None else exogenous_path
         if raw_shocks is None:
             exo_sim = np.zeros(eff_periods, dtype=float)
@@ -825,6 +903,10 @@ def solve_perfect_foresight(
             tol=tol,
             max_iter=max_iter,
             variable_names=v_names,
+            linear_solver=linear_solver,
+            krylov_options=krylov_options,
+            method=method,
+            dampening=dampening,
         )
 
     # Initial guess for Y (T x n_vars) via linear interpolation
@@ -852,6 +934,38 @@ def solve_perfect_foresight(
                 use_complex = True
         except Exception:
             use_complex = False
+
+    audit_context = {
+        "mode": "perfect_foresight", "y_init": y_init_arr.copy(),
+        "y_end": y_ss_arr.copy(), "exogenous_path": exo_sim.copy(),
+        "variable_names": v_names, "equations": eq_fn,
+    }
+    if linear_solver == "krylov":
+        from .stacked_newton import StackedNewtonError, StackedProblem, solve_stacked_newton_krylov
+
+        problem = StackedProblem(eq_fn, y_init_arr, y_ss_arr, exo_sim,
+                                 variable_names=v_names,
+                                 jvp_method="complex" if use_complex else "central")
+        try:
+            krylov_result = solve_stacked_newton_krylov(
+                problem, Y0=Y, tol=tol, max_iter=max_iter, dampening=dampening,
+                **krylov_settings,
+            )
+        except StackedNewtonError as exc:
+            if exc.result is None:
+                raise
+            krylov_result = exc.result
+            warnings.warn(f"solve_perfect_foresight (krylov): {exc}", RuntimeWarning, stacklevel=2)
+        diagnostics = dict(krylov_result.metadata)
+        diagnostics.update(preconditioner=krylov_result.preconditioner,
+                           linear_history=krylov_result.linear_history)
+        return PerfectForesightResult(
+            path=krylov_result.path.copy(), converged=krylov_result.converged,
+            iterations=krylov_result.iterations, residual_norm=krylov_result.residual_norm,
+            terminal_error=krylov_result.terminal_error, variable_names=v_names,
+            initial_residual_norm=krylov_result.initial_residual_norm,
+            linear_solver="krylov", solver_diagnostics=diagnostics, _audit_context=audit_context,
+        )
 
     # Setup MCP constraints if mcp is True or mcp_bounds provided
     is_mcp = bool(mcp or (mcp_bounds is not None and len(mcp_bounds) > 0))
@@ -1262,6 +1376,7 @@ def solve_perfect_foresight(
         terminal_error=term_err,
         variable_names=v_names,
         initial_residual_norm=initial_res_norm,
+        _audit_context=audit_context,
     )
 
 

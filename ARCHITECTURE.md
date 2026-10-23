@@ -12,6 +12,12 @@ The package was significantly extended in **Phase 5** (April–early-May 2026, c
 
 ### Empirical-to-structural estimation and replication
 
+- `study/`: explicit fixed-lag LP/recursive-VAR study specifications and separate
+  model-scenario records. Depends on existing estimators, `reports` and the
+  `runtime.store` frame codec. ZIP/NPZ/JSON archives retain inputs, checksums and
+  provenance without pickle or executable callbacks. Comparisons require matching
+  estimands/inputs, with an explicit rationale for empirical/model comparisons.
+  Experimental workflow API; identification assumptions are recorded, not proved.
 - `structural/bridge.py`: `MomentTargets` owns labeled full estimator covariance,
   unit transformations and metadata; `fit_structural` solves bounded minimum
   distance and separates numerical optimization from local inference validity.
@@ -32,7 +38,8 @@ The package was significantly extended in **Phase 5** (April–early-May 2026, c
   occur inside cases. Analytical, numerical-oracle, external-software and official
   data evidence are distinguished from published empirical model replication.
 - `validation/audit.py`: scoped audits of already solved stationary EGM household,
-  first-order DSGE and dynamic-trade results. Immutable report records retain
+  first-order DSGE, perfect-foresight, nonlinear HANK and dynamic-trade results.
+  Immutable report records retain
   per-check evidence, tolerances, coordinates and residual maps. Default checks
   evaluate equations and one distribution transition without re-solving or using
   the network; derivatives and grid/horizon experiments require explicit opt-in.
@@ -41,6 +48,22 @@ The package was significantly extended in **Phase 5** (April–early-May 2026, c
   Two-asset household declarations use `dp/_two_asset_spec.py` to recognize the
   supported resource/cost identity and bind asset roles and parameter aliases;
   arbitrary functions cannot establish a budget identity through finite probes.
+- `dp/modfile.py`: bounded numeric-AST declaration reader feeding the existing
+  DP compiler, with source lines and original-byte hashes. `load_mod` never
+  solves; `solve_mod` applies explicitly declared options. This is a separate DP
+  language with Dynare-style syntax, not a Dynare-compatible DSGE grammar.
+- `dsge/_hank_closure.py`: explicit finite-horizon affine aggregate equations
+  and household mappings. Linear Jacobians or nonlinear household transitions
+  determine responses; outside-horizon deviations are zero. Full-rank checks
+  establish finite-system solvability, not Blanchard–Kahn determinacy. Nonlinear
+  residuals, budgets and mass conservation are checked separately from convergence.
+- `_mcmc_rank.py`: rank/folded split R-hat, pooled multichain ESS and mean MCSE,
+  used by NUTS diagnostics through `mcmc`. ArviZ is a development reference only;
+  runtime uses NumPy/SciPy. Constant/tail-degenerate inputs return unavailable.
+- `narrative/signals/`: document or balanced-cluster measurement draws, labelled
+  sensitivity paths, forward holdout calibration and whole-path propagation.
+  Failed draws remain visible and block default summaries; no inference engine
+  is silently selected or estimator variance added to measurement variance.
 
 `examples/structural_irf_matching.py` exports complete input/assumption/result
 manifests and figures for a synthetic parameter-recovery exercise; see

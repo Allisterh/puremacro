@@ -61,10 +61,12 @@ from .models import (
     SpatialEffectsResult,
 )
 from .panel import spatial_panel, SpatialPanelResult
-from .lp import spatial_lp, SpatialLPResult, higher_order_weights, spatial_lag_panel
+from .lp import (spatial_lp, SpatialLPResult, higher_order_weights, spatial_lag_panel,
+                 SpatialLPBootstrap, SpatialLPBootstrapResult)
 from .allen_arkolakis import AllenArkolakisModel, AllenArkolakisResult
 
 __all__ = [
+    "SpatialLPBootstrap", "SpatialLPBootstrapResult",
     # weights
     "SpatialWeights",
     "contiguity_weights",

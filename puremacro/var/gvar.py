@@ -1980,6 +1980,26 @@ class GVARResult:
                 + (" ..." if len(self.names) > 20 else "")
             ) from None
 
+    def independent_null_bootstrap(
+        self, *, null: str, integration: str, n_boot: int,
+        block_length: int, null_lags: int = 1, seed: int | None = None,
+        alpha: float = 0.05,
+    ):
+        """Restricted independent-country reference; never a general WE test.
+
+        Both ``null='independent_countries'`` and the stationary/I(1) mode
+        must be chosen explicitly. All country VARX* and auxiliary regressions
+        are re-estimated in every draw. The original diagnostic is unchanged.
+        See :class:`puremacro.var.GVARIndependentNullResult` and
+        ``docs/dependence_bootstrap.md`` for assumptions and size evidence.
+        """
+        from ._gvar_null_bootstrap import independent_null_bootstrap
+
+        return independent_null_bootstrap(
+            self, null=null, integration=integration, n_boot=n_boot,
+            block_length=block_length, null_lags=null_lags, seed=seed, alpha=alpha,
+        )
+
     def _R(self, horizon: int) -> np.ndarray:
         """``R_h = Psi_h G^-1`` for ``h = 0..horizon``."""
         Psi = _ma_coefficients([self.F[l] for l in range(self.s)], horizon)
@@ -2967,7 +2987,7 @@ def _as_country_map(value, countries, argname, default, caller, *, require_all=F
     return {c: int(value) for c in countries}
 
 
-def _weak_exogeneity_test(result_blocks, spec, X, we_lags, transform, alpha, caller):
+def _weak_exogeneity_test(result_blocks, spec, X, we_lags, transform, alpha, caller, *, strict_rank=False):
     """Approximate residual-augmented F test for every star variable."""
     rows = []
     skipped = []
@@ -3006,6 +3026,19 @@ def _weak_exogeneity_test(result_blocks, spec, X, we_lags, transform, alpha, cal
         base.append(U[tt - 1])
         Zu = np.column_stack(base)
         Zr = np.column_stack(base[:-1]) if len(base) > 1 else np.ones((T_e, 1))
+        if strict_rank:
+            # Bootstrap references require estimable tested restrictions.
+            # Preserve the legacy diagnostic-only path unless explicitly asked.
+            # Equilibration makes the rank gate insensitive to variable units.
+            for label, design in (("restricted", Zr), ("unrestricted", Zu)):
+                scale = np.sqrt(np.mean(design ** 2, axis=0))
+                scale = np.where(scale > 0, scale, 1.)
+                try:
+                    inv_xtx(design / scale, name=f"{caller}: {c} {label} auxiliary design")
+                except np.linalg.LinAlgError as exc:
+                    raise ValueError(
+                        f"{caller}: country {c!r} {label} auxiliary design is rank deficient; "
+                        "the tested residual restrictions are not estimable") from exc
         for b in range(kstar):
             y = dXs[tt, b]
             resu = y - Zu @ np.linalg.lstsq(Zu, y, rcond=None)[0]

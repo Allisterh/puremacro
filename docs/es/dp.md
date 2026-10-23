@@ -1,5 +1,8 @@
 > 🇬🇧 [English](../dp.md) · 🇪🇸 Español
 
+
+También puede escribir las declaraciones en un [archivo `.mod` de programación dinámica](dp_modfiles.md) y resolverlo con `dp.solve_mod`.
+
 # Programación dinámica declarativa (`puremacro.dp`)
 
 `puremacro.dp` hace con los programas dinámicos lo que un archivo `.mod` de

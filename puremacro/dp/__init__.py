@@ -18,5 +18,7 @@ from puremacro.dp._panel import Panel
 from puremacro.dp._results import DPSolution
 from puremacro.dp.model import Model
 from puremacro.dp.processes import AR1, Jump, Markov
+from puremacro.dp.modfile import load_mod, solve_mod
 
-__all__ = ["AR1", "DPSolution", "Jump", "Markov", "Model", "ModelSpecError", "Panel", "crra"]
+__all__ = ["AR1", "DPSolution", "Jump", "Markov", "Model", "ModelSpecError", "Panel", "crra",
+           "load_mod", "solve_mod"]

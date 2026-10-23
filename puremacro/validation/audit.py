@@ -6,7 +6,7 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 
-from ._audit_report import AuditCheck, AuditReport, DerivativeCheck, RefinementCheck, ResidualCheck
+from ._audit_report import AuditCheck, AuditReport, DerivativeCheck, RefinementCheck, RefinementLadder, ResidualCheck
 
 _CATEGORIES = ("solver", "equations", "distribution", "derivatives", "refinement")
 _TOLERANCES = {"equations": 1e-8, "euler": 1e-2, "stationarity": 1e-10,
@@ -114,8 +114,9 @@ def audit_result(result: Any, *, model: Any = None,
                  tolerances: Mapping[str, float] | None = None,
                  residuals: Sequence[ResidualCheck] = (),
                  derivatives: Sequence[DerivativeCheck] = (),
-                 refinements: Sequence[RefinementCheck] = ()) -> AuditReport:
-    """Audit a stationary EGM DP, first-order DSGE, or dynamic trade result.
+                 refinements: Sequence[RefinementCheck] = (),
+                 refinement_ladders: Sequence[RefinementLadder] = ()) -> AuditReport:
+    """Audit supplied household, DSGE, nonlinear path, or dynamic trade results.
 
     Categories are ``solver``, ``equations``, ``distribution``, ``derivatives``
     and ``refinement``. Unrequested categories remain visible as
@@ -129,6 +130,14 @@ def audit_result(result: Any, *, model: Any = None,
     the network. Expensive callbacks require the corresponding category.
     Inputs are not mutated. User callbacks are responsible for the same
     no-mutation/no-network contract. Failed callbacks produce failed checks.
+    Perfect-foresight paths require retained solve-time context or explicit
+    ``model=PathAuditContext``. Nonlinear HANK household checks require a solve
+    with ``retain_audit_paths=True``; missing paths are never regenerated.
+    Editable HANK closures re-evaluate aggregate equations. Their nonlinear
+    household consistency compares retained outputs only while household
+    input paths are unchanged; it never runs another household solve.
+    ``refinement_ladders`` run only with ``refinement`` selected and record
+    adjacent-level comparisons, declared budgets and the stopping reason.
 
     Euler tolerance defaults to 0.01 (normalized marginal-utility units),
     independent of the policy iteration tolerance. This is a screening target,
@@ -150,10 +159,15 @@ def audit_result(result: Any, *, model: Any = None,
     for refinement in refinements:
         if any(not np.isfinite(v) or v < 0 for v in (refinement.atol, refinement.rtol)):
             raise ValueError("refinement atol and rtol must be finite and nonnegative")
+    from ._audit_refinement import audit_ladder, validate_ladders
+    validate_ladders(refinement_ladders)
     out = _Collector(checks, tolerances)
     from puremacro.dp._results import DPSolution
     from puremacro.dsge.build import LinearModel
     from puremacro.dsge.klein import KleinSolution
+    from puremacro.dsge._results import HANKResult
+    from puremacro.dsge.perfect_foresight import PerfectForesightResult
+    from puremacro.models.hank_sequence_space import NonlinearHANKResult
     from puremacro.trade.dynamic._results import (
         DynamicSteadyStateResult, DynamicTransitionResult, HorizonComparisonResult,
     )
@@ -163,6 +177,15 @@ def audit_result(result: Any, *, model: Any = None,
     elif isinstance(result, (LinearModel, KleinSolution)):
         from ._audit_structural import audit_dsge
         audit_dsge(out, result, model)
+    elif isinstance(result, PerfectForesightResult):
+        from ._audit_paths import audit_perfect_foresight
+        audit_perfect_foresight(out, result, model)
+    elif isinstance(result, NonlinearHANKResult):
+        from ._audit_paths import audit_nonlinear_hank
+        audit_nonlinear_hank(out, result, model)
+    elif isinstance(result, HANKResult):
+        from ._audit_paths import audit_hank_model
+        audit_hank_model(out, result, model)
     elif isinstance(result, (DynamicSteadyStateResult, DynamicTransitionResult, HorizonComparisonResult)):
         from ._audit_structural import audit_trade
         audit_trade(out, result, model)
@@ -182,6 +205,8 @@ def audit_result(result: Any, *, model: Any = None,
                 out.add("derivatives", derivative.name, status="failed", source=derivative.evidence_source,
                         error=f"{type(exc).__name__}: {exc}")
     if "refinement" in out.checks:
+        for ladder in refinement_ladders:
+            audit_ladder(out, result, ladder)
         for refinement in refinements:
             try:
                 metrics = refinement.metrics or _dp_metrics

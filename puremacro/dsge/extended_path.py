@@ -19,7 +19,7 @@ import pandas as pd
 from ._equations import _steady_state_adapter
 from ._results import ExtendedPathResult
 from .build import _Vec
-from .perfect_foresight import solve_perfect_foresight
+from .perfect_foresight import solve_perfect_foresight, _validate_linear_solver
 
 __all__ = ["extended_path", "ExtendedPathResult"]
 
@@ -44,6 +44,8 @@ def extended_path(
     mcp: bool = False,
     mcp_bounds: Mapping[str | int, tuple[float | None, float | None]] | None = None,
     strict: bool = False,
+    linear_solver: str = "direct",
+    krylov_options: Mapping[str, Any] | None = None,
     **kwargs,
 ) -> ExtendedPathResult:
     r"""Simulate non-linear DSGE model using Fair & Taylor (1983) extended path.
@@ -53,7 +55,7 @@ def extended_path(
     2. Formulate the forward deterministic boundary problem over horizon :math:`T_H`,
        setting expected future innovations to zero: :math:`\mathbb{E}_t[u_{t+s}] = 0`
        for :math:`s \ge 1`, and terminal boundary :math:`y_{t+T_H|t} = y_{ss}`.
-    3. Solve the stacked system via the sparse SuperLU stacked Newton engine in
+    3. Solve the stacked system via the selected stacked Newton engine in
        :func:`solve_perfect_foresight`.
     4. Extract contemporaneous endogenous state :math:`y_t = y_{t|t}`, advance
        historical state :math:`y_{t-1} \leftarrow y_t`, and warm-start date :math:`t+1`.
@@ -102,6 +104,11 @@ def extended_path(
     strict : bool, default False
         If True, raises ``RuntimeError`` if the Newton solver fails to converge
         at any period. If False, marks ``converged=False`` and returns trajectory.
+    linear_solver : {"direct", "krylov"}, default "direct"
+        Perfect-foresight backend used at every rolling date. Krylov does not
+        support MCP; terminal boundaries and shock expectations are unchanged.
+    krylov_options : mapping, optional
+        Controls forwarded to :func:`solve_perfect_foresight`.
     **kwargs
         Additional keyword arguments forwarded to :func:`solve_perfect_foresight`.
 
@@ -112,6 +119,7 @@ def extended_path(
         residual norms, and presentation export methods.
     """
     # 1. Parameter Validation
+    _validate_linear_solver(linear_solver, krylov_options, mcp, mcp_bounds)
     periods = int(periods)
     horizon = int(horizon)
     burn = int(burn)
@@ -421,6 +429,8 @@ def extended_path(
             mcp_bounds=mcp_bounds,
             variable_names=v_names,
             equations_fn=eq_fn,
+            linear_solver=linear_solver,
+            krylov_options=krylov_options,
             **kwargs_pf,
         )
 

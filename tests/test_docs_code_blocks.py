@@ -31,6 +31,15 @@ matplotlib.use("Agg")
 REPO = Path(__file__).resolve().parents[1]
 
 PAGES = [
+    "docs/studies.md",
+    "docs/es/studies.md",
+    "docs/study_workflows.md",
+    "docs/es/study_workflows.md",
+    "docs/performance_scaling.md",
+    "docs/es/performance_scaling.md",
+    "docs/mcmc_diagnostics.md",
+    "docs/es/mcmc_diagnostics.md",
+
     "docs/empirical_research.md",
     "docs/es/empirical_research.md",
     "docs/research_workflows.md",

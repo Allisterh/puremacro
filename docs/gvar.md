@@ -268,3 +268,6 @@ Everything below is a decision, not a gap. Reach for another tool rather than ex
 - Pesaran, M. H. and Shin, Y. (1998). Generalized impulse response analysis in linear multivariate models. *Economics Letters* 58(1), 17–29.
 - Pesaran, M. H., Shin, Y. and Smith, R. J. (2000). Structural analysis of vector error correction models with exogenous I(1) variables. *Journal of Econometrics* 97(2), 293–343.
 - Sims, C. A., Stock, J. H. and Watson, M. W. (1990). Inference in linear time series models with some unit roots. *Econometrica* 58(1), 113–144.
+
+
+[Opt-in dependence-aware bootstrap methods and their restricted assumptions](dependence_bootstrap.md).

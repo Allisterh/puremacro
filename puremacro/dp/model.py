@@ -87,6 +87,10 @@ class Model:
         self._agg_shocks: list[tuple[str, Any]] = []
         self._agg_state: tuple[str, np.ndarray, str] | None = None
         self._functions: dict[str, Any] = {}
+        # Populated only by the additive .mod reader. Ordinary solve() keeps its
+        # existing defaults; solve_mod() explicitly applies file solve options.
+        self._mod_source: dict[str, Any] | None = None
+        self._mod_options: dict[str, Any] = {}
 
     # ------------------------------------------------------------------ declarations
     def parameters(self, **values) -> Model:

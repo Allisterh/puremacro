@@ -111,6 +111,12 @@ Deliberately omitted
   ``gamma``'s interpretation.
 * **Finite-sample / fixed-b corrections** of any kind (see Inference above).
 
+The statements above describe the default asymptotic output. The optional
+``bootstrap=SpatialLPBootstrap(...)`` provides a separate common-support
+stationary block-pairs bootstrap-t table, with an explicit stationarity
+assumption and user-chosen block length. It does not retroactively calibrate
+the default output. See ``docs/dependence_bootstrap.md``.
+
 References
 ----------
 Jorda, O. (2005). Estimation and inference of impulse responses by local
@@ -161,12 +167,15 @@ from .hac import (
     spatial_hac_panel_meat,
 )
 from .weights import SpatialWeights, pairwise_distances
+from ._lp_bootstrap import SpatialLPBootstrap, SpatialLPBootstrapResult, _bootstrap_lp
 
 __all__ = [
     "spatial_lp",
     "SpatialLPResult",
     "higher_order_weights",
     "spatial_lag_panel",
+    "SpatialLPBootstrap",
+    "SpatialLPBootstrapResult",
 ]
 
 
@@ -669,7 +678,7 @@ class SpatialLPResult(LPResult):
             "spillover", "cumulative", "coef", "coef_names", "horizon_values",
             "total_scale", "spillover_orders", "weights_info", "cov_type",
             "cov_options", "alpha", "n_lags", "n_entities_panel", "n_periods_panel",
-            "spec", "notes",
+            "spec", "notes", "bootstrap_result",
         ) if name not in LPResult._metadata
     ]
 
@@ -1017,6 +1026,8 @@ def spatial_lp(
     time_lags: int | None = None,
     kernel: str | None = None,
     metric: str | None = None,
+    lagged_outcome: str = "levels",
+    bootstrap: SpatialLPBootstrap | None = None,
 ) -> SpatialLPResult:
     """Two-way FE panel local projection augmented with the spatially lagged shock.
 
@@ -1127,6 +1138,14 @@ def spatial_lp(
     metric : {'haversine', 'euclidean'}, optional
         Conley distance metric (default ``'haversine'``).  Rejected for the
         other covariance types.
+    lagged_outcome : {'levels', 'difference'}, default 'levels'
+        Whether lagged own and spatial outcomes enter in levels or first
+        differences. The dependent variable remains ``y[t+h]-y[t-1]``.
+    bootstrap : SpatialLPBootstrap, optional
+        Explicit stationary circular block-pairs experiment. Adds a separate
+        ``bootstrap_result`` on common horizon support; original rows retain
+        their own samples. Re-estimates fixed effects and studentization in
+        every draw. See ``docs/dependence_bootstrap.md`` for assumptions.
 
     Returns
     -------
@@ -1244,6 +1263,12 @@ def spatial_lp(
     True
     """
     func = "spatial_lp"
+    if lagged_outcome not in ("levels", "difference"):
+        raise ValueError("spatial_lp: lagged_outcome must be 'levels' or 'difference'")
+    if bootstrap is not None:
+        if not isinstance(bootstrap, SpatialLPBootstrap):
+            raise TypeError("spatial_lp: bootstrap must be SpatialLPBootstrap")
+        bootstrap.validate()
     horizons, n_lags, alpha = resolve_lp_kwargs(
         horizons, n_lags, alpha, lags=lags, horizon=horizon, ci=ci, name=func)
     if len(horizons) == 0:
@@ -1278,6 +1303,10 @@ def spatial_lp(
     cov_kind, cov_fn, cov_options = _resolve_cov(
         cov_type, coords=coords, cutoff_km=cutoff_km, time_lags=time_lags,
         kernel=kernel, metric=metric, func=func)
+    if bootstrap is not None and cov_kind == "cluster":
+        raise ValueError(
+            "spatial_lp: block-pairs bootstrap supports driscoll-kraay or conley "
+            "studentization; entity-cluster covariance has no supported fixed-N limit")
 
     contiguous = list(horizons) == list(range(0, len(horizons)))
     if cumulative and not contiguous:
@@ -1436,6 +1465,8 @@ def spatial_lp(
     for lag in range(1, n_lags + 1):
         df[f"__{x}_L{lag}__"] = grouped[x].shift(lag)
         df[f"__{y}_L{lag}__"] = grouped[y].shift(lag)
+        if lagged_outcome == "difference":
+            df[f"__{y}_L{lag}__"] -= grouped[y].shift(lag + 1)
         for cc in ctl:
             df[f"__{cc}_L{lag}__"] = grouped[cc].shift(lag)
         for p in orders:
@@ -1443,6 +1474,8 @@ def spatial_lp(
                 df[f"__W{p}_{x}_L{lag}__"] = grouped[f"__W{p}_{x}__"].shift(lag)
             if spatial_lag_y:
                 df[f"__W{p}_{y}_L{lag}__"] = grouped[f"__W{p}_{y}__"].shift(lag)
+                if lagged_outcome == "difference":
+                    df[f"__W{p}_{y}_L{lag}__"] -= grouped[f"__W{p}_{y}__"].shift(lag + 1)
             if spatial_lag_controls:
                 for cc in ctl:
                     df[f"__W{p}_{cc}_L{lag}__"] = grouped[f"__W{p}_{cc}__"].shift(lag)
@@ -1480,11 +1513,14 @@ def spatial_lp(
     rows: list[dict] = []
     spill_rows: list[dict] = []
     weak: list[int] = []
+    bootstrap_frames: list[pd.DataFrame] = []
 
     for m, h in enumerate(horizons):
         col_dy = f"__dy_h{h}__"
         df[col_dy] = grouped[y].shift(-h) - grouped[y].shift(1)
         sub = df[[col_dy] + x_cols].dropna()
+        if bootstrap is not None:
+            bootstrap_frames.append(sub)
         n_per_h = sub.index.get_level_values(time_level).nunique() if len(sub) else 0
         n_ent_h = sub.index.get_level_values(entity_level).nunique() if len(sub) else 0
         if sub.empty or n_per_h < 2 or n_ent_h < 2:
@@ -1621,8 +1657,16 @@ def spatial_lp(
         "weak_id_corr": WEAK_ID_CORR,
         "cross_horizon": bool(cross_horizon),
         "x_cols": tuple(x_cols),
+        "lagged_outcome": lagged_outcome,
     }
     res.notes = tuple(notes)
+    res.bootstrap_result = None
+    if bootstrap is not None:
+        res.bootstrap_result = _bootstrap_lp(
+            bootstrap_frames, bootstrap, horizons, label_sel, nF,
+            cov_fn, cov_kind, alpha, entity_level, time_level,
+            lagged_outcome=lagged_outcome,
+        )
     return res
 
 

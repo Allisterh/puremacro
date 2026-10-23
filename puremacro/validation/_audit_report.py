@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
@@ -145,3 +145,63 @@ class RefinementCheck:
     atol: float = 1e-8
     units: Mapping[str, str] = field(default_factory=dict)
     evidence_source: str = "caller_refinement_experiment"
+
+
+@dataclass(frozen=True)
+class PathAuditContext:
+    """Explicit boundary and equation evidence for a perfect-foresight path.
+
+    ``equations(lead, current, lag, shock)`` returns one residual per variable.
+    An explicitly declared ``steady_state`` argument receives ``y_end`` as a
+    fixed reference. Shocks must contain exactly the reported dates; no
+    padding, boundary solve or model compilation is performed by the audit.
+    Pass this as ``model=`` to audit a legacy or manually constructed result.
+    """
+
+    equations: Callable[..., Any]
+    y_init: Any
+    y_end: Any
+    exogenous_path: Any
+    variable_names: Sequence[str] = ()
+    mode: str = "perfect_foresight"
+
+
+@dataclass(frozen=True)
+class RefinementLevel:
+    """One explicitly configured solve in a refinement ladder.
+
+    ``cost`` is a caller-declared work unit, not a measured time or memory
+    bound. ``settings`` records the intended mesh, domain or horizon. The
+    callback must return a new result without mutating earlier results.
+    """
+
+    name: str
+    solve: Callable[[], Any]
+    settings: Mapping[str, Any] = field(default_factory=dict)
+    cost: float = 1.0
+
+
+@dataclass(frozen=True)
+class RefinementLadder:
+    """Bounded adjacent-level comparisons, only run with ``refinement`` selected.
+
+    Metrics and a finite ordered set of solve callbacks are mandatory. Stop
+    after ``consecutive_passes`` consecutive comparisons meet every metric's
+    ``atol + rtol * abs(new)`` target, or at the first failed callback, invalid
+    result, exhausted level list or explicit solve/work budget. Stabilization
+    is evidence for the chosen metrics only, not proof of global accuracy.
+    ``validate_pair`` may raise if a callback changed the economic experiment
+    instead of its numerical resolution. No such equivalence is inferred.
+    """
+
+    name: str
+    levels: Sequence[RefinementLevel]
+    metrics: Callable[[Any], Mapping[str, float]]
+    max_solves: int = 3
+    max_cost: float | None = None
+    consecutive_passes: int = 2
+    rtol: float = 0.005
+    atol: float = 1e-8
+    units: Mapping[str, str] = field(default_factory=dict)
+    validate_pair: Callable[[Any, Any], None] | None = None
+    evidence_source: str = "caller_bounded_refinement_ladder"

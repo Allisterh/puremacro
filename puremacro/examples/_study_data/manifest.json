@@ -1,0 +1,20 @@
+{
+  "description": "Frozen OECD/FRED observations already distributed with Puremacro's course; no new live download.",
+  "retrieval_date": "not recorded in original course snapshot",
+  "files": {
+    "IR3TIB01MXM156N.csv": {
+      "sha256": "51961a6d0c125fc56d863defa5f05bc35d2142445e264c0434728799bb0602d1",
+      "series": "IR3TIB01MXM156N",
+      "unit": "Percent per annum, not seasonally adjusted; three-month interbank rate",
+      "source_url": "https://fred.stlouisfed.org/series/IR3TIB01MXM156N",
+      "publisher": "OECD, distributed by FRED"
+    },
+    "CPALTT01MXM659N.csv": {
+      "sha256": "59170bb321388105faccd8d1304973005b21e517b38525a172ee9ca17ee27340",
+      "series": "CPALTT01MXM659N",
+      "unit": "Percent change from same month one year earlier, not seasonally adjusted",
+      "source_url": "https://fred.stlouisfed.org/series/CPALTT01MXM659N",
+      "publisher": "OECD, distributed by FRED"
+    }
+  }
+}
