@@ -27,6 +27,7 @@ for fast, memory-efficient O(T) performance without dense O(T^3) complexity.
 from __future__ import annotations
 
 import math
+import re
 import warnings
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, Sequence
@@ -45,6 +46,40 @@ from ._equations import _steady_state_adapter
 _STEP_TOL = 1e-10
 # Armijo sufficient-decrease constant for backtracking line search.
 _ARMIJO_C = 1e-4
+
+
+def _mcp_from_tags(model):
+    """Resolve simple Dynare MCP tags without guessing a residual orientation.
+
+    Tags use ``variable > parameter_expression`` or ``variable < expression``.
+    The model equation itself must have Dynare's LHS-minus-RHS sign convention:
+    nonnegative at a lower bound, nonpositive at an upper bound.
+    """
+    from ._parser import Parser, Tokenizer
+    dag = getattr(model, "_dag", model)
+    names = tuple(getattr(model, "variables", ()))
+    params = dict(getattr(model, "_params", None) or getattr(model, "parameter_values", {}))
+    bounds, equations = {}, {}
+    for row, tags in getattr(dag, "equation_tags", {}).items():
+        if "mcp" not in tags:
+            continue
+        match = re.fullmatch(r"\s*([A-Za-z_]\w*)\s*(>=|<=|>|<)\s*(.+?)\s*", tags["mcp"])
+        if match is None or match[1] not in names:
+            raise ValueError("Supported MCP tags have the form 'variable > bound' or 'variable < bound'")
+        name, relation, expression = match.groups()
+        if name in bounds:
+            raise ValueError(f"Repeated MCP variable {name!r}; combine bounds through the Python API")
+        parser = Parser(Tokenizer(expression).tokenize())
+        parser.parameters = list(params)
+        node = parser.parse_expression()
+        if node.variables() or node.parameters() - params.keys() or parser._curr().type != "EOF":
+            raise ValueError("MCP bound expressions may depend only on calibrated parameters")
+        bound = float(node.eval({}, params))
+        if not np.isfinite(bound):
+            raise ValueError("MCP bounds must be finite")
+        bounds[name] = (bound, None) if relation.startswith(">") else (None, bound)
+        equations[name] = (int(row), 1.0)
+    return bounds, equations
 
 
 def _validate_linear_solver(linear_solver: str, krylov_options: Mapping[str, Any] | None,
@@ -681,6 +716,10 @@ def solve_perfect_foresight(
     endval: Mapping[str, float] | None = None,
     linear_solver: str = "direct",
     krylov_options: Mapping[str, Any] | None = None,
+    jacobian_fn: Callable | None = None,
+    mcp_equations: Mapping[str | int, int | tuple[int, float]] | None = None,
+    terminal_policy: Callable | None = None,
+    terminal_jacobian: Callable | None = None,
 ) -> PerfectForesightResult | MCPResult:
     r"""Solve a nonlinear perfect-foresight path, optionally with MCP bounds.
 
@@ -700,10 +739,35 @@ def solve_perfect_foresight(
     ``krylov_options`` accepts preconditioner, forcing, krylov_method, inner_m,
     outer_k, krylov_maxiter, side, max_log_move, time_block, progress and checkpoint.
     Tolerances and initial-step dampening remain the named arguments above.
+
+    ``method='auto'`` uses sparse symbolic date derivatives for parsed models.
+    ``jacobian_fn(lead,current,lag,shocks)`` may instead return ``(A,B,C)``.
+    ``mcp_equations`` explicitly maps bounded variables to residual row indices
+    or ``(row, sign)`` pairs; a positive sign means the residual is nonnegative
+    at a lower bound. Without it the historical loading heuristic is retained.
+    ``terminal_policy(last_state)`` replaces the last lead boundary, while
+    ``y_end`` remains the fixed STEADY_STATE reference. Its chain rule is included;
+    this option currently requires the direct backend.
     """
     from puremacro.dsge.build import _Vec
 
     krylov_settings = _validate_linear_solver(linear_solver, krylov_options, mcp, mcp_bounds)
+    for name, value in (("jacobian_fn", jacobian_fn), ("terminal_policy", terminal_policy),
+                        ("terminal_jacobian", terminal_jacobian)):
+        if value is not None and not callable(value):
+            raise TypeError(f"{name} must be callable")
+    if terminal_jacobian is not None and terminal_policy is None:
+        raise ValueError("terminal_jacobian requires terminal_policy")
+    if terminal_policy is not None and linear_solver == "krylov":
+        raise NotImplementedError("terminal_policy currently requires linear_solver='direct'")
+    if mcp_equations is not None and not mcp_bounds:
+        raise ValueError("mcp_equations requires mcp_bounds")
+    if mcp and mcp_bounds is None:
+        mcp_bounds, tag_equations = _mcp_from_tags(model_or_equations)
+        if mcp_equations is None:
+            mcp_equations = tag_equations
+    if mcp_equations is not None and set(mcp_equations) != set(mcp_bounds or {}):
+        raise ValueError("mcp_equations must map exactly the variables in mcp_bounds")
 
     # 1. Resolve horizon
     if periods is not None:
@@ -727,10 +791,10 @@ def solve_perfect_foresight(
     if not np.isfinite(dampening) or not (0.0 < dampening <= 1.0):
         raise ValueError(f"solve_perfect_foresight: dampening must lie in (0, 1], got {dampening!r}")
 
-    if method not in ("auto", "central", "complex"):
+    if method not in ("auto", "central", "complex", "analytic"):
         raise ValueError(
             f"solve_perfect_foresight: unknown method {method!r}; "
-            "expected one of 'auto', 'central', 'complex'"
+            "expected one of 'auto', 'central', 'complex', 'analytic'"
         )
 
     # 2. Resolve Model vs Equations
@@ -907,6 +971,10 @@ def solve_perfect_foresight(
             krylov_options=krylov_options,
             method=method,
             dampening=dampening,
+            jacobian_fn=jacobian_fn,
+            mcp_equations=mcp_equations,
+            terminal_policy=terminal_policy,
+            terminal_jacobian=terminal_jacobian,
         )
 
     # Initial guess for Y (T x n_vars) via linear interpolation
@@ -920,12 +988,49 @@ def solve_perfect_foresight(
             w = (t + 1.0) / (eff_periods + 1.0)
             Y[t] = (1.0 - w) * y_init_arr + w * y_ss_arr
 
+    if not np.isfinite(Y).all() or not np.isfinite(y_init_arr).all() or not np.isfinite(y_ss_arr).all():
+        raise ValueError("initial path and boundary values must be finite")
+
+    symbolic = None
+    analytic_blocks = jacobian_fn
+    dag = getattr(model, "_dag", model)
+    if analytic_blocks is None and method in ("auto", "analytic") and hasattr(dag, "equations"):
+        if tuple(getattr(dag, "variables", ())) == v_names:
+            from ._transition_derivatives import TrajectoryJacobian
+            symbolic = TrajectoryJacobian(dag, dict(p_dict), y_ss_arr)
+            analytic_blocks = symbolic.blocks
+    if method == "analytic" and analytic_blocks is None:
+        raise ValueError("method='analytic' requires a parsed model or jacobian_fn")
+
+    def terminal_value(last):
+        if terminal_policy is None:
+            return y_ss_arr
+        value = np.asarray(terminal_policy(np.asarray(last).copy())).ravel()
+        if value.size != n_vars or not np.isfinite(value).all():
+            raise ValueError("terminal_policy must return one finite value per variable")
+        return value
+
+    def terminal_derivative(last):
+        if terminal_jacobian is not None:
+            derivative = np.asarray(terminal_jacobian(np.asarray(last).copy()), dtype=float)
+        else:
+            derivative = np.empty((n_vars, n_vars))
+            for j in range(n_vars):
+                step = 1e-6 * max(1.0, abs(last[j]))
+                plus, minus = last.copy(), last.copy()
+                plus[j] += step
+                minus[j] -= step
+                derivative[:, j] = (terminal_value(plus) - terminal_value(minus)) / (2 * step)
+        if derivative.shape != (n_vars, n_vars) or not np.isfinite(derivative).all():
+            raise ValueError("terminal_jacobian must be a finite square variable matrix")
+        return derivative
+
     # Auto-detect differentiation method
     step_fd = 1e-7
     use_complex = False
     if method == "complex":
         use_complex = True
-    elif method == "auto":
+    elif method == "auto" and analytic_blocks is None:
         try:
             pert = y_init_arr.astype(complex)
             pert[0] += 1j * 1e-20
@@ -939,12 +1044,20 @@ def solve_perfect_foresight(
         "mode": "perfect_foresight", "y_init": y_init_arr.copy(),
         "y_end": y_ss_arr.copy(), "exogenous_path": exo_sim.copy(),
         "variable_names": v_names, "equations": eq_fn,
+        "terminal_policy": terminal_policy,
     }
     if linear_solver == "krylov":
         from .stacked_newton import StackedNewtonError, StackedProblem, solve_stacked_newton_krylov
 
+        def analytic_jvp(yp, yc, yl, eps, vp, vc, vl):
+            A, B, C = analytic_blocks(yp, yc, yl, eps)
+            return A @ vp + B @ vc + C @ vl
+
         problem = StackedProblem(eq_fn, y_init_arr, y_ss_arr, exo_sim,
                                  variable_names=v_names,
+                                 blocks_fn=analytic_blocks,
+                                 jvp_fn=(symbolic.jvp if symbolic is not None else analytic_jvp)
+                                 if analytic_blocks is not None else None,
                                  jvp_method="complex" if use_complex else "central")
         try:
             krylov_result = solve_stacked_newton_krylov(
@@ -969,7 +1082,7 @@ def solve_perfect_foresight(
 
     # Setup MCP constraints if mcp is True or mcp_bounds provided
     is_mcp = bool(mcp or (mcp_bounds is not None and len(mcp_bounds) > 0))
-    mcp_specs = []  # list of (var_idx, eq_idx, s, kind, lb, ub)
+    mcp_specs: list[tuple[int, int, float, str, Any, Any, str]] = []
     if is_mcp and mcp_bounds:
         # Determine baseline static equation loadings to map var_idx -> eq_idx and determine sign
         base_f = np.asarray(eq_fn(y_ss_arr, y_ss_arr, y_ss_arr, exo_sim[0]), dtype=float).ravel()
@@ -992,15 +1105,31 @@ def solve_perfect_foresight(
                 else:
                     raise ValueError(f"MCP variable {k!r} not in model variables {v_names}")
 
-            # Map to equation index
-            if abs(B_test[v_idx, v_idx]) > 1e-5:
+            if not 0 <= v_idx < n_vars:
+                raise ValueError(f"MCP variable index {v_idx} is outside the model")
+            # Explicit equation/sign mapping is required for parsed MCP tags.
+            explicit = mcp_equations.get(k) if mcp_equations is not None else None
+            if explicit is not None:
+                if isinstance(explicit, (int, np.integer)):
+                    e_idx, s_sign = int(explicit), 1.0
+                else:
+                    e_idx, s_sign = int(explicit[0]), float(explicit[1])
+                if not 0 <= e_idx < n_vars or s_sign not in (-1.0, 1.0):
+                    raise ValueError("MCP mapping requires a valid row and a sign of +1 or -1")
+            elif abs(B_test[v_idx, v_idx]) > 1e-5:
                 e_idx = v_idx
+                s_sign = 1.0 if B_test[e_idx, v_idx] >= 0 else -1.0
             else:
                 e_idx = int(np.argmax(np.abs(B_test[:, v_idx])))
-
-            s_sign = 1.0 if B_test[e_idx, v_idx] >= 0 else -1.0
+                s_sign = 1.0 if B_test[e_idx, v_idx] >= 0 else -1.0
+            if any(spec[1] == e_idx for spec in mcp_specs):
+                raise ValueError("Each MCP condition must map to a distinct equation")
             lb_val = None if b_tuple[0] is None else float(b_tuple[0])
             ub_val = None if b_tuple[1] is None else float(b_tuple[1])
+            if ((lb_val is not None and not np.isfinite(lb_val)) or
+                (ub_val is not None and not np.isfinite(ub_val)) or
+                (lb_val is not None and ub_val is not None and lb_val > ub_val)):
+                raise ValueError("MCP bounds must be finite and ordered")
 
             if lb_val is not None and ub_val is not None and abs(lb_val - ub_val) < 1e-12:
                 kind = "PINNED"
@@ -1020,7 +1149,7 @@ def solve_perfect_foresight(
         for t in range(eff_periods):
             yl = y_init_arr if t == 0 else Y_curr[t - 1]
             yc = Y_curr[t]
-            yp = y_ss_arr if t == eff_periods - 1 else Y_curr[t + 1]
+            yp = terminal_value(yc) if t == eff_periods - 1 else Y_curr[t + 1]
             eps = exo_sim[t]
             f_val = np.asarray(eq_fn(yp, yc, yl, eps), dtype=float).ravel()
             if len(f_val) != n_vars:
@@ -1051,31 +1180,26 @@ def solve_perfect_foresight(
                 R[t * n_vars : (t + 1) * n_vars] = f_val
         return R
 
-    # Pre-allocate sparse block-tridiagonal Jacobian structure
-    total_entries = (3 * eff_periods - 2) * n_vars * n_vars
-    rows = np.zeros(total_entries, dtype=np.int32)
-    cols = np.zeros(total_entries, dtype=np.int32)
-    data = np.zeros(total_entries, dtype=float)
-
-    idx = 0
+    # Compile the stacked sparsity once. Analytic date blocks need storage only
+    # for their DAG incidence; callbacks retain the historical dense blocks.
+    dense_i, dense_j = np.indices((n_vars, n_vars))
+    full_pattern = (dense_i.ravel(), dense_j.ravel())
+    patterns = list(symbolic.pattern) if symbolic is not None else [full_pattern] * 3
+    if mcp_specs or terminal_policy is not None:
+        # Complementarity contributes a variable derivative on constrained rows;
+        # a terminal policy can fill the whole final current block.
+        patterns[1] = full_pattern
+    row_parts, col_parts = [], []
     for t in range(eff_periods):
-        for j in range(n_vars):
-            for i in range(n_vars):
-                rows[idx] = t * n_vars + i
-                cols[idx] = t * n_vars + j
-                idx += 1
-        if t < eff_periods - 1:
-            for j in range(n_vars):
-                for i in range(n_vars):
-                    rows[idx] = t * n_vars + i
-                    cols[idx] = (t + 1) * n_vars + j
-                    idx += 1
-        if t > 0:
-            for j in range(n_vars):
-                for i in range(n_vars):
-                    rows[idx] = t * n_vars + i
-                    cols[idx] = (t - 1) * n_vars + j
-                    idx += 1
+        for block, offset in ((1, 0), (0, 1), (2, -1)):
+            if not 0 <= t + offset < eff_periods:
+                continue
+            ii, jj = patterns[block]
+            row_parts.append(t * n_vars + ii)
+            col_parts.append((t + offset) * n_vars + jj)
+    rows = np.concatenate(row_parts).astype(np.int32)
+    cols = np.concatenate(col_parts).astype(np.int32)
+    data = np.zeros(len(rows), dtype=float)
 
     R = _eval_stacked(Y)
     res_norm = float(np.max(np.abs(R)))
@@ -1097,58 +1221,69 @@ def solve_perfect_foresight(
         for t in range(eff_periods):
             y_l = y_init_arr if t == 0 else Y[t - 1]
             y_c = Y[t]
-            y_p = y_ss_arr if t == eff_periods - 1 else Y[t + 1]
+            y_p = terminal_value(y_c) if t == eff_periods - 1 else Y[t + 1]
             eps = exo_sim[t]
 
-            # B_t: w.r.t y_curr
-            B_t = np.zeros((n_vars, n_vars), dtype=float)
-            for j in range(n_vars):
-                if use_complex:
-                    pert = y_c.astype(complex)
-                    pert[j] += 1j * 1e-20
-                    df = np.asarray(eq_fn(y_p.astype(complex), pert, y_l.astype(complex), eps), dtype=complex).imag / 1e-20
-                else:
-                    h = step_fd * max(1.0, abs(y_c[j]))
-                    yp_c = y_c.copy(); yp_c[j] += h
-                    ym_c = y_c.copy(); ym_c[j] -= h
-                    fp = np.asarray(eq_fn(y_p, yp_c, y_l, eps), dtype=float).ravel()
-                    fm = np.asarray(eq_fn(y_p, ym_c, y_l, eps), dtype=float).ravel()
-                    df = (fp - fm) / (2.0 * h)
-                B_t[:, j] = df
-
-            # A_t: w.r.t y_plus
-            A_t = np.zeros((n_vars, n_vars), dtype=float)
-            if t < eff_periods - 1:
+            if analytic_blocks is not None:
+                A_t, B_t, C_t = (np.asarray(block, dtype=float).copy()
+                                   for block in analytic_blocks(y_p, y_c, y_l, eps))
+                if any(block.shape != (n_vars, n_vars) or not np.isfinite(block).all()
+                       for block in (A_t, B_t, C_t)):
+                    raise ValueError("jacobian_fn must return three finite square variable matrices")
+            else:
+                # B_t: w.r.t y_curr
+                B_t = np.zeros((n_vars, n_vars), dtype=float)
                 for j in range(n_vars):
                     if use_complex:
-                        pert = y_p.astype(complex)
+                        pert = y_c.astype(complex)
                         pert[j] += 1j * 1e-20
-                        df = np.asarray(eq_fn(pert, y_c.astype(complex), y_l.astype(complex), eps), dtype=complex).imag / 1e-20
+                        df = np.asarray(eq_fn(y_p.astype(complex), pert, y_l.astype(complex), eps), dtype=complex).imag / 1e-20
                     else:
-                        h = step_fd * max(1.0, abs(y_p[j]))
-                        yp_p = y_p.copy(); yp_p[j] += h
-                        ym_p = y_p.copy(); ym_p[j] -= h
-                        fp = np.asarray(eq_fn(yp_p, y_c, y_l, eps), dtype=float).ravel()
-                        fm = np.asarray(eq_fn(ym_p, y_c, y_l, eps), dtype=float).ravel()
+                        h = step_fd * max(1.0, abs(y_c[j]))
+                        yp_c = y_c.copy(); yp_c[j] += h
+                        ym_c = y_c.copy(); ym_c[j] -= h
+                        fp = np.asarray(eq_fn(y_p, yp_c, y_l, eps), dtype=float).ravel()
+                        fm = np.asarray(eq_fn(y_p, ym_c, y_l, eps), dtype=float).ravel()
                         df = (fp - fm) / (2.0 * h)
-                    A_t[:, j] = df
+                    B_t[:, j] = df
 
-            # C_t: w.r.t y_lag
-            C_t = np.zeros((n_vars, n_vars), dtype=float)
-            if t > 0:
-                for j in range(n_vars):
-                    if use_complex:
-                        pert = y_l.astype(complex)
-                        pert[j] += 1j * 1e-20
-                        df = np.asarray(eq_fn(y_p.astype(complex), y_c.astype(complex), pert, eps), dtype=complex).imag / 1e-20
-                    else:
-                        h = step_fd * max(1.0, abs(y_l[j]))
-                        yp_l = y_l.copy(); yp_l[j] += h
-                        ym_l = y_l.copy(); ym_l[j] -= h
-                        fp = np.asarray(eq_fn(y_p, y_c, yp_l, eps), dtype=float).ravel()
-                        fm = np.asarray(eq_fn(y_p, y_c, ym_l, eps), dtype=float).ravel()
-                        df = (fp - fm) / (2.0 * h)
-                    C_t[:, j] = df
+                # A_t: w.r.t y_plus
+                A_t = np.zeros((n_vars, n_vars), dtype=float)
+                if t < eff_periods - 1 or terminal_policy is not None:
+                    for j in range(n_vars):
+                        if use_complex:
+                            pert = y_p.astype(complex)
+                            pert[j] += 1j * 1e-20
+                            df = np.asarray(eq_fn(pert, y_c.astype(complex), y_l.astype(complex), eps), dtype=complex).imag / 1e-20
+                        else:
+                            h = step_fd * max(1.0, abs(y_p[j]))
+                            yp_p = y_p.copy(); yp_p[j] += h
+                            ym_p = y_p.copy(); ym_p[j] -= h
+                            fp = np.asarray(eq_fn(yp_p, y_c, y_l, eps), dtype=float).ravel()
+                            fm = np.asarray(eq_fn(ym_p, y_c, y_l, eps), dtype=float).ravel()
+                            df = (fp - fm) / (2.0 * h)
+                        A_t[:, j] = df
+
+                # C_t: w.r.t y_lag
+                C_t = np.zeros((n_vars, n_vars), dtype=float)
+                if t > 0:
+                    for j in range(n_vars):
+                        if use_complex:
+                            pert = y_l.astype(complex)
+                            pert[j] += 1j * 1e-20
+                            df = np.asarray(eq_fn(y_p.astype(complex), y_c.astype(complex), pert, eps), dtype=complex).imag / 1e-20
+                        else:
+                            h = step_fd * max(1.0, abs(y_l[j]))
+                            yp_l = y_l.copy(); yp_l[j] += h
+                            ym_l = y_l.copy(); ym_l[j] -= h
+                            fp = np.asarray(eq_fn(y_p, y_c, yp_l, eps), dtype=float).ravel()
+                            fm = np.asarray(eq_fn(y_p, y_c, ym_l, eps), dtype=float).ravel()
+                            df = (fp - fm) / (2.0 * h)
+                        C_t[:, j] = df
+
+
+            if t == eff_periods - 1 and terminal_policy is not None:
+                B_t += A_t @ terminal_derivative(y_c)
 
             # Apply MCP chain rule updates to constrained rows
             if is_mcp and mcp_specs:
@@ -1206,28 +1341,17 @@ def solve_perfect_foresight(
                         if t > 0:
                             C_t[e_idx, :] = c_f * C_t[e_idx, :]
 
-            # Copy B_t into data
-            for j in range(n_vars):
-                for i in range(n_vars):
-                    data[data_idx] = B_t[i, j]
-                    data_idx += 1
-
-            # Copy A_t into data
-            if t < eff_periods - 1:
-                for j in range(n_vars):
-                    for i in range(n_vars):
-                        data[data_idx] = A_t[i, j]
-                        data_idx += 1
-
-            # Copy C_t into data
-            if t > 0:
-                for j in range(n_vars):
-                    for i in range(n_vars):
-                        data[data_idx] = C_t[i, j]
-                        data_idx += 1
+            blocks = (A_t, B_t, C_t)
+            for block, offset in ((1, 0), (0, 1), (2, -1)):
+                if not 0 <= t + offset < eff_periods:
+                    continue
+                ii, jj = patterns[block]
+                count = len(ii)
+                data[data_idx:data_idx + count] = blocks[block][ii, jj]
+                data_idx += count
 
         J = sp.csc_matrix((data, (rows, cols)), shape=(n_vars * eff_periods, n_vars * eff_periods))
-        jac_scale = max(1.0, float(np.max(np.abs(data))))
+        jac_scale = max(1.0, float(np.max(np.abs(data), initial=0.0)))
 
         try:
             dY_flat = spla.spsolve(J, -R)
@@ -1337,7 +1461,7 @@ def solve_perfect_foresight(
             for t in range(eff_periods):
                 yl = y_init_arr if t == 0 else Y[t - 1]
                 yc = Y[t]
-                yp = y_ss_arr if t == eff_periods - 1 else Y[t + 1]
+                yp = terminal_value(yc) if t == eff_periods - 1 else Y[t + 1]
                 eps = exo_sim[t]
                 f_v = np.asarray(eq_fn(yp, yc, yl, eps), dtype=float).ravel()
                 if kind == "LOWER":
@@ -1346,6 +1470,9 @@ def solve_perfect_foresight(
                     comp_residual = max(comp_residual, abs((ub_val - yc[v_idx]) * min(0.0, -s_sign * f_v[e_idx])))
 
     term_err = float(np.max(np.abs(Y[-1] - y_ss_arr)))
+    if terminal_policy is not None:
+        audit_context["terminal_policy_input"] = Y[-1].copy()
+        audit_context["terminal_policy_output"] = terminal_value(Y[-1]).copy()
     path_df = pd.DataFrame(
         Y,
         index=pd.RangeIndex(1, eff_periods + 1, name="t"),
@@ -1376,6 +1503,9 @@ def solve_perfect_foresight(
         terminal_error=term_err,
         variable_names=v_names,
         initial_residual_norm=initial_res_norm,
+        solver_diagnostics={"derivatives": "analytic" if analytic_blocks is not None else
+                            ("complex" if use_complex else "central"),
+                            "jacobian_nnz": int(len(data)), "terminal_policy": terminal_policy is not None},
         _audit_context=audit_context,
     )
 

@@ -33,11 +33,12 @@ from __future__ import annotations
 import math
 import re
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-from puremacro.dsge import BlanchardKahnError, LinearModel, load_mod
+from puremacro.dsge import BlanchardKahnError, LinearModel, load_mod, parse_mod
 
 MODELOS = Path(__file__).resolve().parents[1] / "curso" / "notebooks" / "modelos"
 
@@ -222,3 +223,42 @@ def test_neoclasico_capital_output_ratio():
     ss = load_mod(MODELOS / "neoclasico_prevision_perfecta.mod").steady_state
     assert float(ss["k"] / ss["y"]) == pytest.approx(3.63, abs=0.01)
     assert float(ss["l"]) == pytest.approx(0.461355, abs=1e-5)
+
+
+@pytest.mark.parametrize("future_output", [(0.9, 1.2), (1.2, 0.9)])
+@pytest.mark.parametrize("name", ["neoclasico_prevision_perfecta.mod", "rbc_canonico.mod"])
+def test_growth_models_euler_preserve_expected_marginal_utility(name, future_output):
+    """A ratio valid under certainty must not replace the stochastic Euler equation.
+
+    Choose current consumption to equate today's marginal utility with the
+    expected marginal return to saving under two possible future outcomes.
+    Multiplication by uncertain future consumption changes this expectation,
+    although it preserves perfect foresight and first-order perturbation.
+    """
+    parsed = parse_mod(_read(name))
+    params = SimpleNamespace(**parsed["params"])
+    probability = np.array([0.35, 0.65])
+    future_consumption = np.array([0.7, 1.3])
+    capital = 0.9
+    gross_return = params.alpha * np.asarray(future_output) / capital + 1 - params.delta
+    consumption = 1 / (params.beta * (probability @ (gross_return / future_consumption)))
+    values = dict.fromkeys(parsed["variables"], 1.0)
+    values.update(y=1.0, c=consumption, k=capital, l=0.4, a=0.0)
+    current = SimpleNamespace(**values)
+    shocks = SimpleNamespace(e_a=0.0)
+
+    def expected_euler(current_consumption):
+        current.c = current_consumption
+        residuals = []
+        for output, future_c in zip(future_output, future_consumption):
+            lead_values = {**values, "y": output, "c": future_c}
+            if "r" in lead_values:
+                lead_values["r"] = params.alpha * output / capital
+            lead = SimpleNamespace(**lead_values)
+            residuals.append(parsed["equations"](lead, current, current, shocks, params)[1])
+        # Each outcome has a nonzero residual; only its expectation vanishes.
+        assert np.max(np.abs(residuals)) > 1e-3
+        return probability @ residuals
+
+    assert expected_euler(consumption) == pytest.approx(0.0, abs=2e-13)
+    assert abs(expected_euler(1.01 * consumption)) > 1e-3

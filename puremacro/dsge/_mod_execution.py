@@ -98,6 +98,11 @@ def _execute_ordered(model: Any, data: pd.DataFrame | None, sigma: Any) -> Dynar
     elif data is not None:
         report = replace(report, issues=tuple(i for i in report.issues if i.code != "DATA_REQUIRED"))
     _require_supported(report)
+    from .model import NonlinearModel
+    from .inspection import _PF_COMMANDS
+    if isinstance(model, NonlinearModel) or any(s.name in _PF_COMMANDS for s in report.statements):
+        from ._deterministic_execution import _execute_deterministic
+        return _execute_deterministic(model, data, sigma, report)
     commands = [s for s in report.statements if s.name in _ORDERED_OPTIONS]
     # Validate all data and effective options before the first numerical call.
     planned = []

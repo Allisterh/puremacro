@@ -26,10 +26,18 @@ _STOCH_DEFAULTS: dict[str, Any] = {
     "order": 2, "irf": 40, "periods": 0, "ar": 5, "drop": 100,
     "hp_filter": None, "pruning": None, "nograph": True,
 }
+_PF_COMMANDS = {"perfect_foresight_setup", "perfect_foresight_solver", "simul"}
+_PF_DEFAULTS: dict[str, Any] = {
+    "periods": 100, "tol": 1e-8, "tolf": None, "maxit": 50, "max_iter": None,
+    "stack_solve_algo": 0, "linear_solver": "direct", "endval_steady": False, "mcp": False,
+}
 _ORDERED_OPTIONS: dict[str, dict[str, Any]] = {
     "stoch_simul": _STOCH_DEFAULTS,
     "calib_smoother": {"prefilter": False, "first_obs": 1, "nobs": None},
     "shock_decomposition": {"first_obs": 1, "nobs": None},
+    "perfect_foresight_setup": {"periods": 100, "endval_steady": False},
+    "perfect_foresight_solver": {key: value for key, value in _PF_DEFAULTS.items() if key != "endval_steady"},
+    "simul": _PF_DEFAULTS,
 }
 _LEGACY_OPTIONS: dict[str, set[str]] = {
     "stoch_simul": {"order", "irf", "periods", "ar", "hp_filter", "pruning", "nograph"},
@@ -217,8 +225,9 @@ def inspect_mod(
     """Inspect source without evaluation, compilation, solving, plotting or writes.
 
     ``entry_point`` is ``load_mod``, ``execute_mod_commands``, or
-    ``load_hank_mod``. ``ordered=True`` describes the opt-in fixed-calibration
-    runner. Local macro includes are read, with bounded macro expansion.
+    ``load_hank_mod``. ``ordered=True`` describes source-ordered execution at a
+    fixed calibration, including deterministic boundary and shock blocks.
+    Local macro includes are read, with bounded macro expansion.
     Supplied ``data`` is checked for column/schema compatibility only.
     Calibration expressions and numerical option values are deliberately not
     evaluated; symbolic command options are unresolved in ordered mode.
@@ -269,10 +278,15 @@ def inspect_mod(
 
     records = sorted((parser.source_statements if parser else []) + (tokenizer.comments if tokenizer else []),
                      key=lambda r: (r["line"], r["col"], -r["end_line"], -r["end_col"]))
+    deterministic = ordered and any(r["name"] in _PF_COMMANDS for r in records)
     seen_commands: dict[str, int] = {}
     phase_started = False
     assigned_names: set[str] = set()
     option_state = {**_STOCH_DEFAULTS, **_ORDERED_OPTIONS["calib_smoother"]}
+    pf_option_state = dict(_PF_DEFAULTS)
+    history_seen = False
+    terminal_seen = False
+    pf_setup_periods: Any = None
     for record in records:
         name, category = record["name"], record["category"]
         loc, excerpt = _span(record, expanded, trace)
@@ -283,6 +297,15 @@ def inspect_mod(
         effective_options: dict[str, Any] = {}
         is_command = name in _LEGACY_OPTIONS
         preserves: bool | None = ordered if is_command else None
+        if deterministic and name == "initval":
+            history_seen = terminal_seen = False
+        elif deterministic and name in {"histval", "endval"}:
+            history_seen |= name == "histval"
+            terminal_seen |= name == "endval"
+            if history_seen and terminal_seen:
+                issues.append(ModIssue("BOUNDARY_CONFLICT", "unsupported",
+                    "The ordered Dynare subset cannot combine histval and endval within one initval experiment.",
+                    "Use initval for initial conditions when specifying endval, or start a new initval experiment.", loc, len(statements)))
         if category == "calibration assignment":
             if name in assigned_names:
                 status, code = "unsupported", "REPEATED_CALIBRATION_ASSIGNMENT"
@@ -293,7 +316,20 @@ def inspect_mod(
                 status, code = "parsed-only", "UNDECLARED_ASSIGNMENT"
                 reason = "Assignment targets an undeclared parameter/script variable."
                 remedy = "Declare the calibrated parameter explicitly, or move the script into Python."
-        if name == "steady" and opts:
+        if name == "steady" and deterministic:
+            allowed_steady = {"tol", "tolf"}
+            option_status = {key: "supported" if key in allowed_steady else "unsupported" for key in opts}
+            for key, value in opts.items():
+                if key not in allowed_steady or not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) or value <= 0:
+                    issues.append(ModIssue("UNSUPPORTED_OPTION", "unsupported",
+                        f"steady option {key}={value!r} is outside the supported finite positive tolerance subset.",
+                        "Use steady(tolf=...) or steady; and select other methods in Python.", loc, len(statements)))
+            if len(opts) > 1:
+                issues.append(ModIssue("CONFLICTING_OPTIONS", "unsupported", "Specify only one of tol and tolf.",
+                    "Use a single tolerance spelling.", loc, len(statements)))
+            effective_options = {"tol": opts.get("tolf", opts.get("tol", 1e-10))}
+            reason = "Compute and verify the active initial or terminal steady state at this source position."
+        elif name == "steady" and opts:
             status, code = "unsupported", "UNSUPPORTED_OPTION"
             reason, remedy = "Initial steady command options are not consumed by ordered loading.", "Pass supported solve options explicitly to load_mod."
         elif name == "steady" and phase_started:
@@ -345,20 +381,49 @@ def inspect_mod(
                     issues.append(ModIssue("UNSUPPORTED_OPTION", "unsupported",
                         f"{name} option {option!r} is parsed but is not consumed by this entry point.",
                         "Use a supported option or pass supported arguments directly to the Python method.", loc, len(statements)))
-                elif ordered and isinstance(value, str):
+                elif ordered and isinstance(value, str) and not (option == "linear_solver" and value in {"direct", "krylov"}):
                     option_status[option] = "unresolved"
                     issues.append(ModIssue("SYMBOLIC_OPTION", "unresolved",
                         f"Option {option!r} requires expression evaluation, which inspection never performs.",
                         "Use a literal value in the ordered subset.", loc, len(statements)))
             if ordered and name in _ORDERED_OPTIONS:
-                option_state.update(opts)
+                state = pf_option_state if name in _PF_COMMANDS else option_state
+                state.update(opts)
                 if name == "stoch_simul":
                     # Dynare 7.0 generated driver resets this particular option
                     # per statement, unlike ar/irf/filter/sample options.
                     option_state["order"] = opts.get("order", 2)
                 elif name == "calib_smoother":
                     option_state["order"] = 1
-                effective_options = {key: option_state[key] for key in _ORDERED_OPTIONS[name]}
+                if name in _PF_COMMANDS:
+                    if "tol" in opts:
+                        state["tolf"] = None
+                    if "tolf" in opts:
+                        state["tol"] = opts["tolf"]
+                    if "maxit" in opts:
+                        state["max_iter"] = None
+                    if "max_iter" in opts:
+                        state["maxit"] = opts["max_iter"]
+                    for left, right in (("tol", "tolf"), ("maxit", "max_iter")):
+                        if left in opts and right in opts:
+                            issues.append(ModIssue("CONFLICTING_OPTIONS", "unsupported",
+                                f"Specify only one of {left} and {right}.", "Use one spelling per option.", loc, len(statements)))
+                effective_options = {key: state[key] for key in _ORDERED_OPTIONS[name]}
+                if name in {"perfect_foresight_setup", "simul"}:
+                    pf_setup_periods = effective_options["periods"]
+                elif name == "perfect_foresight_solver" and pf_setup_periods is None:
+                    issues.append(ModIssue("PERFECT_FORESIGHT_SETUP_REQUIRED", "unsupported",
+                        "perfect_foresight_solver has no preceding setup command.",
+                        "Call perfect_foresight_setup first, or use simul.", loc, len(statements)))
+                elif name == "perfect_foresight_solver" and pf_setup_periods != effective_options["periods"]:
+                    issues.append(ModIssue("PERFECT_FORESIGHT_SETUP_MISMATCH", "unsupported",
+                        "Solver periods differ from the preceding setup.",
+                        "Run perfect_foresight_setup with the new horizon first.", loc, len(statements)))
+                if name in _PF_COMMANDS and state["linear_solver"] == "krylov":
+                    if state["mcp"] or "stack_solve_algo" in opts:
+                        issues.append(ModIssue("CONFLICTING_OPTIONS", "unsupported",
+                            "Native Krylov cannot be combined with MCP or an explicit Dynare stack_solve_algo.",
+                            "Use the direct backend for MCP; choose one backend option.", loc, len(statements)))
                 if name == "shock_decomposition" and option_state["prefilter"]:
                     issues.append(ModIssue("INHERITED_OPTION_UNSUPPORTED", "unsupported",
                         "shock_decomposition inherits prefilter from calib_smoother, but its native handler does not implement prefilter.",
@@ -377,6 +442,18 @@ def inspect_mod(
                         invalid = value not in (True, 1)
                     elif key == "hp_filter" and value is not None:
                         invalid = not isinstance(value, (float, int)) or not math.isfinite(value) or value <= 0
+                    elif key in {"tol", "tolf"} and value is not None:
+                        invalid = isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0
+                    elif key in {"maxit", "max_iter"} and value is not None:
+                        invalid = isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or int(value) != value or value < 1
+                    elif key == "stack_solve_algo":
+                        invalid = isinstance(value, bool) or value != 0
+                    elif key == "linear_solver":
+                        invalid = value not in {"direct", "krylov"}
+                    elif key in {"endval_steady", "mcp"}:
+                        invalid = value not in (True, False, 0, 1)
+                    if key == "periods" and name in _PF_COMMANDS:
+                        invalid = invalid or value < 1
                     if invalid:
                         issues.append(ModIssue("UNSUPPORTED_OPTION_VALUE", "unsupported",
                             f"{name} effective option {key}={value!r} is outside the supported subset.",
@@ -403,10 +480,10 @@ def inspect_mod(
                     f"{name} requires a caller-supplied DataFrame; datafile options do not load files.",
                     "Pass data= to execute_mod_commands.", loc, len(statements)))
             phase_started = True
-        elif ordered and name in _STATEFUL:
+        elif ordered and name in _STATEFUL and not (deterministic and name in {"histval", "endval"}):
             status, code = "unsupported", "ORDERED_STATE_UNSUPPORTED"
             reason, remedy = "This state-changing block is outside the ordered fixed-calibration subset.", "Use a separate explicit Python study."
-        if phase_started and not is_command and category in {"declaration", "calibration assignment"}:
+        if phase_started and not is_command and category in {"declaration", "calibration assignment"} and not (deterministic and name in {"initval", "shocks"}):
             status, code = "unsupported", "INTERLEAVED_STATE_CHANGE"
             reason = "Calibration/declarations after a numerical command cannot be replayed against the parser's final calibration."
             remedy = "Move the fixed calibration before all commands, or split the studies."
@@ -422,11 +499,31 @@ def inspect_mod(
                   "optim_weights", "osr_params_bounds", "estimated_params", "estimated_params_init",
                   "estimated_params_bounds", "shock_groups", "hetagent_block"}
         for record in records:
+            if deterministic and record["name"] in {"initval", "histval", "endval"}:
+                boundary_tokens = [t for t in parser.tokens if
+                    (record["line"], record["col"]) <= (t.line, t.col) < (record["end_line"], record["end_col"])]
+                loc, _ = _span(record, expanded, trace)
+                for i, token in enumerate(boundary_tokens[:-1]):
+                    if token.value in parser.parameters and boundary_tokens[i + 1].type == "ASSIGN":
+                        issues.append(ModIssue("BOUNDARY_PARAMETER_ASSIGNMENT", "unsupported",
+                            f"{record['name']} cannot change parameter {token.value!r}.",
+                            "Set the fixed calibration before the experiment or use read_mod(params=...).", loc))
+                    if token.value in parser.variables + parser.shocks and boundary_tokens[i + 1].type == "LPAREN":
+                        tail = boundary_tokens[i + 2:]
+                        closing = next((j for j, t in enumerate(tail) if t.type == "RPAREN"), None)
+                        if closing is not None and closing + 1 < len(tail) and tail[closing + 1].type == "ASSIGN":
+                            index_tokens = tail[:closing]
+                            if len(index_tokens) != 1 or index_tokens[0].value != 0:
+                                issues.append(ModIssue("HISTORICAL_INDEX_UNSUPPORTED", "unsupported",
+                                    "The ordered boundary adapter supports only unindexed values or date zero.",
+                                    "Supply an explicitly augmented historical state through the Python API.", loc))
             if record["name"] in {"var", "varexo", "parameters", "shocks", "shock_groups"} and record["category"] not in {"equation", "model-local", "comment"}:
                 head_tokens = [t for t in parser.tokens if
                     (record["line"], record["col"]) <= (t.line, t.col) < (record["end_line"], record["end_col"])]
                 first_semi = next((i for i, t in enumerate(head_tokens) if t.type == "SEMI"), len(head_tokens))
-                if any(t.type == "LPAREN" for t in head_tokens[:first_semi]):
+                declaration_options = [t for t in head_tokens[:first_semi] if t.type == "LPAREN"]
+                overwrite = deterministic and record["name"] == "shocks" and [str(t.value) for t in head_tokens[:first_semi]] == ["shocks", "(", "overwrite", ")"]
+                if declaration_options and not overwrite:
                     loc, _ = _span(record, expanded, trace)
                     issues.append(ModIssue("UNSUPPORTED_DECLARATION_OPTION", "unsupported",
                         f"Options on the {record['name']} declaration are not implemented by this execution route.",
@@ -525,7 +622,7 @@ def inspect_mod(
                 if unknown_shocks:
                     issues.append(ModIssue("UNKNOWN_SHOCK", "unsupported", f"Undeclared shocks: {sorted(unknown_shocks)}.",
                         "Declare each shock with varexo/varexo_det.", loc))
-                if parser.shocks_config.get("anticipated") and ordered:
+                if parser.shocks_config.get("anticipated") and ordered and not deterministic:
                     issues.append(ModIssue("ANTICIPATED_SHOCKS_UNSUPPORTED", "unsupported",
                         "The ordered stochastic subset does not consume dated/anticipated shock paths.",
                         "Use a separate perfect-foresight or news-shock Python study.", loc))

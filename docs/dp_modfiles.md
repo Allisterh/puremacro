@@ -81,6 +81,13 @@ change the declared economic problem. Use `method=vfi` for the discrete
 grid-search solution. Multiple `state` declarations and one `discrete` choice
 are supported by the underlying VFI compiler.
 
+For one-asset EGM, the solver verifies the affine budget from the equations,
+including local aliases, and checks the next-asset coefficient separately from
+income scale. Nonlinear terms or extra constraints cannot be accepted just
+because they vanish at grid nodes. Custom functions of exogenous income remain
+supported; use VFI for general asset-dependent schedules or constraints. See
+the [one-asset EGM restrictions](dp.md).
+
 ```python
 model = dp.load_mod("household.mod")  # validates, never solves
 egm = dp.solve_mod("household.mod")   # honors the file's solve options

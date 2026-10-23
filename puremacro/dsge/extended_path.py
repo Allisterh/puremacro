@@ -46,6 +46,7 @@ def extended_path(
     strict: bool = False,
     linear_solver: str = "direct",
     krylov_options: Mapping[str, Any] | None = None,
+    reuse_preconditioner: bool = True,
     **kwargs,
 ) -> ExtendedPathResult:
     r"""Simulate non-linear DSGE model using Fair & Taylor (1983) extended path.
@@ -109,6 +110,11 @@ def extended_path(
         support MCP; terminal boundaries and shock expectations are unchanged.
     krylov_options : mapping, optional
         Controls forwarded to :func:`solve_perfect_foresight`.
+    reuse_preconditioner : bool, default True
+        For the default Krylov preconditioner, reuse a factorization only when
+        its numerical terminal Jacobian blocks and horizon are exactly equal.
+        Explicit preconditioner/time_block options take precedence. Build/reuse
+        counts and rolling solve diagnostics are retained in the result.
     **kwargs
         Additional keyword arguments forwarded to :func:`solve_perfect_foresight`.
 
@@ -369,6 +375,18 @@ def extended_path(
 
     kwargs_pf = kwargs.copy()
     user_y_end = kwargs_pf.pop("y_end", None)
+    if kwargs_pf.get("jacobian_fn") is None and kwargs_pf.get("method", "auto") in ("auto", "analytic"):
+        dag = getattr(model, "_dag", model)
+        if dag is not None and hasattr(dag, "equations") and tuple(dag.variables) == tuple(v_names):
+            from ._transition_derivatives import TrajectoryJacobian
+            trajectory_jacobian = TrajectoryJacobian(dag, dict(p_dict), y_ss_arr)
+            kwargs_pf["jacobian_fn"] = trajectory_jacobian.blocks
+    from .transitions import _SteadyPreconditionerCache
+    cache = _SteadyPreconditionerCache()
+    rolling_diagnostics = []
+    reuse_active = bool(reuse_preconditioner and linear_solver == "krylov"
+                        and "preconditioner" not in (krylov_options or {})
+                        and "time_block" not in (krylov_options or {}))
 
     companion_m = None
     if (
@@ -414,6 +432,18 @@ def extended_path(
         else:
             y_end_t = None
 
+        rolling_krylov_options = krylov_options
+        if reuse_active:
+            from .stacked_newton import StackedProblem
+            cache_problem = StackedProblem(
+                eq_fn, current_state, y_ss_arr if y_end_t is None else y_end_t, forward_exo,
+                blocks_fn=kwargs_pf.get("jacobian_fn"),
+                jvp_method="complex" if kwargs_pf.get("method") == "complex" else "central",
+            )
+            def cached_preconditioner(path, problem=cache_problem):
+                return cache.get(problem)
+            rolling_krylov_options = dict(krylov_options or {}, preconditioner=cached_preconditioner)
+
         res_t = solve_perfect_foresight(
             model_or_equations=None,
             y_init=current_state,
@@ -430,9 +460,10 @@ def extended_path(
             variable_names=v_names,
             equations_fn=eq_fn,
             linear_solver=linear_solver,
-            krylov_options=krylov_options,
+            krylov_options=rolling_krylov_options,
             **kwargs_pf,
         )
+        rolling_diagnostics.append(dict(getattr(res_t, "solver_diagnostics", {})))
 
         y_t = res_t.path.iloc[0].to_numpy()
         realized_path[t] = y_t
@@ -494,4 +525,7 @@ def extended_path(
         variable_names=v_names,
         shock_names=s_names,
         horizon=horizon,
+        solver_diagnostics={"linear_solver": linear_solver, "preconditioner_reuse": reuse_active,
+                            "preconditioner_builds": cache.builds, "preconditioner_reuses": cache.reuses,
+                            "rolling_solves": tuple(rolling_diagnostics)},
     )

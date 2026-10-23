@@ -2454,7 +2454,8 @@ def parse_mod(mod_text: str, base_dir: Path | str | None = None) -> dict:
     DynareMacroError
         The file has a macro preprocessor syntax or evaluation error.
     ValueError
-        The file has no ``var``/``varexo`` declaration or no ``model;`` block.
+        The file has no ``var`` declaration or no ``model;`` block. A purely
+        deterministic model may omit ``varexo``.
     """
     # 0. Dynare macro processor pre-pass
     if _MACRO_DIRECTIVE.search(mod_text) or _MACRO_INTERPOLATION.search(mod_text):
@@ -2468,8 +2469,6 @@ def parse_mod(mod_text: str, base_dir: Path | str | None = None) -> dict:
         dag = parse_mod_to_dag(clean_text, base_dir=base_dir)
         if not dag.variables:
             raise ValueError("could not find 'var ...;' declaration in .mod content")
-        if not dag.shocks:
-            raise ValueError("could not find 'varexo ...;' declaration in .mod content")
         if not dag.equations:
             raise ValueError("could not find 'model; ... end;' block in .mod content")
         compiled = compile_derivatives(dag)
@@ -2510,9 +2509,7 @@ def parse_mod(mod_text: str, base_dir: Path | str | None = None) -> dict:
 
     # 2. Parse varexo
     varexo_match = re.search(r"\bvarexo\b\s+([^;]+);", non_block_text)
-    if not varexo_match:
-        raise ValueError("could not find 'varexo ...;' declaration in .mod content")
-    shocks = _extract_ids(varexo_match.group(1))
+    shocks = _extract_ids(varexo_match.group(1)) if varexo_match else []
 
     # 2b. Parse varexo_det (deterministic exogenous variables)
     varexo_det_match = re.search(r"\bvarexo_det\b\s+([^;]+);", non_block_text)

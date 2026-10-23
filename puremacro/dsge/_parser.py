@@ -1444,11 +1444,20 @@ class Parser:
         has_bracket = bool(self._match("LBRACKET") or self._match("LPAREN"))
         while self._curr().type not in ("SEMI", "RBRACKET", "RPAREN", "EOF"):
             if self._curr().type == "NUMBER":
-                val1 = int(self._advance().value)
+                raw1 = self._advance().value
+                if raw1 != int(raw1):
+                    raise ValueError("Shock periods must be positive integers")
+                val1 = int(raw1)
                 if self._match("COLON"):
-                    val2 = int(self._expect("NUMBER").value)
+                    raw2 = self._expect("NUMBER").value
+                    if raw2 != int(raw2):
+                        raise ValueError("Shock periods must be positive integers")
+                    val2 = int(raw2)
                     if self._match("COLON"):
-                        val3 = int(self._expect("NUMBER").value)
+                        raw3 = self._expect("NUMBER").value
+                        if raw3 != int(raw3):
+                            raise ValueError("Shock periods must be positive integers")
+                        val3 = int(raw3)
                         period_range = range(val1, val3 + 1, val2)
                         if self.collect_only and len(period_range) > 100_000:
                             raise DynareParseError("Inspection period range resource limit exceeded", self._curr().line, self._curr().col)
@@ -1477,6 +1486,21 @@ class Parser:
     def _parse_values_list(self) -> list[float]:
         """Parse values list or single value (e.g. 0.01, 0.02, 0.01, [0.01])."""
         values: list[float] = []
+        # Full-file parsing reaches dated shocks before its calibration
+        # post-pass. Resolve the preceding declarations here; the ordered
+        # executor instead seeds param_values with its calibration snapshot.
+        scope = dict(self.param_values)
+        if not self.collect_only:
+            for _ in range(len(self.param_assignments) + 1):
+                previous_size = len(scope)
+                for name, assignment in self.param_assignments.items():
+                    if name not in scope:
+                        try:
+                            scope[name] = float(assignment.eval({}, scope))
+                        except (KeyError, ValueError, ArithmeticError):
+                            pass
+                if len(scope) == previous_size:
+                    break
         has_bracket = bool(self._match("LBRACKET") or self._match("LPAREN"))
         while self._curr().type not in ("SEMI", "RBRACKET", "RPAREN", "EOF"):
             expr = self.parse_expression()
@@ -1485,9 +1509,11 @@ class Parser:
                 self._match("COMMA")
                 continue
             try:
-                val = float(expr.eval({}, self.param_values))
-            except (ValueError, ArithmeticError, np.linalg.LinAlgError, KeyError, LookupError, AssertionError, TypeError, RuntimeError, OSError, ConnectionError, Exception):
-                val = float(expr.eval({}, {}))
+                val = float(expr.eval({}, scope))
+            except (KeyError, ValueError, ArithmeticError) as exc:
+                raise ValueError("Shock values must be evaluable from the preceding calibration") from exc
+            if not math.isfinite(val):
+                raise ValueError("Shock values must be finite")
             values.append(val)
             self._match("COMMA")
         if has_bracket:
@@ -1500,12 +1526,31 @@ class Parser:
         self._expect("SEMI")
         return values
 
+    def _record_anticipated_shock(self, name: str, periods: list[int], values: list[float]) -> None:
+        """Merge dated declarations; a later value replaces only its own date."""
+        if not periods or any(period < 1 for period in periods) or len(periods) != len(values):
+            # ValueError is load-bearing: parse_mod must not send a malformed
+            # numerical declaration through its permissive legacy fallback.
+            raise ValueError("Shock periods must be positive and match the number of values")
+        anticipated = self.shocks_config.setdefault("anticipated", {})
+        previous = anticipated.get(name, {})
+        dates = dict(zip(previous.get("periods", []), previous.get("values", [])))
+        dates.update(zip(periods, values))
+        ordered = sorted(dates)
+        anticipated[name] = {"periods": ordered, "values": [dates[date] for date in ordered]}
+        self.options["anticipated_shocks"] = anticipated
+
     def _parse_shocks_block(self) -> None:
         """Parse shocks; block."""
         self._expect("KEYWORD", "shocks")
         if self._match("LPAREN"):
             if self._curr().type in ("IDENT", "KEYWORD"):
-                self.shocks_config["type"] = str(self._advance().value)
+                option = str(self._advance().value)
+                if option == "overwrite":
+                    self.shocks_config = {"variances": {}, "stderrs": {}, "covariances": {},
+                                          "correlations": {}, "anticipated": {}}
+                    self.options["anticipated_shocks"] = self.shocks_config["anticipated"]
+                self.shocks_config["type"] = option
             self._expect("RPAREN")
         self._expect("SEMI")
         self.has_shocks_block = True
@@ -1534,13 +1579,7 @@ class Parser:
                     values = self._parse_values_list()
                     if len(values) == 1 and len(periods) > 1:
                         values = [values[0]] * len(periods)
-                    if "anticipated" not in self.shocks_config:
-                        self.shocks_config["anticipated"] = {}
-                    self.shocks_config["anticipated"][shock1] = {
-                        "periods": periods,
-                        "values": values,
-                    }
-                    self.options["anticipated_shocks"] = self.shocks_config["anticipated"]
+                    self._record_anticipated_shock(shock1, periods, values)
                 elif self._match("COMMA"):
                     if (
                         self._curr().type in ("KEYWORD", "IDENT")
@@ -1570,13 +1609,7 @@ class Parser:
                         values = self._parse_values_list()
                         if len(values) == 1 and len(periods) > 1:
                             values = [values[0]] * len(periods)
-                        if "anticipated" not in self.shocks_config:
-                            self.shocks_config["anticipated"] = {}
-                        self.shocks_config["anticipated"][shock1] = {
-                            "periods": periods,
-                            "values": values,
-                        }
-                        self.options["anticipated_shocks"] = self.shocks_config["anticipated"]
+                        self._record_anticipated_shock(shock1, periods, values)
                     elif (
                         self._curr().type in ("KEYWORD", "IDENT")
                         and self._curr().value == "stderr"
@@ -1610,13 +1643,7 @@ class Parser:
                 values = self._parse_values_list()
                 if len(values) == 1 and len(periods) > 1:
                     values = [values[0]] * len(periods)
-                if "anticipated" not in self.shocks_config:
-                    self.shocks_config["anticipated"] = {}
-                self.shocks_config["anticipated"][last_var] = {
-                    "periods": periods,
-                    "values": values,
-                }
-                self.options["anticipated_shocks"] = self.shocks_config["anticipated"]
+                self._record_anticipated_shock(last_var, periods, values)
             elif self._match("KEYWORD", "corr"):
                 shock1 = str(self._expect("IDENT").value)
                 self._expect("COMMA")

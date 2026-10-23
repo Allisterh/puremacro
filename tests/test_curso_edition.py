@@ -80,8 +80,15 @@ def test_badges_and_setup_are_idempotent_for_every_notebook():
         first, setup = map(_text, nb["cells"][:2])
         assert publication.reescribir_celda0(first, path.name) == first
         assert publication.reescribir_celda1(setup, path.name) == (setup, [])
-        assert "puremacro==5.5.0" in setup
-        ref = "main" if path.name in publication.ACTUALIZADOS else publication.EDICION
+        if path.name in publication.ACTUALIZADOS_DSGE:
+            assert "puremacro==5.7.0" in setup
+            assert "_course_development = False" in setup
+            assert '"--branch", "v5.7.0"' in setup
+            assert '"puremacro", "curso/notebooks"' in setup
+            assert "_course_features" in setup
+        else:
+            assert "puremacro==5.5.0" in setup
+        ref = publication.DSGE_REF if path.name in publication.ACTUALIZADOS_DSGE else "main" if path.name in publication.ACTUALIZADOS else publication.EDICION
         assert f"/blob/{ref}/" in first
         assert "MAV_LLM_MODE" in setup and '"cache"' in setup
         for capability in nb["metadata"].get("course_required_capabilities", []):
@@ -105,28 +112,56 @@ def test_generated_readme_uses_same_edition_and_extras_pin(tmp_path, monkeypatch
     assert "puremacro[io]==5.5.0" in actual
     assert "puremacro[local-llm]==5.5.0" in actual
     assert "git clone --branch course-2026A-5.5.0" in actual
-    amended_links = set(re.findall(r"/blob/main/curso/notebooks/([^()\s]+\.ipynb)", actual))
+    amended_links = set(re.findall(r"/blob/v5\.7\.0/curso/notebooks/([^()\s]+\.ipynb)", actual))
     assert amended_links == publication.ACTUALIZADOS
 
 
-def test_course_amendments_have_matching_execution_evidence():
-    """A mutable lesson link requires its own source and executed-output record."""
+def test_historical_rbc_amendment_evidence_is_retained():
+    """The original 5.5 execution remains a historical record after a new amendment."""
     evidence = json.loads((ROOT / "curso/validation/rbc-uncertainty-2026-10-22.json").read_text(encoding="utf-8"))
     assert evidence["puremacro"] == "5.5.0"
-    assert {row["notebook"] for row in evidence["notebooks"]} == publication.ACTUALIZADOS
+    assert {row["notebook"] for row in evidence["notebooks"]} == publication.ACTUALIZADOS_RBC
+    for row in evidence["notebooks"]:
+        assert re.fullmatch(r"[0-9a-f]{64}", row["source_sha256"])
+        assert re.fullmatch(r"[0-9a-f]{64}", row["output_sha256"])
+        assert row["ok"] and not row["errors"] and not row["warnings"]
+        assert row["girf_tables_equal_5_3_0_reference"]
+
+
+def test_current_dsge_amendments_have_matching_execution_evidence():
+    """All revised lessons must have fresh complete source/output evidence."""
+    evidence = json.loads((ROOT / "curso/validation/dsge-methods-2026-10-23.json").read_text(encoding="utf-8"))
+    assert evidence["puremacro"] == "5.7.0"
+    assert evidence["ok"] and evidence["package_unchanged"] and evidence["inputs_unchanged"]
+    assert evidence["notebook_sources_unchanged"]
+    for name in ("_dsge_labs.py", "modelos/neoclasico_prevision_perfecta.mod", "modelos/rbc_canonico.mod"):
+        assert hashlib.sha256((NOTEBOOKS / name).read_bytes()).hexdigest() == evidence["input_files"][name]
+    assert {row["notebook"] for row in evidence["notebooks"]} == publication.ACTUALIZADOS_DSGE
     for row in evidence["notebooks"]:
         path = NOTEBOOKS / row["notebook"]
         nb = json.loads(path.read_text(encoding="utf-8"))
         assert nb["metadata"]["course_edition"] == publication.EDICION
-        assert nb["metadata"]["course_amendment"] == "2026-10-22-rbc-uncertainty"
+        assert nb["metadata"]["course_amendment"] == "2026-10-23-dsge-methods"
+        assert nb["metadata"]["course_runtime"] == "5.7.0"
         source = [(c["cell_type"], _text(c)) for c in nb["cells"]]
         assert hashlib.sha256(json.dumps(source, ensure_ascii=False).encode()).hexdigest() == row["source_sha256"]
         assert hashlib.sha256(path.read_bytes()).hexdigest() == row["output_sha256"]
-        assert row["ok"] and not row["errors"] and not row["warnings"]
-        assert row["girf_tables_equal_5_3_0_reference"]
+        assert row["ok"] and not row["errors"] and not row["network_attempts"]
         code = [c for c in nb["cells"] if c["cell_type"] == "code"]
-        assert len(code) == row["code_cells"] == 20
+        assert len(code) == row["code_cells"]
         assert all(c["execution_count"] is not None for c in code)
+
+
+@pytest.mark.parametrize("name", sorted(publication.ACTUALIZADOS_DSGE))
+def test_dsge_setup_keeps_extra_imports_and_tail(name):
+    nb = json.loads((NOTEBOOKS / name).read_text(encoding="utf-8"))
+    source = _text(nb["cells"][1])
+    customized = source.replace("import os\n", "import os\nfrom collections import Counter\n", 1) + "\ncustom_tail = 728\n"
+    rewritten, warnings = publication.reescribir_celda1(customized, name)
+    assert not warnings
+    assert "from collections import Counter" in rewritten
+    assert rewritten.endswith("custom_tail = 728")
+    assert publication.reescribir_celda1(rewritten, name) == (rewritten, [])
 
 
 @pytest.mark.mechanism_control

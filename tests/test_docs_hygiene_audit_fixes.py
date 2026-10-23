@@ -40,6 +40,9 @@ NEW_TRADE_DOCS = [
 ]
 # Pages added after 4.3.0 (the stacked Newton-Krylov and the trade modules): same bilingual contract.
 NEW_MODULE_DOCS = [
+    "dsge_nonlinear.md",
+    "dsge_transitions.md",
+    "dsge_global.md",
     "dsge_stacked_newton.md",
     "trade_continuation.md",
     "trade_stability.md",

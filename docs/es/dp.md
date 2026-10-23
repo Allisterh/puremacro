@@ -62,6 +62,23 @@ El mismo modelo se resuelve por VFI discreta con `m.solve()` (r alrededor de
 resultados difieren porque VFI coloca `a(+1)` sobre los nodos de la malla y
 EGM no.
 
+EGM de un activo verifica que el presupuesto declarado sea afín en los activos
+actuales y futuros después de expandir las expresiones locales. Coincidir con
+esa forma en los nodos de la malla no basta para políticas continuas. Se
+rechazan productos de términos dependientes de activos, denominadores que
+dependan de activos, potencias no lineales y funciones de activos, aunque
+coincidan en la malla. Se permiten multiplicaciones y divisiones por términos
+independientes de activos y funciones personalizadas del ingreso exógeno.
+El coeficiente del activo futuro debe ser -1; se verifica por separado de la
+escala del ingreso en cada calibración, edad y elección discreta.
+
+Las restricciones explícitas deben ser una cota cero para el consumo (`c > 0`,
+`0 < c`, o sus versiones no estrictas); se aceptan alias locales. Las
+comprobaciones numéricas también exigen que el dominio factible de la utilidad
+sea exactamente el consumo positivo. La malla determina el límite de deuda.
+Use VFI para otras ecuaciones de recursos o restricciones; EGM rechaza
+restricciones adicionales aunque sean redundantes en todos los nodos declarados.
+
 ### Leer una solución
 
 `DPSolution` contiene la solución sea cual sea el motor:

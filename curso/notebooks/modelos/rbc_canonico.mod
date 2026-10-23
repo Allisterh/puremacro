@@ -34,11 +34,14 @@ sigma_a = 0.007;     // Desviación estándar del choque a la PTF (0.7%)
 model;
 // 1. Condición intratemporal de oferta laboral (margen consumo-ocio):
 //    mu * (1 - l_t)^(-nu) * c_t = w_t
+[name='intratemporal']
 mu * (1 - l)^(-nu) * c = w;
 
 // 2. Ecuación de Euler intertemporal del consumo:
 //    c_t^(-1) = beta * E_t[ c_{t+1}^(-1) * (r_{t+1} + 1 - delta) ]
-c(+1)/(beta*c) = r(+1) + 1 - delta;
+// La utilidad marginal futura permanece dentro de la esperanza condicional.
+[name='Euler']
+1/c = beta*(r(+1) + 1 - delta)/c(+1);
 
 // 3. Demanda de capital de la empresa (precio marginal del capital):
 //    r_t = alpha * y_t / k_{t-1}

@@ -100,6 +100,10 @@ nav:
           - Climate Macro (DICE): climate.md
           - DSGE Sketchpad & Dynare: dsge_build.md
           - Inspecting and running .mod commands: dsge_mod_inspection.md
+          - Choosing a DSGE workflow: dsge_workflows.md
+          - Nonlinear models and ordered deterministic commands: dsge_nonlinear.md
+          - Robust transitions and announced shocks: dsge_transitions.md
+          - Global policies and local accuracy: dsge_global.md
           - DSGE Higher-Order & Constraints: dsge_higher_order.md
           - DSGE Parity & Surface Area: dsge_parity_surface.md
           - DSGE Gradients, NUTS & HANK Bridge: dsge_v3.md
@@ -198,6 +202,10 @@ nav:
           - Macroeconomía del clima (DICE): es/climate.md
           - Cuaderno de bocetos DSGE y Dynare: es/dsge_build.md
           - Inspección y ejecución de comandos .mod: es/dsge_mod_inspection.md
+          - Elegir un flujo DSGE: es/dsge_workflows.md
+          - Modelos no lineales y comandos deterministas ordenados: es/dsge_nonlinear.md
+          - Transiciones robustas y anuncios de choques: es/dsge_transitions.md
+          - Políticas globales y precisión local: es/dsge_global.md
           - DSGE de orden superior y restricciones: es/dsge_higher_order.md
           - Paridad y superficie operativa DSGE: es/dsge_parity_surface.md
           - DSGE Gradientes, NUTS y Puente HANK: es/dsge_v3.md

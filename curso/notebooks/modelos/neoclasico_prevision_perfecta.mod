@@ -25,11 +25,16 @@ rho_a = 0.95;      // Persistencia autorregresiva de la productividad
 model;
 // 1. Condición intratemporal de eficiencia trabajo-ocio:
 //    u_l / u_c = F_l  =>  gamma*c / (n - l) = (1 - alpha) * y / l
+[name='intratemporal']
 gamma*c/(n-l) = (1-alpha)*y/l;
 
 // 2. Ecuación de Euler intertemporal:
 //    u_c(t) = beta * E_t[ u_c(t+1) * (F_k(t+1) + 1 - delta) ]
-c(+1)/(beta*c) = alpha*y(+1)/k + 1 - delta;
+// Conservar la utilidad marginal dentro de la esperanza para soluciones
+// estocásticas de orden superior. Multiplicar por c(+1) es equivalente bajo
+// previsión perfecta y a primer orden, pero altera las correcciones por riesgo.
+[name='Euler']
+1/c = beta*(1/c(+1))*(alpha*y(+1)/k + 1 - delta);
 
 // 3. Restricción agregada de recursos (acumulación de capital):
 //    c_t + k_t - (1 - delta)*k_{t-1} = y_t

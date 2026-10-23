@@ -10,8 +10,9 @@ Includes:
   model-agnostic priors framework.
 - Smets-Wouters (2007) reference model + bundled US dataset.
 - Matrix-free stacked-time Newton-Krylov for perfect-foresight systems
-  (``solve_stacked_newton_krylov``; opt-in, separate from
-  ``solve_perfect_foresight``).
+  (``solve_stacked_newton_krylov``; also available through
+  ``solve_perfect_foresight`` and ``extended_path`` with
+  ``linear_solver="krylov"``).
 
 For likelihood-based estimation, pair the state-space form returned by
 ``make_state_space`` (model-specific) with ``puremacro.dsge.estimate_dsge``.
@@ -70,6 +71,15 @@ from .dynare import (
     _orig_stoch_simul, _linear_model_stoch_simul,
 )
 from .inspection import inspect_mod, ModInspectionReport, ModStatement, ModIssue, ModSourceSpan
+from .model import NonlinearModel, read_mod
+from .global_solution import (
+    EquilibriumProblem, EquilibriumPolicy, TimeIterationResult, PolicyAudit,
+    PolicyRefinementResult, gaussian_quadrature, solve_time_iteration,
+    audit_policy, compare_policies, refine_time_iteration, solve_adaptive_time_iteration,
+)
+from .local_accuracy import LocalDiagnostics, evaluate_perturbation, diagnose_perturbation
+from .transitions import TransitionResult, ShockAnnouncement, solve_transition, solve_announced_path
+from ._deterministic_execution import PerfectForesightSetup
 from ._mod_execution import ModCompatibilityError, ModExecutionError
 from .perfect_foresight import PerfectForesightResult, solve_perfect_foresight
 from .extended_path import extended_path
@@ -167,6 +177,14 @@ from . import marginal, mode, observation, smoother, news
 
 
 __all__ = [
+    "NonlinearModel", "read_mod",
+    "PerfectForesightSetup",
+    "EquilibriumProblem", "EquilibriumPolicy", "TimeIterationResult", "PolicyAudit",
+    "PolicyRefinementResult", "gaussian_quadrature", "solve_time_iteration",
+    "audit_policy", "compare_policies", "refine_time_iteration",
+    "solve_adaptive_time_iteration",
+    "LocalDiagnostics", "evaluate_perturbation", "diagnose_perturbation",
+    "TransitionResult", "ShockAnnouncement", "solve_transition", "solve_announced_path",
     "inspect_mod", "ModInspectionReport", "ModStatement", "ModIssue", "ModSourceSpan",
     "ModCompatibilityError", "ModExecutionError", "DynareCommandResults", "DynareCommandInvocation",
     "klein_solve", "KleinSolution", "BlanchardKahnError",

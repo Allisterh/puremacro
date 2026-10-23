@@ -30,7 +30,7 @@ directory, separate from frozen inputs.
 ## RBC uncertainty update — 22 October 2026
 
 The original 72-notebook record above applies to the immutable
-`course-2026A-5.5.0` edition. The two T02_D notebooks on `main` now add
+`course-2026A-5.5.0` edition. The two T02_D notebooks amended on 22 October added
 irreversible RBC investment and stochastic volatility; their revised source
 and output hashes are recorded separately in
 [`rbc-uncertainty-2026-10-22.json`](rbc-uncertainty-2026-10-22.json).
@@ -44,3 +44,45 @@ The slide figure retains the independently checked 5.3.0 reference calculation;
 the new 5.5.0 run checks compatibility and numerical agreement. Local Python is
 the verified route; this update does not claim a new Colab, Juno or browser run.
 The original tag and its execution manifest were not changed.
+
+## DSGE solution methods — 23 October 2026
+
+[`dsge-methods-2026-10-23.json`](dsge-methods-2026-10-23.json) records the
+English and Spanish T02_A–D revisions against the 5.7.0 release source,
+with setup cells, package requirements and Colab links pinned to `v5.7.0`.
+It identifies the package files, notebook sources and saved outputs, helper
+and model files, frozen data, dependency versions, cell timings and warnings.
+Source-checkout paths in text diagnostics are made relative for portability.
+All eight notebooks completed: 120 code cells and 72 saved figures. T02_A
+retains a Klein conditioning warning in the capital-share sweep; both language
+versions record it. All eight completed in one fresh execution batch after the release pins were
+finalized. The earlier development batch is preserved separately in
+[`dsge-development-2026-10-23.json`](dsge-development-2026-10-23.json), including
+the corrected Spanish T02_B assertion and its complete rerun. The development
+and release batches use identical runtime package files and frozen inputs.
+The runner rejects write-back if package code, notebook sources or inputs
+change during execution. This is a source-checkout validation, not a released
+wheel or a new Colab, Juno or browser certification.
+
+T02_A checks callback/`.mod` path agreement, direct/Krylov agreement, continuation,
+an explicit permanent-shock tail, horizon doubling, news versus surprise timing,
+repeated ordered `.mod` commands and local/global policy errors at independent
+points with a richer quadrature rule. The construction domain reports its
+quadrature exits explicitly; the audit covers the declared interior points.
+T02_B compares orders 1–3 using expected marginal-utility equations; T02_C
+adds local conditioning diagnostics. T02_D checks the library's nonlinear
+irreversible-investment transition against an independent residual function,
+retaining its horizon and stochastic-volatility exercises.
+
+Install the matching `v5.7.0` checkout and execute from the repository root:
+
+```bash
+python -m pip install -e ".[notebooks]"
+python curso/scripts/ejecutar_desarrollo_dsge.py \
+  --work-dir /tmp/puremacro-dsge-validation --jobs 2 --write-back
+```
+
+Use a new work directory for each run. Every notebook gets a fresh IPython
+process and offline input directory; no code cells or economic assertions are
+skipped. The earlier manifests remain historical evidence for their original
+revisions. The current notebook hashes belong to this new record.

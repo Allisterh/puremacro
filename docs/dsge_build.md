@@ -2,6 +2,8 @@
 
 # DSGE sketchpad: models from equations, not matrices
 
+For the 5.7 nonlinear interface and a choice among local, deterministic and global solution methods, start with [DSGE workflows](dsge_workflows.md). This page also documents the earlier sketchpad and local-solution APIs.
+
 `puremacro.dsge.klein_solve` has always solved linear rational-expectations
 models with no Dynare and no compiler — but it takes `A`, `B`, `C`, and getting
 those means differentiating the equilibrium conditions by hand. That derivation
@@ -233,7 +235,7 @@ print(m.theoretical_moments().summary())
 
 ### 4b. Tier 0: The Front End — Macro Preprocessor, AST Parser & Symbolic Differentiation (v2.7.0)
 
-Starting with `puremacro 2.7.0`, the DSGE engine features a production-grade front-end pipeline designed for seamless compatibility with published Dynare models and zero external dependencies:
+Starting with `puremacro 2.7.0`, the DSGE engine includes a front end for a documented subset of Dynare model files, using the core scientific-Python dependencies:
 
 #### Dynare Macro Directives
 `puremacro.dsge` natively preprocesses Dynare macro directives before tokenization:
@@ -271,13 +273,15 @@ m = dsge.load_mod(mod_macro)
     for a read-only compatibility report. The opt-in
     `load_mod(..., command_mode="ordered")` and
     `m.execute_mod_commands(ordered=True, data=...)` preserve each supported
-    fixed-calibration simulation/smoother/decomposition invocation. Unsupported
+    fixed-calibration simulation/smoother/decomposition invocation.
+    `read_mod(...).execute_mod_commands()` adds the ordered deterministic workflow
+    without an implicit solve at load time. Unsupported
     state changes are rejected before solving; calibration changes and other
     command programs require explicit Python workflows. A successful legacy
     `load_mod` call does not validate compatibility with the entire file.
 
 - **Any Dynare name**: a parameter or variable named like a Python keyword (`lambda`, `yield`) parses and solves.
-- **Special Operators**: Supports `STEADY_STATE(x)` and `diff(x)`. `STEADY_STATE` uses a fixed reference during trajectory and derivative evaluation; its expression cannot contain exogenous variables. Perfect-foresight terminal assignments follow the distinction between literal `endval` and `endval` followed by `steady` or `endval_steady`, both in direct solves and legacy `execute_mod_commands()` (including `simul`). Explicit Python `endval` or `y_end` overrides retain their documented precedence. Ordered command execution does not support perfect foresight. See the [correctness advisory](ADVISORY.md). `EXPECTATION(k)(x)` is parsed, but its compiled residual raises `NameError`, so a model that uses it cannot be solved yet.
+- **Special Operators**: Supports `STEADY_STATE(x)` and `diff(x)`. `STEADY_STATE` uses a fixed reference during trajectory and derivative evaluation; its expression cannot contain exogenous variables. Perfect-foresight terminal assignments follow the distinction between literal `endval` and `endval` followed by `steady` or `endval_steady`, both in direct solves and legacy `execute_mod_commands()` (including `simul`). Explicit Python `endval` or `y_end` overrides retain their documented precedence. The 5.7.0 extension supports the deterministic subset in the [nonlinear model guide](dsge_nonlinear.md), with separate setup and solver snapshots. See the [correctness advisory](ADVISORY.md). `EXPECTATION(k)(x)` is parsed, but its compiled residual raises `NameError`, so a model that uses it cannot be solved yet.
 - **Transcendental Functions**: Full parsing and analytical differentiation for `exp`, `log`, `sin`, `cos`, `tan`, `normcdf`, `normpdf`, `erf`, `abs`, and `sign`.
 
 #### Symbolic Differentiation & Common Subexpression Elimination (CSE)

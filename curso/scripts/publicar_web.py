@@ -65,19 +65,28 @@ DEST_DIAP = DESTINO / "site" / "diapositivas"
 REPO = "jalonso1979/puremacro"
 EDICION = "course-2026A-5.5.0"
 RAMA = EDICION
-# Independently executed amendments keep the edition's runtime and helper pin.
-# Their current teaching cells are available on main; the release tag stays immutable.
-ACTUALIZADOS = frozenset({
+# Historical amendments retain their execution records; newer source lessons
+# declare their own runtime instead of silently importing the frozen edition.
+ACTUALIZADOS_RBC = frozenset({
     "T02_D_occbin_zlb_regimes_es.ipynb",
     "T02_D_occbin_zlb_regimes.ipynb",
 })
+ACTUALIZADOS_DSGE = frozenset(
+    f"{stem}{suffix}.ipynb"
+    for stem in ("T02_A_neoclassical_growth_local", "T02_B_rbc_dynare_local",
+                 "T02_C_new_keynesian_local", "T02_D_occbin_zlb_regimes")
+    for suffix in ("", "_es")
+)
+ACTUALIZADOS = ACTUALIZADOS_RBC | ACTUALIZADOS_DSGE
+DSGE_VERSION = "5.7.0"
+DSGE_REF = "v5.7.0"
 RUTA_EN_REPO = "curso/notebooks"
 # Versión de puremacro que piden los cuadernos en Colab.
 PUREMACRO = "puremacro==5.5.0"
 
 # _tutor.py importa _llm.py cuando se llama a tutor(), no al importarse: el paquete lleva los dos o cada
 # pregunta al tutor termina en el texto de respaldo con «ModuleNotFoundError».
-AUXILIARES = ["_datos.py", "_nbstyle.py", "_tutor.py", "_llm.py", "_t01.py"]
+AUXILIARES = ["_datos.py", "_nbstyle.py", "_tutor.py", "_llm.py", "_t01.py", "_dsge_labs.py"]
 EXCLUIR_DATOS = {"tmp_check", "__pycache__", ".ipynb_checkpoints"}
 # Cuadernos que existen en notebooks/ pero aún no se publican.
 EXCLUIDOS: set[str] = set()  # T00_B runs in cache mode; live setup is optional.
@@ -169,7 +178,7 @@ def _codigo(nombre: str) -> str:
 
 
 def _url_colab(nombre: str) -> str:
-    rama = "main" if nombre in ACTUALIZADOS else RAMA
+    rama = DSGE_REF if nombre in ACTUALIZADOS_DSGE else "main" if nombre in ACTUALIZADOS else RAMA
     return f"https://colab.research.google.com/github/{REPO}/blob/{rama}/{RUTA_EN_REPO}/{nombre}"
 
 
@@ -193,6 +202,20 @@ def reescribir_celda0(fuente: str, nombre: str) -> str:
     insignia = (f"[![{'Abrir en Colab' if es else 'Open In Colab'}]"
                 f"(https://colab.research.google.com/assets/colab-badge.svg)]({_url_colab(nombre)})")
     nota = NOTA_ES if es else NOTA_EN
+    if nombre in ACTUALIZADOS_DSGE:
+        nota = (
+            "> **Nota para Google Colab**: esta lección actualizada usa el código del tag "
+            "`v5.7.0` (puremacro 5.7.0) y los modelos de la misma copia. La celda siguiente "
+            "lo instala en Colab; localmente use `python -m pip install -e \".[notebooks]\"` "
+            "desde la raíz de este repositorio y seleccione ese entorno. La edición original "
+            "`course-2026A-5.5.0` permanece disponible en su tag."
+            if es else
+            "> **Google Colab note**: this updated lesson uses the source at tag `v5.7.0` "
+            "(puremacro 5.7.0) and models from the same checkout. The next cell installs it in "
+            "Colab; locally run `python -m pip install -e \".[notebooks]\"` from this repository's "
+            "root and select that environment. The original `course-2026A-5.5.0` edition "
+            "remains available at its tag."
+        )
     if _INSIGNIA.search(fuente):
         fuente = _INSIGNIA.sub(lambda _m: insignia, fuente, count=1)
     else:
@@ -275,6 +298,94 @@ except ImportError:
     pass
 '''
 
+PLANTILLA_DSGE = '''# __TITLE__
+import os
+import sys
+import subprocess
+from pathlib import Path
+__IMPORTS__
+_course_requirements = ["puremacro==5.7.0"]
+_course_edition = "v5.7.0"
+_course_development = False
+
+def _safe_probe(p, is_dir=None):
+    """Test paths without raising in restricted notebook environments."""
+    try:
+        p = Path(p)
+        return p.is_dir() if is_dir is True else p.is_file() if is_dir is False else p.exists()
+    except (OSError, PermissionError, TypeError, ValueError):
+        return False
+
+if "google.colab" in sys.modules:
+    _repo = Path("/content/puremacro-course-v5.7.0")
+    if not _safe_probe(_repo, is_dir=True):
+        subprocess.run(["git", "clone", "-q", "--depth", "1", "--filter=blob:none", "--sparse",
+                        "--branch", "v5.7.0", "https://github.com/jalonso1979/puremacro.git", str(_repo)], check=True)
+        subprocess.run(["git", "-C", str(_repo), "sparse-checkout", "set", "puremacro", "curso/notebooks"], check=True)
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-e", str(_repo)], check=True)
+    os.chdir(_repo / "curso/notebooks")
+
+# A source checkout takes precedence over an older installed course wheel.
+_course_source_root = None
+for _candidate in [Path.cwd(), *Path.cwd().parents]:
+    if _safe_probe(_candidate / "puremacro/__init__.py", is_dir=False) and _safe_probe(_candidate / "pyproject.toml", is_dir=False):
+        _course_source_root = _candidate
+        if str(_candidate) not in sys.path:
+            sys.path.insert(0, str(_candidate))
+        break
+
+_candidates = [Path.cwd(), Path.cwd() / "notebooks", Path.cwd() / "curso/notebooks"]
+if _course_source_root is not None:
+    _candidates.insert(0, _course_source_root / "curso/notebooks")
+_course_helper_dir = next((_c for _c in _candidates if _safe_probe(_c / "_dsge_labs.py", is_dir=False)), None)
+if _course_helper_dir is None:
+    raise RuntimeError("Open this updated notebook from the matching curso/notebooks folder, including _dsge_labs.py and modelos/.")
+if str(_course_helper_dir) not in sys.path:
+    sys.path.insert(0, str(_course_helper_dir))
+
+import puremacro
+from puremacro import dsge
+if puremacro.__version__ != "5.7.0":
+    raise RuntimeError("These DSGE lessons require puremacro==5.7.0. Install the matching tag and restart the kernel.")
+_course_features = ("read_mod", "solve_transition", "solve_announced_path", "solve_time_iteration", "evaluate_perturbation")
+if not all(hasattr(dsge, _name) for _name in _course_features):
+    raise RuntimeError("This lesson requires the updated Puremacro source (5.7.0). Install this checkout with python -m pip install -e '.[notebooks]' and restart the kernel.")
+if _course_source_root is not None and not Path(puremacro.__file__).resolve().is_relative_to(_course_source_root):
+    raise RuntimeError("An older puremacro was already imported. Restart this kernel to use the matching source checkout.")
+print("Puremacro", puremacro.__version__, "— DSGE lessons, v5.7.0")
+
+os.environ.setdefault("MAV_LLM_MODE", "cache")
+
+%matplotlib inline
+try:
+    import _nbstyle
+    _nbstyle.apply_style()
+except ImportError:
+    pass
+'''
+
+
+def _reescribir_celda_dsge(fuente: str, nombre: str) -> tuple[str, list[str]]:
+    """Keep lesson imports/custom tail while selecting the matching source runtime."""
+    if "def _safe_probe" not in fuente or _FIN_ESTILO not in fuente:
+        return fuente, ["celda DSGE: configuración desconocida; no se modifica"]
+    imports = []
+    for node in ast.parse(fuente.split("def _safe_probe", 1)[0]).body:
+        texto = ast.get_source_segment(fuente, node)
+        if isinstance(node, ast.Assign) and all(
+            isinstance(target, ast.Name) and target.id.startswith("_course_") for target in node.targets
+        ):
+            continue
+        if texto and texto not in _IMPORTS_BASE | {"import subprocess"}:
+            imports.append(texto)
+    titulo = ("Configuración de las lecciones DSGE: código local o Colab" if _es_espanol(nombre)
+              else "DSGE lesson setup: local source or Colab")
+    nueva = PLANTILLA_DSGE.replace("__TITLE__", titulo).replace("__IMPORTS__", "\n".join(imports)).rstrip("\n")
+    cola = fuente.split(_FIN_ESTILO, 1)[1]
+    if cola.strip():
+        nueva += "\n\n" + cola.strip("\n")
+    return nueva, []
+
 
 def reescribir_celda1(fuente: str, nombre: str) -> tuple[str, list[str]]:
     """Devuelve la celda de configuración nueva y una lista de avisos.
@@ -283,6 +394,8 @@ def reescribir_celda1(fuente: str, nombre: str) -> tuple[str, list[str]]:
     paquetes extra del ``!pip install`` (p. ej. ``arch``), los ``import`` extra
     de la cabecera y cualquier código después de ``_nbstyle.apply_style()``.
     """
+    if nombre in ACTUALIZADOS_DSGE:
+        return _reescribir_celda_dsge(fuente, nombre)
     avisos: list[str] = []
     if "_safe_probe" not in fuente or _FIN_ESTILO not in fuente:
         avisos.append("celda 1 no parece la de configuración conocida: se deja intacta")
@@ -656,18 +769,30 @@ Economía del ITAM, otoño 2026. Todo el curso corre en Python con
 ejecutadas, así que se puede leer en GitHub sin correr nada.
 
 La carpeta contiene los cuadernos en español (`*_es.ipynb`) y en inglés, los
-auxiliares `_datos.py`, `_nbstyle.py`, `_tutor.py`, `_llm.py` y `_t01.py`, los datos congelados en
+auxiliares `_datos.py`, `_nbstyle.py`, `_tutor.py`, `_llm.py`, `_t01.py` y `_dsge_labs.py`, los datos congelados en
 `data_curso/` y los modelos `.mod` en `modelos/`. Las diapositivas en PDF están
 en `curso/site/diapositivas/`.
 
-**Actualización del 22 de octubre de 2026.** [T02_D](T02_D_occbin_zlb_regimes_es.ipynb) añade un RBC con inversión irreversible: §8 aplica OccBin a un choque de productividad realizado y §9 resuelve un choque de volatilidad estocástica con `puremacro.vfi.Case2Problem`. [Las diapositivas 4](https://jalonso1979.github.io/puremacro/curso/diapositivas/MAV_04_ciclos_economicos_reales_y_contabilidad_del_ciclo.pdf#page=43) desarrollan el álgebra, el método y las respuestas. El cuaderno actualizado mantiene puremacro 5.5.0 y los auxiliares congelados; el tag `course-2026A-5.5.0` conserva su contenido original. Véase la [validación adicional](../validation/README.md).
+**Actualización DSGE del 23 de octubre de 2026 (5.7.0).** T02_A–D usan modelos no lineales sin resolución implícita, ejecución ordenada de comandos `.mod`, transiciones con continuación y diagnósticos comunes de soluciones locales y globales. T02_D conserva las lecciones de inversión irreversible y volatilidad estocástica añadidas el 22 de octubre. Los ocho cuadernos actualizados fijan el código fuente y los auxiliares del tag `v5.7.0`; el tag `course-2026A-5.5.0` conserva la edición original. Véase la [validación adicional](../validation/README.md).
 
-Para ejecutar esta actualización localmente, use un clon de `main` o descargue el cuaderno actualizado dentro de `curso/notebooks/` de la edición congelada. Las instrucciones de abajo reproducen el tag original.
+Para ejecutar T02_A–D con Python 3.12 o posterior, clone el tag y use un entorno virtual nuevo:
+
+```bash
+git clone --branch v5.7.0 --depth 1 https://github.com/jalonso1979/puremacro.git puremacro-5.7.0
+cd puremacro-5.7.0
+python -m venv .venv
+source .venv/bin/activate  # Windows PowerShell: ./.venv/Scripts/Activate.ps1
+python -m pip install -e ".[notebooks]" jupyterlab
+cd curso/notebooks
+jupyter lab
+```
+
+Seleccione ese entorno como kernel. Mantenga `_dsge_labs.py`, `modelos/` y `data_curso/` junto a los cuadernos. La validación registrada usa Python local; Colab instala el código del tag `v5.7.0`. Esta evidencia no certifica una ejecución completa en Colab. Las instrucciones siguientes reproducen la edición original completa.
 
 ## Abrir un cuaderno en Google Colab
 
 Haga clic en el enlace del cuaderno. La primera celda de código instala
-`puremacro` y descarga sólo esta carpeta del repositorio (un clon parcial de los materiales
+`puremacro` y descarga los materiales correspondientes del repositorio (un clon parcial de los materiales
 y datos congelados); no pide acceso a Google Drive. Ejecute las celdas en orden.
 
 {tabla_es}
@@ -718,18 +843,30 @@ programme in Economics, fall 2026. The whole course runs in Python with
 executed outputs, so you can read it on GitHub without running anything.
 
 This folder holds the notebooks in Spanish (`*_es.ipynb`) and English, the
-helpers `_datos.py`, `_nbstyle.py`, `_tutor.py`, `_llm.py` and `_t01.py`, the frozen data in
+helpers `_datos.py`, `_nbstyle.py`, `_tutor.py`, `_llm.py`, `_t01.py` and `_dsge_labs.py`, the frozen data in
 `data_curso/` and the `.mod` models in `modelos/`. The PDF slides are in
 `curso/site/diapositivas/` (in Spanish).
 
-**22 October 2026 update.** [T02_D](T02_D_occbin_zlb_regimes.ipynb) adds an RBC model with irreversible investment: §8 applies OccBin to a realized productivity shock and §9 solves a stochastic-volatility shock with `puremacro.vfi.Case2Problem`. [Slides 4](https://jalonso1979.github.io/puremacro/curso/diapositivas/MAV_04_ciclos_economicos_reales_y_contabilidad_del_ciclo.pdf#page=43) develop the algebra, method and responses. The updated notebook retains puremacro 5.5.0 and the frozen helpers; tag `course-2026A-5.5.0` retains its original contents. See the [additional validation](../validation/README.md).
+**23 October 2026 DSGE update (5.7.0).** T02_A–D use nonlinear models without implicit solving, ordered `.mod` commands, continuation for transitions and common local/global solution diagnostics. T02_D retains the irreversible-investment and stochastic-volatility lessons added on 22 October. The eight updated notebooks pin the source code and helpers to tag `v5.7.0`; tag `course-2026A-5.5.0` retains the original edition. See the [additional validation](../validation/README.md).
 
-To run this update locally, use a `main` checkout or download the updated notebook into the frozen edition’s `curso/notebooks/` directory. The instructions below reproduce the original tag.
+To run T02_A–D with Python 3.12 or later, clone the tag and use a fresh virtual environment:
+
+```bash
+git clone --branch v5.7.0 --depth 1 https://github.com/jalonso1979/puremacro.git puremacro-5.7.0
+cd puremacro-5.7.0
+python -m venv .venv
+source .venv/bin/activate  # Windows PowerShell: ./.venv/Scripts/Activate.ps1
+python -m pip install -e ".[notebooks]" jupyterlab
+cd curso/notebooks
+jupyter lab
+```
+
+Select that environment as the kernel. Keep `_dsge_labs.py`, `modelos/` and `data_curso/` beside the notebooks. Recorded validation uses local Python; Colab installs the source from tag `v5.7.0`. This evidence does not certify a full Colab execution. The following instructions reproduce the complete original edition.
 
 ## Open a notebook in Google Colab
 
 Click the notebook's link. The first code cell installs `puremacro` and fetches
-only this folder from the repository (a partial clone of the materials
+the corresponding materials from the repository (a partial clone of the materials
 and frozen data); it does not ask for Google Drive access. Run the cells in order.
 
 {tabla_en}

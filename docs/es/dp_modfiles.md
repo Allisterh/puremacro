@@ -72,6 +72,14 @@ y preferencias del compilador existente. `method=vfi` utiliza búsqueda discreta
 Varias declaraciones `state` y una elección `discrete` permiten los problemas
 multidimensionales que admite VFI.
 
+Para EGM de un activo, el solucionador verifica el presupuesto afín a partir
+de las ecuaciones, incluidos los alias locales, y comprueba el coeficiente del
+activo futuro por separado de la escala del ingreso. No se admiten términos
+no lineales ni restricciones adicionales sólo porque desaparezcan en los nodos
+de la malla. Se permiten funciones personalizadas del ingreso exógeno; use VFI
+para otras funciones de activos o restricciones. Consulte las
+[restricciones de EGM de un activo](dp.md).
+
 ```python
 modelo = dp.load_mod("household.mod")  # valida sin resolver
 egm = dp.solve_mod("household.mod")

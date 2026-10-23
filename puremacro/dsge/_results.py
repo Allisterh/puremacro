@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
-from typing import Any, Sequence, Tuple
+from typing import Any, Mapping, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -2771,6 +2771,8 @@ class ExtendedPathResult:
         Names of structural shocks in declaration or column order.
     horizon : int, default 100
         Forward anticipation horizon T_H used at each step.
+    solver_diagnostics : mapping
+        Backend, exact preconditioner cache counts, and per-date diagnostics.
     """
 
     path: pd.DataFrame
@@ -2782,6 +2784,7 @@ class ExtendedPathResult:
     variable_names: tuple[str, ...] = ()
     shock_names: tuple[str, ...] = ()
     horizon: int = 100
+    solver_diagnostics: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.variable_names and not self.path.empty:

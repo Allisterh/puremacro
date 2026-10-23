@@ -2,7 +2,7 @@
 
 # puremacro
 
-**New in 5.6.0:** [DP models in `.mod` files](docs/dp_modfiles.md), [reproducible studies](docs/studies.md), [editable HANK equations](docs/hank_model_closure.md) and [runnable workflows](docs/study_workflows.md). Check the [published releases](https://pypi.org/project/puremacro/#history) before installing; these additions require 5.6.0 or this source tree.
+**New in 5.7.0:** [one model, several solution methods](docs/dsge_workflows.md): ordered `.mod` programs, nonlinear transitions, local/global policy comparisons, and eight revised MAV notebooks. This version also includes [DP models in `.mod` files](docs/dp_modfiles.md), [reproducible studies](docs/studies.md) and [editable HANK equations](docs/hank_model_closure.md) developed for 5.6.0.
 
 **Macroeconometrics and structural modeling on the core scientific-Python stack.**
 
@@ -23,9 +23,13 @@ python -m pip install puremacro
 | **Simulate policy** | Declare a household model with [dynamic programming](docs/dp.md), study [monetary transmission](docs/monetary_transmission.md), or build a [trade counterfactual](docs/trade_accounting.md). |
 | **Learn or teach** | Choose a [notebook learning path](docs/notebooks.md) or use the [bilingual course and interactive labs](curso/README.md). Use the pinned course edition below. |
 
-**Documentation for version 5.6.0.** Check [available PyPI releases](https://pypi.org/project/puremacro/#history).
-These examples describe the 5.6.0 API; see the [changelog](CHANGELOG.md)
-for additions and fixes. Match your installed version to the documentation.
+**Documentation for version 5.7.0.** Check [available PyPI releases](https://pypi.org/project/puremacro/#history).
+These APIs require 5.7.0; see the [changelog](CHANGELOG.md) for additions and fixes. Match your installed version to the documentation.
+
+New DSGE workflows share [nonlinear model equations](docs/dsge_nonlinear.md)
+across [robust transitions and announcements](docs/dsge_transitions.md) and
+[local/global policy comparisons](docs/dsge_global.md). The amended bilingual
+[T02_A–D notebooks](curso/notebooks/README.md) pin the code, helpers and models to `v5.7.0`. Their execution evidence covers local Python.
 
 Since 5.5.0: [read-only `.mod` inspection and opt-in ordered execution](docs/dsge_mod_inspection.md),
 and [audits of supported solved results](docs/result_audits.md). Inspection
@@ -1044,7 +1048,7 @@ If you are transitioning from Stata, MATLAB/Dynare, or statsmodels:
 | **DSGE 2nd-Order Pruning** | — | Dynare `stoch_simul(order=2, pruning)` | — | `dsge.build_dynare(eqs, order=2)` / `m.solve_second_order()` |
 | **`puremacro-dynare` CLI** | — | `dynare model.mod` command-line | — | `puremacro-dynare model.mod --order 2 --fevd --plot` |
 | **OccBin (ZLB / piecewise)** | — | Dynare `occbin_solver` / Guerrieri & Iacoviello | — | `dsge.solve_occbin(m_normal, m_zlb, constraint, shocks)` |
-| **Non-Linear Perfect Foresight** | — | Dynare `simul` (Boucekkine-Juillard) | — | `dsge.solve_perfect_foresight(m, shocks, T=100)` |
+| **Non-Linear Perfect Foresight** | — | Dynare `simul` (Boucekkine-Juillard) | — | `dsge.solve_perfect_foresight(m, shocks=shocks, periods=100)` |
 | **Bayesian DSGE (MCMC)** | — | Dynare `estimation(...)` (Metropolis-Hastings) | — | `dsge.estimate_dsge_bayesian(m, data, priors, n_draws=10000)` |
 | **Sequence-Space Fake News** | — | SSJ (Auclert et al. 2021) Python/Julia | — | `models.fake_news_algorithm(T=40)` / `models.simulate_targeted_transfer(...)` |
 | **GLS Unit Root (DF-GLS)** | `dfgls y, maxlag(4)` | ERS (1996) code | `adfuller` | `unit_root.dfgls_test(y, regression="ct")` |
@@ -1055,6 +1059,7 @@ If you are transitioning from Stata, MATLAB/Dynare, or statsmodels:
 
 End-to-end replications of canonical papers and pedagogical showcases live under `notebooks/`
 and `puremacro/examples/`:
+- **Reproducible studies**: frozen-data monetary VAR, household transfer and production-network tariff workflows with portable study archives and retained diagnostics (`69`).
 - **Replications of published results**: Clarida–Galí–Gertler (1999) optimal discretion, simple-rule and timeless commitment checked formula by formula, with the unconditional-versus-conditional loss caveat (`66`), Huggett (1993) and Aiyagari (1994) tables re-solved, with numerical-error bounds, an independent solver and the Markov chain's effect (`67`), and third-order perturbation checked tensor by tensor against closed forms and live Dynare 7.0 (`68`).
 - **Regional nowcasting, causal ML and trade policy**: synthetic Latin American nowcasting with vintage news attribution (`59`), interactive Double ML IRM and DML-IV (`60`), trade and HANK policy simulators (`61`), flexible trade CGE building blocks (`62`), Hicksian tariff games with audited equilibrium recovery (`63`), spectral bounds and Keller continuation (`64`), and GVC cost cascades with Hicksian EV/CV attribution (`65`).
 - **Causal ML, continuous-time HJB & regional real time**: implicit HJB with the adjoint KFE and Aiyagari GE (`56`), multi-constraint OccBin coupled with DML (`57`), and Latin American real-time macro vintages (`58`).
@@ -1094,8 +1099,9 @@ All notebooks strictly adhere to the Pyodide contract and the 7-section pedagogi
 - **`docs/trade_dynamic.md`** — Dynamic MRIO with sector-specific capital (`puremacro.trade.dynamic`): steady states, perfect-foresight transitions, horizon acceptance and the determinacy diagnostic (Spanish twin under `docs/es/`).
 - **`docs/trade_gpu.md`** — Hardware backends for trade and spatial GE (`puremacro.trade.gpu`): PyTorch and Apple MLX batched Jacobians, the float64 policy and homotopy continuation (Spanish twin under `docs/es/`).
 - **`docs/data_ecosystem.md`** — Global macro data ecosystem: emissions, energy transitions, commodity benchmark suites, international financial stability, and modular panel builders (`build_climate_panel`, `build_financial_panel`).
-- **`docs/notebooks.md`** — Complete showcase catalog (notebooks 00–68), pedagogical 7-section architecture, and applied policy suites.
+- **`docs/notebooks.md`** — Complete showcase catalog (notebooks 00–69), pedagogical 7-section architecture, and applied policy suites.
 - **`docs/dsge_build.md`** — DSGE models from equations, native Dynare `.mod` loader, 2nd-order pruning, `puremacro-dynare` CLI, OccBin ZLB, non-linear relaxation, and Bayesian MCMC.
+- **`docs/dsge_workflows.md`**, **`docs/dsge_nonlinear.md`**, **`docs/dsge_transitions.md`**, **`docs/dsge_global.md`** — Nonlinear specifications, ordered deterministic commands, continuation and announcements, global policies and local accuracy audits (Spanish mirrors under `docs/es/`).
 - **`docs/models.md`** — Structural models: Sequence-Space HANK, Fake News algorithm, targeted transfers, and DMP search-and-matching.
 - **`docs/monetary_transmission.md`** — The HANK vs. RANK monetary transmission simulator (`models.monetary_transmission`) and its browser lab in plain JavaScript (Spanish twin under `docs/es/`).
 - **`docs/narrative_sign_svar.md`**, **`docs/honest_did.md`**, **`docs/smooth_lp.md`**, **`docs/hank_nonlinear.md`**, **`docs/gertler_karadi.md`**, **`docs/bvar_sv.md`** — the six 2.3 feature guides (each with a Spanish twin under `docs/es/`).

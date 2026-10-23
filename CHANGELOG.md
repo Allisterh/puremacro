@@ -7,6 +7,68 @@ This changelog describes versioned source changes. Check
 Versions 5.3.0, 5.4.0 and 5.4.1 were tagged but not published to PyPI; their
 additions are included in 5.4.2. See the [release procedure](RELEASING.md).
 
+## 5.7.0 (2026-10-23)
+
+**Use one nonlinear model for ordered `.mod` programs, deterministic transitions and comparable local/global policies.**
+
+This release also includes the 5.6.0 development changes below; 5.6.0 was not published to PyPI.
+
+### Added
+
+- `dsge.read_mod` and `NonlinearModel` retain equations, timing and source
+  metadata without requiring a perturbation solution. The same residuals feed
+  steady states, local approximations, perfect foresight and global policies;
+  Python equation callbacks and models without innovations are supported.
+- Ordered deterministic `.mod` programs preserve `initval`, `histval`, `endval`,
+  steady states, deterministic shock declarations and repeated
+  `perfect_foresight_setup`/`perfect_foresight_solver` snapshots. Unsupported
+  commands and options fail preflight rather than disappearing from execution.
+- `solve_transition` adds adaptive continuation in shocks, terminal values and
+  calibration, economic domains, equation/variable scaling, explicit terminal
+  policies and budgeted horizon checks. `solve_announced_path` separates news
+  from later surprises. Compiled equations supply analytic path derivatives;
+  MCP equation mappings and retained audit evidence expose binding constraints.
+- Global time iteration connects explicit state/control mappings of the same
+  equations to Chebyshev, Smolyak and linear interpolation, Gaussian quadrature,
+  constraints and finite refinement budgets. Independent policy audits report
+  equilibrium/KKT errors, infeasibility and probability leaving the domain.
+  Local orders 1–3 can be evaluated and compared on the same audit points;
+  conditioning diagnostics supplement the existing determinacy checks.
+- English/Spanish guides explain mathematical timing, shapes, solver selection,
+  compatibility limits, runnable examples, diagnostics and reproducibility.
+- MAV T02_A–D in English and Spanish use the new workflows, with common model
+  helpers and a fresh-process offline execution runner. T02_A compares equation
+  stacking, `.mod` transitions, announcement timing and local/global policies;
+  T02_D uses the library transition solver for irreversible investment.
+
+### Fixed
+
+- The MAV neoclassical and RBC `.mod` examples now retain future marginal utility
+  inside the Euler expectation. Perfect-foresight paths and first-order rules
+  are equivalent, while higher-order stochastic solutions now use the stated
+  expected marginal return instead of a certainty-only consumption ratio.
+- Corrected English/Spanish stacked Newton-Krylov documentation and the module
+  and architecture descriptions to reflect the existing perfect-foresight and
+  extended-path integration, supported options and numerical failure behavior.
+- One-asset EGM now checks the affine budget and supported consumption constraint
+  structurally, including intermediate local expressions. Nonlinear budgets,
+  asset-dependent custom functions and extra constraints can no longer pass
+  merely because they agree at asset grid nodes, then produce invalid continuous
+  policies or nonfinite life-cycle values. The next-asset coefficient is checked
+  independently of income scale at each calibration, age and discrete choice.
+  Custom functions of exogenous income remain supported; general resource
+  equations and constraints remain available through VFI.
+
+### Known limits
+
+- These are supported subsets of the Dynare language and solution workflows.
+  Global policies require explicit state/control mappings and a chosen domain;
+  convergence or passing a finite audit does not establish a globally unique
+  equilibrium. Newton-Krylov currently rejects MCP and terminal-policy callbacks.
+- The amended T02_A–D notebooks pin their source, models and helpers to `v5.7.0`.
+  Their execution evidence covers local Python; it does not certify Colab, Juno
+  or a browser notebook session. The full original course remains pinned to 5.5.0.
+
 ## 5.6.0 (2026-10-22)
 
 **Write dynamic programs in `.mod` files and preserve complete empirical studies and model scenarios.**

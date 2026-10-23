@@ -9,7 +9,7 @@ f(y_{t+1}, y_t, y_{t-1}, eps_t) = 0,   t = 1, ..., T,
 y_0 = y_init,   y_{T+1} = y_end,
 ```
 
-sin ensamblar nunca el jacobiano apilado. La dirección de Newton se obtiene a partir de productos jacobiano-vector mediante LGMRES, precondicionado con la inversa exacta del jacobiano tridiagonal por bloques en el tiempo evaluado en el estado estacionario. Es un port independiente del modelo de una implementación anterior, escrito con las convenciones de puremacro. Es opcional y separado: `solve_perfect_foresight` y `extended_path` conservan sin cambios su ruta de bloques densos con SuperLU.
+sin ensamblar el jacobiano apilado para los productos jacobiano-vector. La dirección de Newton se obtiene a partir de estos productos mediante LGMRES, precondicionado con la inversa exacta del jacobiano tridiagonal por bloques en el tiempo evaluado en el estado estacionario. Es un port independiente del modelo de una implementación anterior, escrito con las convenciones de puremacro. Tanto `solve_perfect_foresight` como `extended_path` lo ofrecen mediante `linear_solver="krylov"`; su opción predeterminada es `linear_solver="direct"`. Algunos precondicionadores ensamblan una matriz apilada dispersa para factorizarla.
 
 ## Qué calcula
 
@@ -155,11 +155,15 @@ La comparación de horizontes pasa con 60 frente a 120 fechas (`max_abs_differen
 - reglas de comparación de horizontes y el estadístico de 30/60/120 fechas;
 - una regresión de clasificación de precondicionadores marcada como `slow`.
 
-No validado: cualquier modelo más allá de estos modelos analíticos, cualquier sistema a gran escala, memoria o velocidad a escala, versiones de SciPy anteriores a 1.18 más allá de la sustitución de firma indicada, y la delegación desde `solve_perfect_foresight` (véase abajo).
+Estas pruebas no establecen convergencia para modelos arbitrarios ni rendimiento a cualquier escala. Véanse los [benchmarks de escalamiento](performance_scaling.md) para las cargas medidas y sus límites. Las versiones de SciPy anteriores a 1.18 no se validan aquí más allá de la sustitución de firma indicada.
 
 ## Relación con `solve_perfect_foresight` y `extended_path`
 
-Los dos solucionadores comparten el planteamiento del problema y la convención de apilamiento, y `StackedNewtonResult.to_perfect_foresight_result()` convierte un resultado en el contenedor existente. La integración prevista, no implementada en esta versión, es una opción `linear_solver="krylov"` en `solve_perfect_foresight` que construya un `StackedProblem` a partir de sus `eq_fn`, `y_init_arr`, `y_ss_arr` y `exo_sim` resueltos, delegue en `solve_stacked_newton_krylov` y convierta el resultado, con el modo MCP rechazando la opción, y la misma opción en `extended_path` factorizando el precondicionador del estado estacionario una sola vez y reutilizándolo en cada fecha. Hasta entonces, llame a este módulo directamente con la forma de función de las ecuaciones, exactamente como en el ejemplo anterior.
+Desde 5.6.0, `solve_perfect_foresight(..., linear_solver="krylov")` construye un `StackedProblem` a partir de las ecuaciones, condiciones iniciales y terminales y trayectoria de choques resueltas. Devuelve un `PerfectForesightResult` con `linear_solver`, `solver_diagnostics` y el contexto conservado para auditar la trayectoria. `extended_path` pasa el mismo backend y `krylov_options` a cada resolución sucesiva. Las resoluciones sucesivas con sorpresas también admiten este backend. Las cotas MCP con Krylov están explícitamente fuera de soporte.
+
+Los fallos numéricos de Krylov conservan la última trayectoria y los diagnósticos, emiten una advertencia y devuelven `converged=False`; no cambian silenciosamente al backend directo. `tests/test_dsge_pf_krylov.py` cubre paridad de trayectorias no lineales, referencias congeladas de condiciones terminales de Dynare, llamadas sucesivas de extended path y sorpresas, validación de opciones e información de fallos.
+
+El adaptador de desarrollo 5.7.0 utiliza productos jacobiano-vector analíticos para ecuaciones compiladas; las funciones ordinarias conservan productos numéricos. Use `solve_stacked_newton_krylov` directamente para proporcionar un `StackedProblem`, `jvp_fn` o `stacked_jvp_factory` propio. El resultado independiente puede convertirse con `StackedNewtonResult.to_perfect_foresight_result()`. Consulte los [flujos de transición](dsge_transitions.md) para continuación, dominios y reutilización de precondicionadores con bloques idénticos.
 
 ## Documentación relacionada
 

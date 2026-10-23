@@ -59,6 +59,22 @@ The same model solves by discrete VFI with `m.solve()` (r about 0.0303 on this
 grid, in about 8 s against about 1 s for EGM). The two differ because VFI puts
 `a(+1)` on grid nodes and EGM does not.
 
+One-asset EGM verifies that the declared budget is affine in current and next
+assets after expanding local expressions. Matching that form at grid nodes is
+insufficient for continuous policies. Products of asset-dependent terms,
+asset-dependent denominators, nonlinear powers and functions of assets are
+rejected, even when they happen to match on the grid. Multiplication and
+division by asset-independent terms and custom functions of exogenous income
+remain supported. The coefficient on next assets must be -1, checked separately
+from income scale at each calibration, age and discrete choice.
+
+Explicit constraints must be a zero bound on consumption (`c > 0`, `0 < c`,
+or their non-strict forms); local aliases are accepted. Numerical checks also
+require the reward's feasible domain to be exactly positive consumption.
+The grid supplies the borrowing limit. Use VFI for other resource equations
+or constraints; EGM rejects extra constraints even if they are redundant at
+every declared grid node.
+
 ### Reading a solution
 
 `DPSolution` holds the solution whatever the engine:

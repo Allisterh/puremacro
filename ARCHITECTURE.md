@@ -48,10 +48,38 @@ The package was significantly extended in **Phase 5** (April–early-May 2026, c
   Two-asset household declarations use `dp/_two_asset_spec.py` to recognize the
   supported resource/cost identity and bind asset roles and parameter aliases;
   arbitrary functions cannot establish a budget identity through finite probes.
+- `dp/_egm.py`: one-asset EGM expands local expressions and decomposes the budget
+  into coefficients independent of current/next assets before numerical checks.
+  Asset-dependent calls, denominators and nonlinear products are unsupported;
+  exogenous income functions remain allowed. Explicit constraints must be a
+  zero bound on consumption. Next-asset coefficients are checked against -1
+  independently of income scale at every evaluated calibration/age/choice.
 - `dp/modfile.py`: bounded numeric-AST declaration reader feeding the existing
   DP compiler, with source lines and original-byte hashes. `load_mod` never
   solves; `solve_mod` applies explicitly declared options. This is a separate DP
   language with Dynare-style syntax, not a Dynare-compatible DSGE grammar.
+- `dsge/model.py`: `read_mod` compiles a `NonlinearModel` without a steady-state
+  or perturbation solve. Source metadata, timing, residuals and checked steady
+  states are shared by local, path and explicitly mapped global workflows.
+  `_deterministic_execution.py` replays the supported ordered boundary/shock/
+  setup/solver program with snapshots; `_mod_execution.py` retains stochastic
+  invocations. Unsupported state changes fail compatibility preflight.
+- `dsge/transitions.py`: finite-budget continuation in shocks, terminal values
+  and parameters; open economic domains, residual scaling and explicit horizon
+  comparisons. Announcements use dated information sets. Compiled model
+  derivatives feed the direct and Krylov path backends; MCP mappings,
+  fixed steady references, terminal-policy chain rules and exact calibration
+  snapshots remain available to independent path audits. Krylov preconditioners
+  are reused only when their blocks match, never merely by horizon or shape.
+- `dsge/global_solution.py`: explicit equilibrium state/control maps with
+  innovation quadrature and optional conditional shock rules. Time iteration
+  uses `vfi/collocation` and `vfi/smolyak` plus linear interpolation, with bounded
+  refinement. Independent audit points report equilibrium/KKT error, feasibility
+  and domain-exit probability. Global approximation means a policy over a stated
+  domain, not a theorem about global equilibrium existence or uniqueness.
+  `local_accuracy.py` evaluates raw order-1–3 Taylor rules and inspects selected
+  transition roots and Jacobian conditioning; it does not replace BK tests or
+  the separate state history required by pruned simulation.
 - `dsge/_hank_closure.py`: explicit finite-horizon affine aggregate equations
   and household mappings. Linear Jacobians or nonlinear household transitions
   determine responses; outside-horizon deviations are zero. Full-rank checks
@@ -168,7 +196,12 @@ puremacro/
 │                            _mod_execution.py: opt-in ordered fixed-calibration
 │                            command subset with complete compatibility preflight
 │                            and one retained result per invocation. The legacy
-│                            category runner remains the default.
+│                            category runner remains the load_mod default.
+│                            model.py: nonlinear specification without solving;
+│                            read_mod defaults to ordered command execution.
+│                            transitions.py: continuation, domains and news.
+│                            global_solution.py / local_accuracy.py: explicit
+│                            policy mappings and common accuracy diagnostics.
 ├── connectedness/         ← Diebold-Yilmaz spillover
 ├── forecast/              ← Diebold-Mariano, Giacomini-White, density eval
 ├── tests/                 ← Bai-Perron breaks + unit-root tests
@@ -411,7 +444,8 @@ Dynare fixtures under `tests/fixtures/dynare_issue_177/`.
 | `garch/fit` (GARCH(1,1)) | **Mature** | scipy-only; bounded L-BFGS-B with variance floor at 1e-10. |
 | `dsge/klein` | **Mature** | QZ-based; BK condition enforced. `F` and the shock loadings `N`/`L` were corrected at 1.2.0 (see CHANGELOG) and are now pinned against closed-form solutions in `tests/test_dsge/test_klein_analytic.py`. |
 | `dsge/build` | **Stable** | Model DSL + complex-step Jacobians -> `klein_solve`. Validated against the closed-form neoclassical growth model (full depreciation, log utility) to 1e-9 on every matrix. Complex-step needs an analytic residual function; the build cross-checks against finite differences and raises when it is not. |
-| `dsge/stacked_newton` | **Stable** | Matrix-free stacked-time Newton-Krylov for perfect-foresight systems (`StackedProblem`, `solve_stacked_newton_krylov`, `preconditioned_lgmres` with true-residual reporting, exact block-Thomas/SuperLU inverse of the steady-state stacked Jacobian with optional time-block Jacobi and a SuperLU fallback on singular or ill-conditioned block pivots, structured-preconditioner protocol, horizon-doubling comparison). Ported from an earlier implementation; validated against `solve_perfect_foresight` (1e-8, observed <= 7e-11). Pure numpy/scipy/pandas; `dsge/stacked_newton -> reports` only. `solve_perfect_foresight` and `extended_path` do not use it yet. |
+| `dsge/model`, `dsge/transitions`, `dsge/global_solution`, `dsge/local_accuracy` | **Experimental** | 5.7.0 nonlinear specification and shared solution workflows. Tests include frozen deterministic Dynare references, direct/Krylov agreement, continuation failures and constrained path oracles, Brock–Mirman global policies, independent off-grid errors and finite refinement budgets. Domain and information assumptions are explicit; no general convergence or uniqueness guarantee. |
+| `dsge/stacked_newton` | **Stable** | Matrix-free stacked-time Newton-Krylov for perfect-foresight systems (`StackedProblem`, `solve_stacked_newton_krylov`, `preconditioned_lgmres` with true-residual reporting, exact block-Thomas/SuperLU inverse of the steady-state stacked Jacobian with optional time-block Jacobi and a SuperLU fallback on singular or ill-conditioned block pivots, structured-preconditioner protocol, horizon-doubling comparison). Ported from an earlier implementation; validated against the direct `solve_perfect_foresight` backend (1e-8, observed <= 7e-11). Pure numpy/scipy/pandas; `dsge/stacked_newton -> reports` only. Available through `solve_perfect_foresight` and `extended_path` with `linear_solver="krylov"` since 5.6.0; numerical failures retain diagnostics with no silent direct fallback. MCP bounds are unsupported with Krylov. |
 | `runtime/*` | **Stable** | Detection is heuristic by necessity (no API reports "you are in Juno") and every field is overridable by environment variable. `budget` is opt-in: it changes no estimator default. |
 | `pocket/*` | **Stable** | Format is versioned (`FORMAT_VERSION`) and self-describing. A transport format, not a trust boundary — checksums catch corruption, not tampering. |
 | `longrun/*` | **Stable** | The invariance property (chunking and resumption do not change results) is the contract; `tests/test_longrun.py` pins it. |
@@ -884,7 +918,7 @@ Milestone 3.3.0 introduces eight high-performance engines spanning continuous st
 - **Finite Element Galerkin Projection** (`FEMProblem`): Partitions the continuous state space into localized piecewise-polynomial elements using tent/hat basis functions $\phi_i(k)$ with compact support $\text{supp}(\phi_i) = [k_{i-1}, k_{i+1}]$. Enforces Galerkin orthogonality $\int_{k_{\min}}^{k_{\max}} \mathcal{R}(k; \mathbf{c}) \phi_i(k) \, dk = 0$ via Gauss-Legendre quadrature.
 - **Fischer-Burmeister Non-Smooth Complementarity**: Handles borrowing constraints and inequality kinks ($k' \ge \bar{k}$ with multiplier $\lambda \ge 0$ and $\lambda(k' - \bar{k}) = 0$) using the smoothed Fischer-Burmeister NCP operator:
   $$\Psi_{\text{FB}}^\epsilon(a, b) = a + b - \sqrt{a^2 + b^2 + 2\epsilon} = 0$$
-  where $a = k' - \bar{k}$ and $b = u'(c) - \beta \mathbb{E}[u'(c') R']$. This smooth reformulation eliminates combinatorial Kuhn-Tucker regime-switching loops and guarantees global convergence in Newton iterations.
+  where $a = k' - \bar{k}$ and $b = u'(c) - \beta \mathbb{E}[u'(c') R']$. This reformulation avoids enumerating Kuhn-Tucker regimes. Positive smoothing changes the exact complementarity condition; neither smoothing nor Newton iteration guarantees global convergence. Feasibility and complementarity residuals require separate checks.
 
 #### 2. Shape-Preserving Splines & Smolyak Sparse Grids (`vfi/splines.py`, `vfi/smolyak.py`)
 - **Shape-Preserving Splines** (`CubicBSpline`, `SchumakerSpline`): Standard cubic splines often suffer from Runge phenomena and spurious oscillations near policy kinks. puremacro implements:

@@ -17,7 +17,9 @@ siguen siendo implementaciones separadas para la enseñanza.
 | **Diapositivas (PDF)** | <https://jalonso1979.github.io/puremacro/curso/diapositivas/> |
 | **Cuadernos (Colab)** | [`notebooks/`](notebooks/) |
 
-**Actualización del 22 de octubre de 2026.** [T02_D](notebooks/T02_D_occbin_zlb_regimes_es.ipynb) añade un RBC con inversión irreversible: §8 aplica OccBin a un choque de productividad realizado y §9 resuelve un choque de volatilidad estocástica con `puremacro.vfi.Case2Problem`. [Las diapositivas 4](https://jalonso1979.github.io/puremacro/curso/diapositivas/MAV_04_ciclos_economicos_reales_y_contabilidad_del_ciclo.pdf#page=43) desarrollan el álgebra, el método y las respuestas. El cuaderno actualizado mantiene puremacro 5.5.0 y los auxiliares congelados; el tag `course-2026A-5.5.0` conserva su contenido original. Véase la [validación adicional](validation/README.md).
+**Actualización DSGE del 23 de octubre de 2026.** Los ocho cuadernos T02_A–D en español e inglés fijan su código, auxiliares y modelos a `v5.7.0`. Comparten ecuaciones entre aproximaciones locales, previsión perfecta y políticas globales; incluyen ejecución ordenada de `.mod`, continuación, anuncios y auditorías independientes. Use la [instalación para T02_A–D](notebooks/README.md) y la [guía de métodos](../docs/es/dsge_workflows.md). La edición completa original de 5.5.0 conserva su tag y su evidencia.
+
+**Antecedente: 22 de octubre de 2026.** [T02_D](notebooks/T02_D_occbin_zlb_regimes_es.ipynb) añade un RBC con inversión irreversible: §8 aplica OccBin a un choque de productividad realizado y §9 resuelve un choque de volatilidad estocástica con `puremacro.vfi.Case2Problem`. [Las diapositivas 4](https://jalonso1979.github.io/puremacro/curso/diapositivas/MAV_04_ciclos_economicos_reales_y_contabilidad_del_ciclo.pdf#page=43) desarrollan el álgebra, el método y las respuestas. Esa ejecución histórica usó puremacro 5.5.0 y auxiliares congelados; la revisión actual usa 5.7.0; el tag `course-2026A-5.5.0` conserva su contenido original. Véase la [validación adicional](validation/README.md).
 
 ## Qué hay aquí
 
@@ -39,7 +41,9 @@ El código es MIT, como puremacro. Las diapositivas y el texto de los cuadernos 
 
 Public materials for Jorge Alonso-Ortiz's *Advanced Macroeconomics* course (ITAM, fall 2026), built on [puremacro](https://jorgealonsoortiz.work/puremacro/). The course is taught in Spanish; the labs and notebooks also come in English.
 
-**22 October 2026 update.** [T02_D](notebooks/T02_D_occbin_zlb_regimes.ipynb) adds an RBC model with irreversible investment: §8 applies OccBin to a realized productivity shock and §9 solves a stochastic-volatility shock with `puremacro.vfi.Case2Problem`. [Slides 4](https://jalonso1979.github.io/puremacro/curso/diapositivas/MAV_04_ciclos_economicos_reales_y_contabilidad_del_ciclo.pdf#page=43) develop the algebra, method and responses. The updated notebook retains puremacro 5.5.0 and the frozen helpers; tag `course-2026A-5.5.0` retains its original contents. See the [additional validation](validation/README.md).
+**23 October 2026 DSGE update.** The eight English/Spanish T02_A–D notebooks pin code, helpers and models to `v5.7.0`. They share equations across local approximations, perfect foresight and global policies, with ordered `.mod` execution, continuation, announcements and independent audits. Use the [T02_A–D setup](notebooks/README.md) and [method guide](../docs/dsge_workflows.md). The complete original 5.5.0 edition retains its tag and evidence.
+
+**Earlier update: 22 October 2026.** [T02_D](notebooks/T02_D_occbin_zlb_regimes.ipynb) adds an RBC model with irreversible investment: §8 applies OccBin to a realized productivity shock and §9 solves a stochastic-volatility shock with `puremacro.vfi.Case2Problem`. [Slides 4](https://jalonso1979.github.io/puremacro/curso/diapositivas/MAV_04_ciclos_economicos_reales_y_contabilidad_del_ciclo.pdf#page=43) develop the algebra, method and responses. That historical execution used puremacro 5.5.0 and frozen helpers; the current revision uses 5.7.0; tag `course-2026A-5.5.0` retains its original contents. See the [additional validation](validation/README.md).
 
 **Course edition:** Python 3.12 or later and `puremacro==5.5.0`, with helpers, data, models and cache pinned
 by tag `course-2026A-5.5.0`. The `puremacro.dp` and `puremacro.text` sections are

@@ -132,7 +132,18 @@ def audit_perfect_foresight(out, result, model):
         if shocks.ndim not in (1, 2) or shocks.shape[0] != periods or not np.all(np.isfinite(shocks)):
             raise ValueError("exogenous_path must be finite with exactly one row per reported date")
         equation = _steady_state_adapter(context["equations"])
-        full = np.vstack((initial, path, terminal))
+        terminal_lead = terminal.copy()
+        terminal_policy = context.get("terminal_policy")
+        if terminal_policy is not None:
+            if not callable(terminal_policy):
+                raise ValueError("terminal_policy must be callable")
+            reference_input = _array(context["terminal_policy_input"], (n,), "terminal_policy_input")
+            reference_output = _array(context["terminal_policy_output"], (n,), "terminal_policy_output")
+            replayed = _array(terminal_policy(reference_input.copy()), (n,), "terminal_policy replay")
+            if not np.array_equal(replayed, reference_output):
+                raise ValueError("terminal_policy changed since the solve; retained reference no longer matches")
+            terminal_lead = _array(terminal_policy(path[-1].copy()), (n,), "terminal_policy output")
+        full = np.vstack((initial, path, terminal_lead))
         errors = np.empty_like(path)
         for t in range(periods):
             value = equation(full[t + 2].copy(), full[t + 1].copy(), full[t].copy(),

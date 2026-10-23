@@ -90,13 +90,16 @@ changes. Macro programs must be loaded with `command_mode="ordered"` to retain
 this provenance. For plain text, `execute_mod_commands(ordered=True)` can also
 check an already loaded model, but loading has already performed its solve.
 
-The initial subset consists of repeated `stoch_simul`, `calib_smoother` and
-`shock_decomposition` after one fixed declaration/calibration phase. It rejects
-interleaved assignments or new shock blocks, repeated parameter assignments
-that the legacy parser would collapse, policy commands, terminal-state blocks,
-HANK commands, and mixed deterministic/stochastic programs. Every known
-incompatibility is checked before the first numerical command. Supplied data
-schema and every requested sample are also checked before any invocation.
+The stochastic subset supports repeated `stoch_simul`, `calib_smoother` and
+`shock_decomposition` at a fixed calibration. The 5.7.0 development extension
+also replays deterministic boundary blocks, shock declarations and repeated
+perfect-foresight setup/solver commands, including mixed deterministic and
+stochastic programs. Use `read_mod(source).execute_mod_commands()` to start
+without an implicit steady-state or perturbation solve; see the
+[nonlinear model guide](dsge_nonlinear.md) for the supported options and snapshots.
+Interleaved parameter assignments, policy commands and HANK commands remain
+unsupported in ordered execution. Known incompatibilities, supplied data schema
+and requested samples are checked before the first numerical command.
 
 | Command | Supported explicit options | Effective behavior |
 |---|---|---|

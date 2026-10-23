@@ -2,6 +2,8 @@
 
 # Cuaderno de bocetos DSGE: modelos desde ecuaciones, no matrices
 
+Para la interfaz no lineal de 5.7 y la elección entre métodos locales, deterministas y globales, empiece con [Flujos DSGE](dsge_workflows.md). Esta página también documenta las interfaces anteriores de bocetos y soluciones locales.
+
 `puremacro.dsge.klein_solve` siempre ha resuelto modelos lineales de expectativas racionales sin necesidad de Dynare ni de un compilador externo — pero requiere las matrices `A`, `B` y `C`, y obtenerlas implica diferenciar las condiciones de equilibrio a mano. Esa derivación algebraica es precisamente el paso donde los investigadores cometen errores y el paso en el que una tableta ofrece menos facilidades: sin sistema algebraico computacional, sin MATLAB y sin margen para el error.
 
 `dsge.build` elimina esa barrera. Escriba las condiciones de equilibrio tal como aparecen en el artículo:
@@ -178,7 +180,7 @@ print(m.theoretical_moments().summary())
 
 ### 4b. Nivel 0: El Front End — Preprocesador de Macros, Parser AST y Diferenciación Simbólica (v2.7.0)
 
-A partir de `puremacro 2.7.0`, el motor DSGE incorpora un pipeline frontal de nivel de producción diseñado para compatibilidad nativa con modelos de Dynare publicados y sin ninguna dependencia externa:
+A partir de `puremacro 2.7.0`, el motor DSGE incorpora un parser para un subconjunto documentado de archivos Dynare, usando las dependencias del núcleo científico de Python:
 
 #### Directivas de Macro Dynare
 `puremacro.dsge` preprocesa de forma nativa las directivas macro de Dynare antes de la tokenización:
@@ -218,12 +220,14 @@ m = dsge.load_mod(mod_macro)
     `load_mod(..., command_mode="ordered")` y
     `m.execute_mod_commands(ordered=True, data=...)` conservan cada invocación
     admitida de simulación, suavizado y descomposición con calibración fija.
+    `read_mod(...).execute_mod_commands()` añade el flujo determinista ordenado
+    sin una resolución implícita al cargar.
     Los cambios de estado no admitidos se rechazan antes de resolver; para
     cambiar calibraciones u otros programas use llamadas explícitas de Python.
     Cargar un archivo con el modo heredado no valida todo su contenido.
 
 - **Cualquier nombre de Dynare**: un parámetro o una variable con nombre de palabra reservada de Python (`lambda`, `yield`) se analiza y se resuelve.
-- **Operadores especiales**: Soporte para `STEADY_STATE(x)` y `diff(x)`. `STEADY_STATE` usa una referencia fija al evaluar trayectorias y derivadas; su expresión no puede contener variables exógenas. Las condiciones terminales de previsión perfecta distinguen `endval` literal de `endval` seguido de `steady` o `endval_steady`, tanto en la resolución directa como en `execute_mod_commands()` en modo legacy (incluido `simul`). Los argumentos explícitos de Python `endval` o `y_end` conservan su precedencia documentada. La ejecución ordenada de comandos no admite previsión perfecta. Véase el [aviso de corrección](ADVISORY.md). `EXPECTATION(k)(x)` se analiza sintácticamente, pero su residuo compilado lanza `NameError`, así que un modelo que lo use todavía no puede resolverse.
+- **Operadores especiales**: Soporte para `STEADY_STATE(x)` y `diff(x)`. `STEADY_STATE` usa una referencia fija al evaluar trayectorias y derivadas; su expresión no puede contener variables exógenas. Las condiciones terminales de previsión perfecta distinguen `endval` literal de `endval` seguido de `steady` o `endval_steady`, tanto en la resolución directa como en `execute_mod_commands()` en modo legacy (incluido `simul`). Los argumentos explícitos de Python `endval` o `y_end` conservan su precedencia documentada. La extensión 5.7.0 admite el subconjunto determinista documentado en la [guía de modelos no lineales](dsge_nonlinear.md), con instantáneas separadas de preparación y resolución. Véase el [aviso de corrección](ADVISORY.md). `EXPECTATION(k)(x)` se analiza sintácticamente, pero su residuo compilado lanza `NameError`, así que un modelo que lo use todavía no puede resolverse.
 - **Funciones Trascendentes**: Análisis sintáctico y diferenciación analítica exacta para `exp`, `log`, `sin`, `cos`, `tan`, `normcdf`, `normpdf`, `erf`, `abs` y `sign`.
 
 #### Diferenciación Simbólica y Eliminación de Subexpresiones Comunes (CSE)

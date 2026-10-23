@@ -101,15 +101,21 @@ def test_explicit_terminal_override_takes_precedence_over_parsed_steady(terminal
 
 
 @pytest.mark.parametrize("terminal", ["literal", "steady", "endval_steady"])
-def test_ordered_mode_still_reports_perfect_foresight_as_unsupported(terminal):
+def test_ordered_mode_rejects_unimplemented_options_and_executes_supported_pf(terminal):
     source = _source(terminal, "setup_solver")
     with pytest.raises(ModCompatibilityError) as loading:
         load_mod(source, command_mode="ordered")
-    assert any(issue.code == "ORDERED_COMMAND_UNSUPPORTED" for issue in loading.value.report.issues)
+    assert any(issue.code == "UNSUPPORTED_OPTION" and "tolx" in issue.reason for issue in loading.value.report.issues)
     model = load_mod(source)
     with pytest.raises(ModCompatibilityError) as execution:
         model.execute_mod_commands(ordered=True)
-    assert any(issue.code == "ORDERED_COMMAND_UNSUPPORTED" for issue in execution.value.report.issues)
+    assert any(issue.code == "UNSUPPORTED_OPTION" and "tolx" in issue.reason for issue in execution.value.report.issues)
+    supported = source.replace(", tolx=1e-12", "")
+    ordered = load_mod(supported, command_mode="ordered").execute_mod_commands(ordered=True)
+    reference_name = "endval_literal" if terminal == "literal" else "endval_solved"
+    reference = pd.read_csv(_FIXTURES / f"{reference_name}_dynare_out.csv").iloc[1:11]
+    assert ordered.perfect_foresight.converged
+    np.testing.assert_allclose(ordered.perfect_foresight.path, reference, rtol=0, atol=1e-10)
 
 
 @pytest.mark.parametrize("loader", [load_mod, _build_from_parsed, parse_mod_to_dag],

@@ -9,7 +9,7 @@ f(y_{t+1}, y_t, y_{t-1}, eps_t) = 0,   t = 1, ..., T,
 y_0 = y_init,   y_{T+1} = y_end,
 ```
 
-without ever assembling the stacked Jacobian. The Newton direction is obtained from Jacobian-vector products by LGMRES, preconditioned with the exact inverse of the block-tridiagonal-in-time Jacobian evaluated at the steady state. It is a model-agnostic port of an earlier implementation, written with puremacro conventions. It is opt-in and separate: `solve_perfect_foresight` and `extended_path` keep their dense-block SuperLU path unchanged.
+without assembling the stacked Jacobian for Jacobian-vector products. The Newton direction is obtained from these products by LGMRES, preconditioned with the exact inverse of the block-tridiagonal-in-time Jacobian evaluated at the steady state. It is a model-agnostic port of an earlier implementation, written with puremacro conventions. Both `solve_perfect_foresight` and `extended_path` expose it through `linear_solver="krylov"`; their default is `linear_solver="direct"`. Some preconditioners assemble a sparse stacked matrix for factorization.
 
 ## What it computes
 
@@ -155,11 +155,15 @@ The horizon comparison passes at 60 versus 120 dates (`max_abs_difference` about
 - horizon comparison rules and the 30/60/120-date statistic;
 - a `slow`-marked preconditioner ranking regression.
 
-Not validated: any model beyond these analytic fixtures, any large-scale system, memory or speed at scale, SciPy releases older than 1.18 beyond the signature substitution above, and the delegation from `solve_perfect_foresight` (see below).
+These tests do not establish convergence for arbitrary models or performance at arbitrary scale. See the [workload scaling benchmarks](performance_scaling.md) for measured workloads and their limits. SciPy releases older than 1.18 are not validated here beyond the signature substitution above.
 
 ## Relation to `solve_perfect_foresight` and `extended_path`
 
-The two solvers share the problem statement and the stacking convention, and `StackedNewtonResult.to_perfect_foresight_result()` converts a result into the existing container. The planned integration, not implemented in this release, is a `linear_solver="krylov"` option on `solve_perfect_foresight` that builds a `StackedProblem` from its resolved `eq_fn`, `y_init_arr`, `y_ss_arr` and `exo_sim`, delegates to `solve_stacked_newton_krylov` and converts the result, with MCP mode rejecting the option, and the same option on `extended_path` factoring the steady-state preconditioner once and reusing it at every date. Until then, call this module directly with the callable form of the equations, exactly as in the example above.
+Since 5.6.0, `solve_perfect_foresight(..., linear_solver="krylov")` builds a `StackedProblem` from its resolved equations, initial and terminal boundaries, and shock path. It returns a `PerfectForesightResult` with `linear_solver`, `solver_diagnostics` and the retained path audit context. `extended_path` forwards the same backend and `krylov_options` to each rolling solve. Rolling surprise solves also support this backend. MCP bounds with Krylov are explicitly unsupported.
+
+Numerical Krylov failures retain the last path and diagnostics, warn, and return `converged=False`; they do not silently switch to the direct backend. `tests/test_dsge_pf_krylov.py` covers nonlinear path parity, frozen Dynare terminal-boundary fixtures, rolling extended-path and surprise calls, option validation and failure reporting.
+
+The 5.7.0 development adapter uses analytic Jacobian-vector products for compiled model equations; plain callbacks retain numerical products. Call `solve_stacked_newton_krylov` directly to supply a custom `StackedProblem`, `jvp_fn` or `stacked_jvp_factory`. The standalone result can be converted with `StackedNewtonResult.to_perfect_foresight_result()`. See [transition workflows](dsge_transitions.md) for continuation, domains and exact-block preconditioner reuse.
 
 ## Related documentation
 

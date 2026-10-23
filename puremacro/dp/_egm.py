@@ -1,8 +1,8 @@
 """Compile a dp model to the endogenous grid method (``puremacro.vfi.solve_egm``).
 
 EGM applies when the model is the one-asset income-fluctuation problem in
-disguise. ``EGMPlan`` checks that from the specification, symbolically where it
-can and numerically on the grid where it must:
+disguise. ``EGMPlan`` establishes the affine budget and supported constraints
+from the expression tree, then checks their numerical values on the grid:
 
 * one state ``a`` (infinite or finite horizon), optionally one discrete choice;
 * the reward depends on the choices only through one local, consumption
@@ -47,10 +47,57 @@ from scipy.sparse.linalg import spsolve
 
 from puremacro.dp._expr import ModelSpecError, substitute, symbols
 from puremacro.dp._felicity import Felicity
-from puremacro.dsge._ast import Param
+from puremacro.dsge._ast import BinOp, Const, Node, Param, UnaryOp, Var
 from puremacro.vfi.distribution import lottery_distribution, lottery_push
 from puremacro.vfi.egm import EGMSolution, egm_step, solve_egm
 from puremacro.vfi.equilibrium import EquilibriumResult
+
+
+def _affine_budget(node: Node, state: str) -> tuple[Node, Node, Node]:
+    """Decompose consumption into (income, current-asset, next-asset coefficients).
+
+    Coefficients may depend on shocks, age, choices and parameters, including
+    registered functions of those inputs. Asset-dependent calls, denominators
+    and nonlinear products cannot be certified by agreement at finitely many
+    nodes: EGM chooses continuous assets between those nodes. Do not cancel
+    such expressions, which could also hide singularities in their domain.
+    """
+    assets = {(state, 0), (state, 1)}
+
+    def dependent(expr: Node) -> bool:
+        return bool(symbols(expr) & assets)
+
+    def split(expr: Node) -> tuple[Node, Node, Node]:
+        zero, one = Const(0.), Const(1.)
+        if not dependent(expr):
+            return expr, zero, zero
+        if isinstance(expr, Var):
+            return (zero, one, zero) if expr.lead == 0 else (zero, zero, one)
+        if isinstance(expr, UnaryOp) and expr.op in {"+", "-"}:
+            a, b, c = split(expr.expr)
+            return UnaryOp(expr.op, a), UnaryOp(expr.op, b), UnaryOp(expr.op, c)
+        if isinstance(expr, BinOp):
+            left, right = expr.left, expr.right
+            if expr.op in {"+", "-"}:
+                a, b, c = split(left)
+                x, y, z = split(right)
+                return BinOp(expr.op, a, x), BinOp(expr.op, b, y), BinOp(expr.op, c, z)
+            if expr.op == "*" and not (dependent(left) and dependent(right)):
+                part, factor = (left, right) if dependent(left) else (right, left)
+                a, b, c = split(part)
+                return BinOp("*", a, factor), BinOp("*", b, factor), BinOp("*", c, factor)
+            if expr.op == "/" and not dependent(right):
+                a, b, c = split(left)
+                return BinOp("/", a, right), BinOp("/", b, right), BinOp("/", c, right)
+            if expr.op == "^" and right == one:
+                return split(left)
+        requirement = (f"{state}(+1) not to depend on {state}(+1)" if (state, 1) in symbols(expr)
+                       else f"{state}(+1) linear in {state}")
+        raise ModelSpecError(f"method='egm' needs consumption + {requirement}; "
+                             "the budget must be structurally affine in assets. "
+                             "Use method='vfi' for general resource equations.")
+
+    return split(node)
 
 
 @dataclass
@@ -113,6 +160,20 @@ class EGMPlan:
         self.a = comp.state_grids[0]
         self.n_z = comp.P.shape[0]
         self.cname = self._consumption_local()
+        expanded: dict[str, Node] = {}
+        for name, node in comp.locals:
+            expanded[name] = substitute(node, expanded)
+        budget = expanded[self.cname]
+        _, _, saving_coefficient = _affine_budget(budget, comp.state_names[0])
+        # A constraint can agree with c > 0 at every grid node but exclude
+        # interior policies. Require the declared zero bound on consumption;
+        # the existing numerical check also verifies the reward's domain.
+        positive = (BinOp(">", budget, Const(0.)), BinOp("<", Const(0.), budget),
+                    BinOp(">=", budget, Const(0.)), BinOp("<=", Const(0.), budget))
+        if any(substitute(node, expanded) not in positive for node in comp.constraints):
+            raise ModelSpecError(f"method='egm' supports exactly the constraint {self.cname} > 0 "
+                                 "(plus the grid's borrowing limit); extra constraints cannot be "
+                                 "validated from grid probes. Use method='vfi' for other constraints.")
         inl: dict = {}
         for name, node in comp.locals:
             if name != self.cname:
@@ -120,6 +181,7 @@ class EGMPlan:
         self.felicity = Felicity(substitute(comp.reward, inl), self.cname, self.dname, comp.param_names,
                                  "method='egm'", functions=m._functions)
         self._c_fn = comp._household_function("_dp_c", Param(self.cname))
+        self._saving_coefficient_fn = comp._household_function("_dp_saving_coefficient", saving_coefficient)
 
     # ------------------------------------------------------------ structure
     def _consumption_local(self) -> str:
@@ -165,6 +227,10 @@ class EGMPlan:
     def budget(self, params: dict, age=None, d=None) -> tuple[float, np.ndarray]:
         """Return (R, y) with c + a(+1) = R*a + y(z), or raise if the budget is not of that form."""
         a, n_a = self.a, self.a.size
+        coefficient = np.asarray(self._call(self._saving_coefficient_fn, a[0], a[0], 1, params, age, d))
+        if not np.all(np.isfinite(coefficient)) or np.any(np.abs(coefficient + 1.) > 1e-12):
+            raise ModelSpecError("method='egm' needs a coefficient of -1 on next-period assets "
+                                 "in the consumption budget c + a(+1) = R*a + y(z)")
         cur, nxt = a.reshape(n_a, 1, 1), a.reshape(1, n_a, 1)
         c3 = np.broadcast_to(self._call(self._c_fn, nxt, cur, 3, params, age, d), (n_a, n_a, self.n_z))
         coh = c3 + nxt

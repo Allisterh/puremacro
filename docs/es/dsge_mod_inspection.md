@@ -79,13 +79,17 @@ Los programas macro requieren `command_mode="ordered"`. Para fuentes sin macros,
 también puede usar `execute_mod_commands(ordered=True)` en un modelo ya cargado,
 pero en ese caso la resolución de carga ya ocurrió.
 
-El subconjunto admite `stoch_simul`, `calib_smoother` y `shock_decomposition`
-repetidos después de una sola fase fija de declaración/calibración. Rechaza
-reasignaciones intercaladas, nuevos shocks después de comandos numéricos,
-asignaciones repetidas que el analizador colapsaría, políticas, bloques terminales,
-HANK y combinaciones deterministas/estocásticas. Todas las incompatibilidades
-conocidas, el esquema de datos y los intervalos muestrales se validan antes del
-primer comando numérico.
+El subconjunto estocástico admite `stoch_simul`, `calib_smoother` y
+`shock_decomposition` repetidos con calibración fija. La extensión de desarrollo
+5.7.0 también reproduce bloques de frontera, declaraciones de choques y comandos
+repetidos de preparación/resolución de previsión perfecta, incluidos programas
+deterministas y estocásticos combinados. Use
+`read_mod(source).execute_mod_commands()` para empezar sin resolver implícitamente
+el estado estacionario ni la perturbación; la [guía de modelos no lineales](dsge_nonlinear.md)
+describe las opciones y las instantáneas admitidas. Las reasignaciones intercaladas
+de parámetros y los comandos de política y HANK siguen fuera del soporte ordenado.
+Las incompatibilidades conocidas, el esquema de datos y los intervalos muestrales
+se validan antes del primer comando numérico.
 
 | Comando | Opciones explícitas soportadas | Valores iniciales |
 |---|---|---|
