@@ -15,7 +15,7 @@
       "seconds": 124.83,
       "warnings": [],
       "errors": [],
-      "output_sha256": "062744f779987e0df4e748b0a76e9d8745705346988658caf6de8973355f7deb",
+      "output_sha256": "d5dbe6016f0290460bcf6cfb4134687d2edfeac995b99fcb77df53522d0575cb",
       "girf_tables_equal_5_3_0_reference": true,
       "girf_tables_sha256": "1e12cc5e8f0cadbf1a4ad6ceec56c63154223f4abbc236d2e03abe0f8c9288e1",
       "teaching_cells_equal_local_master": true
@@ -29,7 +29,7 @@
       "seconds": 123.64,
       "warnings": [],
       "errors": [],
-      "output_sha256": "d3bb5704e840f85ff5217bc0b8eee0e478f845f14faacee1dd14efa1c5c46f3a",
+      "output_sha256": "48b9135eba12f9e5184dd541eedae67c4b8cd8c98a191cc14ee202a8a5f00896",
       "girf_tables_equal_5_3_0_reference": true,
       "girf_tables_sha256": "9bace479eda1a08f1c4be8827fffd527a24dd943127de35f6eac7401b06e0649",
       "teaching_cells_equal_local_master": true

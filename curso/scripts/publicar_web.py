@@ -65,6 +65,12 @@ DEST_DIAP = DESTINO / "site" / "diapositivas"
 REPO = "jalonso1979/puremacro"
 EDICION = "course-2026A-5.5.0"
 RAMA = EDICION
+# Independently executed amendments keep the edition's runtime and helper pin.
+# Their current teaching cells are available on main; the release tag stays immutable.
+ACTUALIZADOS = frozenset({
+    "T02_D_occbin_zlb_regimes_es.ipynb",
+    "T02_D_occbin_zlb_regimes.ipynb",
+})
 RUTA_EN_REPO = "curso/notebooks"
 # Versión de puremacro que piden los cuadernos en Colab.
 PUREMACRO = "puremacro==5.5.0"
@@ -163,7 +169,8 @@ def _codigo(nombre: str) -> str:
 
 
 def _url_colab(nombre: str) -> str:
-    return f"https://colab.research.google.com/github/{REPO}/blob/{RAMA}/{RUTA_EN_REPO}/{nombre}"
+    rama = "main" if nombre in ACTUALIZADOS else RAMA
+    return f"https://colab.research.google.com/github/{REPO}/blob/{rama}/{RUTA_EN_REPO}/{nombre}"
 
 
 # ---------------------------------------------------------------------------
@@ -580,8 +587,8 @@ TEMAS = {  # código -> (tema en español, tema en inglés)
               "Canonical RBC: simulation, moments and the hours debate"),
     "T02_C": ("Precios rígidos y búsqueda: fricciones en bienes y trabajo",
               "Sticky prices and search: frictions in goods and labour markets"),
-    "T02_D": ("Restricciones ocasionalmente activas y límite inferior cero (OccBin)",
-              "Occasionally binding constraints and the zero lower bound (OccBin)"),
+    "T02_D": ("OccBin, inversión irreversible y choques de incertidumbre",
+              "OccBin, irreversible investment and uncertainty shocks"),
     "T02_E": ("Estimación bayesiana de modelos DSGE y comparación de modelos",
               "Bayesian DSGE estimation and model comparison"),
     "T02_F": ("Fricciones macrofinancieras: Gertler y Karadi (2011)", "Macro-financial frictions: Gertler–Karadi (2011)"),
@@ -653,6 +660,10 @@ auxiliares `_datos.py`, `_nbstyle.py`, `_tutor.py`, `_llm.py` y `_t01.py`, los d
 `data_curso/` y los modelos `.mod` en `modelos/`. Las diapositivas en PDF están
 en `curso/site/diapositivas/`.
 
+**Actualización del 22 de octubre de 2026.** [T02_D](T02_D_occbin_zlb_regimes_es.ipynb) añade un RBC con inversión irreversible: §8 aplica OccBin a un choque de productividad realizado y §9 resuelve un choque de volatilidad estocástica con `puremacro.vfi.Case2Problem`. [Las diapositivas 4](https://jalonso1979.github.io/puremacro/curso/diapositivas/MAV_04_ciclos_economicos_reales_y_contabilidad_del_ciclo.pdf#page=43) desarrollan el álgebra, el método y las respuestas. El cuaderno actualizado mantiene puremacro 5.5.0 y los auxiliares congelados; el tag `course-2026A-5.5.0` conserva su contenido original. Véase la [validación adicional](../validation/README.md).
+
+Para ejecutar esta actualización localmente, use un clon de `main` o descargue el cuaderno actualizado dentro de `curso/notebooks/` de la edición congelada. Las instrucciones de abajo reproducen el tag original.
+
 ## Abrir un cuaderno en Google Colab
 
 Haga clic en el enlace del cuaderno. La primera celda de código instala
@@ -710,6 +721,10 @@ This folder holds the notebooks in Spanish (`*_es.ipynb`) and English, the
 helpers `_datos.py`, `_nbstyle.py`, `_tutor.py`, `_llm.py` and `_t01.py`, the frozen data in
 `data_curso/` and the `.mod` models in `modelos/`. The PDF slides are in
 `curso/site/diapositivas/` (in Spanish).
+
+**22 October 2026 update.** [T02_D](T02_D_occbin_zlb_regimes.ipynb) adds an RBC model with irreversible investment: §8 applies OccBin to a realized productivity shock and §9 solves a stochastic-volatility shock with `puremacro.vfi.Case2Problem`. [Slides 4](https://jalonso1979.github.io/puremacro/curso/diapositivas/MAV_04_ciclos_economicos_reales_y_contabilidad_del_ciclo.pdf#page=43) develop the algebra, method and responses. The updated notebook retains puremacro 5.5.0 and the frozen helpers; tag `course-2026A-5.5.0` retains its original contents. See the [additional validation](../validation/README.md).
+
+To run this update locally, use a `main` checkout or download the updated notebook into the frozen edition’s `curso/notebooks/` directory. The instructions below reproduce the original tag.
 
 ## Open a notebook in Google Colab
 

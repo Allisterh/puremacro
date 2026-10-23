@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import importlib.util
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -79,7 +81,8 @@ def test_badges_and_setup_are_idempotent_for_every_notebook():
         assert publication.reescribir_celda0(first, path.name) == first
         assert publication.reescribir_celda1(setup, path.name) == (setup, [])
         assert "puremacro==5.5.0" in setup
-        assert "/blob/course-2026A-5.5.0/" in first
+        ref = "main" if path.name in publication.ACTUALIZADOS else publication.EDICION
+        assert f"/blob/{ref}/" in first
         assert "MAV_LLM_MODE" in setup and '"cache"' in setup
         for capability in nb["metadata"].get("course_required_capabilities", []):
             counts[capability] += 1
@@ -102,7 +105,28 @@ def test_generated_readme_uses_same_edition_and_extras_pin(tmp_path, monkeypatch
     assert "puremacro[io]==5.5.0" in actual
     assert "puremacro[local-llm]==5.5.0" in actual
     assert "git clone --branch course-2026A-5.5.0" in actual
-    assert "/blob/main/" not in actual
+    amended_links = set(re.findall(r"/blob/main/curso/notebooks/([^()\s]+\.ipynb)", actual))
+    assert amended_links == publication.ACTUALIZADOS
+
+
+def test_course_amendments_have_matching_execution_evidence():
+    """A mutable lesson link requires its own source and executed-output record."""
+    evidence = json.loads((ROOT / "curso/validation/rbc-uncertainty-2026-10-22.json").read_text(encoding="utf-8"))
+    assert evidence["puremacro"] == "5.5.0"
+    assert {row["notebook"] for row in evidence["notebooks"]} == publication.ACTUALIZADOS
+    for row in evidence["notebooks"]:
+        path = NOTEBOOKS / row["notebook"]
+        nb = json.loads(path.read_text(encoding="utf-8"))
+        assert nb["metadata"]["course_edition"] == publication.EDICION
+        assert nb["metadata"]["course_amendment"] == "2026-10-22-rbc-uncertainty"
+        source = [(c["cell_type"], _text(c)) for c in nb["cells"]]
+        assert hashlib.sha256(json.dumps(source, ensure_ascii=False).encode()).hexdigest() == row["source_sha256"]
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == row["output_sha256"]
+        assert row["ok"] and not row["errors"] and not row["warnings"]
+        assert row["girf_tables_equal_5_3_0_reference"]
+        code = [c for c in nb["cells"] if c["cell_type"] == "code"]
+        assert len(code) == row["code_cells"] == 20
+        assert all(c["execution_count"] is not None for c in code)
 
 
 @pytest.mark.mechanism_control
