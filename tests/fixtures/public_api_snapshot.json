@@ -259,10 +259,16 @@
       "Model",
       "ModelSpecError",
       "Panel",
-      "crra"
+      "crra",
+      "load_mod",
+      "solve_mod"
     ],
     "puremacro.dp.model": [
       "Model"
+    ],
+    "puremacro.dp.modfile": [
+      "load_mod",
+      "solve_mod"
     ],
     "puremacro.dp.processes": [
       "AR1",
@@ -1930,7 +1936,10 @@
       "effective_sample_size",
       "gelman_rubin",
       "geweke_z",
+      "mcse_mean",
+      "multichain_ess",
       "random_walk_metropolis",
+      "rank_normalized_rhat",
       "trace_summary"
     ],
     "puremacro.midas": [
@@ -2521,6 +2530,14 @@
       "infer_policy_stance",
       "score_multilingual"
     ],
+    "puremacro.narrative.signals": [
+      "SignalPropagation",
+      "build_signal_draws",
+      "calibrate_signal",
+      "evaluate_events",
+      "propagate_signal",
+      "score_documents"
+    ],
     "puremacro.narrative.store": [
       "CorpusStore",
       "SCHEMA_VERSION",
@@ -2910,6 +2927,8 @@
       "MoranResult",
       "SpatialEffectsResult",
       "SpatialLMResult",
+      "SpatialLPBootstrap",
+      "SpatialLPBootstrapResult",
       "SpatialLPResult",
       "SpatialModelResult",
       "SpatialOLSResult",
@@ -2954,6 +2973,8 @@
       "spatial_hac_panel_meat"
     ],
     "puremacro.spatial.lp": [
+      "SpatialLPBootstrap",
+      "SpatialLPBootstrapResult",
       "SpatialLPResult",
       "higher_order_weights",
       "spatial_lag_panel",
@@ -3010,6 +3031,19 @@
     ],
     "puremacro.structural.lp": [
       "lp_moment_targets"
+    ],
+    "puremacro.study": [
+      "ScenarioResult",
+      "ScenarioSpec",
+      "StudyComparison",
+      "StudyResult",
+      "StudySpec",
+      "VariableSpec",
+      "compare_studies",
+      "load_study",
+      "record_scenario",
+      "run_study",
+      "save_study"
     ],
     "puremacro.synthetic_control": [
       "SyntheticControlResult",
@@ -3739,7 +3773,10 @@
       "CaseResult",
       "DerivativeCheck",
       "Mechanism",
+      "PathAuditContext",
       "RefinementCheck",
+      "RefinementLadder",
+      "RefinementLevel",
       "ResearchBenchmark",
       "ResearchBenchmarkReport",
       "ResidualCheck",
@@ -3765,6 +3802,7 @@
       "CountryVARX",
       "FAVARResult",
       "GVARGIRFResult",
+      "GVARIndependentNullResult",
       "GVARResult",
       "VarEstimateResult",
       "WeakExogeneityResult",
@@ -4888,10 +4926,13 @@
       "variable_names"
     ],
     "puremacro.dsge._results.HANKResult": [
+      "_audit_context",
       "asset_distribution",
       "asset_grid",
+      "closure",
       "converged",
       "deposit_distribution",
+      "diagnostics",
       "horizon",
       "jacobians",
       "joint_distribution",
@@ -5451,11 +5492,14 @@
       "variable_names"
     ],
     "puremacro.dsge.perfect_foresight.PerfectForesightResult": [
+      "_audit_context",
       "converged",
       "initial_residual_norm",
       "iterations",
+      "linear_solver",
       "path",
       "residual_norm",
+      "solver_diagnostics",
       "terminal_error",
       "variable_names"
     ],
@@ -6133,6 +6177,7 @@
     ],
     "puremacro.models.hank_sequence_space.NonlinearHANKResult": [
       "U",
+      "_audit_context",
       "converged",
       "horizon",
       "irf_consumption_linear",
@@ -6457,12 +6502,36 @@
       "token_count",
       "uncertainty_intensity"
     ],
+    "puremacro.narrative.signals._propagate.SignalPropagation": [
+      "_attempts",
+      "_baseline",
+      "_draws",
+      "_metadata"
+    ],
     "puremacro.narrative.topics.DynamicTopicModelResult": [
       "components",
       "document_topics",
       "feature_names",
       "topic_keywords",
       "topic_shares"
+    ],
+    "puremacro.narrative.types.BenchmarkScore": [
+      "mae",
+      "mean_bias",
+      "n_obs",
+      "pearson",
+      "rmse",
+      "spearman",
+      "unit"
+    ],
+    "puremacro.narrative.types.EventPanelScore": [
+      "auc",
+      "n_events",
+      "n_obs",
+      "polarity",
+      "spearman",
+      "top_decile_hit_rate",
+      "top_n"
     ],
     "puremacro.narrative.types.NarrativeEvent": [
       "confidence",
@@ -6513,6 +6582,15 @@
       "multilingual_parity",
       "n_docs_per_period",
       "survey_scores"
+    ],
+    "puremacro.narrative.types.SurveyScore": [
+      "mae",
+      "mean_bias",
+      "n_obs",
+      "pearson",
+      "rmse",
+      "spearman",
+      "unit"
     ],
     "puremacro.narrative.validation.spec_curve.NarrativeSpecificationCurve": [
       "_results",
@@ -6868,6 +6946,21 @@
       "psd_tol",
       "sigma"
     ],
+    "puremacro.spatial._lp_bootstrap.SpatialLPBootstrap": [
+      "assume_stationary",
+      "block_length",
+      "n_boot",
+      "seed"
+    ],
+    "puremacro.spatial._lp_bootstrap.SpatialLPBootstrapResult": [
+      "coefficient_draws",
+      "joint_mc_se",
+      "joint_p_value",
+      "joint_statistic",
+      "metadata",
+      "statistic_draws",
+      "table"
+    ],
     "puremacro.spatial.allen_arkolakis.AllenArkolakisResult": [
       "L_hat",
       "consumer_market_access",
@@ -7153,6 +7246,58 @@
       "success",
       "targets",
       "theta"
+    ],
+    "puremacro.study._core.StudyComparison": [
+      "comparison_note",
+      "studies"
+    ],
+    "puremacro.study._core.StudyResult": [
+      "_frames",
+      "_manifest_json",
+      "spec"
+    ],
+    "puremacro.study._core.StudySpec": [
+      "ci",
+      "controls",
+      "frequency",
+      "horizon",
+      "identification",
+      "lags",
+      "method",
+      "n_boot",
+      "name",
+      "ordering",
+      "responses",
+      "sample_end",
+      "sample_start",
+      "seed",
+      "shock",
+      "shock_size",
+      "variables"
+    ],
+    "puremacro.study._core.VariableSpec": [
+      "name",
+      "scale",
+      "transform",
+      "unit"
+    ],
+    "puremacro.study._scenario.ScenarioResult": [
+      "_frames",
+      "_manifest_json",
+      "_source",
+      "spec"
+    ],
+    "puremacro.study._scenario.ScenarioSpec": [
+      "frequency",
+      "horizon",
+      "identification",
+      "model",
+      "name",
+      "response_convention",
+      "responses",
+      "shock",
+      "shock_size",
+      "variables"
     ],
     "puremacro.synthetic_control.SyntheticControlResult": [
       "actual",
@@ -8129,6 +8274,14 @@
       "tolerance",
       "units"
     ],
+    "puremacro.validation._audit_report.PathAuditContext": [
+      "equations",
+      "exogenous_path",
+      "mode",
+      "variable_names",
+      "y_end",
+      "y_init"
+    ],
     "puremacro.validation._audit_report.RefinementCheck": [
       "atol",
       "evidence_source",
@@ -8137,6 +8290,25 @@
       "rtol",
       "solve",
       "units"
+    ],
+    "puremacro.validation._audit_report.RefinementLadder": [
+      "atol",
+      "consecutive_passes",
+      "evidence_source",
+      "levels",
+      "max_cost",
+      "max_solves",
+      "metrics",
+      "name",
+      "rtol",
+      "units",
+      "validate_pair"
+    ],
+    "puremacro.validation._audit_report.RefinementLevel": [
+      "cost",
+      "name",
+      "settings",
+      "solve"
     ],
     "puremacro.validation._audit_report.ResidualCheck": [
       "evaluate",
@@ -8198,6 +8370,11 @@
       "generated_at",
       "results",
       "schema_version"
+    ],
+    "puremacro.var._gvar_null_bootstrap.GVARIndependentNullResult": [
+      "metadata",
+      "statistic_draws",
+      "table"
     ],
     "puremacro.var._results.VarEstimateResult": [
       "A_list",
