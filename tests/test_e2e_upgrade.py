@@ -68,6 +68,47 @@ def _resolve_publicar_web_path() -> Optional[Path]:
     return None
 
 
+def _load_course_publisher():
+    path = _resolve_publicar_web_path()
+    require_feature("F2", path is not None, "publicar_web.py not found")
+    spec = importlib.util.spec_from_file_location("course_publisher_e2e", path)
+    assert spec is not None and spec.loader is not None
+    publisher = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(publisher)
+    return publisher
+
+
+@pytest.fixture
+def course_publication_fixture(tmp_path, monkeypatch):
+    """Exercise the real selector with files, a matching directory and a non-T file."""
+    publisher = _load_course_publisher()
+    names = ["T01_first.ipynb", "T02_second.ipynb"]
+    for name in [*reversed(names), "notes.ipynb"]:
+        (tmp_path / name).write_text("{}", encoding="utf-8")
+    (tmp_path / "T03_directory.ipynb").mkdir()
+    monkeypatch.setattr(publisher, "FUENTE_NB", tmp_path)
+    return publisher, names
+
+
+@pytest.fixture
+def isolated_course_llm_environment(initial_mode):
+    """Prove helper import and setup defaults restore absent and pre-existing settings."""
+    with pytest.MonkeyPatch.context() as outer:
+        incoming = os.environ.copy()
+        for variable in ("MAV_LLM_MODE", "PUREMACRO_LLM_CACHE"):
+            incoming.pop(variable, None)
+        if initial_mode is not None:
+            incoming.update(MAV_LLM_MODE=initial_mode, PUREMACRO_LLM_CACHE="pre-existing-cache")
+        outer.setattr(os, "environ", incoming)
+        before = incoming.copy()
+        with pytest.MonkeyPatch.context() as isolated:
+            # Direct setdefault calls during import/execution must never touch the caller's mapping.
+            isolated.setattr(os, "environ", incoming.copy())
+            yield isolated
+        assert os.environ is incoming
+        assert dict(os.environ) == before
+
+
 def _resolve_exercises_paths() -> Tuple[Optional[Path], Optional[Path]]:
     """Return paths to EXERCISES.md and EXERCISES_ES.md if present."""
     en = NOTEBOOKS_DIR / "EXERCISES.md"
@@ -240,17 +281,17 @@ class TestTier1Track1CoursePortal:
         assert lines_banxico > 1000, f"banxico_comunicados.csv has only {lines_banxico} lines"
         assert lines_fomc > 1000, f"fomc_statements.csv has only {lines_fomc} lines"
 
-    # --- Feature 2: Web Publication Gating & Colab Sync ---
-    def test_t1_f2_01_publicar_web_script_declares_t00_b_gated(self):
-        """F2: publicar_web.py gates T00_B in EXCLUIDOS or NO_PUBLICAR_AUN."""
-        pub_path = _resolve_publicar_web_path()
-        require_feature("F2", pub_path is not None, "publicar_web.py not found in curso/scripts or TEACHING")
-        content = pub_path.read_text(encoding="utf-8")
-        has_excluidos = "EXCLUIDOS" in content
-        has_no_publicar = "NO_PUBLICAR_AUN" in content
-        assert has_excluidos or has_no_publicar, "publicar_web.py missing gating variables"
-        assert "T00_B_local_model_setup.ipynb" in content, "T00_B_local_model_setup.ipynb not gated"
-        assert "T00_B_configura_tu_modelo_local_es.ipynb" in content, "T00_B_configura_tu_modelo_local_es.ipynb not gated"
+    # --- Feature 2: Complete Course Publication & Colab Sync ---
+    def test_t1_f2_01_publisher_selects_all_validated_notebooks(self):
+        """F2: The published edition includes all 72 validated notebooks, including T00_B."""
+        publisher = _load_course_publisher()
+        selected = [path.name for path in publisher.cuadernos_fuente()]
+        source = sorted(path.name for path in (CURSO_DIR / "notebooks").glob("T*.ipynb")
+                        if path.is_file())
+        manifest = json.loads((CURSO_DIR / "validation/course-2026A-5.5.0.json").read_text(encoding="utf-8"))
+        assert len(source) == 72
+        assert selected == source == sorted(item["notebook"] for item in manifest["results"])
+        assert {"T00_B_local_model_setup.ipynb", "T00_B_configura_tu_modelo_local_es.ipynb"} <= set(selected)
 
     def test_t1_f2_02_publicar_web_auxiliares_includes_t01(self):
         """F2: AUXILIARES list in publicar_web.py includes _t01.py."""
@@ -287,12 +328,70 @@ class TestTier1Track1CoursePortal:
             f"Expected main entry points in {pub_path}, found {func_names}"
         )
 
-    def test_t1_f2_05_gated_notebook_not_leaked_to_public_labs(self):
-        """F2: Gated T00_B notebook is not exposed in public curso/site/labs."""
-        labs_dir = CURSO_DIR / "site" / "labs"
-        if labs_dir.exists():
-            leaks = [f.name for f in labs_dir.glob("*t00_b*")]
-            assert not leaks, f"Gated T00_B leaked into public labs: {leaks}"
+    @pytest.mark.parametrize("name", ["T00_B_local_model_setup.ipynb", "T00_B_configura_tu_modelo_local_es.ipynb"])
+    @pytest.mark.parametrize("initial_mode", [None, "cache", "auto"])
+    def test_t1_f2_05_t00_b_live_model_requires_opt_in(self, name, initial_mode, tmp_path,
+                                                   isolated_course_llm_environment):
+        """F2: Actual T00_B cells use cache by default and reach a live engine only after opt-in."""
+        import puremacro.llm as library
+
+        monkeypatch = isolated_course_llm_environment
+        notebooks = CURSO_DIR / "notebooks"
+        path = notebooks / name
+        nb = json.loads(path.read_text(encoding="utf-8"))
+        source = lambda i: "".join(nb["cells"][i]["source"])
+        # Run the real default-setting statement without Colab installs or IPython magics.
+        setup = ast.parse("\n".join(line for line in source(1).splitlines() if not line.startswith("%")))
+        defaults = [node for node in setup.body if isinstance(node, ast.Expr)
+                    and isinstance(node.value, ast.Call)
+                    and ast.unparse(node.value.func) == "os.environ.setdefault"]
+        assert len(defaults) == 1
+        spec = importlib.util.spec_from_file_location("course_llm_e2e", notebooks / "_llm.py")
+        assert spec is not None and spec.loader is not None
+        helper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(helper)
+        assert helper._LIBRARY is library
+        for variable in ("MAV_LLM_MODE", "PUREMACRO_LLM_MODE", "PUREMACRO_LLM_CACHE"):
+            monkeypatch.delenv(variable, raising=False)
+        monkeypatch.setenv("PUREMACRO_LLM_MODEL", "qwen3-4b")
+        monkeypatch.setenv("MAV_LLM_USER_CACHE", str(tmp_path / "user.sqlite"))
+        monkeypatch.setenv("PUREMACRO_LLM_FALLBACK_CACHE", str(notebooks / "data_curso/llm_cache.sqlite"))
+        if initial_mode is not None:
+            monkeypatch.setenv("MAV_LLM_MODE", initial_mode)
+        calls = {"available": 0, "resolve": 0, "complete": 0}
+
+        class HarmlessEngine:
+            name = "ollama"
+
+            def complete(self, *args, **kwargs):
+                calls["complete"] += 1
+                return "TEST_LIVE_RESPONSE"
+
+        def resolve_engine(*args, **kwargs):
+            calls["resolve"] += 1
+            return HarmlessEngine()
+
+        def available_engines(*args, **kwargs):
+            calls["available"] += 1
+            return ["ollama"]
+
+        monkeypatch.setattr(library._engines, "resolve_engine", resolve_engine)
+        monkeypatch.setattr(library._engines, "available_engines", available_engines)
+        monkeypatch.setattr(library._models, "device_budget_gb", lambda: 32)
+        namespace = {"os": os, "_llm": helper}
+        exec(compile(ast.Module(body=defaults, type_ignores=[]), str(path) + "#cache-default", "exec"), namespace)
+        exec(compile(source(5), str(path) + "#self-check", "exec"), namespace)
+        exec(compile(source(7), str(path) + "#live-comparison", "exec"), namespace)
+        assert namespace["ref"] is not None and not helper.MISSES
+        if initial_mode in (None, "cache"):
+            assert namespace["llm"].mode == namespace["modo_vivo"] == "cache"
+            assert calls == {"available": 0, "resolve": 0, "complete": 0}
+            assert namespace["vivo"] == namespace["ref"]
+        else:
+            assert namespace["llm"].mode == "auto" and namespace["modo_vivo"] == "off"
+            assert calls["available"] >= 1
+            assert calls["resolve"] == calls["complete"] == 1
+            assert namespace["vivo"] == "TEST_LIVE_RESPONSE"
 
     # --- Feature 3: Bilingual Exercises Catalog NB 66–68 ---
     def test_t1_f3_01_exercises_files_exist(self):
@@ -760,12 +859,11 @@ class TestTier2BoundaryTrack1:
         assert "choques_narrativos" in nb_es.name
 
     # F2 Boundary
-    def test_t2_f2_01_empty_excluidos_set_rejection(self):
-        """F2: Gating requires non-empty exclusion set to prevent accidental leak."""
-        pub_path = _resolve_publicar_web_path()
-        require_feature("F2", pub_path is not None, "publicar_web.py missing")
-        content = pub_path.read_text(encoding="utf-8")
-        assert "T00_B" in content
+    def test_t2_f2_01_empty_exclusions_include_only_notebook_files(self, course_publication_fixture, monkeypatch):
+        """F2: Empty exclusions select all T notebooks in order, never directories or unrelated files."""
+        publisher, names = course_publication_fixture
+        monkeypatch.setattr(publisher, "NO_PUBLICAR_AUN", set())
+        assert [path.name for path in publisher.cuadernos_fuente()] == names
 
     def test_t2_f2_02_whitespace_in_auxiliares_names(self):
         """F2: Auxiliaries list contains no accidental leading/trailing whitespace."""
@@ -779,11 +877,11 @@ class TestTier2BoundaryTrack1:
             for it in items:
                 assert it == it.strip(), f"Item has whitespace: '{it}'"
 
-    def test_t2_f2_03_duplicate_exclusions(self):
-        """F2: Exclusion checks function correctly with set membership."""
-        pub_path = _resolve_publicar_web_path()
-        require_feature("F2", pub_path is not None, "publicar_web.py missing")
-        assert pub_path.exists()
+    def test_t2_f2_03_duplicate_exclusions(self, course_publication_fixture, monkeypatch):
+        """F2: Partial exclusions affect only matching files, even with repeated or absent names."""
+        publisher, names = course_publication_fixture
+        monkeypatch.setattr(publisher, "NO_PUBLICAR_AUN", set([names[0], names[0], "T99_absent.ipynb"]))
+        assert [path.name for path in publisher.cuadernos_fuente()] == names[1:]
 
     def test_t2_f2_04_missing_source_colab_files(self):
         """F2: Missing notebook file handles error or skip gracefully."""
@@ -798,16 +896,11 @@ class TestTier2BoundaryTrack1:
         for p in pw.cuadernos_fuente():
             assert p.exists()
 
-    def test_t2_f2_05_all_notebooks_excluded_boundary(self):
+    def test_t2_f2_05_all_notebooks_excluded_boundary(self, course_publication_fixture, monkeypatch):
         """F2: Empty notebook set after exclusions handles boundary cleanly."""
-        script_path = CURSO_DIR / "scripts" / "publicar_web.py"
-        spec = importlib.util.spec_from_file_location("publicar_web", script_path)
-        pw = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(pw)
-        assert len(pw.EXCLUIDOS) >= 2
-        assert "T00_B_local_model_setup.ipynb" in pw.EXCLUIDOS
-        raw = [p.name for p in pw.FUENTE_NB.glob("T*.ipynb")]
-        assert any(ex in raw for ex in pw.EXCLUIDOS)
+        publisher, names = course_publication_fixture
+        monkeypatch.setattr(publisher, "NO_PUBLICAR_AUN", set(names))
+        assert publisher.cuadernos_fuente() == []
 
     # F3 Boundary
     def test_t2_f3_01_empty_markdown_exercise_block(self):

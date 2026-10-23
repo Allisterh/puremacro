@@ -38,12 +38,14 @@ Al final imprime el tamaño total y avisa de cualquier archivo de más de 50 MB
 from __future__ import annotations
 
 import argparse
+import ast
 import csv
 import filecmp
 import json
 import os
 import re
 import shutil
+import shlex
 import sys
 import unicodedata
 from pathlib import Path
@@ -61,20 +63,18 @@ DEST_NB = DESTINO / "notebooks"
 DEST_DIAP = DESTINO / "site" / "diapositivas"
 
 REPO = "jalonso1979/puremacro"
-RAMA = "main"
+EDICION = "course-2026A-5.5.0"
+RAMA = EDICION
 RUTA_EN_REPO = "curso/notebooks"
 # Versión de puremacro que piden los cuadernos en Colab.
-PUREMACRO = "puremacro>=4.8.1,<5"
+PUREMACRO = "puremacro==5.5.0"
 
 # _tutor.py importa _llm.py cuando se llama a tutor(), no al importarse: el paquete lleva los dos o cada
 # pregunta al tutor termina en el texto de respaldo con «ModuleNotFoundError».
 AUXILIARES = ["_datos.py", "_nbstyle.py", "_tutor.py", "_llm.py", "_t01.py"]
 EXCLUIR_DATOS = {"tmp_check", "__pycache__", ".ipynb_checkpoints"}
 # Cuadernos que existen en notebooks/ pero aún no se publican.
-EXCLUIDOS: set[str] = {
-    "T00_B_local_model_setup.ipynb",
-    "T00_B_configura_tu_modelo_local_es.ipynb",
-}
+EXCLUIDOS: set[str] = set()  # T00_B runs in cache mode; live setup is optional.
 NO_PUBLICAR_AUN: set[str] = EXCLUIDOS
 # Notas internas del paquete de datos (menciona claves de calificación y figuras_curso.py).
 EXCLUIR_ARCHIVOS_DATOS = {Path("bundle_2026A/LEEME.md")}
@@ -171,14 +171,14 @@ def _url_colab(nombre: str) -> str:
 # ---------------------------------------------------------------------------
 _INSIGNIA = re.compile(
     r"\[!\[[^\]]*\]\(https://colab\.research\.google\.com/assets/colab-badge\.svg\)\]\([^)]*\)")
-_NOTA_COLAB = re.compile(r"^> \*\*(?:Nota para Google Colab|Google Colab Note)\*\*:.*$", re.M)
+_NOTA_COLAB = re.compile(r"^> \*\*(?:Nota para Google Colab|Google Colab [Nn]ote)\*\*:.*$", re.M)
 
 NOTA_ES = ("> **Nota para Google Colab**: la celda siguiente instala `puremacro` y, si hace falta, "
            f"descarga del repositorio público [{REPO}](https://github.com/{REPO}) sólo la carpeta "
-           f"`{RUTA_EN_REPO}` (auxiliares, datos congelados y modelos). No pide acceso a Google Drive.")
+           f"`{RUTA_EN_REPO}` de la edición `{EDICION}` (auxiliares, datos congelados y modelos). No pide acceso a Google Drive.")
 NOTA_EN = ("> **Google Colab note**: the next cell installs `puremacro` and, if needed, fetches only the "
            f"`{RUTA_EN_REPO}` folder (helpers, frozen data and models) from the public repository "
-           f"[{REPO}](https://github.com/{REPO}). It does not ask for Google Drive access.")
+           f"[{REPO}](https://github.com/{REPO}), edition `{EDICION}`. It does not ask for Google Drive access.")
 
 
 def reescribir_celda0(fuente: str, nombre: str) -> str:
@@ -204,14 +204,17 @@ _PIP = re.compile(r"^\s*!pip install -q (.+)$", re.M)
 _FIN_ESTILO = "    _nbstyle.apply_style()\nexcept ImportError:\n    pass"
 _IMPORTS_BASE = {"import os", "import sys", "from pathlib import Path"}
 
-PLANTILLA_ES = '''\
-# Configuración del entorno: Google Colab, instalación local o Juno (iPad)
+PLANTILLA = '''# {setup_title}
 import os
 import sys
+import subprocess
 from pathlib import Path
 {imports}
+_course_requirements = {requirements!r}
+_course_edition = {edition!r}
+
 def _safe_probe(p, is_dir=None):
-    """¿Existe la ruta? Sin lanzar OSError/PermissionError en el sandbox de Juno."""
+    """Test paths without raising in the Juno sandbox."""
     try:
         p = Path(p)
         if is_dir is True:
@@ -223,68 +226,25 @@ def _safe_probe(p, is_dir=None):
         return False
 
 if "google.colab" in sys.modules:
-    !pip install -q "{pin}"{extra_pip}
-    if not _safe_probe(Path.cwd() / "_nbstyle.py", is_dir=False):
-        # Clon parcial del repositorio público: sólo {ruta}, sin historia
-        _repo = Path("/content/puremacro")
-        if not _safe_probe(_repo, is_dir=True):
-            !git clone -q --depth 1 --filter=blob:none --sparse https://github.com/{repo}.git {{_repo}}
-        !git -C {{_repo}} sparse-checkout set {ruta} 2>&1 | tail -n 2
-        os.chdir(_repo / "{ruta}")
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", *_course_requirements], check=True)
+    # A separate directory per edition prevents reuse of helpers from another course.
+    _repo = Path("/content/puremacro-" + _course_edition)
+    if not _safe_probe(_repo, is_dir=True):
+        subprocess.run(["git", "clone", "-q", "--depth", "1", "--filter=blob:none", "--sparse",
+                        "--branch", _course_edition, "https://github.com/{repo}.git", str(_repo)], check=True)
+    subprocess.run(["git", "-C", str(_repo), "checkout", "--detach", _course_edition], check=True)
+    subprocess.run(["git", "-C", str(_repo), "sparse-checkout", "set", "{ruta}"], check=True)
+    _course_status = subprocess.run(["git", "-C", str(_repo), "status", "--porcelain",
+                                     "--untracked-files=normal", "--", "{ruta}"],
+                                    check=True, capture_output=True, text=True).stdout
+    if _course_status.strip():
+        raise RuntimeError("The cached course edition was modified; use a fresh Colab runtime for the frozen edition.")
+    os.chdir(_repo / "{ruta}")
 
-# Carpeta con los auxiliares del curso (_nbstyle, _datos) en sys.path, sin salir del sandbox
-_candidatos = [Path.cwd(), Path.cwd() / "notebooks", Path.cwd() / "{ruta}"]
+# Locate the course helpers for local Python, Colab and Juno.
+_candidates = [Path.cwd(), Path.cwd() / "notebooks", Path.cwd() / "curso/notebooks"]
 try:
-    _candidatos.insert(0, Path(__file__).resolve().parent)  # Juno define __file__
-except (NameError, OSError):
-    pass
-for _c in _candidatos:
-    if _safe_probe(_c / "_nbstyle.py", is_dir=False):
-        if str(_c) not in sys.path:
-            sys.path.insert(0, str(_c))
-        break
-
-# Gráficas en línea y estilo del curso
-%matplotlib inline
-try:
-    import _nbstyle
-    _nbstyle.apply_style()
-except ImportError:
-    pass
-'''
-
-PLANTILLA_EN = '''\
-# Environment setup: Google Colab, local install or Juno (iPad)
-import os
-import sys
-from pathlib import Path
-{imports}
-def _safe_probe(p, is_dir=None):
-    """Does the path exist? Never raises OSError/PermissionError in the Juno sandbox."""
-    try:
-        p = Path(p)
-        if is_dir is True:
-            return p.is_dir()
-        if is_dir is False:
-            return p.is_file()
-        return p.exists()
-    except (OSError, PermissionError, TypeError, ValueError):
-        return False
-
-if "google.colab" in sys.modules:
-    !pip install -q "{pin}"{extra_pip}
-    if not _safe_probe(Path.cwd() / "_nbstyle.py", is_dir=False):
-        # Partial clone of the public repository: only {ruta}, no history
-        _repo = Path("/content/puremacro")
-        if not _safe_probe(_repo, is_dir=True):
-            !git clone -q --depth 1 --filter=blob:none --sparse https://github.com/{repo}.git {{_repo}}
-        !git -C {{_repo}} sparse-checkout set {ruta} 2>&1 | tail -n 2
-        os.chdir(_repo / "{ruta}")
-
-# Put the course helpers folder (_nbstyle, _datos) on sys.path, without leaving the sandbox
-_candidates = [Path.cwd(), Path.cwd() / "notebooks", Path.cwd() / "{ruta}"]
-try:
-    _candidates.insert(0, Path(__file__).resolve().parent)  # Juno defines __file__
+    _candidates.insert(0, Path(__file__).resolve().parent)
 except (NameError, OSError):
     pass
 for _c in _candidates:
@@ -293,7 +253,13 @@ for _c in _candidates:
             sys.path.insert(0, str(_c))
         break
 
-# Inline figures and the course style
+import puremacro
+if puremacro.__version__ != "5.5.0":
+    raise RuntimeError("This course edition requires puremacro==5.5.0; install it and restart the kernel.")
+
+# Cached reference responses are the reproducible default; live models are optional.
+os.environ.setdefault("MAV_LLM_MODE", "cache")
+
 %matplotlib inline
 try:
     import _nbstyle
@@ -311,44 +277,85 @@ def reescribir_celda1(fuente: str, nombre: str) -> tuple[str, list[str]]:
     de la cabecera y cualquier código después de ``_nbstyle.apply_style()``.
     """
     avisos: list[str] = []
-    if "--filter=blob:none" in fuente:          # la maestra ya trae el formato nuevo
-        return fuente, avisos
     if "_safe_probe" not in fuente or _FIN_ESTILO not in fuente:
         avisos.append("celda 1 no parece la de configuración conocida: se deja intacta")
         return fuente, avisos
 
-    extra_pip = ""
-    m = _PIP.search(fuente)
+    # Both legacy shell installs and this edition's structured list are inputs.
+    m = re.search(r"^_course_requirements = (.+)$", fuente, re.M)
     if m:
-        fichas = [f for f in m.group(1).split()
-                  if not f.strip("\"'").startswith("puremacro") and f != "openpyxl"]
-        extra_pip = "".join(" " + f for f in fichas)
+        requisitos = ast.literal_eval(m.group(1))
     else:
-        avisos.append("celda 1 sin '!pip install': se añade el de puremacro")
+        m = _PIP.search(fuente)
+        requisitos = shlex.split(m.group(1)) if m else []
+        if not m:
+            avisos.append("celda 1 sin '!pip install': se añade el de puremacro")
+    extras: set[str] = set()
+    otros: list[str] = []
+    for requisito in requisitos:
+        paquete = re.match(r"^puremacro(?:\[([^]]+)\])?(?:[<>=!~].*)?$", requisito)
+        if paquete:
+            extras.update((paquete.group(1) or "").split(","))
+        elif requisito not in otros:
+            otros.append(requisito)
+    extras.discard("")
+    pin = PUREMACRO.replace("puremacro", "puremacro[" + ",".join(sorted(extras)) + "]", 1) if extras else PUREMACRO
+    requisitos = [pin, *otros]
 
     cabecera = fuente.split("def _safe_probe", 1)[0]
-    imports = [ln for ln in cabecera.splitlines()
-               if re.match(r"^(import |from \S+ import )", ln) and ln.strip() not in _IMPORTS_BASE]
+    imports = []
+    for node in ast.parse(cabecera).body:
+        texto = ast.get_source_segment(cabecera, node)
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id in {"_course_requirements", "_course_edition"}
+            for target in node.targets
+        ):
+            continue
+        if texto and texto not in _IMPORTS_BASE | {"import subprocess"}:
+            # Retain conditional/multiline imports and any custom setup before
+            # _safe_probe, as well as the trailing block below.
+            imports.append(texto)
+
     cola = fuente.split(_FIN_ESTILO, 1)[1]
 
-    # Lo que la plantilla sustituye no debe traer nada más que la maestra vieja:
-    # cualquier línea de código desconocida entre la cabecera y el estilo se avisa.
+    # Preserve the whole cell when a replaced boilerplate block contains
+    # unfamiliar imports, assignments or explicit custom path operations.
+    avisos_previos = len(avisos)
     medio = fuente.split("def _safe_probe", 1)[1].split(_FIN_ESTILO, 1)[0]
     conocidas = ("drive.mount", "search_paths", "git", "colab_dir", "mav_target", "_candidates",
-                 "colab", "clon", "sparse", "chdir", "_repo", "_candidatos")
+                 "colab", "clon", "sparse", "chdir", "_repo", "_candidatos", "MAV_LLM_MODE")
     for linea in medio.splitlines():
         s = linea.strip()
         if not s or s.startswith("#") or s.startswith("!"):
             continue
-        if re.match(r"^(import|from) ", s) and s not in ("import subprocess", "import _nbstyle",
+        if re.match(r"^(import|from) ", s) and s not in ("import subprocess", "import puremacro", "import _nbstyle",
                                                           "from google.colab import drive"):
             avisos.append(f"celda 1: import no previsto en el bloque sustituido: {s}")
         if "sys.path.append" in s or ("os.environ" in s and not any(k in s for k in conocidas)):
             avisos.append(f"celda 1: línea no prevista en el bloque sustituido: {s}")
 
-    plantilla = PLANTILLA_ES if _es_espanol(nombre) else PLANTILLA_EN
-    nueva = plantilla.format(imports="".join(ln + "\n" for ln in imports), pin=PUREMACRO,
-                             extra_pip=extra_pip, repo=REPO, ruta=RUTA_EN_REPO).rstrip("\n")
+    medio_python = "def _safe_probe" + medio + _FIN_ESTILO
+    medio_python = "\n".join(
+        re.sub(r"^(\s*)[!%].*$", r"\1pass", line) for line in medio_python.splitlines()
+    )
+    variables_conocidas = {"p", "_repo", "_candidates", "_candidatos", "_c", "_course_status",
+                           "search_paths", "colab_dir", "mav_target"}
+    try:
+        for node in ast.walk(ast.parse(medio_python)):
+            if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                for target in targets:
+                    if isinstance(target, ast.Name) and target.id not in variables_conocidas:
+                        avisos.append("celda 1: asignación no prevista en el bloque sustituido: " + target.id)
+    except SyntaxError:
+        avisos.append("celda 1: bloque de configuración no reconocido")
+    if len(avisos) > avisos_previos:
+        return fuente, avisos
+
+    titulo = ("Configuración: Google Colab, Python local o Juno (iPad)" if _es_espanol(nombre)
+              else "Environment setup: Google Colab, local Python or Juno (iPad)")
+    nueva = PLANTILLA.format(setup_title=titulo, imports="".join(ln + "\n" for ln in imports),
+                            requirements=requisitos, edition=EDICION, repo=REPO, ruta=RUTA_EN_REPO).rstrip("\n")
     if cola.strip():
         nueva += "\n\n" + cola.strip("\n")
     return nueva, avisos
@@ -628,9 +635,9 @@ def construir_leeme() -> bool:
         filas_en.append(f"| {codigo} | {tema_en} | {_enlace_colab(es, 'Spanish')} | {_enlace_colab(en, 'English')} |")
     tabla_es = "| Código | Tema | Español | Inglés |\n|---|---|---|---|\n" + "\n".join(filas_es)
     tabla_en = "| Code | Topic | Spanish | English |\n|---|---|---|---|\n" + "\n".join(filas_en)
-    clon = (f"git clone --depth 1 --filter=blob:none --sparse https://github.com/{REPO}.git\n"
+    clon = (f"git clone --branch {EDICION} --depth 1 --filter=blob:none --sparse https://github.com/{REPO}.git\n"
             f"cd puremacro\ngit sparse-checkout set {RUTA_EN_REPO}\n"
-            f"python -m pip install \"{PUREMACRO.replace('puremacro', 'puremacro[io]', 1)}\" statsmodels arch jupyterlab\n"
+            f"python -m pip install \"{PUREMACRO.replace('puremacro', 'puremacro[io]', 1)}\" statsmodels arch scikit-learn jupyterlab\n"
             f"cd {RUTA_EN_REPO}\njupyter lab")
     texto = f"""# Macroeconomía Avanzada (MAV) — cuadernos del curso
 
@@ -649,24 +656,30 @@ en `curso/site/diapositivas/`.
 ## Abrir un cuaderno en Google Colab
 
 Haga clic en el enlace del cuaderno. La primera celda de código instala
-`puremacro` y descarga sólo esta carpeta del repositorio (un clon parcial, unos
-55 MB, casi todo datos); no pide acceso a Google Drive. Ejecute las celdas en orden.
+`puremacro` y descarga sólo esta carpeta del repositorio (un clon parcial de los materiales
+y datos congelados); no pide acceso a Google Drive. Ejecute las celdas en orden.
 
 {tabla_es}
 
 ## Correr los cuadernos en su máquina
 
-Requiere Python 3.11 o posterior.
+Requiere Python 3.12 o posterior.
 
 ```bash
 {clon}
 ```
 
-Un `git clone https://github.com/{REPO}.git` completo también funciona. T03_E usa un modelo de lenguaje local si lo
-encuentra (`pip install "puremacro[local-llm]"` u Ollama); sin él corre con un
-motor simulado que avisa y no extrae eventos, que es lo que muestran sus salidas
-guardadas. Ningún cuaderno necesita red: las descargas en vivo son opcionales y,
-por omisión, se leen los datos congelados de `data_curso/`.
+La edición fija `puremacro==5.5.0` y el contenido del tag `{EDICION}`: auxiliares,
+datos, caché y modelos. `puremacro.dp` y `puremacro.text` son obligatorios y sus
+secciones se ejecutan completas. Los 72 cuadernos incluyen las variantes históricas
+de T01; la tabla muestra la ruta principal.
+
+La instalación inicial requiere red. Después se usan los datos congelados de
+`data_curso/` y, por omisión, `MAV_LLM_MODE=cache`: respuestas de referencia de
+Qwen3-4B, sin buscar motores ni descargar modelos. T00_B también corre en ese modo;
+la comparación con un modelo vivo y los refrescos de datos son opcionales.
+Para usar un modelo local, siga T00_B (`pip install "puremacro[local-llm]==5.5.0"`
+u Ollama) y elija explícitamente `MAV_LLM_MODE=auto`.
 
 ## Datos
 
@@ -701,24 +714,30 @@ helpers `_datos.py`, `_nbstyle.py`, `_tutor.py`, `_llm.py` and `_t01.py`, the fr
 ## Open a notebook in Google Colab
 
 Click the notebook's link. The first code cell installs `puremacro` and fetches
-only this folder from the repository (a partial clone of about 55 MB, mostly
-data); it does not ask for Google Drive access. Run the cells in order.
+only this folder from the repository (a partial clone of the materials
+and frozen data); it does not ask for Google Drive access. Run the cells in order.
 
 {tabla_en}
 
 ## Run the notebooks locally
 
-Requires Python 3.11 or later.
+Requires Python 3.12 or later.
 
 ```bash
 {clon}
 ```
 
-A full `git clone https://github.com/{REPO}.git` also works. T03_E uses a local language model if it finds one
-(`pip install "puremacro[local-llm]"` or Ollama); without one it runs on a mock
-engine that prints a notice and extracts no events, which is what its saved outputs
-show. No notebook needs the network: live downloads are optional and, by default,
-the frozen data in `data_curso/` is read.
+This edition pins `puremacro==5.5.0` and tag `{EDICION}` for its helpers, data,
+cache and models. `puremacro.dp` and `puremacro.text` are required and their
+sections execute in full. All 72 notebooks include the historical T01 variants;
+the table shows the main route.
+
+Initial installation needs the network. Afterwards, notebooks use frozen files
+in `data_curso/` and default to `MAV_LLM_MODE=cache`: Qwen3-4B reference responses,
+without engine discovery or model downloads. T00_B also runs in this mode;
+comparison with a live model and live data refreshes are optional.
+For a local model, follow T00_B (`pip install "puremacro[local-llm]==5.5.0"` or
+Ollama) and explicitly select `MAV_LLM_MODE=auto`.
 
 ## Data
 

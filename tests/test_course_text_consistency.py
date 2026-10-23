@@ -153,26 +153,18 @@ def test_start_here_names_shipped_notebooks():
         "the start page may say offline, not fully synthetic")
 
 
-def test_course_colab_hints_pin_the_readme_commit():
-    """Repository installs in the course pin the commit the README declares, and no
-    cell still calls puremacro.text or puremacro.dp unpublished."""
-    readme_commits = set(_COMMIT.findall((CURSO / "README.md").read_text(encoding="utf-8")))
-    assert readme_commits, "the course README names the pinned development commit"
-    unpinned, stale, hints = [], [], 0
+def test_course_install_hints_use_released_edition():
+    """The course requires released DP/text and never installs an obsolete source tree."""
+    readme = (CURSO / "README.md").read_text(encoding="utf-8")
+    assert "puremacro==5.5.0" in readme
+    assert "course-2026A-5.5.0" in readme
+    checked = 0
     for path in sorted(CURSO.glob("*.ipynb")):
+        checked += 1
         for i, cell in enumerate(_notebook(path)["cells"]):
             text = _text(cell)
-            for m in _GIT_INSTALL.finditer(text):
-                hints += 1
-                pin = m.group(1)
-                if pin is None or pin[1:] not in readme_commits:
-                    unpinned.append(f"{path.name} cell {i}: {m.group(0)}")
+            assert not _GIT_INSTALL.search(text), f"{path.name} cell {i}: source reinstall"
             if _INSTALL_CONTEXT.search(text):
-                for m in _STALE.finditer(text + "\n" + _rendered(cell)):
-                    stale.append(f"{path.name} cell {i}: {m.group(0)!r}")
-    assert hints >= 8, hints                    # positive control: the recipe cells were found
-    assert not unpinned, (
-        "repository installs without the README's commit pin:\n  " + "\n  ".join(unpinned))
-    assert not stale, (
-        "text that still calls puremacro.text or puremacro.dp unpublished:\n  "
-        + "\n  ".join(stale))
+                assert not _STALE.search(text + "\n" + _rendered(cell)), (
+                    f"{path.name} cell {i}: obsolete installation guidance in source or stored output")
+    assert checked == 72

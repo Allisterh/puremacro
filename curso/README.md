@@ -2,13 +2,13 @@
 
 Materiales públicos del curso *Macroeconomía Avanzada* de Jorge Alonso-Ortiz (ITAM, otoño 2026), construidos sobre [puremacro](https://jorgealonsoortiz.work/puremacro/).
 
-**Edición del curso:** el entorno base conserva `puremacro>=4.8.1,<5`.
-Use ese entorno para reproducir esta edición; la migración a 5.x requiere una
-validación separada. Para aprender la versión actual de la biblioteca, consulte
-los [cuadernos de demostración](../docs/es/notebooks.md). Los laboratorios
-HTML/JavaScript son materiales de esta edición y sus resultados no certifican
-la versión actual del paquete. Algunas secciones opcionales usan un commit de
-desarrollo fijado; consulte las [notas de instalación](notebooks/README.md).
+**Edición del curso:** Python 3.12 o posterior y `puremacro==5.5.0`, con auxiliares, datos, modelos y caché
+fijados por el tag `course-2026A-5.5.0`. Las secciones `puremacro.dp` y
+`puremacro.text` son obligatorias. Los 72 cuadernos se ejecutan con datos
+congelados y respuestas del modelo de referencia en caché; los modelos vivos y
+las actualizaciones de datos son opcionales. Consulte las
+[notas de instalación](notebooks/README.md). Los laboratorios HTML/JavaScript
+siguen siendo implementaciones separadas para la enseñanza.
 
 | | |
 |---|---|
@@ -25,7 +25,7 @@ desarrollo fijado; consulte las [notas de instalación](notebooks/README.md).
 - `notebooks/data_curso/`: instantáneas congeladas de datos públicos. Las fuentes y cómo citarlas están en [`FUENTES.md`](notebooks/data_curso/FUENTES.md).
 - `tools/`: scripts que generan los datos de los laboratorios (`datos_*.py`) y arman el sitio (`construir_sitio.py`).
 
-No hay exámenes, soluciones ni material interno del curso en este repositorio.
+Los cuadernos conservan sus esquemas de solución para el trabajo autónomo; no incluyen exámenes ni claves internas de calificación.
 
 ## Licencia
 
@@ -37,16 +37,42 @@ El código es MIT, como puremacro. Las diapositivas y el texto de los cuadernos 
 
 Public materials for Jorge Alonso-Ortiz's *Advanced Macroeconomics* course (ITAM, fall 2026), built on [puremacro](https://jorgealonsoortiz.work/puremacro/). The course is taught in Spanish; the labs and notebooks also come in English.
 
-**Course edition:** the base environment retains `puremacro>=4.8.1,<5`.
-Use that environment to reproduce this edition; migration to 5.x requires
-separate validation. For the current library, start with the
-[showcase notebooks](../docs/notebooks.md). The HTML/JavaScript labs belong to
-this course edition; their results do not certify the current package release.
-Some optional sections use a pinned development commit; see the
-[setup notes](notebooks/README.md).
+**Course edition:** Python 3.12 or later and `puremacro==5.5.0`, with helpers, data, models and cache pinned
+by tag `course-2026A-5.5.0`. The `puremacro.dp` and `puremacro.text` sections are
+required. All 72 notebooks execute with frozen data and cached reference-model
+responses; live models and data refreshes are optional. See the
+[setup notes](notebooks/README.md). The HTML/JavaScript labs remain separate
+teaching implementations.
 
 - `site/`: the interactive labs published at <https://jalonso1979.github.io/puremacro/curso/> (static HTML/JS with course implementations and data), plus the slide PDFs.
 - `notebooks/`: notebooks T00–T09 in Spanish and English, runnable in Google Colab, with frozen public data in `data_curso/`. See `FUENTES.md` for sources and citation.
 - `tools/`: lab data builders and the site assembler.
 
-No exams, solutions or internal course material are included. The code is MIT-licensed; the slides and notebook text are [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); data belong to their original publishers.
+The notebooks retain their solution outlines for independent study; exams and internal grading keys are not included. The code is MIT-licensed; the slides and notebook text are [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); data belong to their original publishers.
+
+
+## Reproduce the execution audit
+
+Install the exact wheel and notebook tools in a dedicated Python 3.12+ environment,
+then run from that environment with `PYTHONPATH` unset:
+
+```bash
+python -m pip install /path/puremacro-5.5.0-py3-none-any.whl
+python -m pip install nbclient nbformat ipykernel statsmodels arch scikit-learn openpyxl pyarrow
+python curso/scripts/ejecutar_edicion.py --wheel /path/puremacro-5.5.0-py3-none-any.whl --work-dir /tmp/course-5.5-audit --jobs 2
+```
+
+The work directory must be new and outside the repository. The runner copies
+all course inputs there, records the wheel hash, checks installed files against
+the wheel byte for byte, and verifies the import location. It
+executes all 72 notebooks with the environment's kernel, and records per-cell
+execution plus required DP/text coverage in `summary.json` and `evidence/`.
+`inputs.json` records package versions and hashes of all copied inputs;
+`snapshot_integrity.json` checks frozen inputs afterwards. Network access is
+blocked and missing cached reference responses fail the audit. Add `--write-back`
+to retain successful executed outputs in the source notebooks. `--notebook NAME`
+can repeat a particular notebook in a new directory after a correction.
+The historical T01_B lessons export reconstructed national accounts to
+`generated/qna/` and check their round trip there, keeping the frozen data intact.
+The [edition execution manifest](validation/README.md) records the exact candidate
+wheel, dependency versions, input and output hashes, and all 72 notebook outcomes.

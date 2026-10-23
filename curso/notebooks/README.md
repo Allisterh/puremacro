@@ -7,85 +7,77 @@ Economía del ITAM, otoño 2026. Todo el curso corre en Python con
 [`puremacro`](https://github.com/jalonso1979/puremacro): cada cuaderno trae sus salidas ya
 ejecutadas, así que se puede leer en GitHub sin correr nada.
 
-**Entorno base de esta edición:** `puremacro>=4.8.1,<5`. Mantenga el curso en un
-entorno separado de puremacro 5.x: actualizar el paquete requiere volver a
-ejecutar y validar los cuadernos. Los [cuadernos de demostración de la
-biblioteca](../../docs/es/notebooks.md) son el punto de entrada para la versión
-actual. Los laboratorios HTML/JavaScript del curso son materiales separados.
-
-Las secciones opcionales de programación dinámica en T03_A, T06_A y T06_B
-pueden instalar en Colab el commit de desarrollo
-`4a726629aa8a35c1c3d762a9bbbb2b4036590252`, también identificado como 4.8.1,
-si falta `puremacro.dp`. Siga las notas de cada sección. Las sugerencias
-históricas de instalar el repositorio sin fijar un commit no reproducen esta
-edición; puede omitir esas secciones opcionales.
-
 La carpeta contiene los cuadernos en español (`*_es.ipynb`) y en inglés, los
-auxiliares `_datos.py`, `_nbstyle.py`, `_tutor.py` y `_llm.py`, los datos congelados en
+auxiliares `_datos.py`, `_nbstyle.py`, `_tutor.py`, `_llm.py` y `_t01.py`, los datos congelados en
 `data_curso/` y los modelos `.mod` en `modelos/`. Las diapositivas en PDF están
 en `curso/site/diapositivas/`.
 
 ## Abrir un cuaderno en Google Colab
 
 Haga clic en el enlace del cuaderno. La primera celda de código instala
-`puremacro>=4.8.1,<5` y descarga sólo esta carpeta del repositorio (un clon parcial, unos
-55 MB, casi todo datos); no pide acceso a Google Drive. Ejecute las celdas en orden.
+`puremacro` y descarga sólo esta carpeta del repositorio (un clon parcial de los materiales
+y datos congelados); no pide acceso a Google Drive. Ejecute las celdas en orden.
 
 | Código | Tema | Español | Inglés |
 |---|---|---|---|
-| T00 | Syllabus interactivo del curso | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T00_syllabus_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T00_syllabus.ipynb) |
-| T00_B | Configura tu modelo de lenguaje local (Qwen3-4B) | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T00_B_configura_tu_modelo_local_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T00_B_local_model_setup.ipynb) |
-| T01_A | Hechos del ciclo económico desde el mercado de trabajo | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_A_data_panels_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_A_data_panels.ipynb) |
-| T01_B | Contabilidad nacional y hechos estilizados internacionales | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_B_measurement_and_cycles_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_B_measurement_and_cycles.ipynb) |
-| T01_C | El ciclo a frecuencia mensual, semanal y diaria | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_C_stylized_facts_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_C_stylized_facts.ipynb) |
-| T02_A | Modelo neoclásico de crecimiento: log-linealización y aproximación local | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_A_neoclassical_growth_local_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_A_neoclassical_growth_local.ipynb) |
-| T02_B | RBC canónico: simulación, momentos y el debate de las horas | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_B_rbc_dynare_local_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_B_rbc_dynare_local.ipynb) |
-| T02_C | Precios rígidos y búsqueda: fricciones en bienes y trabajo | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_C_new_keynesian_local_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_C_new_keynesian_local.ipynb) |
-| T02_D | Restricciones ocasionalmente activas y límite inferior cero (OccBin) | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_D_occbin_zlb_regimes_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_D_occbin_zlb_regimes.ipynb) |
-| T02_E | Estimación bayesiana de modelos DSGE y comparación de modelos | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_E_bayesian_dsge_local_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_E_bayesian_dsge_local.ipynb) |
-| T02_F | Fricciones macrofinancieras: Gertler y Karadi (2011) | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_F_gertler_karadi_macrofinance_local_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_F_gertler_karadi_macrofinance_local.ipynb) |
-| T03_A | Choques agregados con mercados incompletos: Krusell–Smith y jacobianos | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_A_aggregate_shocks_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_A_aggregate_shocks.ipynb) |
-| T03_B | Volatilidad: GARCH y efecto apalancamiento | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_B_garch_volatility_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_B_garch_volatility.ipynb) |
-| T03_C | Crecimiento en riesgo (growth-at-risk) | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_C_growth_at_risk_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_C_growth_at_risk.ipynb) |
-| T03_D | Incertidumbre de política económica a partir de texto | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_D_narrative_uncertainty_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_D_narrative_uncertainty.ipynb) |
-| T03_E | Modelos de lenguaje locales como instrumento de medición | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_E_local_llm_uncertainty_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_E_local_llm_uncertainty.ipynb) |
-| T03_F | Comunicación de bancos centrales y tono de la política monetaria | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_F_narrative_llm_central_banks_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_F_narrative_llm_central_banks.ipynb) |
-| T04_A | El multiplicador de impuestos, de tres maneras | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T04_A_tax_multiplier_three_ways_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T04_A_tax_multiplier_three_ways.ipynb) |
-| T04_C | Contabilidad del ciclo económico: las cuñas | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T04_C_contabilidad_ciclo_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T04_C_business_cycle_accounting.ipynb) |
-| T05_A | Identificación de choques con SVAR | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_A_svar_identification_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_A_svar_identification.ipynb) |
-| T05_B | Proyecciones locales | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_B_local_projections_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_B_local_projections.ipynb) |
-| T05_C | Diferencias en diferencias escalonadas | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_C_staggered_did_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_C_staggered_did.ipynb) |
-| T05_D | DiD con proyecciones locales (LP-DiD) | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_D_lp_did_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_D_lp_did.ipynb) |
-| T05_E | Transmisión dependiente del estado y respuestas generalizadas | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_E_regime_girf_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_E_regime_girf.ipynb) |
-| T05_F | SVAR de la inflación de 2021–2024 (Bernanke–Blanchard) | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_F_svar_post_covid_inflation_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_F_svar_post_covid_inflation.ipynb) |
-| T05_G | Identificación narrativa de choques monetarios con un LLM local (Banxico y FOMC) | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_G_choques_narrativos_llm_banxico_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_G_narrative_llm_banxico.ipynb) |
-| T06_A | ¿De dónde viene la desigualdad de riqueza? | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_A_wealth_inequality_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_A_wealth_inequality.ipynb) |
-| T06_B | Ciclo de vida, demografía y pensiones | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_B_life_cycle_and_demographics_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_B_life_cycle_and_demographics.ipynb) |
-| T06_C | Carteras, preferencias y la frontera HANK | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_C_portfolios_and_preferences_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_C_portfolios_and_preferences.ipynb) |
-| T07_A | Dinámica empresarial y mala asignación de recursos | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T07_A_firm_dynamics_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T07_A_firm_dynamics.ipynb) |
-| T08_A | Búsqueda laboral y flujos de trabajadores | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T08_A_labor_flows_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T08_A_labor_flows.ipynb) |
-| T09_A | Galería de validación numérica | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T09_A_validation_gallery_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T09_A_validation_gallery.ipynb) |
-| T09_B | Construye tu propio índice | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T09_B_build_your_own_index_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T09_B_build_your_own_index.ipynb) |
+| T00 | Syllabus interactivo del curso | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T00_syllabus_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T00_syllabus.ipynb) |
+| T00_B | Configura tu modelo de lenguaje local (Qwen3-4B) | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T00_B_configura_tu_modelo_local_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T00_B_local_model_setup.ipynb) |
+| T01_A | Hechos del ciclo económico desde el mercado de trabajo | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_A_data_panels_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_A_data_panels.ipynb) |
+| T01_B | Contabilidad nacional y hechos estilizados internacionales | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_B_measurement_and_cycles_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_B_measurement_and_cycles.ipynb) |
+| T01_C | El ciclo a frecuencia mensual, semanal y diaria | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_C_stylized_facts_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_C_stylized_facts.ipynb) |
+| T02_A | Modelo neoclásico de crecimiento: log-linealización y aproximación local | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_A_neoclassical_growth_local_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_A_neoclassical_growth_local.ipynb) |
+| T02_B | RBC canónico: simulación, momentos y el debate de las horas | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_B_rbc_dynare_local_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_B_rbc_dynare_local.ipynb) |
+| T02_C | Precios rígidos y búsqueda: fricciones en bienes y trabajo | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_C_new_keynesian_local_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_C_new_keynesian_local.ipynb) |
+| T02_D | Restricciones ocasionalmente activas y límite inferior cero (OccBin) | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_D_occbin_zlb_regimes_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_D_occbin_zlb_regimes.ipynb) |
+| T02_E | Estimación bayesiana de modelos DSGE y comparación de modelos | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_E_bayesian_dsge_local_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_E_bayesian_dsge_local.ipynb) |
+| T02_F | Fricciones macrofinancieras: Gertler y Karadi (2011) | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_F_gertler_karadi_macrofinance_local_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_F_gertler_karadi_macrofinance_local.ipynb) |
+| T03_A | Choques agregados con mercados incompletos: Krusell–Smith y jacobianos | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_A_aggregate_shocks_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_A_aggregate_shocks.ipynb) |
+| T03_B | Volatilidad: GARCH y efecto apalancamiento | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_B_garch_volatility_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_B_garch_volatility.ipynb) |
+| T03_C | Crecimiento en riesgo (growth-at-risk) | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_C_growth_at_risk_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_C_growth_at_risk.ipynb) |
+| T03_D | Incertidumbre de política económica a partir de texto | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_D_narrative_uncertainty_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_D_narrative_uncertainty.ipynb) |
+| T03_E | Modelos de lenguaje locales como instrumento de medición | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_E_local_llm_uncertainty_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_E_local_llm_uncertainty.ipynb) |
+| T03_F | Comunicación de bancos centrales y tono de la política monetaria | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_F_narrative_llm_central_banks_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_F_narrative_llm_central_banks.ipynb) |
+| T04_A | El multiplicador de impuestos, de tres maneras | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T04_A_tax_multiplier_three_ways_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T04_A_tax_multiplier_three_ways.ipynb) |
+| T04_C | Contabilidad del ciclo económico: las cuñas | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T04_C_contabilidad_ciclo_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T04_C_business_cycle_accounting.ipynb) |
+| T05_A | Identificación de choques con SVAR | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_A_svar_identification_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_A_svar_identification.ipynb) |
+| T05_B | Proyecciones locales | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_B_local_projections_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_B_local_projections.ipynb) |
+| T05_C | Diferencias en diferencias escalonadas | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_C_staggered_did_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_C_staggered_did.ipynb) |
+| T05_D | DiD con proyecciones locales (LP-DiD) | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_D_lp_did_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_D_lp_did.ipynb) |
+| T05_E | Transmisión dependiente del estado y respuestas generalizadas | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_E_regime_girf_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_E_regime_girf.ipynb) |
+| T05_F | SVAR de la inflación de 2021–2024 (Bernanke–Blanchard) | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_F_svar_post_covid_inflation_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_F_svar_post_covid_inflation.ipynb) |
+| T05_G | Identificación narrativa de choques monetarios con un LLM local (Banxico y FOMC) | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_G_choques_narrativos_llm_banxico_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_G_narrative_llm_banxico.ipynb) |
+| T06_A | ¿De dónde viene la desigualdad de riqueza? | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T06_A_wealth_inequality_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T06_A_wealth_inequality.ipynb) |
+| T06_B | Ciclo de vida, demografía y pensiones | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T06_B_life_cycle_and_demographics_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T06_B_life_cycle_and_demographics.ipynb) |
+| T06_C | Carteras, preferencias y la frontera HANK | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T06_C_portfolios_and_preferences_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T06_C_portfolios_and_preferences.ipynb) |
+| T07_A | Dinámica empresarial y mala asignación de recursos | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T07_A_firm_dynamics_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T07_A_firm_dynamics.ipynb) |
+| T08_A | Búsqueda laboral y flujos de trabajadores | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T08_A_labor_flows_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T08_A_labor_flows.ipynb) |
+| T09_A | Galería de validación numérica | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T09_A_validation_gallery_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T09_A_validation_gallery.ipynb) |
+| T09_B | Construye tu propio índice | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T09_B_build_your_own_index_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T09_B_build_your_own_index.ipynb) |
 
 ## Correr los cuadernos en su máquina
 
-Requiere Python 3.11 o posterior.
+Requiere Python 3.12 o posterior.
 
 ```bash
-git clone --depth 1 --filter=blob:none --sparse https://github.com/jalonso1979/puremacro.git
+git clone --branch course-2026A-5.5.0 --depth 1 --filter=blob:none --sparse https://github.com/jalonso1979/puremacro.git
 cd puremacro
 git sparse-checkout set curso/notebooks
-python -m pip install "puremacro[io]>=4.8.1,<5" statsmodels arch jupyterlab
+python -m pip install "puremacro[io]==5.5.0" statsmodels arch scikit-learn jupyterlab
 cd curso/notebooks
 jupyter lab
 ```
 
-Un `git clone https://github.com/jalonso1979/puremacro.git` completo también funciona. T03_E usa un modelo de lenguaje local si lo
-encuentra (`pip install "puremacro[io,local-llm]>=4.8.1,<5"` u Ollama); sin él corre con un
-motor simulado que avisa y no extrae eventos, que es lo que muestran sus salidas
-guardadas. La instalación inicial y la descarga de materiales requieren red.
-Después, los ejemplos usan por omisión los datos congelados de `data_curso/`;
-las descargas de datos en vivo son opcionales.
+La edición fija `puremacro==5.5.0` y el contenido del tag `course-2026A-5.5.0`: auxiliares,
+datos, caché y modelos. `puremacro.dp` y `puremacro.text` son obligatorios y sus
+secciones se ejecutan completas. Los 72 cuadernos incluyen las variantes históricas
+de T01; la tabla muestra la ruta principal.
+
+La instalación inicial requiere red. Después se usan los datos congelados de
+`data_curso/` y, por omisión, `MAV_LLM_MODE=cache`: respuestas de referencia de
+Qwen3-4B, sin buscar motores ni descargar modelos. T00_B también corre en ese modo;
+la comparación con un modelo vivo y los refrescos de datos son opcionales.
+Para usar un modelo local, siga T00_B (`pip install "puremacro[local-llm]==5.5.0"`
+u Ollama) y elija explícitamente `MAV_LLM_MODE=auto`.
 
 ## Datos
 
@@ -112,84 +104,77 @@ programme in Economics, fall 2026. The whole course runs in Python with
 [`puremacro`](https://github.com/jalonso1979/puremacro). Every notebook is saved with its
 executed outputs, so you can read it on GitHub without running anything.
 
-**Base environment for this edition:** `puremacro>=4.8.1,<5`. Keep the course in a separate
-environment from puremacro 5.x; upgrading requires reexecuting and validating
-the notebooks. The library's [showcase notebooks](../../docs/notebooks.md) are
-the starting point for the current release. The course's HTML/JavaScript labs
-are separate teaching materials.
-
-The optional dynamic-programming sections in T03_A, T06_A and T06_B can install
-development commit `4a726629aa8a35c1c3d762a9bbbb2b4036590252` in Colab, also
-identified as 4.8.1, when `puremacro.dp` is missing. Follow each section's notes.
-Historical suggestions to install the repository without a pinned commit do
-not reproduce this edition; those optional sections can be skipped.
-
 This folder holds the notebooks in Spanish (`*_es.ipynb`) and English, the
-helpers `_datos.py`, `_nbstyle.py`, `_tutor.py` and `_llm.py`, the frozen data in
+helpers `_datos.py`, `_nbstyle.py`, `_tutor.py`, `_llm.py` and `_t01.py`, the frozen data in
 `data_curso/` and the `.mod` models in `modelos/`. The PDF slides are in
 `curso/site/diapositivas/` (in Spanish).
 
 ## Open a notebook in Google Colab
 
-Click the notebook's link. The first code cell installs `puremacro>=4.8.1,<5` and fetches
-only this folder from the repository (a partial clone of about 55 MB, mostly
-data); it does not ask for Google Drive access. Run the cells in order.
+Click the notebook's link. The first code cell installs `puremacro` and fetches
+only this folder from the repository (a partial clone of the materials
+and frozen data); it does not ask for Google Drive access. Run the cells in order.
 
 | Code | Topic | Spanish | English |
 |---|---|---|---|
-| T00 | Interactive course syllabus | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T00_syllabus_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T00_syllabus.ipynb) |
-| T00_B | Set up your local language model (Qwen3-4B) | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T00_B_configura_tu_modelo_local_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T00_B_local_model_setup.ipynb) |
-| T01_A | Business-cycle facts from the labour side | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_A_data_panels_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_A_data_panels.ipynb) |
-| T01_B | National accounts and cross-country stylized facts | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_B_measurement_and_cycles_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_B_measurement_and_cycles.ipynb) |
-| T01_C | The cycle at monthly, weekly and daily frequency | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_C_stylized_facts_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T01_C_stylized_facts.ipynb) |
-| T02_A | Neoclassical growth model: log-linearization and local approximation | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_A_neoclassical_growth_local_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_A_neoclassical_growth_local.ipynb) |
-| T02_B | Canonical RBC: simulation, moments and the hours debate | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_B_rbc_dynare_local_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_B_rbc_dynare_local.ipynb) |
-| T02_C | Sticky prices and search: frictions in goods and labour markets | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_C_new_keynesian_local_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_C_new_keynesian_local.ipynb) |
-| T02_D | Occasionally binding constraints and the zero lower bound (OccBin) | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_D_occbin_zlb_regimes_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_D_occbin_zlb_regimes.ipynb) |
-| T02_E | Bayesian DSGE estimation and model comparison | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_E_bayesian_dsge_local_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_E_bayesian_dsge_local.ipynb) |
-| T02_F | Macro-financial frictions: Gertler–Karadi (2011) | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_F_gertler_karadi_macrofinance_local_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T02_F_gertler_karadi_macrofinance_local.ipynb) |
-| T03_A | Aggregate shocks with incomplete markets: Krusell–Smith and sequence-space Jacobians | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_A_aggregate_shocks_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_A_aggregate_shocks.ipynb) |
-| T03_B | Volatility: GARCH and leverage effects | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_B_garch_volatility_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_B_garch_volatility.ipynb) |
-| T03_C | Growth-at-risk | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_C_growth_at_risk_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_C_growth_at_risk.ipynb) |
-| T03_D | Economic policy uncertainty from text | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_D_narrative_uncertainty_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_D_narrative_uncertainty.ipynb) |
-| T03_E | Local language models as measurement tools | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_E_local_llm_uncertainty_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_E_local_llm_uncertainty.ipynb) |
-| T03_F | Central-bank communication and monetary-policy tone | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_F_narrative_llm_central_banks_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T03_F_narrative_llm_central_banks.ipynb) |
-| T04_A | The tax multiplier, three ways | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T04_A_tax_multiplier_three_ways_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T04_A_tax_multiplier_three_ways.ipynb) |
-| T04_C | Business-cycle accounting: the wedges | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T04_C_contabilidad_ciclo_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T04_C_business_cycle_accounting.ipynb) |
-| T05_A | Identifying shocks with SVARs | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_A_svar_identification_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_A_svar_identification.ipynb) |
-| T05_B | Local projections | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_B_local_projections_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_B_local_projections.ipynb) |
-| T05_C | Staggered difference-in-differences | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_C_staggered_did_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_C_staggered_did.ipynb) |
-| T05_D | Difference-in-differences with local projections (LP-DiD) | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_D_lp_did_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_D_lp_did.ipynb) |
-| T05_E | State-dependent transmission and generalized impulse responses | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_E_regime_girf_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_E_regime_girf.ipynb) |
-| T05_F | SVAR of the 2021–2024 inflation (Bernanke–Blanchard) | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_F_svar_post_covid_inflation_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_F_svar_post_covid_inflation.ipynb) |
-| T05_G | Narrative identification of monetary shocks with a local LLM (Banxico and FOMC) | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_G_choques_narrativos_llm_banxico_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T05_G_narrative_llm_banxico.ipynb) |
-| T06_A | Where does wealth inequality come from? | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_A_wealth_inequality_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_A_wealth_inequality.ipynb) |
-| T06_B | Life cycle, demographics and pensions | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_B_life_cycle_and_demographics_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_B_life_cycle_and_demographics.ipynb) |
-| T06_C | Portfolios, preferences and the HANK frontier | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_C_portfolios_and_preferences_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T06_C_portfolios_and_preferences.ipynb) |
-| T07_A | Firm dynamics and misallocation | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T07_A_firm_dynamics_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T07_A_firm_dynamics.ipynb) |
-| T08_A | Labour search and worker flows | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T08_A_labor_flows_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T08_A_labor_flows.ipynb) |
-| T09_A | Numerical validation gallery | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T09_A_validation_gallery_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T09_A_validation_gallery.ipynb) |
-| T09_B | Build your own index | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T09_B_build_your_own_index_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/main/curso/notebooks/T09_B_build_your_own_index.ipynb) |
+| T00 | Interactive course syllabus | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T00_syllabus_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T00_syllabus.ipynb) |
+| T00_B | Set up your local language model (Qwen3-4B) | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T00_B_configura_tu_modelo_local_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T00_B_local_model_setup.ipynb) |
+| T01_A | Business-cycle facts from the labour side | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_A_data_panels_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_A_data_panels.ipynb) |
+| T01_B | National accounts and cross-country stylized facts | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_B_measurement_and_cycles_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_B_measurement_and_cycles.ipynb) |
+| T01_C | The cycle at monthly, weekly and daily frequency | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_C_stylized_facts_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_C_stylized_facts.ipynb) |
+| T02_A | Neoclassical growth model: log-linearization and local approximation | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_A_neoclassical_growth_local_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_A_neoclassical_growth_local.ipynb) |
+| T02_B | Canonical RBC: simulation, moments and the hours debate | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_B_rbc_dynare_local_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_B_rbc_dynare_local.ipynb) |
+| T02_C | Sticky prices and search: frictions in goods and labour markets | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_C_new_keynesian_local_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_C_new_keynesian_local.ipynb) |
+| T02_D | Occasionally binding constraints and the zero lower bound (OccBin) | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_D_occbin_zlb_regimes_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_D_occbin_zlb_regimes.ipynb) |
+| T02_E | Bayesian DSGE estimation and model comparison | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_E_bayesian_dsge_local_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_E_bayesian_dsge_local.ipynb) |
+| T02_F | Macro-financial frictions: Gertler–Karadi (2011) | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_F_gertler_karadi_macrofinance_local_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_F_gertler_karadi_macrofinance_local.ipynb) |
+| T03_A | Aggregate shocks with incomplete markets: Krusell–Smith and sequence-space Jacobians | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_A_aggregate_shocks_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_A_aggregate_shocks.ipynb) |
+| T03_B | Volatility: GARCH and leverage effects | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_B_garch_volatility_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_B_garch_volatility.ipynb) |
+| T03_C | Growth-at-risk | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_C_growth_at_risk_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_C_growth_at_risk.ipynb) |
+| T03_D | Economic policy uncertainty from text | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_D_narrative_uncertainty_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_D_narrative_uncertainty.ipynb) |
+| T03_E | Local language models as measurement tools | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_E_local_llm_uncertainty_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_E_local_llm_uncertainty.ipynb) |
+| T03_F | Central-bank communication and monetary-policy tone | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_F_narrative_llm_central_banks_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_F_narrative_llm_central_banks.ipynb) |
+| T04_A | The tax multiplier, three ways | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T04_A_tax_multiplier_three_ways_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T04_A_tax_multiplier_three_ways.ipynb) |
+| T04_C | Business-cycle accounting: the wedges | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T04_C_contabilidad_ciclo_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T04_C_business_cycle_accounting.ipynb) |
+| T05_A | Identifying shocks with SVARs | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_A_svar_identification_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_A_svar_identification.ipynb) |
+| T05_B | Local projections | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_B_local_projections_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_B_local_projections.ipynb) |
+| T05_C | Staggered difference-in-differences | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_C_staggered_did_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_C_staggered_did.ipynb) |
+| T05_D | Difference-in-differences with local projections (LP-DiD) | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_D_lp_did_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_D_lp_did.ipynb) |
+| T05_E | State-dependent transmission and generalized impulse responses | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_E_regime_girf_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_E_regime_girf.ipynb) |
+| T05_F | SVAR of the 2021–2024 inflation (Bernanke–Blanchard) | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_F_svar_post_covid_inflation_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_F_svar_post_covid_inflation.ipynb) |
+| T05_G | Narrative identification of monetary shocks with a local LLM (Banxico and FOMC) | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_G_choques_narrativos_llm_banxico_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T05_G_narrative_llm_banxico.ipynb) |
+| T06_A | Where does wealth inequality come from? | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T06_A_wealth_inequality_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T06_A_wealth_inequality.ipynb) |
+| T06_B | Life cycle, demographics and pensions | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T06_B_life_cycle_and_demographics_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T06_B_life_cycle_and_demographics.ipynb) |
+| T06_C | Portfolios, preferences and the HANK frontier | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T06_C_portfolios_and_preferences_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T06_C_portfolios_and_preferences.ipynb) |
+| T07_A | Firm dynamics and misallocation | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T07_A_firm_dynamics_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T07_A_firm_dynamics.ipynb) |
+| T08_A | Labour search and worker flows | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T08_A_labor_flows_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T08_A_labor_flows.ipynb) |
+| T09_A | Numerical validation gallery | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T09_A_validation_gallery_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T09_A_validation_gallery.ipynb) |
+| T09_B | Build your own index | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T09_B_build_your_own_index_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T09_B_build_your_own_index.ipynb) |
 
 ## Run the notebooks locally
 
-Requires Python 3.11 or later.
+Requires Python 3.12 or later.
 
 ```bash
-git clone --depth 1 --filter=blob:none --sparse https://github.com/jalonso1979/puremacro.git
+git clone --branch course-2026A-5.5.0 --depth 1 --filter=blob:none --sparse https://github.com/jalonso1979/puremacro.git
 cd puremacro
 git sparse-checkout set curso/notebooks
-python -m pip install "puremacro[io]>=4.8.1,<5" statsmodels arch jupyterlab
+python -m pip install "puremacro[io]==5.5.0" statsmodels arch scikit-learn jupyterlab
 cd curso/notebooks
 jupyter lab
 ```
 
-A full `git clone https://github.com/jalonso1979/puremacro.git` also works. T03_E uses a local language model if it finds one
-(`pip install "puremacro[io,local-llm]>=4.8.1,<5"` or Ollama); without one it runs on a mock
-engine that prints a notice and extracts no events, which is what its saved outputs
-show. Initial installation and downloading the materials need network access.
-After setup, the examples use the frozen data in `data_curso/` by default;
-live data downloads are optional.
+This edition pins `puremacro==5.5.0` and tag `course-2026A-5.5.0` for its helpers, data,
+cache and models. `puremacro.dp` and `puremacro.text` are required and their
+sections execute in full. All 72 notebooks include the historical T01 variants;
+the table shows the main route.
+
+Initial installation needs the network. Afterwards, notebooks use frozen files
+in `data_curso/` and default to `MAV_LLM_MODE=cache`: Qwen3-4B reference responses,
+without engine discovery or model downloads. T00_B also runs in this mode;
+comparison with a live model and live data refreshes are optional.
+For a local model, follow T00_B (`pip install "puremacro[local-llm]==5.5.0"` or
+Ollama) and explicitly select `MAV_LLM_MODE=auto`.
 
 ## Data
 

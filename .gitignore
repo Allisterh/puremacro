@@ -35,6 +35,9 @@ htmlcov/
 # Jupyter
 .ipynb_checkpoints
 
+# Reconstructed course exports are separate from the frozen data edition.
+/curso/notebooks/generated/
+
 # OS / Editor
 .DS_Store
 .vscode/
