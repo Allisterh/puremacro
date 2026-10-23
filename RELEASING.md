@@ -153,8 +153,10 @@ Everything here is local and reversible until step 7.
    git push origin HEAD:main
    git push origin refs/tags/vX.Y.Z          # ← fires release.yml: full CI, then PyPI
    ```
-8. **Watch it land.** Publishing waits for the full CI matrix on the tag, about 50
-   minutes, so PyPI shows the new version only after that:
+8. **Watch it land.** Publishing waits for the full CI matrix and opt-in tests
+   on the tag. Shared runners can take over an hour; wait for successful
+   completion rather than assuming a fixed duration. PyPI shows the version
+   only after the publishing job succeeds:
    ```bash
    gh run list --workflow=release.yml --limit 1
    ```

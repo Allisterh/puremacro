@@ -36,8 +36,10 @@ Users of `STEADY_STATE()` in nonlinear trajectories should review the
 
 The bilingual [course edition `course-2026A-5.5.0`](https://github.com/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/README.md)
 pins `puremacro==5.5.0` and requires **Python 3.12 or later**. All 72 notebooks
-were executed with frozen data and cached language-model responses, including
-the required DP and text sections. Live data refreshes and live local models
+were executed against the [recorded candidate wheel](https://github.com/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/validation/README.md)
+with frozen data and cached language-model responses, including the required
+DP and text sections. The [release record](https://github.com/jalonso1979/puremacro/releases/tag/v5.5.0)
+verifies that the published wheel contains the same runtime files. Live data refreshes and live local models
 remain optional and were not part of that validation. Follow the edition's
 setup instructions; the library itself continues to support Python 3.11+.
 

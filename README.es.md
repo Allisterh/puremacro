@@ -38,8 +38,10 @@ a ejecutar los cálculos afectados.
 
 La [edición bilingüe del curso `course-2026A-5.5.0`](https://github.com/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/README.md)
 fija `puremacro==5.5.0` y requiere **Python 3.12 o posterior**. Se ejecutaron los
-72 cuadernos con datos congelados y respuestas de modelos de lenguaje en caché,
-incluidas las secciones obligatorias de DP y texto. Los refrescos de datos y
+72 cuadernos con el [wheel candidato documentado](https://github.com/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/validation/README.md),
+datos congelados y respuestas de modelos de lenguaje en caché, incluidas las
+secciones obligatorias de DP y texto. El [registro de publicación](https://github.com/jalonso1979/puremacro/releases/tag/v5.5.0)
+verifica que el wheel publicado contiene los mismos archivos de ejecución. Los refrescos de datos y
 los modelos locales en vivo siguen siendo opcionales y no formaron parte de
 esa validación. Siga las instrucciones de la edición; la biblioteca conserva
 el soporte de Python 3.11+.
