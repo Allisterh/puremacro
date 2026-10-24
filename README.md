@@ -2,7 +2,7 @@
 
 # puremacro
 
-**New in 5.7.0:** [one model, several solution methods](docs/dsge_workflows.md): ordered `.mod` programs, nonlinear transitions, local/global policy comparisons, and eight revised MAV notebooks. This version also includes [DP models in `.mod` files](docs/dp_modfiles.md), [reproducible studies](docs/studies.md) and [editable HANK equations](docs/hank_model_closure.md) developed for 5.6.0.
+**New in 5.7:** [one model, several solution methods](docs/dsge_workflows.md): ordered `.mod` programs, nonlinear transitions, local/global policy comparisons, and eight revised MAV notebooks. This version also includes [DP models in `.mod` files](docs/dp_modfiles.md), [reproducible studies](docs/studies.md) and [editable HANK equations](docs/hank_model_closure.md) developed for 5.6.0.
 
 **Macroeconometrics and structural modeling on the core scientific-Python stack.**
 
@@ -23,13 +23,13 @@ python -m pip install puremacro
 | **Simulate policy** | Declare a household model with [dynamic programming](docs/dp.md), study [monetary transmission](docs/monetary_transmission.md), or build a [trade counterfactual](docs/trade_accounting.md). |
 | **Learn or teach** | Choose a [notebook learning path](docs/notebooks.md) or use the [bilingual course and interactive labs](curso/README.md). Use the pinned course edition below. |
 
-**Documentation for version 5.7.0.** Check [available PyPI releases](https://pypi.org/project/puremacro/#history).
-These APIs require 5.7.0; see the [changelog](CHANGELOG.md) for additions and fixes. Match your installed version to the documentation.
+**Documentation for version 5.7.1.** Check [available PyPI releases](https://pypi.org/project/puremacro/#history).
+These pages target 5.7.1; see the [changelog](CHANGELOG.md) for additions and fixes. Match your installed version to the documentation.
 
 New DSGE workflows share [nonlinear model equations](docs/dsge_nonlinear.md)
 across [robust transitions and announcements](docs/dsge_transitions.md) and
 [local/global policy comparisons](docs/dsge_global.md). The amended bilingual
-[T02_A–D notebooks](curso/notebooks/README.md) pin the code, helpers and models to `v5.7.0`. Their execution evidence covers local Python.
+[T02_A–D notebooks](curso/notebooks/README.md) pin the code, helpers and models to `v5.7.1`. Their execution evidence covers local Python.
 
 Since 5.5.0: [read-only `.mod` inspection and opt-in ordered execution](docs/dsge_mod_inspection.md),
 and [audits of supported solved results](docs/result_audits.md). Inspection

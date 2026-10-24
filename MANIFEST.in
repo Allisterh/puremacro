@@ -10,3 +10,4 @@ include curso/scripts/ejecutar_desarrollo_dsge.py
 include curso/validation/dsge-methods-2026-10-23.json
 include docs/dsge_workflows.md docs/es/dsge_workflows.md
 include curso/validation/dsge-development-2026-10-23.json
+include curso/validation/dsge-release-5.7.0-2026-10-23.json

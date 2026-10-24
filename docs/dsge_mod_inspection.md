@@ -91,7 +91,7 @@ this provenance. For plain text, `execute_mod_commands(ordered=True)` can also
 check an already loaded model, but loading has already performed its solve.
 
 The stochastic subset supports repeated `stoch_simul`, `calib_smoother` and
-`shock_decomposition` at a fixed calibration. The 5.7.0 development extension
+`shock_decomposition` at a fixed calibration. The extension introduced in 5.7.0
 also replays deterministic boundary blocks, shock declarations and repeated
 perfect-foresight setup/solver commands, including mixed deterministic and
 stochastic programs. Use `read_mod(source).execute_mod_commands()` to start

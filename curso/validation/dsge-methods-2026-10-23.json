@@ -1,7 +1,7 @@
 {
   "date": "2026-10-23",
-  "scope": "T02_A-D bilingual 5.7.0 release source execution",
-  "puremacro": "5.7.0",
+  "scope": "T02_A-D bilingual 5.7.1 release source execution",
+  "puremacro": "5.7.1",
   "runtime_source": "local source checkout, not a released wheel",
   "verified_platform": "local Python, fresh offline IPython process per notebook",
   "python": "3.12.13 (main, Jul 18 2026, 16:55:18) [Clang 22.1.3 ]",
@@ -13,7 +13,7 @@
     "ipython": "9.17.1"
   },
   "package_sources": {
-    "puremacro/__init__.py": "98ccef0461d790e6e689eef76bfe22d588012855ab35208fce8b026db2303a13",
+    "puremacro/__init__.py": "58ca3c5cccaa6ab8adbe8ade4c8d0d681a038a43f1cd891c6f84197a24c92bf5",
     "puremacro/_backend.py": "1758487ae508d3ea0e93b95e1697be485f6bf28b9950d0889b788ebc1ad88525",
     "puremacro/_cache_db.py": "c7c065b6cc144139382d966984843f2b28da95f141b1a19b941c2e431ccc36ff",
     "puremacro/_codes.py": "ebe4fb706e21024a1b6a687e8190fb0c7446c77a882da5c71d53e307643de76b",
@@ -1366,7 +1366,7 @@
   "notebooks": [
     {
       "notebook": "T02_A_neoclassical_growth_local.ipynb",
-      "source_sha256": "aa4f88e99250bf3c597d2fa83044639a151580551738512e3c569b645925a3f1",
+      "source_sha256": "0a3018a1870503db8d8d95320cb4409de302c1f86dfaebe0709ab07c9d0b5408",
       "ok": true,
       "errors": [],
       "warnings": [
@@ -1377,77 +1377,77 @@
       ],
       "figures": 8,
       "code_cells": 12,
-      "seconds": 18.661,
-      "version": "5.7.0",
+      "seconds": 16.782,
+      "version": "5.7.1",
       "module": "puremacro/__init__.py",
       "cells": [
         {
           "index": 1,
-          "seconds": 2.393,
+          "seconds": 0.864,
           "ok": true
         },
         {
           "index": 3,
-          "seconds": 0.006,
+          "seconds": 0.004,
           "ok": true
         },
         {
           "index": 5,
-          "seconds": 0.032,
+          "seconds": 0.026,
           "ok": true
         },
         {
           "index": 7,
-          "seconds": 0.201,
+          "seconds": 0.155,
           "ok": true
         },
         {
           "index": 9,
-          "seconds": 1.941,
+          "seconds": 1.83,
           "ok": true
         },
         {
           "index": 11,
-          "seconds": 0.169,
+          "seconds": 0.172,
           "ok": true
         },
         {
           "index": 13,
-          "seconds": 0.322,
+          "seconds": 0.316,
           "ok": true
         },
         {
           "index": 15,
-          "seconds": 1.171,
+          "seconds": 1.183,
           "ok": true
         },
         {
           "index": 17,
-          "seconds": 0.609,
+          "seconds": 0.586,
           "ok": true
         },
         {
           "index": 19,
-          "seconds": 1.013,
+          "seconds": 1.019,
           "ok": true
         },
         {
           "index": 21,
-          "seconds": 10.684,
+          "seconds": 10.511,
           "ok": true
         },
         {
           "index": 23,
-          "seconds": 0.116,
+          "seconds": 0.112,
           "ok": true
         }
       ],
       "network_attempts": [],
-      "output_sha256": "e8f37bf26d8b52346f2118b8a97d8f7845c681f0255e00098c76036301921386"
+      "output_sha256": "8a7ade549b334928c8079c7cac23543377c218654d344b243cfcec8c6b30e29d"
     },
     {
       "notebook": "T02_A_neoclassical_growth_local_es.ipynb",
-      "source_sha256": "b691c193e49078388c5f0857e11d3129dd2317492727722e6e98eb0f1209be66",
+      "source_sha256": "3d4bb267e4b2a98c7190427125f3d52737750137d9a54ec76cbc871cfef39566",
       "ok": true,
       "errors": [],
       "warnings": [
@@ -1458,261 +1458,89 @@
       ],
       "figures": 8,
       "code_cells": 12,
-      "seconds": 18.66,
-      "version": "5.7.0",
+      "seconds": 16.701,
+      "version": "5.7.1",
       "module": "puremacro/__init__.py",
       "cells": [
         {
           "index": 1,
-          "seconds": 2.392,
+          "seconds": 0.864,
           "ok": true
         },
         {
           "index": 3,
-          "seconds": 0.006,
+          "seconds": 0.004,
           "ok": true
         },
         {
           "index": 5,
-          "seconds": 0.035,
+          "seconds": 0.026,
           "ok": true
         },
         {
           "index": 7,
-          "seconds": 0.199,
+          "seconds": 0.156,
           "ok": true
         },
         {
           "index": 9,
-          "seconds": 1.951,
+          "seconds": 1.827,
           "ok": true
         },
         {
           "index": 11,
-          "seconds": 0.17,
+          "seconds": 0.175,
           "ok": true
         },
         {
           "index": 13,
-          "seconds": 0.323,
+          "seconds": 0.316,
           "ok": true
         },
         {
           "index": 15,
-          "seconds": 1.177,
+          "seconds": 1.187,
           "ok": true
         },
         {
           "index": 17,
-          "seconds": 0.614,
+          "seconds": 0.587,
           "ok": true
         },
         {
           "index": 19,
-          "seconds": 1.023,
+          "seconds": 1.032,
           "ok": true
         },
         {
           "index": 21,
-          "seconds": 10.652,
+          "seconds": 10.414,
           "ok": true
         },
         {
           "index": 23,
-          "seconds": 0.116,
+          "seconds": 0.112,
           "ok": true
         }
       ],
       "network_attempts": [],
-      "output_sha256": "a8efbaf3c227fb44c692f56ad6482c5a507a7a81bf5c6f7142d73ca4ca95cba3"
+      "output_sha256": "dd67c5c8386bc685de17d551dad5a5651d6333320d1ab4a076c9e598e3c898bd"
     },
     {
       "notebook": "T02_B_rbc_dynare_local.ipynb",
-      "source_sha256": "d161a9427bafdce76ce9ae4c8b2abb3fbfd235e026256f9d4007af4b0ad6a1e4",
+      "source_sha256": "609e0792adf64bc7aa69499760f3e670286a8279ec3268dde7e6e7f755508682",
       "ok": true,
       "errors": [],
       "warnings": [],
       "figures": 9,
       "code_cells": 14,
-      "seconds": 39.384,
-      "version": "5.7.0",
+      "seconds": 25.527,
+      "version": "5.7.1",
       "module": "puremacro/__init__.py",
       "cells": [
         {
           "index": 1,
-          "seconds": 1.343,
-          "ok": true
-        },
-        {
-          "index": 3,
-          "seconds": 0.027,
-          "ok": true
-        },
-        {
-          "index": 5,
-          "seconds": 0.065,
-          "ok": true
-        },
-        {
-          "index": 7,
-          "seconds": 0.425,
-          "ok": true
-        },
-        {
-          "index": 9,
-          "seconds": 5.067,
-          "ok": true
-        },
-        {
-          "index": 11,
-          "seconds": 1.808,
-          "ok": true
-        },
-        {
-          "index": 13,
-          "seconds": 2.296,
-          "ok": true
-        },
-        {
-          "index": 15,
-          "seconds": 0.382,
-          "ok": true
-        },
-        {
-          "index": 17,
-          "seconds": 0.323,
-          "ok": true
-        },
-        {
-          "index": 19,
-          "seconds": 4.179,
-          "ok": true
-        },
-        {
-          "index": 21,
-          "seconds": 9.519,
-          "ok": true
-        },
-        {
-          "index": 23,
-          "seconds": 0.222,
-          "ok": true
-        },
-        {
-          "index": 25,
-          "seconds": 11.022,
-          "ok": true
-        },
-        {
-          "index": 27,
-          "seconds": 2.698,
-          "ok": true
-        }
-      ],
-      "network_attempts": [],
-      "output_sha256": "899008df2a53032221d4e068294569c4d781a6a498c8b2a6c279f28fed896815"
-    },
-    {
-      "notebook": "T02_B_rbc_dynare_local_es.ipynb",
-      "source_sha256": "04239335b53dfb849bebc2204208868f1620b4d8524cb0bab9581805a4d620aa",
-      "ok": true,
-      "errors": [],
-      "warnings": [],
-      "figures": 9,
-      "code_cells": 14,
-      "seconds": 39.013,
-      "version": "5.7.0",
-      "module": "puremacro/__init__.py",
-      "cells": [
-        {
-          "index": 1,
-          "seconds": 1.143,
-          "ok": true
-        },
-        {
-          "index": 3,
-          "seconds": 0.049,
-          "ok": true
-        },
-        {
-          "index": 5,
-          "seconds": 0.116,
-          "ok": true
-        },
-        {
-          "index": 7,
-          "seconds": 0.463,
-          "ok": true
-        },
-        {
-          "index": 9,
-          "seconds": 4.608,
-          "ok": true
-        },
-        {
-          "index": 11,
-          "seconds": 1.955,
-          "ok": true
-        },
-        {
-          "index": 13,
-          "seconds": 3.051,
-          "ok": true
-        },
-        {
-          "index": 15,
-          "seconds": 0.16,
-          "ok": true
-        },
-        {
-          "index": 17,
-          "seconds": 0.223,
-          "ok": true
-        },
-        {
-          "index": 19,
-          "seconds": 7.55,
-          "ok": true
-        },
-        {
-          "index": 21,
-          "seconds": 5.912,
-          "ok": true
-        },
-        {
-          "index": 23,
-          "seconds": 0.237,
-          "ok": true
-        },
-        {
-          "index": 25,
-          "seconds": 10.812,
-          "ok": true
-        },
-        {
-          "index": 27,
-          "seconds": 2.729,
-          "ok": true
-        }
-      ],
-      "network_attempts": [],
-      "output_sha256": "cee4e2eeda6bcd1a9d526b32a7cfc9d421d6f7083864febe86c2ab1220f5f49b"
-    },
-    {
-      "notebook": "T02_C_new_keynesian_local.ipynb",
-      "source_sha256": "2c81ecd46aefe70bf7eeee76bbe551f25489ecb68f85e506b80a099867c53aa9",
-      "ok": true,
-      "errors": [],
-      "warnings": [],
-      "figures": 11,
-      "code_cells": 14,
-      "seconds": 27.069,
-      "version": "5.7.0",
-      "module": "puremacro/__init__.py",
-      "cells": [
-        {
-          "index": 1,
-          "seconds": 0.727,
+          "seconds": 0.595,
           "ok": true
         },
         {
@@ -1722,83 +1550,169 @@
         },
         {
           "index": 5,
-          "seconds": 0.022,
+          "seconds": 0.043,
           "ok": true
         },
         {
           "index": 7,
-          "seconds": 0.23,
+          "seconds": 0.297,
           "ok": true
         },
         {
           "index": 9,
-          "seconds": 0.229,
+          "seconds": 2.406,
           "ok": true
         },
         {
           "index": 11,
-          "seconds": 0.252,
+          "seconds": 1.598,
           "ok": true
         },
         {
           "index": 13,
-          "seconds": 0.105,
+          "seconds": 1.779,
           "ok": true
         },
         {
           "index": 15,
-          "seconds": 5.827,
+          "seconds": 0.11,
           "ok": true
         },
         {
           "index": 17,
-          "seconds": 0.458,
+          "seconds": 0.178,
           "ok": true
         },
         {
           "index": 19,
-          "seconds": 0.173,
+          "seconds": 2.541,
           "ok": true
         },
         {
           "index": 21,
-          "seconds": 11.683,
+          "seconds": 5.909,
           "ok": true
         },
         {
           "index": 23,
-          "seconds": 0.431,
+          "seconds": 0.199,
           "ok": true
         },
         {
           "index": 25,
-          "seconds": 0.166,
+          "seconds": 7.732,
           "ok": true
         },
         {
           "index": 27,
-          "seconds": 6.745,
+          "seconds": 2.119,
           "ok": true
         }
       ],
       "network_attempts": [],
-      "output_sha256": "b4752aad76ac460809ea778b4a5c01de6eb28985f1d48d5f521eb3b182bf8f3d"
+      "output_sha256": "1ee3fac27253146f5c86e87e383f289eb1c5b515918f6e8c4e3eff20f756720f"
     },
     {
-      "notebook": "T02_C_new_keynesian_local_es.ipynb",
-      "source_sha256": "2e8b415febfd8821ebde55d749d764a914956229eeaf084d003ead5367b3c390",
+      "notebook": "T02_B_rbc_dynare_local_es.ipynb",
+      "source_sha256": "40b185a85f6868a615ce373ae9f449ebcd4557176712db3e36f5469f562ab4c4",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "figures": 9,
+      "code_cells": 14,
+      "seconds": 28.514,
+      "version": "5.7.1",
+      "module": "puremacro/__init__.py",
+      "cells": [
+        {
+          "index": 1,
+          "seconds": 0.605,
+          "ok": true
+        },
+        {
+          "index": 3,
+          "seconds": 0.017,
+          "ok": true
+        },
+        {
+          "index": 5,
+          "seconds": 0.055,
+          "ok": true
+        },
+        {
+          "index": 7,
+          "seconds": 0.297,
+          "ok": true
+        },
+        {
+          "index": 9,
+          "seconds": 4.027,
+          "ok": true
+        },
+        {
+          "index": 11,
+          "seconds": 0.641,
+          "ok": true
+        },
+        {
+          "index": 13,
+          "seconds": 1.092,
+          "ok": true
+        },
+        {
+          "index": 15,
+          "seconds": 0.271,
+          "ok": true
+        },
+        {
+          "index": 17,
+          "seconds": 0.178,
+          "ok": true
+        },
+        {
+          "index": 19,
+          "seconds": 4.722,
+          "ok": true
+        },
+        {
+          "index": 21,
+          "seconds": 6.929,
+          "ok": true
+        },
+        {
+          "index": 23,
+          "seconds": 0.189,
+          "ok": true
+        },
+        {
+          "index": 25,
+          "seconds": 7.518,
+          "ok": true
+        },
+        {
+          "index": 27,
+          "seconds": 1.969,
+          "ok": true
+        }
+      ],
+      "network_attempts": [],
+      "output_sha256": "02fa0f03aea23366714027313c98c5dfaabde4b4b17b8d62c0938ff9b409b2b9"
+    },
+    {
+      "notebook": "T02_C_new_keynesian_local.ipynb",
+      "source_sha256": "03b3e47f2c5ba19131a8840761b10ab5a1c994ed8267bb9a188616b335305428",
       "ok": true,
       "errors": [],
       "warnings": [],
       "figures": 11,
       "code_cells": 14,
-      "seconds": 31.457,
-      "version": "5.7.0",
+      "seconds": 28.792,
+      "version": "5.7.1",
       "module": "puremacro/__init__.py",
       "cells": [
         {
           "index": 1,
-          "seconds": 0.624,
+          "seconds": 0.686,
           "ok": true
         },
         {
@@ -1808,194 +1722,164 @@
         },
         {
           "index": 5,
-          "seconds": 0.022,
+          "seconds": 0.021,
           "ok": true
         },
         {
           "index": 7,
-          "seconds": 0.231,
+          "seconds": 0.22,
           "ok": true
         },
         {
           "index": 9,
-          "seconds": 0.23,
+          "seconds": 0.201,
           "ok": true
         },
         {
           "index": 11,
-          "seconds": 0.256,
+          "seconds": 0.242,
           "ok": true
         },
         {
           "index": 13,
-          "seconds": 0.107,
+          "seconds": 0.1,
           "ok": true
         },
         {
           "index": 15,
-          "seconds": 5.83,
+          "seconds": 4.931,
           "ok": true
         },
         {
           "index": 17,
-          "seconds": 0.459,
+          "seconds": 0.436,
           "ok": true
         },
         {
           "index": 19,
-          "seconds": 0.184,
+          "seconds": 0.165,
           "ok": true
         },
         {
           "index": 21,
-          "seconds": 16.59,
+          "seconds": 12.572,
           "ok": true
         },
         {
           "index": 23,
-          "seconds": 0.387,
+          "seconds": 0.988,
           "ok": true
         },
         {
           "index": 25,
-          "seconds": 0.174,
+          "seconds": 0.418,
           "ok": true
         },
         {
           "index": 27,
-          "seconds": 6.344,
+          "seconds": 7.789,
           "ok": true
         }
       ],
       "network_attempts": [],
-      "output_sha256": "22c0a66bfd0d2e40e6f826221abb6cab94b13d3fd3c074a34806838d9bd7eac3"
+      "output_sha256": "3449eecb2aba2693582cf0241b703c3e4ef9e816743f7f4eed4f3be14d65f54e"
     },
     {
-      "notebook": "T02_D_occbin_zlb_regimes.ipynb",
-      "source_sha256": "4efab0a0763e75da50bb1026c5e4aac5ece8b0972cda70a6ea84a8043282cfd0",
+      "notebook": "T02_C_new_keynesian_local_es.ipynb",
+      "source_sha256": "4638e0293e3a66fa633d27102c0c313d1e20b37a74e2368db29a64da534dc24b",
       "ok": true,
       "errors": [],
       "warnings": [],
-      "figures": 8,
-      "code_cells": 20,
-      "seconds": 176.403,
-      "version": "5.7.0",
+      "figures": 11,
+      "code_cells": 14,
+      "seconds": 28.699,
+      "version": "5.7.1",
       "module": "puremacro/__init__.py",
       "cells": [
         {
           "index": 1,
-          "seconds": 0.597,
+          "seconds": 0.596,
           "ok": true
         },
         {
           "index": 3,
-          "seconds": 0.006,
+          "seconds": 0.015,
           "ok": true
         },
         {
           "index": 5,
-          "seconds": 0.327,
+          "seconds": 0.021,
           "ok": true
         },
         {
           "index": 7,
-          "seconds": 0.141,
+          "seconds": 0.218,
           "ok": true
         },
         {
           "index": 9,
-          "seconds": 0.195,
+          "seconds": 0.207,
           "ok": true
         },
         {
           "index": 11,
-          "seconds": 0.111,
+          "seconds": 0.252,
           "ok": true
         },
         {
           "index": 13,
-          "seconds": 0.19,
+          "seconds": 0.104,
           "ok": true
         },
         {
           "index": 15,
-          "seconds": 0.239,
+          "seconds": 5.128,
           "ok": true
         },
         {
-          "index": 18,
-          "seconds": 0.009,
+          "index": 17,
+          "seconds": 0.49,
           "ok": true
         },
         {
-          "index": 20,
-          "seconds": 0.02,
+          "index": 19,
+          "seconds": 0.193,
           "ok": true
         },
         {
-          "index": 22,
-          "seconds": 14.646,
+          "index": 21,
+          "seconds": 14.676,
           "ok": true
         },
         {
           "index": 23,
-          "seconds": 0.082,
+          "seconds": 0.36,
           "ok": true
         },
         {
           "index": 25,
-          "seconds": 15.656,
+          "seconds": 0.162,
           "ok": true
         },
         {
           "index": 27,
-          "seconds": 0.002,
-          "ok": true
-        },
-        {
-          "index": 29,
-          "seconds": 0.109,
-          "ok": true
-        },
-        {
-          "index": 30,
-          "seconds": 0.004,
-          "ok": true
-        },
-        {
-          "index": 32,
-          "seconds": 140.97,
-          "ok": true
-        },
-        {
-          "index": 34,
-          "seconds": 3.003,
-          "ok": true
-        },
-        {
-          "index": 35,
-          "seconds": 0.084,
-          "ok": true
-        },
-        {
-          "index": 38,
-          "seconds": 0.005,
+          "seconds": 6.274,
           "ok": true
         }
       ],
       "network_attempts": [],
-      "output_sha256": "64998dfb938bbe17705d2b89927a0f95e2747b8a7b09593cce8ab506e8f50e38"
+      "output_sha256": "3f1896a1586626b087fd7f3320c29dc9bdd27d3ed504df3c8fb5b204cb7fee90"
     },
     {
-      "notebook": "T02_D_occbin_zlb_regimes_es.ipynb",
-      "source_sha256": "af9c3826b60ad585125fa53d2cb7cc96656715827960911830e7ed2e82842f42",
+      "notebook": "T02_D_occbin_zlb_regimes.ipynb",
+      "source_sha256": "cea9945a57a7fa2abc68998d3e4401ee1f21da7abf146f25f378b87265b84795",
       "ok": true,
       "errors": [],
       "warnings": [],
       "figures": 8,
       "code_cells": 20,
-      "seconds": 178.935,
-      "version": "5.7.0",
+      "seconds": 180.079,
+      "version": "5.7.1",
       "module": "puremacro/__init__.py",
       "cells": [
         {
@@ -2010,32 +1894,32 @@
         },
         {
           "index": 5,
-          "seconds": 0.333,
+          "seconds": 0.33,
           "ok": true
         },
         {
           "index": 7,
-          "seconds": 0.145,
+          "seconds": 0.146,
           "ok": true
         },
         {
           "index": 9,
-          "seconds": 0.198,
+          "seconds": 0.204,
           "ok": true
         },
         {
           "index": 11,
-          "seconds": 0.114,
+          "seconds": 0.113,
           "ok": true
         },
         {
           "index": 13,
-          "seconds": 0.194,
+          "seconds": 0.195,
           "ok": true
         },
         {
           "index": 15,
-          "seconds": 0.243,
+          "seconds": 0.24,
           "ok": true
         },
         {
@@ -2050,7 +1934,7 @@
         },
         {
           "index": 22,
-          "seconds": 14.535,
+          "seconds": 14.373,
           "ok": true
         },
         {
@@ -2060,7 +1944,7 @@
         },
         {
           "index": 25,
-          "seconds": 15.467,
+          "seconds": 15.462,
           "ok": true
         },
         {
@@ -2070,7 +1954,7 @@
         },
         {
           "index": 29,
-          "seconds": 0.117,
+          "seconds": 0.112,
           "ok": true
         },
         {
@@ -2080,17 +1964,17 @@
         },
         {
           "index": 32,
-          "seconds": 143.832,
+          "seconds": 145.016,
           "ok": true
         },
         {
           "index": 34,
-          "seconds": 2.956,
+          "seconds": 3.084,
           "ok": true
         },
         {
           "index": 35,
-          "seconds": 0.076,
+          "seconds": 0.082,
           "ok": true
         },
         {
@@ -2100,7 +1984,123 @@
         }
       ],
       "network_attempts": [],
-      "output_sha256": "926ce56ae71a0dff77828ba6dde9e33c729f9f645db9466d27a86dea09fa9b99"
+      "output_sha256": "2a3fcedd7e9c51c76a4a686fefaedc182cb56830a0adee94f78caf52671b10c4"
+    },
+    {
+      "notebook": "T02_D_occbin_zlb_regimes_es.ipynb",
+      "source_sha256": "a1c5e88e0a6ea0e48466e52a177e5e2402d2a9aec7c7c1227d076d02acbf7b57",
+      "ok": true,
+      "errors": [],
+      "warnings": [],
+      "figures": 8,
+      "code_cells": 20,
+      "seconds": 180.981,
+      "version": "5.7.1",
+      "module": "puremacro/__init__.py",
+      "cells": [
+        {
+          "index": 1,
+          "seconds": 0.582,
+          "ok": true
+        },
+        {
+          "index": 3,
+          "seconds": 0.006,
+          "ok": true
+        },
+        {
+          "index": 5,
+          "seconds": 0.331,
+          "ok": true
+        },
+        {
+          "index": 7,
+          "seconds": 0.148,
+          "ok": true
+        },
+        {
+          "index": 9,
+          "seconds": 0.196,
+          "ok": true
+        },
+        {
+          "index": 11,
+          "seconds": 0.113,
+          "ok": true
+        },
+        {
+          "index": 13,
+          "seconds": 0.192,
+          "ok": true
+        },
+        {
+          "index": 15,
+          "seconds": 0.242,
+          "ok": true
+        },
+        {
+          "index": 18,
+          "seconds": 0.009,
+          "ok": true
+        },
+        {
+          "index": 20,
+          "seconds": 0.02,
+          "ok": true
+        },
+        {
+          "index": 22,
+          "seconds": 14.636,
+          "ok": true
+        },
+        {
+          "index": 23,
+          "seconds": 0.081,
+          "ok": true
+        },
+        {
+          "index": 25,
+          "seconds": 15.687,
+          "ok": true
+        },
+        {
+          "index": 27,
+          "seconds": 0.002,
+          "ok": true
+        },
+        {
+          "index": 29,
+          "seconds": 0.115,
+          "ok": true
+        },
+        {
+          "index": 30,
+          "seconds": 0.004,
+          "ok": true
+        },
+        {
+          "index": 32,
+          "seconds": 145.597,
+          "ok": true
+        },
+        {
+          "index": 34,
+          "seconds": 2.933,
+          "ok": true
+        },
+        {
+          "index": 35,
+          "seconds": 0.079,
+          "ok": true
+        },
+        {
+          "index": 38,
+          "seconds": 0.005,
+          "ok": true
+        }
+      ],
+      "network_attempts": [],
+      "output_sha256": "e0d9c47024b850de16074f25d5eed5272ba3d51f5c41ef7f0f9ae47052360793"
     }
   ]
 }

@@ -105,8 +105,8 @@ requiere su desigualdad económica y condición de complementariedad.
 
 ## Siga la secuencia docente de MAV
 
-La [guía bilingüe del curso](https://github.com/jalonso1979/puremacro/blob/v5.7.0/curso/notebooks/README.md)
-fija T02_A–D, sus auxiliares y modelos al tag `v5.7.0`. La edición original de
+La [guía bilingüe del curso](https://github.com/jalonso1979/puremacro/blob/v5.7.1/curso/notebooks/README.md)
+fija T02_A–D, sus auxiliares y modelos al tag `v5.7.1`. La edición original de
 72 cuadernos permanece disponible en `course-2026A-5.5.0`.
 
 | Lección | Qué reproducir | Comprobación independiente destacada |
@@ -121,8 +121,8 @@ Python 3.11+. Cree un entorno virtual nuevo y utilice el mismo intérprete para
 instalar dependencias e iniciar Jupyter:
 
 ```bash
-git clone --branch v5.7.0 --depth 1 https://github.com/jalonso1979/puremacro.git puremacro-5.7.0
-cd puremacro-5.7.0
+git clone --branch v5.7.1 --depth 1 https://github.com/jalonso1979/puremacro.git puremacro-5.7.1
+cd puremacro-5.7.1
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e ".[notebooks]" jupyterlab
@@ -136,7 +136,7 @@ En Windows PowerShell, sustituya la activación por
 reinicie el kernel después de instalar. Ejecute las celdas en orden; no mezcle
 el entorno del curso 5.5.0 con las lecciones DSGE actualizadas.
 
-El [registro de ejecución](https://github.com/jalonso1979/puremacro/blob/v5.7.0/curso/validation/README.md)
+El [registro de ejecución](https://github.com/jalonso1979/puremacro/blob/v5.7.1/curso/validation/README.md)
 identifica entradas de cuadernos y biblioteca, ejecución de celdas y figuras
 guardadas. La ejecución local y las pruebas Pyodide sin interfaz son
 comprobaciones distintas; ninguna certifica todas las sesiones de Colab,

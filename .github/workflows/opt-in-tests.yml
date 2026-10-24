@@ -12,8 +12,8 @@ name: Opt-in tests
 # Measured on 2026-10-03 (12-core laptop, conda Python 3.13): 115 passed,
 # 9 skipped in 74 min, of which 43 min were
 # tests/test_notebooks/test_notebooks_execute.py::test_all_notebooks_execute.
-# That one test runs in its own job below, weekly and on demand only, so the
-# release gate stays within the hour on a shared runner.
+# That showcase notebook test runs in its own job below, weekly and on demand
+# only, so the release gate stays within the hour on a shared runner.
 
 on:
   schedule:
@@ -43,7 +43,7 @@ jobs:
           pip install -e ".[dev,notebooks]"
 
       # `-m` on the command line replaces the marker expression in addopts.
-      # The notebook-execution test is deselected here and run by the job
+      # The showcase notebook test is deselected here and run by the job
       # below; the `network` marker stays opt-in (external services).
       # PYTHONPATH: six slow test modules import the repository's `tools`
       # package (reference-validation helpers). The default `pytest` run
@@ -61,9 +61,10 @@ jobs:
             --durations=25 -rs
 
   notebooks:
-    name: execute every notebook (ubuntu, Python 3.12)
+    name: execute every showcase notebook (ubuntu, Python 3.12)
     # Inside a workflow_call (release.yml) github.event_name is the caller's
     # "push" of the tag, so this job runs only on the schedule and on demand.
+    # Frozen course editions use their separately validated environments.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 330
@@ -80,7 +81,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,notebooks]"
 
-      - name: Execute the notebooks
+      - name: Execute the showcase notebooks
         env:
           PUREMACRO_TIMING_SCALE: "10"
           PUREMACRO_LLM_MODE: "cache"

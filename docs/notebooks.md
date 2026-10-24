@@ -37,7 +37,7 @@ identifies the candidate archive actually executed; public-wheel equivalence
 belongs to the release record. Use that edition's own setup in a separate
 environment. Its numbering and HTML/JavaScript labs are separate from this catalog.
 
-For nonlinear DSGE work, the updated [MAV T02_A–D sequence](dsge_workflows.md#follow-the-mav-teaching-sequence) uses the `v5.7.0` model and solver workflows. It has separate execution evidence and setup instructions from the original 5.5.0 course edition.
+For nonlinear DSGE work, the updated [MAV T02_A–D sequence](dsge_workflows.md#follow-the-mav-teaching-sequence) uses the `v5.7.1` model and solver workflows. It has separate execution evidence and setup instructions from the original 5.5.0 course edition.
 
 ## Run and change an example
 

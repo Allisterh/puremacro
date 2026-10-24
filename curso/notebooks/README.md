@@ -12,13 +12,13 @@ auxiliares `_datos.py`, `_nbstyle.py`, `_tutor.py`, `_llm.py`, `_t01.py` y `_dsg
 `data_curso/` y los modelos `.mod` en `modelos/`. Las diapositivas en PDF están
 en `curso/site/diapositivas/`.
 
-**Actualización DSGE del 23 de octubre de 2026 (5.7.0).** T02_A–D usan modelos no lineales sin resolución implícita, ejecución ordenada de comandos `.mod`, transiciones con continuación y diagnósticos comunes de soluciones locales y globales. T02_D conserva las lecciones de inversión irreversible y volatilidad estocástica añadidas el 22 de octubre. Los ocho cuadernos actualizados fijan el código fuente y los auxiliares del tag `v5.7.0`; el tag `course-2026A-5.5.0` conserva la edición original. Véase la [validación adicional](../validation/README.md).
+**Actualización DSGE del 23 de octubre de 2026 (5.7.1).** T02_A–D usan modelos no lineales sin resolución implícita, ejecución ordenada de comandos `.mod`, transiciones con continuación y diagnósticos comunes de soluciones locales y globales. T02_D conserva las lecciones de inversión irreversible y volatilidad estocástica añadidas el 22 de octubre. Los ocho cuadernos actualizados fijan el código fuente y los auxiliares del tag `v5.7.1`; el tag `course-2026A-5.5.0` conserva la edición original. Véase la [validación adicional](../validation/README.md).
 
 Para ejecutar T02_A–D con Python 3.12 o posterior, clone el tag y use un entorno virtual nuevo:
 
 ```bash
-git clone --branch v5.7.0 --depth 1 https://github.com/jalonso1979/puremacro.git puremacro-5.7.0
-cd puremacro-5.7.0
+git clone --branch v5.7.1 --depth 1 https://github.com/jalonso1979/puremacro.git puremacro-5.7.1
+cd puremacro-5.7.1
 python -m venv .venv
 source .venv/bin/activate  # Windows PowerShell: ./.venv/Scripts/Activate.ps1
 python -m pip install -e ".[notebooks]" jupyterlab
@@ -26,7 +26,7 @@ cd curso/notebooks
 jupyter lab
 ```
 
-Seleccione ese entorno como kernel. Mantenga `_dsge_labs.py`, `modelos/` y `data_curso/` junto a los cuadernos. La validación registrada usa Python local; Colab instala el código del tag `v5.7.0`. Esta evidencia no certifica una ejecución completa en Colab. Las instrucciones siguientes reproducen la edición original completa.
+Seleccione ese entorno como kernel. Mantenga `_dsge_labs.py`, `modelos/` y `data_curso/` junto a los cuadernos. La validación registrada usa Python local; Colab instala el código del tag `v5.7.1`. Esta evidencia no certifica una ejecución completa en Colab. Las instrucciones siguientes reproducen la edición original completa.
 
 ## Abrir un cuaderno en Google Colab
 
@@ -41,10 +41,10 @@ y datos congelados); no pide acceso a Google Drive. Ejecute las celdas en orden.
 | T01_A | Hechos del ciclo económico desde el mercado de trabajo | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_A_data_panels_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_A_data_panels.ipynb) |
 | T01_B | Contabilidad nacional y hechos estilizados internacionales | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_B_measurement_and_cycles_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_B_measurement_and_cycles.ipynb) |
 | T01_C | El ciclo a frecuencia mensual, semanal y diaria | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_C_stylized_facts_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_C_stylized_facts.ipynb) |
-| T02_A | Modelo neoclásico de crecimiento: log-linealización y aproximación local | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.0/curso/notebooks/T02_A_neoclassical_growth_local_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.0/curso/notebooks/T02_A_neoclassical_growth_local.ipynb) |
-| T02_B | RBC canónico: simulación, momentos y el debate de las horas | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.0/curso/notebooks/T02_B_rbc_dynare_local_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.0/curso/notebooks/T02_B_rbc_dynare_local.ipynb) |
-| T02_C | Precios rígidos y búsqueda: fricciones en bienes y trabajo | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.0/curso/notebooks/T02_C_new_keynesian_local_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.0/curso/notebooks/T02_C_new_keynesian_local.ipynb) |
-| T02_D | OccBin, inversión irreversible y choques de incertidumbre | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.0/curso/notebooks/T02_D_occbin_zlb_regimes_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.0/curso/notebooks/T02_D_occbin_zlb_regimes.ipynb) |
+| T02_A | Modelo neoclásico de crecimiento: log-linealización y aproximación local | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.1/curso/notebooks/T02_A_neoclassical_growth_local_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.1/curso/notebooks/T02_A_neoclassical_growth_local.ipynb) |
+| T02_B | RBC canónico: simulación, momentos y el debate de las horas | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.1/curso/notebooks/T02_B_rbc_dynare_local_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.1/curso/notebooks/T02_B_rbc_dynare_local.ipynb) |
+| T02_C | Precios rígidos y búsqueda: fricciones en bienes y trabajo | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.1/curso/notebooks/T02_C_new_keynesian_local_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.1/curso/notebooks/T02_C_new_keynesian_local.ipynb) |
+| T02_D | OccBin, inversión irreversible y choques de incertidumbre | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.1/curso/notebooks/T02_D_occbin_zlb_regimes_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.1/curso/notebooks/T02_D_occbin_zlb_regimes.ipynb) |
 | T02_E | Estimación bayesiana de modelos DSGE y comparación de modelos | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_E_bayesian_dsge_local_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_E_bayesian_dsge_local.ipynb) |
 | T02_F | Fricciones macrofinancieras: Gertler y Karadi (2011) | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_F_gertler_karadi_macrofinance_local_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_F_gertler_karadi_macrofinance_local.ipynb) |
 | T03_A | Choques agregados con mercados incompletos: Krusell–Smith y jacobianos | [español](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_A_aggregate_shocks_es.ipynb) | [inglés](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_A_aggregate_shocks.ipynb) |
@@ -125,13 +125,13 @@ helpers `_datos.py`, `_nbstyle.py`, `_tutor.py`, `_llm.py`, `_t01.py` and `_dsge
 `data_curso/` and the `.mod` models in `modelos/`. The PDF slides are in
 `curso/site/diapositivas/` (in Spanish).
 
-**23 October 2026 DSGE update (5.7.0).** T02_A–D use nonlinear models without implicit solving, ordered `.mod` commands, continuation for transitions and common local/global solution diagnostics. T02_D retains the irreversible-investment and stochastic-volatility lessons added on 22 October. The eight updated notebooks pin the source code and helpers to tag `v5.7.0`; tag `course-2026A-5.5.0` retains the original edition. See the [additional validation](../validation/README.md).
+**23 October 2026 DSGE update (5.7.1).** T02_A–D use nonlinear models without implicit solving, ordered `.mod` commands, continuation for transitions and common local/global solution diagnostics. T02_D retains the irreversible-investment and stochastic-volatility lessons added on 22 October. The eight updated notebooks pin the source code and helpers to tag `v5.7.1`; tag `course-2026A-5.5.0` retains the original edition. See the [additional validation](../validation/README.md).
 
 To run T02_A–D with Python 3.12 or later, clone the tag and use a fresh virtual environment:
 
 ```bash
-git clone --branch v5.7.0 --depth 1 https://github.com/jalonso1979/puremacro.git puremacro-5.7.0
-cd puremacro-5.7.0
+git clone --branch v5.7.1 --depth 1 https://github.com/jalonso1979/puremacro.git puremacro-5.7.1
+cd puremacro-5.7.1
 python -m venv .venv
 source .venv/bin/activate  # Windows PowerShell: ./.venv/Scripts/Activate.ps1
 python -m pip install -e ".[notebooks]" jupyterlab
@@ -139,7 +139,7 @@ cd curso/notebooks
 jupyter lab
 ```
 
-Select that environment as the kernel. Keep `_dsge_labs.py`, `modelos/` and `data_curso/` beside the notebooks. Recorded validation uses local Python; Colab installs the source from tag `v5.7.0`. This evidence does not certify a full Colab execution. The following instructions reproduce the complete original edition.
+Select that environment as the kernel. Keep `_dsge_labs.py`, `modelos/` and `data_curso/` beside the notebooks. Recorded validation uses local Python; Colab installs the source from tag `v5.7.1`. This evidence does not certify a full Colab execution. The following instructions reproduce the complete original edition.
 
 ## Open a notebook in Google Colab
 
@@ -154,10 +154,10 @@ and frozen data); it does not ask for Google Drive access. Run the cells in orde
 | T01_A | Business-cycle facts from the labour side | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_A_data_panels_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_A_data_panels.ipynb) |
 | T01_B | National accounts and cross-country stylized facts | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_B_measurement_and_cycles_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_B_measurement_and_cycles.ipynb) |
 | T01_C | The cycle at monthly, weekly and daily frequency | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_C_stylized_facts_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T01_C_stylized_facts.ipynb) |
-| T02_A | Neoclassical growth model: log-linearization and local approximation | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.0/curso/notebooks/T02_A_neoclassical_growth_local_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.0/curso/notebooks/T02_A_neoclassical_growth_local.ipynb) |
-| T02_B | Canonical RBC: simulation, moments and the hours debate | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.0/curso/notebooks/T02_B_rbc_dynare_local_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.0/curso/notebooks/T02_B_rbc_dynare_local.ipynb) |
-| T02_C | Sticky prices and search: frictions in goods and labour markets | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.0/curso/notebooks/T02_C_new_keynesian_local_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.0/curso/notebooks/T02_C_new_keynesian_local.ipynb) |
-| T02_D | OccBin, irreversible investment and uncertainty shocks | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.0/curso/notebooks/T02_D_occbin_zlb_regimes_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.0/curso/notebooks/T02_D_occbin_zlb_regimes.ipynb) |
+| T02_A | Neoclassical growth model: log-linearization and local approximation | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.1/curso/notebooks/T02_A_neoclassical_growth_local_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.1/curso/notebooks/T02_A_neoclassical_growth_local.ipynb) |
+| T02_B | Canonical RBC: simulation, moments and the hours debate | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.1/curso/notebooks/T02_B_rbc_dynare_local_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.1/curso/notebooks/T02_B_rbc_dynare_local.ipynb) |
+| T02_C | Sticky prices and search: frictions in goods and labour markets | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.1/curso/notebooks/T02_C_new_keynesian_local_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.1/curso/notebooks/T02_C_new_keynesian_local.ipynb) |
+| T02_D | OccBin, irreversible investment and uncertainty shocks | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.1/curso/notebooks/T02_D_occbin_zlb_regimes_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/v5.7.1/curso/notebooks/T02_D_occbin_zlb_regimes.ipynb) |
 | T02_E | Bayesian DSGE estimation and model comparison | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_E_bayesian_dsge_local_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_E_bayesian_dsge_local.ipynb) |
 | T02_F | Macro-financial frictions: Gertler–Karadi (2011) | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_F_gertler_karadi_macrofinance_local_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T02_F_gertler_karadi_macrofinance_local.ipynb) |
 | T03_A | Aggregate shocks with incomplete markets: Krusell–Smith and sequence-space Jacobians | [Spanish](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_A_aggregate_shocks_es.ipynb) | [English](https://colab.research.google.com/github/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/T03_A_aggregate_shocks.ipynb) |

@@ -2,7 +2,7 @@
 
 # puremacro
 
-**Novedades de 5.7.0:** [un modelo, varios métodos de solución](docs/es/dsge_workflows.md): programas `.mod` ordenados, transiciones no lineales, comparaciones de políticas locales/globales y ocho cuadernos MAV revisados. Esta versión también incluye [DP en archivos `.mod`](docs/es/dp_modfiles.md), [estudios reproducibles](docs/es/studies.md) y [ecuaciones HANK editables](docs/es/hank_model_closure.md) desarrollados para 5.6.0.
+**Novedades de 5.7:** [un modelo, varios métodos de solución](docs/es/dsge_workflows.md): programas `.mod` ordenados, transiciones no lineales, comparaciones de políticas locales/globales y ocho cuadernos MAV revisados. Esta versión también incluye [DP en archivos `.mod`](docs/es/dp_modfiles.md), [estudios reproducibles](docs/es/studies.md) y [ecuaciones HANK editables](docs/es/hank_model_closure.md) desarrollados para 5.6.0.
 
 **Macroeconometría y modelos estructurales sobre el núcleo científico de Python.**
 
@@ -24,8 +24,8 @@ python -m pip install puremacro
 | **Simular políticas** | Declare un modelo de hogares con [programación dinámica](docs/es/dp.md), estudie la [transmisión monetaria](docs/es/monetary_transmission.md) o construya un [contrafactual comercial](docs/es/trade_accounting.md). |
 | **Aprender o enseñar** | Elija una [ruta de cuadernos](docs/es/notebooks.md) o use el [curso bilingüe y sus laboratorios interactivos](curso/README.md). Use la edición fija del curso indicada abajo. |
 
-**Documentación de la versión 5.7.0.** Consulte las [versiones disponibles en PyPI](https://pypi.org/project/puremacro/#history).
-Estas APIs requieren 5.7.0; consulte el
+**Documentación de la versión 5.7.1.** Consulte las [versiones disponibles en PyPI](https://pypi.org/project/puremacro/#history).
+Estas páginas corresponden a 5.7.1; consulte el
 [historial de cambios](CHANGELOG.md) y use la documentación correspondiente
 a su versión instalada.
 
@@ -33,7 +33,7 @@ Los nuevos flujos DSGE comparten [ecuaciones no lineales](docs/es/dsge_nonlinear
 entre [transiciones y anuncios](docs/es/dsge_transitions.md) y
 [comparaciones de políticas locales y globales](docs/es/dsge_global.md).
 Los [cuadernos bilingües T02_A–D](curso/notebooks/README.md) fijan el código,
-los auxiliares y los modelos al tag `v5.7.0`. Su evidencia de ejecución cubre Python local.
+los auxiliares y los modelos al tag `v5.7.1`. Su evidencia de ejecución cubre Python local.
 
 Desde 5.5.0: [inspección de `.mod` sin ejecución numérica y ejecución ordenada opcional](docs/es/dsge_mod_inspection.md),
 y [auditorías de resultados resueltos admitidos](docs/es/result_audits.md).

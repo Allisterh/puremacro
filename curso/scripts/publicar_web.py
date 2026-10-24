@@ -78,8 +78,8 @@ ACTUALIZADOS_DSGE = frozenset(
     for suffix in ("", "_es")
 )
 ACTUALIZADOS = ACTUALIZADOS_RBC | ACTUALIZADOS_DSGE
-DSGE_VERSION = "5.7.0"
-DSGE_REF = "v5.7.0"
+DSGE_VERSION = "5.7.1"
+DSGE_REF = "v5.7.1"
 RUTA_EN_REPO = "curso/notebooks"
 # Versión de puremacro que piden los cuadernos en Colab.
 PUREMACRO = "puremacro==5.5.0"
@@ -205,13 +205,13 @@ def reescribir_celda0(fuente: str, nombre: str) -> str:
     if nombre in ACTUALIZADOS_DSGE:
         nota = (
             "> **Nota para Google Colab**: esta lección actualizada usa el código del tag "
-            "`v5.7.0` (puremacro 5.7.0) y los modelos de la misma copia. La celda siguiente "
+            "`v5.7.1` (puremacro 5.7.1) y los modelos de la misma copia. La celda siguiente "
             "lo instala en Colab; localmente use `python -m pip install -e \".[notebooks]\"` "
             "desde la raíz de este repositorio y seleccione ese entorno. La edición original "
             "`course-2026A-5.5.0` permanece disponible en su tag."
             if es else
-            "> **Google Colab note**: this updated lesson uses the source at tag `v5.7.0` "
-            "(puremacro 5.7.0) and models from the same checkout. The next cell installs it in "
+            "> **Google Colab note**: this updated lesson uses the source at tag `v5.7.1` "
+            "(puremacro 5.7.1) and models from the same checkout. The next cell installs it in "
             "Colab; locally run `python -m pip install -e \".[notebooks]\"` from this repository's "
             "root and select that environment. The original `course-2026A-5.5.0` edition "
             "remains available at its tag."
@@ -304,8 +304,8 @@ import sys
 import subprocess
 from pathlib import Path
 __IMPORTS__
-_course_requirements = ["puremacro==5.7.0"]
-_course_edition = "v5.7.0"
+_course_requirements = ["puremacro==5.7.1"]
+_course_edition = "v5.7.1"
 _course_development = False
 
 def _safe_probe(p, is_dir=None):
@@ -317,10 +317,10 @@ def _safe_probe(p, is_dir=None):
         return False
 
 if "google.colab" in sys.modules:
-    _repo = Path("/content/puremacro-course-v5.7.0")
+    _repo = Path("/content/puremacro-course-v5.7.1")
     if not _safe_probe(_repo, is_dir=True):
         subprocess.run(["git", "clone", "-q", "--depth", "1", "--filter=blob:none", "--sparse",
-                        "--branch", "v5.7.0", "https://github.com/jalonso1979/puremacro.git", str(_repo)], check=True)
+                        "--branch", "v5.7.1", "https://github.com/jalonso1979/puremacro.git", str(_repo)], check=True)
         subprocess.run(["git", "-C", str(_repo), "sparse-checkout", "set", "puremacro", "curso/notebooks"], check=True)
     subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-e", str(_repo)], check=True)
     os.chdir(_repo / "curso/notebooks")
@@ -345,14 +345,14 @@ if str(_course_helper_dir) not in sys.path:
 
 import puremacro
 from puremacro import dsge
-if puremacro.__version__ != "5.7.0":
-    raise RuntimeError("These DSGE lessons require puremacro==5.7.0. Install the matching tag and restart the kernel.")
+if puremacro.__version__ != "5.7.1":
+    raise RuntimeError("These DSGE lessons require puremacro==5.7.1. Install the matching tag and restart the kernel.")
 _course_features = ("read_mod", "solve_transition", "solve_announced_path", "solve_time_iteration", "evaluate_perturbation")
 if not all(hasattr(dsge, _name) for _name in _course_features):
-    raise RuntimeError("This lesson requires the updated Puremacro source (5.7.0). Install this checkout with python -m pip install -e '.[notebooks]' and restart the kernel.")
+    raise RuntimeError("This lesson requires the updated Puremacro source (5.7.1). Install this checkout with python -m pip install -e '.[notebooks]' and restart the kernel.")
 if _course_source_root is not None and not Path(puremacro.__file__).resolve().is_relative_to(_course_source_root):
     raise RuntimeError("An older puremacro was already imported. Restart this kernel to use the matching source checkout.")
-print("Puremacro", puremacro.__version__, "— DSGE lessons, v5.7.0")
+print("Puremacro", puremacro.__version__, "— DSGE lessons, v5.7.1")
 
 os.environ.setdefault("MAV_LLM_MODE", "cache")
 
@@ -773,13 +773,13 @@ auxiliares `_datos.py`, `_nbstyle.py`, `_tutor.py`, `_llm.py`, `_t01.py` y `_dsg
 `data_curso/` y los modelos `.mod` en `modelos/`. Las diapositivas en PDF están
 en `curso/site/diapositivas/`.
 
-**Actualización DSGE del 23 de octubre de 2026 (5.7.0).** T02_A–D usan modelos no lineales sin resolución implícita, ejecución ordenada de comandos `.mod`, transiciones con continuación y diagnósticos comunes de soluciones locales y globales. T02_D conserva las lecciones de inversión irreversible y volatilidad estocástica añadidas el 22 de octubre. Los ocho cuadernos actualizados fijan el código fuente y los auxiliares del tag `v5.7.0`; el tag `course-2026A-5.5.0` conserva la edición original. Véase la [validación adicional](../validation/README.md).
+**Actualización DSGE del 23 de octubre de 2026 (5.7.1).** T02_A–D usan modelos no lineales sin resolución implícita, ejecución ordenada de comandos `.mod`, transiciones con continuación y diagnósticos comunes de soluciones locales y globales. T02_D conserva las lecciones de inversión irreversible y volatilidad estocástica añadidas el 22 de octubre. Los ocho cuadernos actualizados fijan el código fuente y los auxiliares del tag `v5.7.1`; el tag `course-2026A-5.5.0` conserva la edición original. Véase la [validación adicional](../validation/README.md).
 
 Para ejecutar T02_A–D con Python 3.12 o posterior, clone el tag y use un entorno virtual nuevo:
 
 ```bash
-git clone --branch v5.7.0 --depth 1 https://github.com/jalonso1979/puremacro.git puremacro-5.7.0
-cd puremacro-5.7.0
+git clone --branch v5.7.1 --depth 1 https://github.com/jalonso1979/puremacro.git puremacro-5.7.1
+cd puremacro-5.7.1
 python -m venv .venv
 source .venv/bin/activate  # Windows PowerShell: ./.venv/Scripts/Activate.ps1
 python -m pip install -e ".[notebooks]" jupyterlab
@@ -787,7 +787,7 @@ cd curso/notebooks
 jupyter lab
 ```
 
-Seleccione ese entorno como kernel. Mantenga `_dsge_labs.py`, `modelos/` y `data_curso/` junto a los cuadernos. La validación registrada usa Python local; Colab instala el código del tag `v5.7.0`. Esta evidencia no certifica una ejecución completa en Colab. Las instrucciones siguientes reproducen la edición original completa.
+Seleccione ese entorno como kernel. Mantenga `_dsge_labs.py`, `modelos/` y `data_curso/` junto a los cuadernos. La validación registrada usa Python local; Colab instala el código del tag `v5.7.1`. Esta evidencia no certifica una ejecución completa en Colab. Las instrucciones siguientes reproducen la edición original completa.
 
 ## Abrir un cuaderno en Google Colab
 
@@ -847,13 +847,13 @@ helpers `_datos.py`, `_nbstyle.py`, `_tutor.py`, `_llm.py`, `_t01.py` and `_dsge
 `data_curso/` and the `.mod` models in `modelos/`. The PDF slides are in
 `curso/site/diapositivas/` (in Spanish).
 
-**23 October 2026 DSGE update (5.7.0).** T02_A–D use nonlinear models without implicit solving, ordered `.mod` commands, continuation for transitions and common local/global solution diagnostics. T02_D retains the irreversible-investment and stochastic-volatility lessons added on 22 October. The eight updated notebooks pin the source code and helpers to tag `v5.7.0`; tag `course-2026A-5.5.0` retains the original edition. See the [additional validation](../validation/README.md).
+**23 October 2026 DSGE update (5.7.1).** T02_A–D use nonlinear models without implicit solving, ordered `.mod` commands, continuation for transitions and common local/global solution diagnostics. T02_D retains the irreversible-investment and stochastic-volatility lessons added on 22 October. The eight updated notebooks pin the source code and helpers to tag `v5.7.1`; tag `course-2026A-5.5.0` retains the original edition. See the [additional validation](../validation/README.md).
 
 To run T02_A–D with Python 3.12 or later, clone the tag and use a fresh virtual environment:
 
 ```bash
-git clone --branch v5.7.0 --depth 1 https://github.com/jalonso1979/puremacro.git puremacro-5.7.0
-cd puremacro-5.7.0
+git clone --branch v5.7.1 --depth 1 https://github.com/jalonso1979/puremacro.git puremacro-5.7.1
+cd puremacro-5.7.1
 python -m venv .venv
 source .venv/bin/activate  # Windows PowerShell: ./.venv/Scripts/Activate.ps1
 python -m pip install -e ".[notebooks]" jupyterlab
@@ -861,7 +861,7 @@ cd curso/notebooks
 jupyter lab
 ```
 
-Select that environment as the kernel. Keep `_dsge_labs.py`, `modelos/` and `data_curso/` beside the notebooks. Recorded validation uses local Python; Colab installs the source from tag `v5.7.0`. This evidence does not certify a full Colab execution. The following instructions reproduce the complete original edition.
+Select that environment as the kernel. Keep `_dsge_labs.py`, `modelos/` and `data_curso/` beside the notebooks. Recorded validation uses local Python; Colab installs the source from tag `v5.7.1`. This evidence does not certify a full Colab execution. The following instructions reproduce the complete original edition.
 
 ## Open a notebook in Google Colab
 

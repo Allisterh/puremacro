@@ -102,8 +102,8 @@ complementarity condition.
 
 ## Follow the MAV teaching sequence
 
-The [bilingual course guide](https://github.com/jalonso1979/puremacro/blob/v5.7.0/curso/notebooks/README.md)
-pins T02_A–D, their helpers and their model files to `v5.7.0`. The original
+The [bilingual course guide](https://github.com/jalonso1979/puremacro/blob/v5.7.1/curso/notebooks/README.md)
+pins T02_A–D, their helpers and their model files to `v5.7.1`. The original
 72-notebook edition remains available at `course-2026A-5.5.0`.
 
 | Lesson | What to reproduce | Independent check to notice |
@@ -118,8 +118,8 @@ though the library supports Python 3.11+. Use a fresh virtual environment and
 the same interpreter to install dependencies and start Jupyter:
 
 ```bash
-git clone --branch v5.7.0 --depth 1 https://github.com/jalonso1979/puremacro.git puremacro-5.7.0
-cd puremacro-5.7.0
+git clone --branch v5.7.1 --depth 1 https://github.com/jalonso1979/puremacro.git puremacro-5.7.1
+cd puremacro-5.7.1
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e ".[notebooks]" jupyterlab
@@ -133,7 +133,7 @@ On Windows PowerShell, replace the activation command with
 restart the kernel after installation. Execute cells in order; do not mix the
 5.5.0 course environment with the updated DSGE lessons.
 
-The [execution record](https://github.com/jalonso1979/puremacro/blob/v5.7.0/curso/validation/README.md)
+The [execution record](https://github.com/jalonso1979/puremacro/blob/v5.7.1/curso/validation/README.md)
 identifies notebook and runtime inputs, cell execution and saved figures.
 Local execution and the headless Pyodide smoke suite are distinct checks;
 neither certifies every Colab, Juno or browser notebook session.

@@ -38,7 +38,7 @@ público pertenece al registro de la versión. Use las instrucciones propias
 de esa edición en un entorno separado. Su numeración y sus laboratorios
 HTML/JavaScript son independientes de este catálogo.
 
-Para trabajo DSGE no lineal, la [secuencia MAV T02_A–D actualizada](dsge_workflows.md#siga-la-secuencia-docente-de-mav) usa los modelos y métodos de `v5.7.0`. Sus instrucciones y evidencia de ejecución son independientes de la edición original 5.5.0.
+Para trabajo DSGE no lineal, la [secuencia MAV T02_A–D actualizada](dsge_workflows.md#siga-la-secuencia-docente-de-mav) usa los modelos y métodos de `v5.7.1`. Sus instrucciones y evidencia de ejecución son independientes de la edición original 5.5.0.
 
 ## Ejecute y modifique un ejemplo
 

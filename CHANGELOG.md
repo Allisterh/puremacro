@@ -7,6 +7,30 @@ This changelog describes versioned source changes. Check
 Versions 5.3.0, 5.4.0 and 5.4.1 were tagged but not published to PyPI; their
 additions are included in 5.4.2. See the [release procedure](RELEASING.md).
 
+## 5.7.1 (2026-10-23)
+
+**Fix the opt-in course test bootstrap and publish the retained 5.7.0 features.**
+
+Version 5.7.0 was publicly tagged but was not published to PyPI. Its public tag
+and source history remain unchanged. This patch retains the 5.7.0 features
+below, including the earlier unpublished 5.6.0 development changes; it does
+not change the numerical solvers or economic notebook equations.
+
+### Fixed
+
+- The opt-in T02_F macro-finance notebook test now bootstraps the current
+  checkout under test instead of executing the frozen 5.5.0 course bootstrap
+  against a newer package. The original course notebook keeps its historical
+  edition pin.
+- The scheduled/manual showcase notebook test now selects the `showcase`
+  suite explicitly, matching its documented discovery scope. Its assertions
+  and test identity remain unchanged; historical course validation retains
+  its separate execution records.
+- The eight amended T02_A–D notebooks and their current setup instructions now
+  pin the package, models and helpers to `v5.7.1`. Their new offline execution
+  record is separate from the preserved 5.7.0 release-source and development
+  records.
+
 ## 5.7.0 (2026-10-23)
 
 **Use one nonlinear model for ordered `.mod` programs, deterministic transitions and comparable local/global policies.**

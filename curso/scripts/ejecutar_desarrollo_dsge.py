@@ -173,8 +173,8 @@ def main():
         for name in names
     )
     success = all(record["ok"] for record in records) and unchanged and unchanged_inputs and unchanged_notebooks
-    manifest = dict(date="2026-10-23", scope="T02_A-D bilingual 5.7.0 release source execution",
-                    puremacro="5.7.0", runtime_source="local source checkout, not a released wheel",
+    manifest = dict(date="2026-10-23", scope="T02_A-D bilingual 5.7.1 release source execution",
+                    puremacro="5.7.1", runtime_source="local source checkout, not a released wheel",
                     verified_platform="local Python, fresh offline IPython process per notebook",
                     python=sys.version,
                     dependencies={name: version(name) for name in

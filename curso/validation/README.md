@@ -48,21 +48,34 @@ The original tag and its execution manifest were not changed.
 ## DSGE solution methods — 23 October 2026
 
 [`dsge-methods-2026-10-23.json`](dsge-methods-2026-10-23.json) records the
-English and Spanish T02_A–D revisions against the 5.7.0 release source,
-with setup cells, package requirements and Colab links pinned to `v5.7.0`.
+English and Spanish T02_A–D revisions against the 5.7.1 release source,
+with setup cells, package requirements and Colab links pinned to `v5.7.1`.
 It identifies the package files, notebook sources and saved outputs, helper
 and model files, frozen data, dependency versions, cell timings and warnings.
 Source-checkout paths in text diagnostics are made relative for portability.
-All eight notebooks completed: 120 code cells and 72 saved figures. T02_A
-retains a Klein conditioning warning in the capital-share sweep; both language
-versions record it. All eight completed in one fresh execution batch after the release pins were
-finalized. The earlier development batch is preserved separately in
+All eight notebooks completed in one fresh offline batch after the 5.7.1 pins
+were finalized: 120 code cells and 72 saved figures. All 112 code cells after
+the eight setup cells, including their economic assertions, retain exactly the
+same source as the accepted 5.7.0 run. T02_A retains its Klein conditioning
+warning in the capital-share sweep; both language versions record it.
+
+The accepted 5.7.0 release-source batch is preserved without alteration in
+[`dsge-release-5.7.0-2026-10-23.json`](dsge-release-5.7.0-2026-10-23.json).
+Its public tag was not moved; 5.7.0 was not published to PyPI. The earlier
+development batch is preserved separately in
 [`dsge-development-2026-10-23.json`](dsge-development-2026-10-23.json), including
-the corrected Spanish T02_B assertion and its complete rerun. The development
-and release batches use identical runtime package files and frozen inputs.
+the corrected Spanish T02_B assertion and its complete rerun. Those two
+historical batches retain their original package hashes and frozen inputs.
+Between the accepted 5.7.0 batch and this 5.7.1 batch, the only changed runtime
+package file is `puremacro/__init__.py`, containing the version-string update.
+Numerical package sources, notebook economic cells, helpers, models and frozen
+data are unchanged. The current manifest records all 871 current package-file
+hashes; it does not relabel the older evidence as a 5.7.1 run.
+
 The runner rejects write-back if package code, notebook sources or inputs
 change during execution. This is a source-checkout validation, not a released
-wheel or a new Colab, Juno or browser certification.
+wheel or a new Colab, Juno or browser certification. Any released-wheel
+verification must compare that wheel with the current 5.7.1 package hashes.
 
 T02_A checks callback/`.mod` path agreement, direct/Krylov agreement, continuation,
 an explicit permanent-shock tail, horizon doubling, news versus surprise timing,
@@ -74,12 +87,12 @@ adds local conditioning diagnostics. T02_D checks the library's nonlinear
 irreversible-investment transition against an independent residual function,
 retaining its horizon and stochastic-volatility exercises.
 
-Install the matching `v5.7.0` checkout and execute from the repository root:
+Install the matching `v5.7.1` checkout and execute from the repository root:
 
 ```bash
 python -m pip install -e ".[notebooks]"
 python curso/scripts/ejecutar_desarrollo_dsge.py \
-  --work-dir /tmp/puremacro-dsge-validation --jobs 2 --write-back
+  --work-dir /tmp/puremacro-571-course-validation --jobs 2 --write-back
 ```
 
 Use a new work directory for each run. Every notebook gets a fresh IPython

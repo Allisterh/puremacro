@@ -16,10 +16,12 @@ apply to the percent series.
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import re
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -45,6 +47,7 @@ EXPECTED_SPREAD_BPS = (255.8, 255.8, 1, 20.2)
 
 #: Source text that identifies the lesson's closing self-check cell.
 SELF_CHECK_MARKER = {"en": "VERIFICATION ASSERTIONS PASSED", "es": "ASERCIONES DE VERIFICACI"}
+CHECKOUT_MARKER = "T02_F_CHECKOUT_EVIDENCE "
 
 #: Credit-policy regimes: (impact Y %, trough Y %, impact N %, spread bps,
 #: cumulative Y loss as the sum of the 40 quarterly percent deviations, active quarters).
@@ -103,6 +106,72 @@ def _assert_policy_table(nb: dict) -> None:
         assert int(got[5]) == expected[5], (nu_g, "active quarters", got)
 
 
+def _checkout_version() -> str:
+    with (REPO / "pyproject.toml").open("rb") as source:
+        return tomllib.load(source)["project"]["version"]
+
+
+def _current_checkout_setup(source: str, name: str, version: str) -> str:
+    """Generate a test-only bootstrap; leave the frozen 5.5 edition on disk."""
+    spec = importlib.util.spec_from_file_location(
+        "course_publication_t02f", REPO / "curso/scripts/publicar_web.py"
+    )
+    assert spec is not None and spec.loader is not None
+    publication = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(publication)
+    recognized, notices = publication.reescribir_celda1(source, name)
+    assert not notices and recognized == source, ("Unrecognized frozen course setup", notices)
+    # Reuse the source-origin guard, helper discovery, imports and custom-tail
+    # preservation from the current course bootstrap. Change its version pin
+    # before rewriting, so lesson-specific tail code is never substituted.
+    publication.PLANTILLA_DSGE = publication.PLANTILLA_DSGE.replace(
+        publication.DSGE_VERSION, version
+    )
+    setup, notices = publication._reescribir_celda_dsge(source, name)
+    assert not notices, notices
+    return setup + f'''
+
+# Independent evidence that this compatibility test used the current checkout.
+import json as _checkout_json
+assert puremacro.__version__ == {version!r}, puremacro.__version__
+assert Path(puremacro.__file__).resolve() == Path({str(REPO / "puremacro/__init__.py")!r}).resolve(), puremacro.__file__
+print({CHECKOUT_MARKER!r} + _checkout_json.dumps({{
+    "version": puremacro.__version__,
+    "module": str(Path(puremacro.__file__).resolve()),
+}}, sort_keys=True))
+'''
+
+
+@pytest.mark.parametrize("lang", sorted(NOTEBOOKS))
+def test_checkout_bootstrap_preserves_frozen_lesson_and_economic_cells(lang):
+    original = NOTEBOOKS[lang].read_bytes()
+    notebook = json.loads(original)
+    setup_source = "".join(notebook["cells"][1]["source"])
+    assert 'puremacro.__version__ != "5.5.0"' in setup_source
+    version = _checkout_version()
+    setup = _current_checkout_setup(setup_source, NOTEBOOKS[lang].name, version)
+    assert f'puremacro.__version__ != "{version}"' in setup
+    assert f"puremacro.__version__ == {version!r}" in setup
+    assert repr(str(REPO / "puremacro/__init__.py")) in setup
+    tail = setup_source.split("    _nbstyle.apply_style()\nexcept ImportError:\n    pass", 1)[1]
+    assert tail.strip() in setup
+    notebook["cells"][1]["source"] = setup
+    frozen = json.loads(original)
+    assert len(notebook["cells"]) == len(frozen["cells"])
+    assert notebook["cells"][:1] == frozen["cells"][:1]
+    assert notebook["cells"][2:] == frozen["cells"][2:]
+    assert NOTEBOOKS[lang].read_bytes() == original
+
+
+@pytest.mark.parametrize("lang", sorted(NOTEBOOKS))
+def test_checkout_bootstrap_rejects_unrecognized_middle_setup_code(lang):
+    notebook = json.loads(NOTEBOOKS[lang].read_text(encoding="utf-8"))
+    source = "".join(notebook["cells"][1]["source"])
+    source = source.replace("%matplotlib inline", "economic_seed = 1729\n\n%matplotlib inline")
+    with pytest.raises(AssertionError, match="Unrecognized frozen course setup"):
+        _current_checkout_setup(source, NOTEBOOKS[lang].name, _checkout_version())
+
+
 @pytest.mark.parametrize("lang", sorted(NOTEBOOKS))
 def test_saved_scorecard_reports_percent_deviations(lang):
     nb = json.loads(NOTEBOOKS[lang].read_text(encoding="utf-8"))
@@ -118,7 +187,7 @@ def test_saved_policy_table_reports_percent_deviations(lang):
 @pytest.mark.slow
 @pytest.mark.parametrize("lang", sorted(NOTEBOOKS))
 def test_lesson_executes_and_reports_percent_deviations(lang, tmp_path, monkeypatch):
-    """Run the lesson in a fresh kernel against this checkout and read what it prints."""
+    """Run all economic cells against this checkout, not the frozen 5.5 wheel."""
     nbformat = pytest.importorskip("nbformat")
     nbclient = pytest.importorskip("nbclient")
     pytest.importorskip("ipykernel")
@@ -136,11 +205,26 @@ def test_lesson_executes_and_reports_percent_deviations(lang, tmp_path, monkeypa
     monkeypatch.setenv("PYTHONPATH", os.pathsep.join([str(REPO), os.environ.get("PYTHONPATH", "")]))
     monkeypatch.setenv("MPLBACKEND", "Agg")
 
+    frozen_source = NOTEBOOKS[lang].read_bytes()
     nb = nbformat.read(NOTEBOOKS[lang], as_version=4)
+    version = _checkout_version()
+    nb.cells[1].source = _current_checkout_setup(nb.cells[1].source, NOTEBOOKS[lang].name, version)
     nbclient.NotebookClient(
-        nb, kernel_name="puremacro-t02f", timeout=900, resources={"metadata": {"path": str(CURSO)}}
+        nb, kernel_name="puremacro-t02f", timeout=900, force_raise_errors=True,
+        resources={"metadata": {"path": str(CURSO)}},
     ).execute()
 
+    evidence = [line.removeprefix(CHECKOUT_MARKER)
+                for line in _stdout_of_cell(nb, CHECKOUT_MARKER).splitlines()
+                if line.startswith(CHECKOUT_MARKER)]
+    assert len(evidence) == 1
+    assert json.loads(evidence[0]) == {
+        "version": version, "module": str((REPO / "puremacro/__init__.py").resolve()),
+    }
+    assert all(cell.execution_count is not None for cell in nb.cells if cell.cell_type == "code")
+    assert not [output for cell in nb.cells if cell.cell_type == "code"
+                for output in cell.outputs if output.output_type == "error"]
+    assert NOTEBOOKS[lang].read_bytes() == frozen_source
     _assert_scorecard(nb)
     _assert_policy_table(nb)
     checks = _stdout_of_cell(nb, SELF_CHECK_MARKER[lang])

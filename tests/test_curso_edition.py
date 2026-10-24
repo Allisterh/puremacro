@@ -81,9 +81,9 @@ def test_badges_and_setup_are_idempotent_for_every_notebook():
         assert publication.reescribir_celda0(first, path.name) == first
         assert publication.reescribir_celda1(setup, path.name) == (setup, [])
         if path.name in publication.ACTUALIZADOS_DSGE:
-            assert "puremacro==5.7.0" in setup
+            assert "puremacro==5.7.1" in setup
             assert "_course_development = False" in setup
-            assert '"--branch", "v5.7.0"' in setup
+            assert '"--branch", "v5.7.1"' in setup
             assert '"puremacro", "curso/notebooks"' in setup
             assert "_course_features" in setup
         else:
@@ -112,7 +112,7 @@ def test_generated_readme_uses_same_edition_and_extras_pin(tmp_path, monkeypatch
     assert "puremacro[io]==5.5.0" in actual
     assert "puremacro[local-llm]==5.5.0" in actual
     assert "git clone --branch course-2026A-5.5.0" in actual
-    amended_links = set(re.findall(r"/blob/v5\.7\.0/curso/notebooks/([^()\s]+\.ipynb)", actual))
+    amended_links = set(re.findall(r"/blob/v5\.7\.1/curso/notebooks/([^()\s]+\.ipynb)", actual))
     assert amended_links == publication.ACTUALIZADOS
 
 
@@ -131,7 +131,7 @@ def test_historical_rbc_amendment_evidence_is_retained():
 def test_current_dsge_amendments_have_matching_execution_evidence():
     """All revised lessons must have fresh complete source/output evidence."""
     evidence = json.loads((ROOT / "curso/validation/dsge-methods-2026-10-23.json").read_text(encoding="utf-8"))
-    assert evidence["puremacro"] == "5.7.0"
+    assert evidence["puremacro"] == "5.7.1"
     assert evidence["ok"] and evidence["package_unchanged"] and evidence["inputs_unchanged"]
     assert evidence["notebook_sources_unchanged"]
     for name in ("_dsge_labs.py", "modelos/neoclasico_prevision_perfecta.mod", "modelos/rbc_canonico.mod"):
@@ -142,7 +142,7 @@ def test_current_dsge_amendments_have_matching_execution_evidence():
         nb = json.loads(path.read_text(encoding="utf-8"))
         assert nb["metadata"]["course_edition"] == publication.EDICION
         assert nb["metadata"]["course_amendment"] == "2026-10-23-dsge-methods"
-        assert nb["metadata"]["course_runtime"] == "5.7.0"
+        assert nb["metadata"]["course_runtime"] == "5.7.1"
         source = [(c["cell_type"], _text(c)) for c in nb["cells"]]
         assert hashlib.sha256(json.dumps(source, ensure_ascii=False).encode()).hexdigest() == row["source_sha256"]
         assert hashlib.sha256(path.read_bytes()).hexdigest() == row["output_sha256"]

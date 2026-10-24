@@ -22,11 +22,11 @@ python -m pip install puremacro
 | **Simulate policy** | Declare a household model with [dynamic programming](dp.md), study [monetary transmission](monetary_transmission.md), or build a [trade counterfactual](trade_accounting.md). |
 | **Learn or teach** | Choose a [notebook learning path](notebooks.md) or use the [bilingual course and interactive labs](https://github.com/jalonso1979/puremacro/tree/main/curso). Use the pinned course edition below. |
 
-**Documentation for version 5.7.0.** Check [available PyPI releases](https://pypi.org/project/puremacro/#history).
-These examples describe the 5.7.0 API; see the [changelog](https://github.com/jalonso1979/puremacro/blob/main/CHANGELOG.md)
+**Documentation for version 5.7.1.** Check [available PyPI releases](https://pypi.org/project/puremacro/#history).
+These examples describe the 5.7.1 API; see the [changelog](https://github.com/jalonso1979/puremacro/blob/main/CHANGELOG.md)
 for additions and fixes. Match your installed version to the documentation.
 
-New in 5.7.0: [DSGE workflows and method selection](dsge_workflows.md), [nonlinear models](dsge_nonlinear.md), [transitions and announcements](dsge_transitions.md), and [local/global accuracy](dsge_global.md).
+New in 5.7: [DSGE workflows and method selection](dsge_workflows.md), [nonlinear models](dsge_nonlinear.md), [transitions and announcements](dsge_transitions.md), and [local/global accuracy](dsge_global.md).
 
 Also included from the 5.6.0 development cycle: [DP in `.mod` files](dp_modfiles.md), [reproducible studies](studies.md), [editable HANK equations](hank_model_closure.md) and [three complete applications](study_workflows.md). Review the [experimental inference limits](dependence_bootstrap.md).
 

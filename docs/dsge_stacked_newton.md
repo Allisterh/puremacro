@@ -163,7 +163,7 @@ Since 5.6.0, `solve_perfect_foresight(..., linear_solver="krylov")` builds a `St
 
 Numerical Krylov failures retain the last path and diagnostics, warn, and return `converged=False`; they do not silently switch to the direct backend. `tests/test_dsge_pf_krylov.py` covers nonlinear path parity, frozen Dynare terminal-boundary fixtures, rolling extended-path and surprise calls, option validation and failure reporting.
 
-The 5.7.0 development adapter uses analytic Jacobian-vector products for compiled model equations; plain callbacks retain numerical products. Call `solve_stacked_newton_krylov` directly to supply a custom `StackedProblem`, `jvp_fn` or `stacked_jvp_factory`. The standalone result can be converted with `StackedNewtonResult.to_perfect_foresight_result()`. See [transition workflows](dsge_transitions.md) for continuation, domains and exact-block preconditioner reuse.
+The adapter introduced in 5.7.0 uses analytic Jacobian-vector products for compiled model equations; plain callbacks retain numerical products. Call `solve_stacked_newton_krylov` directly to supply a custom `StackedProblem`, `jvp_fn` or `stacked_jvp_factory`. The standalone result can be converted with `StackedNewtonResult.to_perfect_foresight_result()`. See [transition workflows](dsge_transitions.md) for continuation, domains and exact-block preconditioner reuse.
 
 ## Related documentation
 
