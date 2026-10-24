@@ -24,7 +24,7 @@ python -m pip install puremacro
 | **Simular políticas** | Declare un modelo de hogares con [programación dinámica](docs/es/dp.md), estudie la [transmisión monetaria](docs/es/monetary_transmission.md) o construya un [contrafactual comercial](docs/es/trade_accounting.md). |
 | **Aprender o enseñar** | Elija una [ruta de cuadernos](docs/es/notebooks.md) o use el [curso bilingüe y sus laboratorios interactivos](curso/README.md). Use la edición fija del curso indicada abajo. |
 
-**Documentación de la versión 5.7.1.** Consulte las [versiones disponibles en PyPI](https://pypi.org/project/puremacro/#history).
+**Versión publicada 5.7.1.** Instale la [versión verificada de PyPI](https://pypi.org/project/puremacro/5.7.1/); consulte el [registro de publicación y validación](https://github.com/jalonso1979/puremacro/releases/tag/v5.7.1).
 Estas páginas corresponden a 5.7.1; consulte el
 [historial de cambios](CHANGELOG.md) y use la documentación correspondiente
 a su versión instalada.
@@ -886,10 +886,10 @@ verificación y la orden que reconstruye el archivo, se distribuye como
 
 ## Estado
 
-La versión publicada **5.5.0** incluye `puremacro.trade` y sus módulos MRIO, reincorporados
+La versión publicada **5.7.1** incluye `puremacro.trade` y sus módulos MRIO, reincorporados
 en 5.2.0, junto con las adiciones y correcciones del
 [historial de cambios](CHANGELOG.md). Instale la
-[distribución 5.5.0 de PyPI](https://pypi.org/project/puremacro/5.5.0/). La versión 4.8.1 es la última con los estudios de investigación
+[distribución 5.7.1 de PyPI](https://pypi.org/project/puremacro/5.7.1/). La versión 4.8.1 es la última con los estudios de investigación
 retirados en 5.x (`pip install "puremacro<5"`). Los [niveles de estabilidad](ARCHITECTURE.md#stability-tiers)
 identifican las superficies estables, experimentales y de soporte limitado.
 Los cálculos estructurales tienen [límites de validación](docs/es/STRUCTURAL_VALIDATION_STATUS.md)

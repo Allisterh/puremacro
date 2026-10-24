@@ -31,6 +31,22 @@ not change the numerical solvers or economic notebook equations.
   record is separate from the preserved 5.7.0 release-source and development
   records.
 
+### Known issues
+
+- The pre-existing higher-order Sylvester LU cache rounds scalar keys to
+  12 decimal places, so distinct Schur products can reuse a factorization.
+  A determinate analytic model with roots near `0.9999998` shows relative
+  second-/third-order coefficient errors up to approximately `3.8e-7`.
+  The existing near-unit-root warning does not quantify this curvature error.
+  There is no general drop-in public-API workaround: validate affected
+  higher-order coefficients against an independent analytic/dense reference
+  and do not assume full floating-point precision near unit roots. Exact cache
+  keys and independent operator regression checks are targeted for **5.7.2**;
+  that correction is planned, not included here. The
+  [release record](https://github.com/jalonso1979/puremacro/releases/tag/v5.7.1)
+  includes a public-API reproducer. This example does not demonstrate a general
+  unit-invariance failure.
+
 ## 5.7.0 (2026-10-23)
 
 **Use one nonlinear model for ordered `.mod` programs, deterministic transitions and comparable local/global policies.**

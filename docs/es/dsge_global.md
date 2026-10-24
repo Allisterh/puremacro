@@ -538,6 +538,20 @@ de condición depende de las unidades de ecuaciones y variables. Un Jacobiano
 no conservado se informa como no comprobado. Una raíz cercana a uno indica
 persistencia y sensibilidad, no demuestra por sí sola invalidez del equilibrio.
 
+**Problema conocido de precisión de orden superior en 5.7.1.** El solucionador
+de Sylvester existente redondea a 12 decimales las claves escalares de su caché
+LU; productos de Schur distintos pueden reutilizar una factorización. Un
+ejemplo determinado con solución analítica y raíces de transición cercanas a
+`0.9999998` muestra errores relativos en los coeficientes de segundo y tercer
+orden de hasta aproximadamente `3.8e-7`. La advertencia sobre raíces cercanas a
+uno no mide este error de curvatura, y el número de condición del Jacobiano
+dinámico no corresponde al operador de orden superior. El
+[registro de publicación](https://github.com/jalonso1979/puremacro/releases/tag/v5.7.1)
+incluye un ejemplo reproducible que utiliza la API pública. Las claves exactas
+de caché y las comprobaciones independientes del operador de orden superior
+son trabajo posterior previsto. El ejemplo no demuestra un fallo general de
+invariancia respecto de las unidades.
+
 La poda evita generar recursivamente términos de orden superior al retenido y
 transporta componentes de estado separados. La diferencia entre una regla de
 Taylor sin poda y una recursión podada se desarrolla en

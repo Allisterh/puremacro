@@ -22,7 +22,7 @@ python -m pip install puremacro
 | **Simulate policy** | Declare a household model with [dynamic programming](dp.md), study [monetary transmission](monetary_transmission.md), or build a [trade counterfactual](trade_accounting.md). |
 | **Learn or teach** | Choose a [notebook learning path](notebooks.md) or use the [bilingual course and interactive labs](https://github.com/jalonso1979/puremacro/tree/main/curso). Use the pinned course edition below. |
 
-**Documentation for version 5.7.1.** Check [available PyPI releases](https://pypi.org/project/puremacro/#history).
+**Published version 5.7.1.** Install the [verified PyPI release](https://pypi.org/project/puremacro/5.7.1/); see the [release and validation record](https://github.com/jalonso1979/puremacro/releases/tag/v5.7.1).
 These examples describe the 5.7.1 API; see the [changelog](https://github.com/jalonso1979/puremacro/blob/main/CHANGELOG.md)
 for additions and fixes. Match your installed version to the documentation.
 

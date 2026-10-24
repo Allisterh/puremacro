@@ -23,7 +23,7 @@ python -m pip install puremacro
 | **Simulate policy** | Declare a household model with [dynamic programming](docs/dp.md), study [monetary transmission](docs/monetary_transmission.md), or build a [trade counterfactual](docs/trade_accounting.md). |
 | **Learn or teach** | Choose a [notebook learning path](docs/notebooks.md) or use the [bilingual course and interactive labs](curso/README.md). Use the pinned course edition below. |
 
-**Documentation for version 5.7.1.** Check [available PyPI releases](https://pypi.org/project/puremacro/#history).
+**Published version 5.7.1.** Install the [verified PyPI release](https://pypi.org/project/puremacro/5.7.1/); see the [release and validation record](https://github.com/jalonso1979/puremacro/releases/tag/v5.7.1).
 These pages target 5.7.1; see the [changelog](CHANGELOG.md) for additions and fixes. Match your installed version to the documentation.
 
 New DSGE workflows share [nonlinear model equations](docs/dsge_nonlinear.md)
@@ -1154,9 +1154,9 @@ command that rebuilds the file, ships as `puremacro/trade/_datafiles/SOURCES.md`
 
 ## Status
 
-Published version **5.5.0** includes `puremacro.trade` and its MRIO modules, restored in
+Published version **5.7.1** includes `puremacro.trade` and its MRIO modules, restored in
 5.2.0, plus the additions and fixes listed in the [changelog](CHANGELOG.md).
-Install the [5.5.0 distribution from PyPI](https://pypi.org/project/puremacro/5.5.0/).
+Install the [5.7.1 distribution from PyPI](https://pypi.org/project/puremacro/5.7.1/).
 Release 4.8.1 is the last one with the research
 studies removed in 5.x (`pip install "puremacro<5"`). The [stability tiers](ARCHITECTURE.md#stability-tiers)
 identify stable, experimental and best-effort surfaces. Structural calculations

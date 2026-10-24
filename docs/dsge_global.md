@@ -533,6 +533,18 @@ number depends on equation and variable units. Missing Jacobians are reported
 as not checked. A near-unit transition root is evidence of persistence and
 sensitivity, not by itself a proof of an invalid equilibrium.
 
+**Known higher-order accuracy issue in 5.7.1.** The existing Sylvester solver
+rounds scalar LU-cache keys to 12 decimal places, so distinct Schur products
+can reuse a factorization. A determinate analytic example with transition
+roots near `0.9999998` shows relative second-/third-order coefficient errors
+up to approximately `3.8e-7`. The near-unit-root warning does not measure this
+curvature error, and the dynamic Jacobian condition number is not the condition
+number of the higher-order operator. See the public-API reproducer attached to
+the [release record](https://github.com/jalonso1979/puremacro/releases/tag/v5.7.1).
+Exact cache keys and independent higher-order operator checks are planned
+follow-up work. This example does not demonstrate a general failure of unit
+invariance.
+
 Pruning avoids recursively generating terms beyond the chosen approximation
 order and carries separate state components. The distinction between a raw
 Taylor rule and a pruned state-space recursion is developed by
