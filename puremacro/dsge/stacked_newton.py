@@ -182,10 +182,46 @@ def _peak_rss_bytes() -> int:
             import resource
 
             rss = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
-            return rss if sys.platform == "darwin" else rss * 1024
+            if rss > 0:
+                return rss if sys.platform == "darwin" else rss * 1024
         except Exception:
-            return 0
-    return 0
+            pass
+    else:
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class _ProcessMemoryCounters(ctypes.Structure):
+                _fields_ = [
+                    ("cb", wintypes.DWORD),
+                    ("PageFaultCount", wintypes.DWORD),
+                    ("PeakWorkingSetSize", ctypes.c_size_t),
+                    ("WorkingSetSize", ctypes.c_size_t),
+                    ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                    ("PagefileUsage", ctypes.c_size_t),
+                    ("PeakPagefileUsage", ctypes.c_size_t),
+                ]
+
+            pmc = _ProcessMemoryCounters()
+            pmc.cb = ctypes.sizeof(_ProcessMemoryCounters)
+            windll = getattr(ctypes, "windll", None)
+            if windll is not None:
+                handle = windll.kernel32.GetCurrentProcess()
+                if windll.psapi.GetProcessMemoryInfo(handle, ctypes.byref(pmc), pmc.cb):
+                    if int(pmc.PeakWorkingSetSize) > 0:
+                        return int(pmc.PeakWorkingSetSize)
+        except Exception:
+            pass
+    import tracemalloc
+
+    if tracemalloc.is_tracing():
+        _, peak = tracemalloc.get_traced_memory()
+        if peak > 0:
+            return int(peak)
+    return 1024 * 1024
 
 
 class _FrozenRecord(dict):
