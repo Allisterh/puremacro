@@ -4793,6 +4793,7 @@
       "osr_options",
       "osr_params",
       "osr_params_bounds",
+      "param_assignments",
       "parameter_values",
       "parameters",
       "perfect_foresight_options",
@@ -5198,6 +5199,22 @@
       "fevd",
       "moments"
     ],
+    "puremacro.dsge._sylvester.SylvesterWorkCounts": [
+      "back_substitutions",
+      "lu_cache_evictions",
+      "lu_cache_hits",
+      "lu_cache_misses",
+      "lu_factorizations",
+      "max_block_condition",
+      "max_block_size",
+      "max_cache",
+      "min_block_rcond",
+      "n_states",
+      "n_vars",
+      "order",
+      "quasi_block_solves",
+      "scalar_solves"
+    ],
     "puremacro.dsge._symbolic.CompiledDerivatives": [
       "_eval_derivatives_impl",
       "_eval_first_order_impl",
@@ -5348,6 +5365,7 @@
     ],
     "puremacro.dsge.global_solution.EquilibriumProblem": [
       "admissible",
+      "batched",
       "complementarity",
       "control_bounds",
       "control_names",
@@ -5355,12 +5373,14 @@
       "equation_names",
       "metadata",
       "residual",
+      "residual_jacobian",
       "residual_scale",
       "shock_nodes",
       "shock_rule",
       "shock_weights",
       "state_names",
-      "transition"
+      "transition",
+      "transition_jacobian"
     ],
     "puremacro.dsge.global_solution.PolicyAudit": [
       "diagnostics",
@@ -5379,6 +5399,7 @@
     ],
     "puremacro.dsge.global_solution.TimeIterationResult": [
       "audit",
+      "callback_evaluations",
       "control_names",
       "converged",
       "history",
@@ -5446,10 +5467,19 @@
       "residual"
     ],
     "puremacro.dsge.local_accuracy.LocalDiagnostics": [
+      "curvature_condition_method",
+      "curvature_conditioning",
+      "curvature_coupling_amplification",
+      "curvature_operator_condition",
       "equation_count",
+      "innovation_operator_condition",
       "jacobian_condition",
       "jacobian_rank",
+      "risk_operator_condition",
       "roots",
+      "schur_block_condition",
+      "sylvester_residuals",
+      "sylvester_work",
       "warnings"
     ],
     "puremacro.dsge.marginal.HarmonicMeanResult": [
@@ -5594,14 +5624,20 @@
       "sigma_eta"
     ],
     "puremacro.dsge.perfect_foresight.MCPResult": [
+      "_audit_context",
       "binding_periods",
       "complementarity_residual",
       "converged",
       "initial_residual_norm",
       "iterations",
+      "linear_solver",
       "path",
+      "physical_complementarity_residual",
+      "physical_mcp_feasibility",
+      "physical_residual_norm",
       "residual_norm",
       "residuals",
+      "solver_diagnostics",
       "terminal_error",
       "variable_names"
     ],
@@ -5826,6 +5862,10 @@
       "continuation_history",
       "converged",
       "horizon_history",
+      "normalized_horizon_error",
+      "physical_complementarity_residual",
+      "physical_mcp_feasibility",
+      "physical_residual_norm",
       "preconditioner_builds",
       "reason",
       "scaled_residual_norm",
