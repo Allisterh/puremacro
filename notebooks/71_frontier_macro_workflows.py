@@ -444,9 +444,7 @@ ax3.set_yticks(range(len(piv_bf.index)))
 ax3.set_yticklabels([f"{r:.1f}" for r in piv_bf.index])
 ax3.set(xlabel="Energy Shock $z_1$", ylabel=r"Substitution Elasticity $\theta$", title=f"2nd-Order GDP Curvature ({res_studio.overall_audit_status})")
 cbar = fig.colorbar(im, ax=ax3)
-cbar.set_label(r"$\frac{1}{2} z^\top \mathcal{H} z$ (%)", rotation=90)
-
-plt.show()
+_ = cbar.set_label(r"$\frac{1}{2} z^\top \mathcal{H} z$ (%)", rotation=90)
 
 # %% [markdown]
 # ### 9. Verification scorecard

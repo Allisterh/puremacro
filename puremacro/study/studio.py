@@ -191,13 +191,13 @@ class PolicyStudioResult:
             ax.set_yticklabels([str(y) for y in piv.index])
             ax.set_xlabel(axes[1])
             ax.set_ylabel(axes[0])
-            ax.set_title(f"{m_col} ({self.overall_audit_status})")
+            ax.set_title(f"{m_col} ({self.overall_audit_status})", loc="center")
             fig.colorbar(im, ax=ax)
         else:
             ax.plot(df[axes[0]], df[m_col], marker="o", lw=2.0)
             ax.set_xlabel(axes[0])
             ax.set_ylabel(m_col)
-            ax.set_title(f"{m_col} ({self.overall_audit_status})")
+            ax.set_title(f"{m_col} ({self.overall_audit_status})", loc="center")
         return fig
 
 
