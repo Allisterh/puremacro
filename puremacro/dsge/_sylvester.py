@@ -222,7 +222,7 @@ def _solve_scalar_block(
     A_plus: np.ndarray,
     tau: float,
     rhs: np.ndarray,
-    lu_cache: OrderedDict[float, tuple[Any, Any, int, np.ndarray, float]],
+    lu_cache: OrderedDict[float, tuple[Any, Any, int, float]],
     max_cache: int,
     dgetrf: Any,
     dgetrs: Any,
@@ -237,8 +237,9 @@ def _solve_scalar_block(
             tracker.max_block_size = 1
 
     use_cache = max_cache > 0
+    Mj: np.ndarray | None = None
     if use_cache and key in lu_cache:
-        lu, piv, info, Mj, rcond_est = lu_cache[key]
+        lu, piv, info, rcond_est = lu_cache[key]
         lu_cache.move_to_end(key)
         if tracker is not None:
             tracker.lu_cache_hits += 1
@@ -258,13 +259,15 @@ def _solve_scalar_block(
                 lu_cache.popitem(last=False)
                 if tracker is not None:
                     tracker.lu_cache_evictions += 1
-            lu_cache[key] = (lu, piv, info, Mj, rcond_est)
+            lu_cache[key] = (lu, piv, info, rcond_est)
 
-    singular_rcond = max(Mj.shape[0], 1) * np.finfo(float).eps
+    singular_rcond = max(A_hat.shape[0], 1) * np.finfo(float).eps
     if info == 0 and rcond_est > singular_rcond:
         sol, solve_info = dgetrs(lu, piv, rhs)
         if solve_info == 0 and np.isfinite(sol).all():
             if rcond_est < 1e-8:
+                if Mj is None:
+                    Mj = A_hat + key * A_plus
                 res_norm = float(np.linalg.norm(Mj @ sol - rhs, ord=np.inf))
                 rhs_norm = float(np.linalg.norm(rhs, ord=np.inf))
                 mj_norm = float(np.linalg.norm(Mj, ord=np.inf))
@@ -275,6 +278,8 @@ def _solve_scalar_block(
             else:
                 return sol
 
+    if Mj is None:
+        Mj = A_hat + key * A_plus
     return _solve_consistent_linear(
         Mj,
         rhs,
@@ -378,7 +383,7 @@ def solve_generalized_sylvester_schur(
     A_plus: np.ndarray,
     h_x: np.ndarray,
     K_xx: np.ndarray,
-    max_cache: int = 128,
+    max_cache: int = 32,
     *,
     return_work_counts: bool = False,
 ) -> np.ndarray | tuple[np.ndarray, SylvesterWorkCounts]:
@@ -459,7 +464,7 @@ def solve_generalized_sylvester_schur(
     dgetrf = scipy.linalg.lapack.dgetrf
     dgetrs = scipy.linalg.lapack.dgetrs
     dgecon = getattr(scipy.linalg.lapack, "dgecon", None)
-    lu_cache: OrderedDict[float, tuple[Any, Any, int, np.ndarray, float]] = OrderedDict()
+    lu_cache: OrderedDict[float, tuple[Any, Any, int, float]] = OrderedDict()
 
     for i1, e1 in blocks:
         m1 = e1 - i1
@@ -522,7 +527,7 @@ def solve_order3_sylvester_schur(
     A_plus: np.ndarray,
     h_x: np.ndarray,
     K_xxx: np.ndarray,
-    max_cache: int = 128,
+    max_cache: int = 64,
     *,
     return_work_counts: bool = False,
 ) -> np.ndarray | tuple[np.ndarray, SylvesterWorkCounts]:
@@ -603,7 +608,7 @@ def solve_order3_sylvester_schur(
     dgetrf = scipy.linalg.lapack.dgetrf
     dgetrs = scipy.linalg.lapack.dgetrs
     dgecon = getattr(scipy.linalg.lapack, "dgecon", None)
-    lu_cache: OrderedDict[float, tuple[Any, Any, int, np.ndarray, float]] = OrderedDict()
+    lu_cache: OrderedDict[float, tuple[Any, Any, int, float]] = OrderedDict()
 
     for i1, e1 in blocks:
         m1 = e1 - i1
@@ -689,7 +694,7 @@ def solve_generalized_sylvester_kronecker(
     A_plus: np.ndarray,
     h_x: np.ndarray,
     K_xx: np.ndarray,
-    max_cache: int = 128,
+    max_cache: int = 32,
     *,
     return_work_counts: bool = False,
 ) -> np.ndarray | tuple[np.ndarray, SylvesterWorkCounts]:
@@ -781,7 +786,7 @@ def solve_order1_sylvester(
     dgetrf = scipy.linalg.lapack.dgetrf
     dgetrs = scipy.linalg.lapack.dgetrs
     dgecon = getattr(scipy.linalg.lapack, "dgecon", None)
-    lu_cache: OrderedDict[float, tuple[Any, Any, int, np.ndarray, float]] = OrderedDict()
+    lu_cache: OrderedDict[float, tuple[Any, Any, int, float]] = OrderedDict()
 
     for i1, e1 in blocks:
         m1 = e1 - i1
