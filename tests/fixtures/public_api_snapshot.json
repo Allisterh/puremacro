@@ -116,7 +116,10 @@
     ],
     "puremacro.climate": [
       "DICEResult",
-      "simulate_dice_model"
+      "SpatialClimateIAM",
+      "SpatialClimateIAMResult",
+      "simulate_dice_model",
+      "solve_spatial_climate_iam"
     ],
     "puremacro.climate.annual_lp": [
       "climate_annual_lp"
@@ -137,6 +140,11 @@
       "make_dl_lags",
       "monthly_dl"
     ],
+    "puremacro.climate.spatial_iam": [
+      "SpatialClimateIAM",
+      "SpatialClimateIAMResult",
+      "solve_spatial_climate_iam"
+    ],
     "puremacro.climate_panel": [
       "build_climate_panel"
     ],
@@ -153,6 +161,28 @@
     ],
     "puremacro.connectedness.diebold_yilmaz": [
       "spillover_index"
+    ],
+    "puremacro.core": [
+      "DFMDifferentiableAdapter",
+      "DSGEDifferentiableAdapter",
+      "DifferentiableModel",
+      "HANKDAGDifferentiableAdapter",
+      "SVARDifferentiableAdapter",
+      "SpatialDifferentiableAdapter",
+      "StateSpaceProtocol",
+      "TradeDifferentiableAdapter",
+      "wrap_differentiable_model"
+    ],
+    "puremacro.core.protocol": [
+      "DFMDifferentiableAdapter",
+      "DSGEDifferentiableAdapter",
+      "DifferentiableModel",
+      "HANKDAGDifferentiableAdapter",
+      "SVARDifferentiableAdapter",
+      "SpatialDifferentiableAdapter",
+      "StateSpaceProtocol",
+      "TradeDifferentiableAdapter",
+      "wrap_differentiable_model"
     ],
     "puremacro.credentials": [
       "MissingCredentialError",
@@ -314,6 +344,7 @@
       "GK2011_PARAMS",
       "GammaPrior",
       "GertlerKaradiResult",
+      "HANKAggregateRiskResult",
       "HANKEstimationResult",
       "HANKModel",
       "HANKResult",
@@ -340,6 +371,7 @@
       "NUTSResult",
       "NewsDecompositionResult",
       "NewsIRFResult",
+      "NonlinearHANKTransitionResult",
       "NonlinearModel",
       "NonlinearOccBinResult",
       "NormalPrior",
@@ -386,6 +418,7 @@
       "audit_policy",
       "bayesian_irf",
       "build",
+      "build_canonical_hank_dag",
       "build_dynare",
       "build_gertler_karadi_model",
       "canonical_growth_2nd_order",
@@ -415,6 +448,7 @@
       "gaussian_quadrature",
       "hank",
       "hank_loglik_whittle",
+      "hank_nonlinear",
       "harmonic_mean_mdd",
       "identification",
       "inspect_mod",
@@ -469,7 +503,9 @@
       "solve_announced_path",
       "solve_dynare_2nd_order",
       "solve_gertler_karadi",
+      "solve_hank_aggregate_risk_order2",
       "solve_hank_bridge",
+      "solve_hank_nonlinear_transition",
       "solve_ms_dsge",
       "solve_multiconstraint_occbin",
       "solve_nonlinear_occbin",
@@ -637,6 +673,13 @@
       "estimate_hank_irf_matching",
       "estimate_hank_whittle",
       "hank_loglik_whittle"
+    ],
+    "puremacro.dsge.hank_nonlinear": [
+      "HANKAggregateRiskResult",
+      "NonlinearHANKTransitionResult",
+      "build_canonical_hank_dag",
+      "solve_hank_aggregate_risk_order2",
+      "solve_hank_nonlinear_transition"
     ],
     "puremacro.dsge.identification": [
       "identification"
@@ -1612,8 +1655,10 @@
     ],
     "puremacro.inference": [
       "ARTestResult",
+      "AdaptiveTemperingSchedule",
       "LewbelIVResult",
       "SIMEXResult",
+      "SMCResult",
       "SupTBandResult",
       "anderson_rubin_test",
       "block_bootstrap",
@@ -1641,6 +1686,7 @@
       "quandt_andrews_supF",
       "run_spec_curve",
       "simex_ols",
+      "smc_sample",
       "stacked_matched_filter",
       "stock_yogo_cv",
       "supt_band",
@@ -1708,6 +1754,11 @@
     "puremacro.inference.simex": [
       "SIMEXResult",
       "simex_ols"
+    ],
+    "puremacro.inference.smc": [
+      "AdaptiveTemperingSchedule",
+      "SMCResult",
+      "smc_sample"
     ],
     "puremacro.inference.spec_curve": [
       "bootstrap_pvalue_median",
@@ -1903,10 +1954,15 @@
       "chunked"
     ],
     "puremacro.lp": [
+      "DistributionalBridgeResult",
+      "DistributionalLPResult",
       "LPDiDResult",
       "LPResult",
       "SmoothLPResult",
+      "bridge_hank_distributional_irf",
       "cce_panel_lp",
+      "estimate_distributional_lp",
+      "estimate_quantile_lp",
       "la_lp",
       "la_lp_iv",
       "lp_asymmetric",
@@ -1940,6 +1996,13 @@
     ],
     "puremacro.lp.cce": [
       "cce_panel_lp"
+    ],
+    "puremacro.lp.distributional": [
+      "DistributionalBridgeResult",
+      "DistributionalLPResult",
+      "bridge_hank_distributional_irf",
+      "estimate_distributional_lp",
+      "estimate_quantile_lp"
     ],
     "puremacro.lp.garch_in_mean": [
       "lp_garch_in_mean"
@@ -2976,7 +3039,6 @@
       "to_1sd_pct"
     ],
     "puremacro.sigma": [
-      "SigmaObject",
       "shapley_factors",
       "shapley_table",
       "shapley_var"
@@ -2985,6 +3047,30 @@
       "shapley_factors",
       "shapley_table",
       "shapley_var"
+    ],
+    "puremacro.sovereign": [
+      "RestructuringResult",
+      "SovereignDefaultResult",
+      "SuddenStopResult",
+      "decompose_spread_term_structure",
+      "evaluate_debt_restructuring",
+      "solve_sovereign_default",
+      "solve_sudden_stop"
+    ],
+    "puremacro.sovereign._results": [
+      "RestructuringResult",
+      "SovereignDefaultResult",
+      "SuddenStopResult"
+    ],
+    "puremacro.sovereign.arellano": [
+      "solve_sovereign_default"
+    ],
+    "puremacro.sovereign.mendoza": [
+      "solve_sudden_stop"
+    ],
+    "puremacro.sovereign.restructuring": [
+      "decompose_spread_term_structure",
+      "evaluate_debt_restructuring"
     ],
     "puremacro.spatial": [
       "AllenArkolakisModel",
@@ -4511,6 +4597,52 @@
       "scc_initial",
       "trajectories"
     ],
+    "puremacro.climate.spatial_iam.SpatialClimateIAM": [
+      "abatement_theta1",
+      "abatement_theta2",
+      "amenity_damage_coefficients",
+      "beta",
+      "carbon_intensity",
+      "climate_sensitivity",
+      "congestion_alpha",
+      "damage_coefficients",
+      "damage_curvature",
+      "initial_carbon_stock",
+      "initial_migration_shares",
+      "initial_population",
+      "initial_temperatures",
+      "initial_trade_shares",
+      "initial_wages",
+      "migration_dispersion",
+      "optimal_temperatures",
+      "phi_0",
+      "phi_L",
+      "phi_decay",
+      "preindustrial_carbon",
+      "region_names",
+      "trade_elasticity",
+      "warming_pattern_scale"
+    ],
+    "puremacro.climate.spatial_iam.SpatialClimateIAMResult": [
+      "carbon_leakage_rate",
+      "carbon_mass_balance_error",
+      "carbon_stock_path",
+      "converged",
+      "emissions_path",
+      "global_emissions_path",
+      "global_temperature_path",
+      "iterations",
+      "metadata",
+      "pigouvian_tax_path",
+      "policy_scenario",
+      "population_conservation_error",
+      "population_hat_path",
+      "population_path",
+      "real_wage_hat_path",
+      "region_names",
+      "temperature_path",
+      "welfare_hat"
+    ],
     "puremacro.cointegration_modern.DOLSResult": [
       "alpha",
       "alpha_se",
@@ -5494,6 +5626,38 @@
       "target_irfs",
       "vcov"
     ],
+    "puremacro.dsge.hank_nonlinear.HANKAggregateRiskResult": [
+      "control_names",
+      "distribution_moments",
+      "g_sigmasigma",
+      "g_x",
+      "g_xx",
+      "h_sigmasigma",
+      "h_x",
+      "h_xx",
+      "metadata",
+      "precautionary_shift_output",
+      "precautionary_shift_rate",
+      "precautionary_shift_wealth",
+      "sigma_agg",
+      "state_names"
+    ],
+    "puremacro.dsge.hank_nonlinear.NonlinearHANKTransitionResult": [
+      "asymmetry_ratio",
+      "binding_fractions",
+      "broyden_updates",
+      "converged",
+      "iterations",
+      "jacobian_evaluations",
+      "linear_paths",
+      "metadata",
+      "paths",
+      "residual_norm",
+      "shock_size",
+      "shock_var",
+      "targets",
+      "unknowns"
+    ],
     "puremacro.dsge.inspection.ModInspectionReport": [
       "coverage",
       "data_check",
@@ -6288,6 +6452,19 @@
       "reliability",
       "sigma_u"
     ],
+    "puremacro.inference.smc.SMCResult": [
+      "acceptance_rates",
+      "elapsed_seconds",
+      "ess_history",
+      "log_mdd",
+      "mdd_se",
+      "metadata",
+      "mutation_type",
+      "param_names",
+      "particles",
+      "stage_tempering",
+      "weights"
+    ],
     "puremacro.instruments._core.Instrument": [
       "category",
       "frequency",
@@ -6376,6 +6553,33 @@
       "last_run",
       "rate",
       "total"
+    ],
+    "puremacro.lp.distributional.DistributionalBridgeResult": [
+      "bins",
+      "decile_correlations",
+      "distance_l2",
+      "distance_mahalanobis",
+      "empirical_irf",
+      "hank_irf",
+      "horizons",
+      "mean_absolute_error",
+      "metadata",
+      "peak_gaps",
+      "sign_concordance"
+    ],
+    "puremacro.lp.distributional.DistributionalLPResult": [
+      "adding_up_max_error",
+      "bin_weights",
+      "bins",
+      "ci",
+      "ci_lower",
+      "ci_upper",
+      "cov_type",
+      "distribution_type",
+      "horizons",
+      "irf_matrix",
+      "metadata",
+      "se_matrix"
     ],
     "puremacro.lp.lp_did.LPDiDResult": [
       "alpha",
@@ -7239,15 +7443,71 @@
       "loader",
       "name"
     ],
-    "puremacro.sigma.sigma_numpy.SigmaObject": [
-      "R",
-      "Sigma",
-      "country",
-      "labels",
-      "period",
-      "psd_enforce",
-      "psd_tol",
-      "sigma"
+    "puremacro.sovereign._results.RestructuringResult": [
+      "baseline_spread",
+      "counterfactual_spread",
+      "debt_gdp_relief_pct",
+      "default_prob_post",
+      "default_prob_pre",
+      "haircut",
+      "initial_debt",
+      "maturity_extension_years",
+      "metadata",
+      "post_default_prob",
+      "pre_default_prob",
+      "restructured_debt",
+      "spread_compression",
+      "spread_reduction_bps",
+      "transition_path"
+    ],
+    "puremacro.sovereign._results.SovereignDefaultResult": [
+      "b_grid",
+      "bellman_residual",
+      "bond_price",
+      "converged",
+      "coupon_rate_kappa",
+      "default_prob",
+      "dq_db",
+      "iterations",
+      "maturity_param_delta",
+      "metadata",
+      "p_trans",
+      "policy_b",
+      "policy_b_prime",
+      "q_bond",
+      "residual",
+      "spread",
+      "spread_mean",
+      "spread_y_corr",
+      "taste_shock_scale",
+      "v_d",
+      "v_default",
+      "v_expected",
+      "v_r",
+      "v_repay",
+      "v_star",
+      "y_grid"
+    ],
+    "puremacro.sovereign._results.SuddenStopResult": [
+      "amplification_ratio",
+      "asset_price_q",
+      "b_grid",
+      "collateral_binding_fraction",
+      "converged",
+      "crisis_probability",
+      "iterations",
+      "k_grid",
+      "kappa_collateral",
+      "metadata",
+      "multiplier_lambda",
+      "p_trans",
+      "policy_b",
+      "policy_b_prime",
+      "policy_c",
+      "policy_k",
+      "policy_k_prime",
+      "policy_q_asset",
+      "z_grid"
     ],
     "puremacro.spatial._lp_bootstrap.SpatialLPBootstrap": [
       "assume_stationary",

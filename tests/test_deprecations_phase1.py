@@ -18,18 +18,12 @@ def test_regress_lp_emits_future_warning():
 
 
 def test_sigma_numpy_emits_future_warning():
-    from puremacro.sigma.sigma_numpy import SigmaObject
-
-    with pytest.deprecated_call():
-        SigmaObject(
-            sigma=np.array([1.0, 2.0]),
-            R=np.eye(2),
-            labels=["x1", "x2"],
-        )
+    with pytest.raises((ImportError, AttributeError)):
+        from puremacro.sigma.sigma_numpy import SigmaObject  # noqa: F401
 
 
 def test_lp_garch_utils_emits_future_warning():
     import sys
     sys.modules.pop("puremacro.lp.garch_utils", None)
-    with pytest.deprecated_call():
+    with pytest.raises(ImportError):
         import puremacro.lp.garch_utils  # noqa: F401

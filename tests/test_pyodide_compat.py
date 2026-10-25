@@ -64,6 +64,8 @@ _SKIP_PREFIXES = (
     # oracle modules are the Pyodide path (see vfi/_backend selection).
     "puremacro.vfi.kernels_numba",
     "puremacro.models.nested_dmp.kernels_numba",
+    # 6.0.0 tombstone raises ImportError on import by design
+    "puremacro.lp.garch_utils",
 )
 
 

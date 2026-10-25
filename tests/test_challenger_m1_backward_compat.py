@@ -262,52 +262,22 @@ def test_vfi_solution_plot_headless_and_axes():
 # ===========================================================================
 
 def test_garch_utils_future_warning_names_a_future_release():
-    """Ensure puremacro.lp.garch_utils emits FutureWarning naming a release that has not shipped.
-
-    The target was 4.0.0 until that release shipped (2026-09-16) keeping the shim; it is
-    5.0.0 from 2026-09-22 and 6.0.0 since 5.1.0 (2026-10-15), so a minor release removes
-    nothing (see tests/test_docs_hygiene_audit_fixes.py for the drift guard).
-    """
-    with warnings.catch_warnings(record=True) as recorded:
-        warnings.simplefilter("always")
-        if "puremacro.lp.garch_utils" in sys.modules:
-            importlib.reload(sys.modules["puremacro.lp.garch_utils"])
-        else:
-            importlib.import_module("puremacro.lp.garch_utils")
-
-    garch_warnings = [
-        w for w in recorded
-        if issubclass(w.category, FutureWarning) and "puremacro.lp.garch_utils" in str(w.message)
-    ]
-    assert len(garch_warnings) >= 1, "Expected FutureWarning on importing garch_utils"
-    msg = str(garch_warnings[0].message)
-    assert "6.0.0" in msg, f"Expected target '6.0.0' in warning message, got: {msg}"
-    assert "5.0.0" not in msg, f"Stale '5.0.0' target found in warning: {msg}"
-    assert "2.0.0" not in msg, f"Stale '2.0.0' target found in warning: {msg}"
-    assert "4.0.0" not in msg, f"Stale '4.0.0' target found in warning: {msg}"
+    """Ensure puremacro.lp.garch_utils raises ImportError citing 6.0.0 removal."""
+    sys.modules.pop("puremacro.lp.garch_utils", None)
+    with pytest.raises(ImportError) as excinfo:
+        importlib.import_module("puremacro.lp.garch_utils")
+    msg = str(excinfo.value)
+    assert "6.0.0" in msg
+    assert "puremacro.lp._garch_utils" in msg
 
 
 def test_sigma_numpy_future_warning_names_a_future_release():
-    """Ensure puremacro.sigma.sigma_numpy.SigmaObject emits FutureWarning naming 6.0.0.
-
-    The target was 4.0.0 until that release shipped (2026-09-16) keeping the shim; it is
-    5.0.0 from 2026-09-23 and 6.0.0 since 5.1.0, like garch_utils.
-    """
-    with warnings.catch_warnings(record=True) as recorded:
-        warnings.simplefilter("always")
-        from puremacro.sigma.sigma_numpy import SigmaObject
-        _ = SigmaObject(sigma=np.array([0.1, 0.2]), R=np.eye(2), labels=["A", "B"])
-
-    sigma_warnings = [
-        w for w in recorded
-        if issubclass(w.category, FutureWarning) and "SigmaObject is deprecated" in str(w.message)
-    ]
-    assert len(sigma_warnings) >= 1, "Expected FutureWarning on SigmaObject init"
-    msg = str(sigma_warnings[0].message)
-    assert "6.0.0" in msg, f"Expected target '6.0.0' in warning message, got: {msg}"
-    assert "5.0.0" not in msg, f"Stale '5.0.0' target found in warning: {msg}"
-    assert "2.0.0" not in msg, f"Stale '2.0.0' target found in warning: {msg}"
-    assert "4.0.0" not in msg, f"Stale '4.0.0' target found in warning: {msg}"
+    """Ensure puremacro.sigma.sigma_numpy.SigmaObject raises ImportError/AttributeError citing 6.0.0."""
+    with pytest.raises((ImportError, AttributeError)) as excinfo:
+        from puremacro.sigma.sigma_numpy import SigmaObject  # noqa: F401
+    msg = str(excinfo.value)
+    assert "6.0.0" in msg or "SigmaObject" in msg
+    assert "puremacro.volatility.sigma.SigmaObject" in msg or "SigmaObject" in msg
 
 
 # ===========================================================================

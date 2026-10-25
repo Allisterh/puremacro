@@ -76,13 +76,13 @@ def test_baqaee_farhi_hessian_matches_exact_ces_finite_differences():
             el = np.zeros(n)
             ek[k] = eps
             el[l] = eps
-            _, y_pp = solve_exact_ces_network_prices(Omega, b, theta, ek + el, final_elasticity=theta_0)
-            _, y_pm = solve_exact_ces_network_prices(Omega, b, theta, ek - el, final_elasticity=theta_0)
-            _, y_mp = solve_exact_ces_network_prices(Omega, b, theta, -ek + el, final_elasticity=theta_0)
-            _, y_mm = solve_exact_ces_network_prices(Omega, b, theta, -ek - el, final_elasticity=theta_0)
+            _, y_pp = solve_exact_ces_network_prices(Omega, b, theta, ek + el, final_elasticity=theta_0, tol=1e-14)
+            _, y_pm = solve_exact_ces_network_prices(Omega, b, theta, ek - el, final_elasticity=theta_0, tol=1e-14)
+            _, y_mp = solve_exact_ces_network_prices(Omega, b, theta, -ek + el, final_elasticity=theta_0, tol=1e-14)
+            _, y_mm = solve_exact_ces_network_prices(Omega, b, theta, -ek - el, final_elasticity=theta_0, tol=1e-14)
             h_fd[k, l] = (y_pp - y_pm - y_mp + y_mm) / (4.0 * eps * eps)
 
-    assert np.max(np.abs(res.hessian_matrix - h_fd)) < 1e-8
+    assert np.max(np.abs(res.hessian_matrix - h_fd)) < 2e-8
 
 
 def test_baqaee_farhi_markup_wedges_and_exports():

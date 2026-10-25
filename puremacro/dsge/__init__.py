@@ -189,8 +189,15 @@ from .occbin_nonlinear import (
     NonlinearOccBinResult,
     solve_nonlinear_occbin,
 )
+from .hank_nonlinear import (
+    HANKAggregateRiskResult,
+    NonlinearHANKTransitionResult,
+    build_canonical_hank_dag,
+    solve_hank_aggregate_risk_order2,
+    solve_hank_nonlinear_transition,
+)
 from . import priors
-from . import marginal, mode, observation, smoother, news
+from . import marginal, mode, observation, smoother, news, hank_nonlinear
 
 
 __all__ = [
@@ -278,6 +285,10 @@ __all__ = [
     "SimpleBlock", "HetBlock", "SolvedBlock", "BlockDAG", "SSJDAGResult",
     "HANKEstimationResult", "hank_loglik_whittle", "estimate_hank_whittle", "estimate_hank_irf_matching",
     "NonlinearOccBinResult", "solve_nonlinear_occbin",
+    # --- Track II.3: Global Nonlinear HANK with Aggregate Risk -----------
+    "NonlinearHANKTransitionResult", "HANKAggregateRiskResult",
+    "solve_hank_nonlinear_transition", "solve_hank_aggregate_risk_order2",
+    "build_canonical_hank_dag", "hank_nonlinear",
 ]
 from . import smets_wouters  # re-export for back-compat with 0.50.0 callers
 from . import gertler_karadi

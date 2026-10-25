@@ -439,31 +439,27 @@ def test_welfare_payoff_matrix_result_to_typst():
 # 5. Stale Deprecation Warnings Retired
 # ---------------------------------------------------------------------------
 
-def test_garch_utils_deprecation_warning():
+def test_garch_utils_removed_in_v600():
     import sys
     sys.modules.pop("puremacro.lp.garch_utils", None)
-    with warnings.catch_warnings(record=True) as record:
-        warnings.simplefilter("always")
+    with pytest.raises(ImportError) as excinfo:
         import puremacro.lp.garch_utils  # noqa: F401
-    matches = [w for w in record if "puremacro.lp.garch_utils" in str(w.message)]
-    assert len(matches) > 0
-    msg = str(matches[0].message)
-    # 4.0.0 shipped (2026-09-16) keeping the shim; the target was retargeted to 5.0.0 on
-    # 2026-09-22 and to 6.0.0 at 5.1.0 (2026-10-15), so a minor release removes nothing;
-    # tests/test_docs_hygiene_audit_fixes.py guards it against drifting again.
-    assert "a future major release (6.0.0)" in msg
-    assert "2.0.0" not in msg and "4.0.0" not in msg and "5.0.0" not in msg
+    msg = str(excinfo.value)
+    assert "puremacro 6.0.0" in msg
+    assert "puremacro.lp._garch_utils" in msg
+
+    # Canonical path works cleanly
+    from puremacro.lp._garch_utils import align_series_for_lp
+    assert callable(align_series_for_lp)
 
 
-def test_sigma_numpy_deprecation_warning():
-    with warnings.catch_warnings(record=True) as record:
-        warnings.simplefilter("always")
-        from puremacro.sigma.sigma_numpy import SigmaObject
-        SigmaObject(sigma=np.array([0.1, 0.2]), R=np.eye(2), labels=["A", "B"])
-    matches = [w for w in record if "SigmaObject is deprecated" in str(w.message)]
-    assert len(matches) > 0
-    msg = str(matches[0].message)
-    # 4.0.0 shipped keeping this shim too; retargeted to 5.0.0 with garch_utils (2026-09-23)
-    # and to 6.0.0 at 5.1.0.
-    assert "a future major release (6.0.0)" in msg
-    assert "2.0.0" not in msg and "4.0.0" not in msg and "5.0.0" not in msg
+def test_sigma_numpy_removed_in_v600():
+    with pytest.raises((ImportError, AttributeError)) as excinfo:
+        from puremacro.sigma.sigma_numpy import SigmaObject  # noqa: F401
+    msg = str(excinfo.value)
+    assert "6.0.0" in msg or "SigmaObject" in msg
+
+    # Canonical path works cleanly
+    from puremacro.volatility.sigma import SigmaObject
+    obj = SigmaObject(sig=np.array([0.1, 0.2]), R=np.eye(2), sectors=["A", "B"])
+    assert obj.var(np.array([1.0, 1.0])) > 0

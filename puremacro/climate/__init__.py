@@ -6,8 +6,16 @@ Contains:
 - Multi-reservoir carbon cycle and climate temperature anomaly dynamics.
 """
 from puremacro.climate.dice import DICEResult, simulate_dice_model
+from puremacro.climate.spatial_iam import (
+    SpatialClimateIAM,
+    SpatialClimateIAMResult,
+    solve_spatial_climate_iam,
+)
 
 __all__ = [
     "DICEResult",
     "simulate_dice_model",
+    "SpatialClimateIAM",
+    "SpatialClimateIAMResult",
+    "solve_spatial_climate_iam",
 ]

@@ -28,7 +28,7 @@ phase follows §5.2-5.3 (exact initial filtering and smoothing).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import NamedTuple, Optional
+from typing import Any, NamedTuple, Optional
 
 import numpy as np
 
@@ -108,6 +108,14 @@ class StateSpaceModel:
             self.d = np.asarray(self.d, dtype=float).reshape(-1)
             if self.d.shape != (n,):
                 raise ValueError(f"StateSpaceModel.d must be (n,) with n = {n}; got {self.d.shape}")
+
+    def filter(self, y: np.ndarray, **kwargs: Any) -> dict[str, Any]:
+        """Run Kalman filter on observed series y."""
+        return kalman_filter(y, self, **kwargs)
+
+    def smooth(self, y: np.ndarray, **kwargs: Any) -> dict[str, Any]:
+        """Run Kalman RTS smoother on observed series y."""
+        return kalman_smoother(y, self, **kwargs)
 
 
 

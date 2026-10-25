@@ -19,6 +19,13 @@ from .garch_state import lp_garch_state
 from .garch_in_mean import lp_garch_in_mean
 from .quantile import lp_quantile
 from .la_lp import la_lp, la_lp_iv
+from .distributional import (
+    DistributionalBridgeResult,
+    DistributionalLPResult,
+    bridge_hank_distributional_irf,
+    estimate_distributional_lp,
+    estimate_quantile_lp,
+)
 
 __all__ = [
     "lp_hac", "LPResult", "panel_lp", "panel_lp_dk", "lp_iv", "lp_iv_lewbel", "panel_lp_iv",
@@ -27,4 +34,9 @@ __all__ = [
     "lp_garch_state", "lp_garch_in_mean",
     "lp_quantile", "la_lp", "la_lp_iv",
     "lp_did", "LPDiDResult",
+    "DistributionalBridgeResult",
+    "DistributionalLPResult",
+    "bridge_hank_distributional_irf",
+    "estimate_distributional_lp",
+    "estimate_quantile_lp",
 ]

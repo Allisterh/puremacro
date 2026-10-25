@@ -7,6 +7,26 @@ This changelog describes versioned source changes. Check
 Versions 5.3.0, 5.4.0 and 5.4.1 were tagged but not published to PyPI; their
 additions are included in 5.4.2. See the [release procedure](RELEASING.md).
 
+## 6.0.0 (2026-10-25)
+
+**Major Release: Unified Differentiable Model Protocol, Vectorized Tempered SMC Engine, Global Nonlinear HANK with Aggregate Risk, Quantitative Sovereign Default & Sudden Stop Suite, Distributional Local Projections with Exact Adding-Up, Integrated Spatial Climate IAM, and Bilingual Flagship Showcase Notebook 72.**
+
+### Added
+
+- `puremacro.core.protocol` (`DifferentiableModel`, `StateSpaceProtocol`, `wrap_differentiable_model`, `LinearDSGEAdapter`, `BlockDAGAdapter`, `DynamicSpatialAdapter`, `NowcastDFMAdapter`) provides a unified five-method differentiable modeling protocol (`.impulse_response()`, `.simulate()`, `.loglik_and_grad()`, `.counterfactual()`, `.to_interactive_html()`) interoperable with `DualArray` forward automatic differentiation score gradients.
+- `puremacro.inference.smc` (`smc_sample`, `SMCResult`, `AdaptiveTemperingSchedule`, `TemperingStageDiagnostics`, `ImportanceWeights`, `RWProposal`, `MALAProposal`, `HMCProposal`) provides a vectorized, tempered Sequential Monte Carlo estimation engine with adaptive ESS targeting, MALA/HMC analytical score gradients, and marginal data density ($\ln p(Y)$) recovery.
+- `puremacro.dsge.hank_nonlinear` (`solve_hank_nonlinear_transition`, `solve_hank_aggregate_risk_order2`, `NonlinearHANKTransitionResult`, `HANKAggregateRiskResult`) provides global nonlinear sequence-space general-equilibrium transitions with Good Broyden rank-1 Jacobian updates and 2nd-order aggregate risk perturbation with Winberry–Reiter moment reduction.
+- `puremacro.sovereign` (`solve_sovereign_default`, `solve_sudden_stop`, `decompose_spread_term_structure`, `evaluate_debt_restructuring`, `SovereignDefaultResult`, `SuddenStopResult`, `RestructuringResult`) provides quantitative sovereign default under short- and long-term debt, extreme-value taste shocks, `DualArray` dilution derivatives $\partial q/\partial b' \le 0$, Mendoza (2010) collateral sudden stops, spread term-structure decomposition, and debt restructuring counterfactuals.
+- `puremacro.lp.distributional` (`estimate_distributional_lp`, `estimate_quantile_lp`, `bridge_hank_distributional_irf`, `DistributionalLPResult`, `DistributionalBridgeResult`) provides functional and distributional local projections enforcing exact cross-sectional adding-up constraints ($\max_h |\sum_b \beta_{b,h}| < 10^{-12}$) via null-space projections, Driscoll–Kraay panel covariance inference, and structural HANK decile bridges.
+- `puremacro.climate.spatial_iam` (`SpatialClimateIAM`, `solve_spatial_climate_iam`, `SpatialClimateIAMResult`) couples dynamic spatial trade and migration hat-algebra with a mass-conserving multi-box carbon cycle, regional temperature damage functions, Carbon Border Adjustment Mechanisms (CBAM), and analytical Golosov et al. (2014) Pigouvian carbon taxes.
+- Showcase Notebook 72 (`notebooks/72_macro_v6_flagship_workflows.py` and `notebooks/72_macro_v6_flagship_workflows_es.py` + compiled `.ipynb` builds) uniting all six v6.0.0 tracks with a 3-panel publication figure, 14-check scorecard, and interactive parameterized exercises.
+
+### Removed
+
+- Scheduled v6.0.0 deprecations permanently removed:
+  * `puremacro.lp.garch_utils` (migrated to `puremacro.lp._garch_utils`).
+  * `SigmaObject` in `puremacro.sigma.sigma_numpy` (migrated to `puremacro.volatility.sigma.SigmaObject`).
+
 ## 5.9.0 (2026-10-25)
 
 **Pure-NumPy forward AD (`DualArray` / `HyperDualArray`), generalized nonlinear DAG Sequence-Space Jacobians & Whittle HANK estimation, 2nd/3rd-order pruned nonlinear OccBin, Baqaee–Farhi 2nd-order network aggregation, dynamic spatial migration hat-algebra, mixed-frequency nowcast news gradients, self-auditing `PolicyStudio` counterfactual grids, zero-server interactive HTML5/SVG explorer, and bilingual showcase notebook 71.**

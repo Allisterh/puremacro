@@ -98,40 +98,16 @@ def _named_removal_release(message: str) -> Version:
 # ---------------------------------------------------------------------------
 
 def test_garch_utils_deprecation_names_a_future_major_release():
-    import puremacro
-
     sys.modules.pop("puremacro.lp.garch_utils", None)
-    with warnings.catch_warnings(record=True) as record:
-        warnings.simplefilter("always")
+    with pytest.raises(ImportError) as excinfo:
         importlib.import_module("puremacro.lp.garch_utils")
-    messages = [
-        str(w.message)
-        for w in record
-        if issubclass(w.category, FutureWarning) and "puremacro.lp.garch_utils" in str(w.message)
-    ]
-    assert messages, "importing puremacro.lp.garch_utils must emit its FutureWarning"
-    target = _named_removal_release(messages[0])
-    current = Version(puremacro.__version__)
-    assert target > current, (
-        f"garch_utils FutureWarning names removal in {target} but puremacro is already "
-        f"{current}; retarget the shim (this drifted at 2.0.0 and again at 4.0.0)"
-    )
-    assert (target.minor, target.micro) == (0, 0), f"removal must be scheduled for a major release, got {target}"
+    assert "6.0.0" in str(excinfo.value)
 
 
 def test_sigma_numpy_deprecation_names_a_future_major_release():
-    """The sibling shim ``puremacro.sigma.sigma_numpy`` drifted the same way (it named 4.0.0)."""
-    import puremacro
-    from puremacro.sigma.sigma_numpy import SigmaObject
-
-    with warnings.catch_warnings(record=True) as record:
-        warnings.simplefilter("always")
-        SigmaObject(sigma=[0.1, 0.2], R=[[1.0, 0.0], [0.0, 1.0]], labels=["A", "B"])
-    messages = [str(w.message) for w in record
-                if issubclass(w.category, FutureWarning) and "SigmaObject is deprecated" in str(w.message)]
-    assert messages, "SigmaObject must emit its FutureWarning"
-    target = _named_removal_release(messages[0])
-    assert target > Version(puremacro.__version__) and (target.minor, target.micro) == (0, 0), target
+    with pytest.raises((ImportError, AttributeError)) as excinfo:
+        from puremacro.sigma.sigma_numpy import SigmaObject  # noqa: F401
+    assert "6.0.0" in str(excinfo.value) or "SigmaObject" in str(excinfo.value)
 
 
 # ---------------------------------------------------------------------------

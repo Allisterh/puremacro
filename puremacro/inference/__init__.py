@@ -30,6 +30,7 @@ from .diagnostics import durbin_watson
 # are also re-exported here.
 from . import proxy
 from .proxy import effective_sample_size, matched_filter, stacked_matched_filter
+from .smc import AdaptiveTemperingSchedule, SMCResult, smc_sample
 
 # quandt_andrews_supF is loaded lazily because quandt_andrews.py depends on
 # puremacro.tests.breaks, which can fail to resolve when the project root is
@@ -81,4 +82,7 @@ __all__ = [
     "effective_sample_size",
     "matched_filter",
     "stacked_matched_filter",
+    "AdaptiveTemperingSchedule",
+    "SMCResult",
+    "smc_sample",
 ]
