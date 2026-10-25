@@ -1,5 +1,15 @@
 {
   "all": {
+    "puremacro._autodiff": [
+      "DualArray",
+      "HyperDualArray",
+      "dual_solve",
+      "dual_sylvester_solve",
+      "hessian_forward",
+      "jacobian_forward",
+      "seed_dual_vector",
+      "value_and_grad"
+    ],
     "puremacro._backend": [
       "SUPPORTED",
       "available_backends",
@@ -280,6 +290,7 @@
       "BayesianIRFResult",
       "BetaPrior",
       "BlanchardKahnError",
+      "BlockDAG",
       "BlockTridiagonalPreconditioner",
       "ConditionalForecastResult",
       "DSGEForecastResult",
@@ -303,9 +314,11 @@
       "GK2011_PARAMS",
       "GammaPrior",
       "GertlerKaradiResult",
+      "HANKEstimationResult",
       "HANKModel",
       "HANKResult",
       "HarmonicMeanResult",
+      "HetBlock",
       "HorizonComparison",
       "IdentificationResult",
       "InteractiveIRFResult",
@@ -328,6 +341,7 @@
       "NewsDecompositionResult",
       "NewsIRFResult",
       "NonlinearModel",
+      "NonlinearOccBinResult",
       "NormalPrior",
       "OSRResult",
       "OccBinConstraint",
@@ -343,6 +357,7 @@
       "PriorPredictiveResult",
       "PrunedDSGESolution",
       "PrunedSimulationResult",
+      "SSJDAGResult",
       "SW07MarginalLikelihoodResult",
       "SW07PosteriorResult",
       "Scope",
@@ -350,7 +365,9 @@
       "ShockAnnouncement",
       "ShockDecompResult",
       "ShockDecompositionResult",
+      "SimpleBlock",
       "SmootherResult",
+      "SolvedBlock",
       "StackedNewtonError",
       "StackedNewtonResult",
       "StackedProblem",
@@ -388,6 +405,8 @@
       "estimate_dsge",
       "estimate_dsge_bayesian",
       "estimate_dsge_var",
+      "estimate_hank_irf_matching",
+      "estimate_hank_whittle",
       "estimate_sw07",
       "evaluate_perturbation",
       "extended_path",
@@ -395,6 +414,7 @@
       "forecast_model",
       "gaussian_quadrature",
       "hank",
+      "hank_loglik_whittle",
       "harmonic_mean_mdd",
       "identification",
       "inspect_mod",
@@ -452,6 +472,7 @@
       "solve_hank_bridge",
       "solve_ms_dsge",
       "solve_multiconstraint_occbin",
+      "solve_nonlinear_occbin",
       "solve_occbin",
       "solve_perfect_foresight",
       "solve_pruned_occbin",
@@ -611,6 +632,12 @@
       "load_hank_mod",
       "solve_hank_bridge"
     ],
+    "puremacro.dsge.hank_estimate": [
+      "HANKEstimationResult",
+      "estimate_hank_irf_matching",
+      "estimate_hank_whittle",
+      "hank_loglik_whittle"
+    ],
     "puremacro.dsge.identification": [
       "identification"
     ],
@@ -676,6 +703,10 @@
       "solve_occbin",
       "solve_pruned_occbin"
     ],
+    "puremacro.dsge.occbin_nonlinear": [
+      "NonlinearOccBinResult",
+      "solve_nonlinear_occbin"
+    ],
     "puremacro.dsge.particle_filter": [
       "ParticleFilterResult",
       "StochasticVolatilitySpec",
@@ -737,6 +768,13 @@
     "puremacro.dsge.smoother": [
       "forecast_model",
       "smooth_model"
+    ],
+    "puremacro.dsge.ssj_dag": [
+      "BlockDAG",
+      "HetBlock",
+      "SSJDAGResult",
+      "SimpleBlock",
+      "SolvedBlock"
     ],
     "puremacro.dsge.stacked_newton": [
       "BlockTridiagonalPreconditioner",
@@ -2831,6 +2869,7 @@
       "irf_to_markdown",
       "irf_to_typst",
       "latex_escape",
+      "result_to_interactive_html",
       "summary_to_dataframe",
       "summary_to_latex",
       "summary_to_markdown",
@@ -2950,6 +2989,8 @@
     "puremacro.spatial": [
       "AllenArkolakisModel",
       "AllenArkolakisResult",
+      "DynamicSpatialHatModel",
+      "DynamicSpatialHatResult",
       "GearyResult",
       "MoranResult",
       "SpatialEffectsResult",
@@ -2979,6 +3020,7 @@
       "sdm",
       "sem",
       "slx",
+      "solve_dynamic_spatial_hat",
       "spatial_effects",
       "spatial_hac_panel_cov",
       "spatial_hac_panel_meat",
@@ -2991,6 +3033,11 @@
       "MoranResult",
       "gearys_c",
       "morans_i"
+    ],
+    "puremacro.spatial.dynamic_hat": [
+      "DynamicSpatialHatModel",
+      "DynamicSpatialHatResult",
+      "solve_dynamic_spatial_hat"
     ],
     "puremacro.spatial.hac": [
       "conley_cov",
@@ -3060,6 +3107,9 @@
       "lp_moment_targets"
     ],
     "puremacro.study": [
+      "CounterfactualGrid",
+      "PolicyStudioCell",
+      "PolicyStudioResult",
       "ScenarioResult",
       "ScenarioSpec",
       "StudyComparison",
@@ -3069,8 +3119,15 @@
       "compare_studies",
       "load_study",
       "record_scenario",
+      "run_policy_studio",
       "run_study",
       "save_study"
+    ],
+    "puremacro.study.studio": [
+      "CounterfactualGrid",
+      "PolicyStudioCell",
+      "PolicyStudioResult",
+      "run_policy_studio"
     ],
     "puremacro.synthetic_control": [
       "SyntheticControlResult",
@@ -3188,6 +3245,7 @@
       "MRIOTable",
       "NashTariffResult",
       "NestedCESTechnology",
+      "NetworkMacroDecompositionResult",
       "OptimalTariffResult",
       "ParameterContinuationFailure",
       "ParameterContinuationResult",
@@ -3208,6 +3266,7 @@
       "WelfareDecompositionResult",
       "WelfarePayoffMatrixResult",
       "aggregate_mrio",
+      "baqaee_farhi_decomposition",
       "build_initial_guess",
       "build_strategic_tariffs",
       "build_tariff_matrices",
@@ -3263,6 +3322,7 @@
       "household_prices_from_result",
       "identify_source",
       "mrio",
+      "network_macro",
       "optimal_tariffs",
       "pack_equilibrium_vector",
       "plot_scenario_distributions",
@@ -3287,6 +3347,7 @@
       "solve_dynamic_steady_state",
       "solve_dynamic_transition",
       "solve_equilibrium",
+      "solve_exact_ces_network_prices",
       "solve_flexible_trade_equilibrium",
       "solve_homotopy_continuation",
       "solve_multilateral_nash_tariffs",
@@ -3674,6 +3735,11 @@
       "regularize_table",
       "to_calibration_matrix",
       "verify_zip_member"
+    ],
+    "puremacro.trade.network_macro": [
+      "NetworkMacroDecompositionResult",
+      "baqaee_farhi_decomposition",
+      "solve_exact_ces_network_prices"
     ],
     "puremacro.trade.optimal_tariffs": [
       "build_strategic_tariffs",
@@ -4325,6 +4391,12 @@
     ]
   },
   "result_classes": {
+    "puremacro._autodiff.HyperDualArray": [
+      "d1",
+      "d12",
+      "d2",
+      "val"
+    ],
     "puremacro.bartik.akm.ShiftShareIVResult": [
       "akm_shocks",
       "alpha",
@@ -5409,6 +5481,19 @@
       "require_domain",
       "state_names"
     ],
+    "puremacro.dsge.hank_estimate.HANKEstimationResult": [
+      "converged",
+      "fitted_irfs",
+      "iterations",
+      "log_likelihood",
+      "metadata",
+      "method",
+      "objective_value",
+      "params",
+      "se",
+      "target_irfs",
+      "vcov"
+    ],
     "puremacro.dsge.inspection.ModInspectionReport": [
       "coverage",
       "data_check",
@@ -5598,6 +5683,24 @@
       "log_likelihood",
       "reference_model",
       "regime_history"
+    ],
+    "puremacro.dsge.occbin_nonlinear.NonlinearOccBinResult": [
+      "binding_periods",
+      "constraint",
+      "converged",
+      "iterations",
+      "linear_binding_periods",
+      "linear_occbin_path",
+      "linear_regimes",
+      "max_bound_violation",
+      "metadata",
+      "order",
+      "precautionary_shift_norm",
+      "regimes",
+      "shadow_path",
+      "sigma",
+      "simulated_path",
+      "unconstrained_pruned_path"
     ],
     "puremacro.dsge.particle_filter.ParticleFilterResult": [
       "ess",
@@ -5808,6 +5911,37 @@
       "params",
       "shock_names",
       "state_names"
+    ],
+    "puremacro.dsge.ssj_dag.HetBlock": [
+      "inputs",
+      "jacobian_fn",
+      "name",
+      "nonlinear_fn",
+      "outputs"
+    ],
+    "puremacro.dsge.ssj_dag.SSJDAGResult": [
+      "H_U_condition",
+      "converged",
+      "ge_jacobians",
+      "iterations",
+      "metadata",
+      "mode",
+      "paths",
+      "residual_norm"
+    ],
+    "puremacro.dsge.ssj_dag.SimpleBlock": [
+      "fn",
+      "inputs",
+      "max_lag",
+      "max_lead",
+      "name",
+      "outputs"
+    ],
+    "puremacro.dsge.ssj_dag.SolvedBlock": [
+      "inner_block",
+      "name",
+      "targets",
+      "unknowns"
     ],
     "puremacro.dsge.stacked_newton.HorizonComparison": [
       "long_horizon",
@@ -7179,6 +7313,35 @@
       "z_rand",
       "z_values"
     ],
+    "puremacro.spatial.dynamic_hat.DynamicSpatialHatModel": [
+      "beta",
+      "congestion_alpha",
+      "initial_migration_shares",
+      "initial_population",
+      "initial_trade_shares",
+      "initial_wages",
+      "migration_dispersion",
+      "region_names",
+      "trade_elasticity"
+    ],
+    "puremacro.spatial.dynamic_hat.DynamicSpatialHatResult": [
+      "converged",
+      "iterations",
+      "max_bellman_residual",
+      "metadata",
+      "migration_row_stochastic_error",
+      "migration_shares_path",
+      "population_conservation_error",
+      "population_hat_path",
+      "population_path",
+      "price_hat_path",
+      "real_wage_hat_path",
+      "region_names",
+      "trade_shares_path",
+      "value_hat_path",
+      "wage_hat_path",
+      "welfare_hat"
+    ],
     "puremacro.spatial.models.SpatialEffectsResult": [
       "alpha",
       "direct",
@@ -7467,6 +7630,27 @@
       "shock",
       "shock_size",
       "variables"
+    ],
+    "puremacro.study.studio.CounterfactualGrid": [
+      "axes",
+      "fixed_params"
+    ],
+    "puremacro.study.studio.PolicyStudioCell": [
+      "audit_residual",
+      "audit_status",
+      "converged",
+      "coordinates",
+      "metrics",
+      "notes",
+      "raw_result"
+    ],
+    "puremacro.study.studio.PolicyStudioResult": [
+      "cells",
+      "fail_count",
+      "grid",
+      "metadata",
+      "pass_count",
+      "warn_count"
     ],
     "puremacro.synthetic_control.SyntheticControlResult": [
       "actual",
@@ -8322,6 +8506,27 @@
       "path",
       "sha256",
       "status"
+    ],
+    "puremacro.trade.network_macro.NetworkMacroDecompositionResult": [
+      "allocative_efficiency_dlog_y",
+      "cost_domar_weights",
+      "domar_weights",
+      "elasticities",
+      "equilibrium_log_prices",
+      "exact_ces_dlog_y",
+      "final_demand_second_order",
+      "final_elasticity",
+      "first_order_dlog_y",
+      "hessian_matrix",
+      "leontief_inverse",
+      "markups",
+      "metadata",
+      "node_second_order_contributions",
+      "second_order_dlog_y",
+      "sector_first_order_contributions",
+      "sector_names",
+      "tfp_shocks",
+      "total_second_order_dlog_y"
     ],
     "puremacro.trade.policy_analytics.EffectiveRateOfProtectionResult": [
       "country_code",

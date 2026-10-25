@@ -159,6 +159,76 @@ def solve_sylvester_generalized(
     return X_out if is_batched else X_out[0]
 
 
+def sylvester_order2_tangent(
+    A_hat: np.ndarray,
+    B: np.ndarray,
+    G: np.ndarray,
+    D_xx: np.ndarray,
+    *,
+    dA_hat: np.ndarray,
+    dB: np.ndarray,
+    dG: np.ndarray,
+    dD_xx: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    r"""Solve second-order Sylvester equation $A_{\text{hat}} X + B X (G \otimes G) = D_{xx}$ and its parameter tangents.
+
+    Parameters
+    ----------
+    A_hat, B : np.ndarray of shape (N, N)
+        Leading and forward Sylvester coefficient matrices.
+    G : np.ndarray of shape (n_s, n_s)
+        First-order state transition matrix.
+    D_xx : np.ndarray of shape (N, n_s * n_s)
+        Second-order right-hand side matrix.
+    dA_hat, dB : np.ndarray of shape (P, N, N)
+        Parameter sensitivities of `A_hat` and `B`.
+    dG : np.ndarray of shape (P, n_s, n_s)
+        Parameter sensitivities of `G`.
+    dD_xx : np.ndarray of shape (P, N, n_s * n_s)
+        Parameter sensitivities of `D_xx`.
+
+    Returns
+    -------
+    X_xx : np.ndarray of shape (N, n_s * n_s)
+        Primal second-order decision-rule matrix.
+    dX_xx : np.ndarray of shape (P, N, n_s * n_s)
+        Exact analytical parameter derivatives $\partial X_{xx} / \partial \theta$.
+    """
+    A_hat = np.asarray(A_hat, dtype=float)
+    B = np.asarray(B, dtype=float)
+    G = np.asarray(G, dtype=float)
+    D_xx = np.asarray(D_xx, dtype=float)
+    dA_hat = np.asarray(dA_hat, dtype=float)
+    dB = np.asarray(dB, dtype=float)
+    dG = np.asarray(dG, dtype=float)
+    dD_xx = np.asarray(dD_xx, dtype=float)
+
+    C = np.kron(G, G)
+    X_xx = solve_sylvester_generalized(A_hat, B, C, D_xx)
+
+    P = dG.shape[0]
+    M = C.shape[0]
+    N = A_hat.shape[0]
+    XC = X_xx @ C
+    BX = B @ X_xx
+
+    rhs_batch = np.zeros((P, N, M), dtype=float)
+    for p in range(P):
+        dC_p = np.kron(dG[p], G) + np.kron(G, dG[p])
+        rhs_batch[p] = (
+            dD_xx[p]
+            - dA_hat[p] @ X_xx
+            - dB[p] @ XC
+            - BX @ dC_p
+        )
+
+    dX_xx = solve_sylvester_generalized(A_hat, B, C, rhs_batch)
+    if dX_xx.ndim == 2:
+        dX_xx = dX_xx[np.newaxis, :, :]
+    return X_xx, dX_xx
+
+
+
 # ---------------------------------------------------------------------------
 # StateSpaceSensitivity Container
 # ---------------------------------------------------------------------------

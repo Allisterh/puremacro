@@ -172,6 +172,23 @@ from .markov_switching import (
     MSDSGEResult,
     solve_ms_dsge,
 )
+from .ssj_dag import (
+    BlockDAG,
+    HetBlock,
+    SSJDAGResult,
+    SimpleBlock,
+    SolvedBlock,
+)
+from .hank_estimate import (
+    HANKEstimationResult,
+    estimate_hank_irf_matching,
+    estimate_hank_whittle,
+    hank_loglik_whittle,
+)
+from .occbin_nonlinear import (
+    NonlinearOccBinResult,
+    solve_nonlinear_occbin,
+)
 from . import priors
 from . import marginal, mode, observation, smoother, news
 
@@ -257,6 +274,10 @@ __all__ = [
     "systematic_resample", "stratified_resample", "residual_resample", "multinomial_resample",
     "solve_ms_dsge", "MSDSGEResult",
     "markov_switching",
+    # --- Sequence-Space DAG, Whittle HANK Estimation & Nonlinear OccBin ---
+    "SimpleBlock", "HetBlock", "SolvedBlock", "BlockDAG", "SSJDAGResult",
+    "HANKEstimationResult", "hank_loglik_whittle", "estimate_hank_whittle", "estimate_hank_irf_matching",
+    "NonlinearOccBinResult", "solve_nonlinear_occbin",
 ]
 from . import smets_wouters  # re-export for back-compat with 0.50.0 callers
 from . import gertler_karadi

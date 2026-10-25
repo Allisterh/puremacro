@@ -496,6 +496,14 @@ class DynamicFactorModel:
             raise RuntimeError("Model must be fitted before accessing loglik.")
         return self.result_.loglik
 
+    @property
+    def ssm(self) -> StateSpaceModel:
+        if self.result_ is None:
+            raise RuntimeError("Model must be fitted before accessing ssm.")
+        if self.result_.ssm is None:
+            raise RuntimeError("Underlying state-space model not available.")
+        return self.result_.ssm
+
     def summary(self) -> str:
         if self.result_ is None:
             raise RuntimeError("Model must be fitted before calling summary().")

@@ -20,7 +20,7 @@ acotado hacia una aplicación más amplia.
 | ¿Cómo construyo un índice de incertidumbre? | 11 → 13 → 30 → 37 | Procedencia del corpus, normalización y validación de la medida |
 | ¿Por qué importa la heterogeneidad? | 01 → 03 → 05 → 31 → 44 | Restricciones presupuestarias, distribuciones y equilibrio |
 | ¿Cómo resuelvo y estimo modelos estructurales? | 21 → 41 → 42 → 43 | Residuos de equilibrio, identificación y diagnóstico del muestreo |
-| ¿Qué método numérico necesita mi modelo? | 22 → 51 → 52 → 53 → 56 → 70 | Error de aproximación, sensibilidad a la malla y convergencia |
+| ¿Qué método numérico necesita mi modelo? | 22 → 51 → 52 → 53 → 56 → 70 → 71 | Error de aproximación, sensibilidad a la malla y convergencia |
 | ¿Cómo se propagan los aranceles? | 55 → 61 → 62 → 63 → 65; después 64 | Calibración, contabilidad, definición de bienestar y límites del solucionador |
 | ¿Cómo conservo un experimento empírico o de modelo completo? | 69 → 06 → 55 | Unidades y supuestos explícitos, auditorías, archivos verificables y límites de escenarios |
 | ¿Cómo verifico un solucionador contra un resultado publicado? | 66 → 67 → 68 → 12 | Formas cerradas, rutas de solución independientes, tolerancias y criterio de evaluación |
@@ -137,6 +137,16 @@ un experimento; no establece su precisión ni su generalidad.
   la iteración temporal separable de Chebyshev y las transiciones restringidas
   Newton–Krylov sin matriz (`mcp=True`, `terminal_policy`) coinciden con los
   métodos directos en el dominio y horizonte declarados.
+- **71 — flujos macroeconómicos de frontera:** une AD hacia adelante en NumPy puro
+  (`DualArray`, `HyperDualArray`, `hessian_forward`), jacobianos DAG en espacio de
+  secuencias y estimación HANK de Whittle (`BlockDAG`, `hank_loglik_whittle`),
+  OccBin no lineal podado de 2.°/3.er orden con desplazamientos por riesgo precautorio,
+  nowcasting en espacio de estados de frecuencia mixta con descomposición de noticias
+  de Banbura–Modugno, HJB continuo contra el viento / KFE adjunta con puente
+  `HetBlock`, macroeconomía de redes de 2.° orden de Baqaee–Farhi, álgebra de
+  variaciones relativas espacial dinámica de Caliendo–Parro–Rossi-Hansberg y
+  mallas contrafactuales con autoauditoría en `PolicyStudio` con exportación
+  HTML5/SVG interactiva sin servidor.
 
 La [plantilla de cuadernos](https://github.com/jalonso1979/puremacro/blob/main/notebooks/_TEMPLATE.md)
 conecta pregunta, ecuaciones, intuición, código, interpretación, ejercicio y
@@ -221,4 +231,5 @@ Cada título abre un cuaderno ejecutado; «fuente» abre su archivo `.py` editab
 | [68_third_order_perturbation_trust_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/68_third_order_perturbation_trust_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/68_third_order_perturbation_trust_es.py) | Perturbación de tercer orden verificada con formas cerradas y Dynare 7.0 en vivo, un error tensorial que ninguna trayectoria ve, y lo que dice el tercer orden verificado | [68_third_order_perturbation_trust](https://github.com/jalonso1979/puremacro/blob/main/notebooks/68_third_order_perturbation_trust.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/68_third_order_perturbation_trust.py) |
 | [69_reproducible_studies_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies_es.py) | VAR mexicano, transferencia a hogares y arancel OCDE reproducibles: supuestos, auditorías, figuras y archivos portátiles | [69_reproducible_studies](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies.py) |
 | [70_nonlinear_dsge_workflows_and_accuracy_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/70_nonlinear_dsge_workflows_and_accuracy_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/70_nonlinear_dsge_workflows_and_accuracy_es.py) | Comandos `.mod` ordenados, condicionamiento de Sylvester, políticas separables de Chebyshev y transiciones restringidas Newton–Krylov | [70_nonlinear_dsge_workflows_and_accuracy](https://github.com/jalonso1979/puremacro/blob/main/notebooks/70_nonlinear_dsge_workflows_and_accuracy.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/70_nonlinear_dsge_workflows_and_accuracy.py) |
+| [71_frontier_macro_workflows_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/71_frontier_macro_workflows_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/71_frontier_macro_workflows_es.py) | Suite macroeconómica de frontera: AD hacia adelante, HANK en secuencias, OccBin podado, nowcasting, HJB continuo, GE redes/espacial y PolicyStudio | [71_frontier_macro_workflows](https://github.com/jalonso1979/puremacro/blob/main/notebooks/71_frontier_macro_workflows.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/71_frontier_macro_workflows.py) |
 | [local_llm_uncertainty_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty_es.py) | Inferencia local con motores opcionales de escritorio; respaldo simulado sin conexión | [local_llm_uncertainty](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty.py) |

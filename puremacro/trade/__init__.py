@@ -195,7 +195,13 @@ from .dynamic import (
     run_horizon_ladder,
     solve_dynamic_steady_state,
     solve_dynamic_transition,
-    tariff_path,
+     tariff_path,
+)
+from . import network_macro
+from .network_macro import (
+    NetworkMacroDecompositionResult,
+    baqaee_farhi_decomposition,
+    solve_exact_ces_network_prices,
 )
 
 __all__: list[str] = [
@@ -356,4 +362,8 @@ __all__: list[str] = [
     "DynamicTransitionResult",
     "DynamicStabilityResult",
     "ConsumptionEquivalentResult",
+    "network_macro",
+    "NetworkMacroDecompositionResult",
+    "baqaee_farhi_decomposition",
+    "solve_exact_ces_network_prices",
 ]

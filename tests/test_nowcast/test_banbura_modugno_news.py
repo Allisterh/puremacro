@@ -39,7 +39,7 @@ def nowcast_panel_dgp():
 
 
 def test_banbura_modugno_pure_releases_identity(nowcast_panel_dgp):
-    """Verify |revision - total_impact| < 10^-10 when new releases occur at the ragged edge."""
+    """Verify |revision - total_impact| < 10^-12 when new releases occur at the ragged edge."""
     df_true, _ = nowcast_panel_dgp
     df_old = df_true.copy()
     # Ragged edge at latest month: series 1 to 5 missing
@@ -59,18 +59,18 @@ def test_banbura_modugno_pure_releases_identity(nowcast_panel_dgp):
 
     assert isinstance(res, NewsDecompositionResult)
     assert res.target_variable == "gdp"
-    # Mandatory precision requirement
-    assert res.decomposition_error < 1e-10
-    assert abs(res.revision - res.total_impact) < 1e-10
+    # Mandatory precision requirement (exact identity <= 10^-12)
+    assert res.decomposition_error < 1e-12
+    assert abs(res.revision - res.total_impact) < 1e-12
 
     # No revisions occurred, so revision impacts must be empty / zero
     assert len(res.revision_table) == 0
     assert len(res.news_table) == 3
-    assert abs(sum(res.impact_releases.values()) - res.total_impact) < 1e-10
+    assert abs(sum(res.impact_releases.values()) - res.total_impact) < 1e-12
 
 
 def test_banbura_modugno_pure_revisions_identity(nowcast_panel_dgp):
-    """Verify |revision - total_impact| < 10^-10 when only historical data are revised."""
+    """Verify |revision - total_impact| < 10^-12 when only historical data are revised."""
     df_true, _ = nowcast_panel_dgp
     df_old = df_true.copy()
     df_old.iloc[-1, 1:] = np.nan
@@ -84,11 +84,11 @@ def test_banbura_modugno_pure_revisions_identity(nowcast_panel_dgp):
 
     res = banbura_modugno_news(model, df_old, df_new, target_series="gdp")
 
-    assert res.decomposition_error < 1e-10
-    assert abs(res.revision - res.total_impact) < 1e-10
+    assert res.decomposition_error < 1e-12
+    assert abs(res.revision - res.total_impact) < 1e-12
     assert len(res.news_table) == 0
     assert len(res.revision_table) == 2
-    assert abs(sum(res.impact_revisions.values()) - res.total_impact) < 1e-10
+    assert abs(sum(res.impact_revisions.values()) - res.total_impact) < 1e-12
 
 
 def test_banbura_modugno_combined_releases_and_revisions(nowcast_panel_dgp):
@@ -111,8 +111,8 @@ def test_banbura_modugno_combined_releases_and_revisions(nowcast_panel_dgp):
 
     res = banbura_modugno_news(model, df_old, df_new, target_series="gdp")
 
-    assert res.decomposition_error < 1e-10
-    assert abs(res.revision - res.total_impact) < 1e-10
+    assert res.decomposition_error < 1e-12
+    assert abs(res.revision - res.total_impact) < 1e-12
     assert len(res.news_table) == 3
     assert len(res.revision_table) == 2
 
@@ -172,11 +172,11 @@ def test_banbura_modugno_multi_step_vintages(nowcast_panel_dgp):
     # Step 1 -> 3 directly
     res_1_3 = banbura_modugno_news(model, df_v1, df_v3, target_series="gdp")
 
-    assert res_1_2.decomposition_error < 1e-10
-    assert res_2_3.decomposition_error < 1e-10
-    assert res_1_3.decomposition_error < 1e-10
+    assert res_1_2.decomposition_error < 1e-12
+    assert res_2_3.decomposition_error < 1e-12
+    assert res_1_3.decomposition_error < 1e-12
     # Additivity across steps
-    assert abs((res_1_2.revision + res_2_3.revision) - res_1_3.revision) < 1e-10
+    assert abs((res_1_2.revision + res_2_3.revision) - res_1_3.revision) < 1e-12
 
 
 def test_banbura_modugno_presentation_and_plots(nowcast_panel_dgp):
@@ -232,7 +232,7 @@ def test_model_news_convenience_wrapper(nowcast_panel_dgp):
 
     res = model.news(df_old, df_new, target_series="gdp")
     assert isinstance(res, NewsDecompositionResult)
-    assert res.decomposition_error < 1e-10
+    assert res.decomposition_error < 1e-12
 
 
 def test_banbura_modugno_no_change(nowcast_panel_dgp):
@@ -260,5 +260,5 @@ def test_banbura_modugno_raw_arrays():
     model = DynamicFactorModel(n_factors=1, p=1, standardize=False).fit(X_old)
     res = banbura_modugno_news(model, X_old, X_new, target_series=0)
 
-    assert res.decomposition_error < 1e-10
-    assert abs(res.revision - res.total_impact) < 1e-10
+    assert res.decomposition_error < 1e-12
+    assert abs(res.revision - res.total_impact) < 1e-12

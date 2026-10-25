@@ -563,8 +563,26 @@ def _compute_residual_jacobian_c(
     residual_fn: Optional[Callable] = None,
     step: float = 1e-6,
     backend: str = "numpy",
+    diff_method: str = "central",
 ) -> np.ndarray:
-    """Evaluate J_c = \nabla_c R(c^*; \theta) using central finite differences."""
+    """Evaluate J_c = \\nabla_c R(c^*; \\theta) using forward DualArray AD or central differences."""
+    if str(diff_method).lower() == "autodiff" and residual_fn is not None:
+        from puremacro._autodiff import DualArray, seed_dual_vector
+
+        p_dict: Dict[str, Any] = dict(params or {})
+        if beta is not None:
+            p_dict["beta"] = float(beta)
+        try:
+            c_dual = seed_dual_vector(c_star)
+            try:
+                res_dual = residual_fn(c_dual, p_dict)
+            except TypeError:
+                res_dual = residual_fn(c_dual)
+            if isinstance(res_dual, DualArray):
+                return np.asarray(res_dual.der, dtype=np.float64)
+        except Exception:
+            pass
+
     N = len(c_star)
     J_c = np.zeros((N, N), dtype=np.float64)
 
@@ -595,8 +613,29 @@ def _compute_residual_jacobian_theta(
     residual_fn: Optional[Callable] = None,
     step: float = 1e-5,
     backend: str = "numpy",
+    diff_method: str = "central",
 ) -> np.ndarray:
-    """Evaluate J_\theta = \nabla_\theta R(c^*; \theta) using central finite differences."""
+    """Evaluate J_\\theta = \\nabla_\\theta R(c^*; \\theta) using forward DualArray AD or central differences."""
+    if str(diff_method).lower() == "autodiff" and residual_fn is not None:
+        from puremacro._autodiff import DualArray, seed_dual_vector
+
+        try:
+            theta_vec = [
+                base_beta if p_name == "beta" else float(base_params.get(p_name, 1.0))
+                for p_name in param_names
+            ]
+            theta_dual = seed_dual_vector(theta_vec)
+            p_dual_dict: Dict[str, Any] = dict(base_params)
+            if "beta" in p_dual_dict:
+                p_dual_dict["beta"] = float(base_beta)
+            for idx, p_name in enumerate(param_names):
+                p_dual_dict[p_name] = theta_dual[idx]
+            res_dual = residual_fn(c_star, p_dual_dict)
+            if isinstance(res_dual, DualArray):
+                return np.asarray(res_dual.der, dtype=np.float64)
+        except Exception:
+            pass
+
     N = len(c_star)
     p = len(param_names)
     J_theta = np.zeros((N, p), dtype=np.float64)
@@ -1267,6 +1306,8 @@ def compute_ift_gradients(
     base_params = dict(getattr(problem, "params", {}) if problem is not None else {})
     base_beta = float(getattr(problem, "beta", 0.96) if problem is not None else 0.96)
 
+    diff_method = str(kwargs.get("diff_method", "central"))
+
     # 1. Compute J_c = \nabla_c R(c^*; \theta)
     J_c = _compute_residual_jacobian_c(
         solution,
@@ -1277,6 +1318,7 @@ def compute_ift_gradients(
         residual_fn=residual_fn,
         step=step_c,
         backend=backend,
+        diff_method=diff_method,
     )
 
     # 2. Compute J_\theta = \nabla_\theta R(c^*; \theta)
@@ -1290,6 +1332,7 @@ def compute_ift_gradients(
         residual_fn=residual_fn,
         step=h,
         backend=backend,
+        diff_method=diff_method,
     )
 
     # 3. Solve J_c X = - J_\theta via single LU factorization (or robust fallback)

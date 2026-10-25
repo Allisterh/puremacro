@@ -7,6 +7,43 @@ This changelog describes versioned source changes. Check
 Versions 5.3.0, 5.4.0 and 5.4.1 were tagged but not published to PyPI; their
 additions are included in 5.4.2. See the [release procedure](RELEASING.md).
 
+## 5.9.0 (2026-10-25)
+
+**Pure-NumPy forward AD (`DualArray` / `HyperDualArray`), generalized nonlinear DAG Sequence-Space Jacobians & Whittle HANK estimation, 2nd/3rd-order pruned nonlinear OccBin, Baqaee–Farhi 2nd-order network aggregation, dynamic spatial migration hat-algebra, mixed-frequency nowcast news gradients, self-auditing `PolicyStudio` counterfactual grids, zero-server interactive HTML5/SVG explorer, and bilingual showcase notebook 71.**
+
+### Added
+
+- `puremacro._autodiff` (`DualArray`, `HyperDualArray`, `seed_dual_vector`,
+  `jacobian_forward`, `value_and_grad`, `hessian_forward`, `dual_solve`,
+  `dual_sylvester_solve`) provides a pure-NumPy vectorized forward-mode automatic
+  differentiation engine supporting `@` (`__matmul__`), NumPy ufuncs, implicit
+  linear solves, and Sylvester equations, wired into
+  `puremacro.vfi.analytic_gradients` (`diff_method="autodiff"`) and
+  `puremacro.dsge._gradients.sylvester_order2_tangent`.
+- `puremacro.dsge.ssj_dag` (`SimpleBlock`, `HetBlock`, `SolvedBlock`, `BlockDAG`,
+  `SSJDAGResult`) and `puremacro.dsge.hank_estimate` (`hank_loglik_whittle`,
+  `estimate_hank_whittle`, `estimate_hank_irf_matching`, `HANKEstimationResult`)
+  for composable general-equilibrium Sequence-Space Jacobians, damped quasi-Newton
+  nonlinear DAG transitions, continuous-time HJB/KFE `HetBlock` integration, and
+  frequency-domain Whittle / IRF-matching HANK estimation.
+- `puremacro.dsge.occbin_nonlinear` (`solve_nonlinear_occbin`,
+  `NonlinearOccBinResult`) extending piecewise-linear OccBin to 2nd- and 3rd-order
+  pruned perturbation systems with precautionary risk shifts.
+- `puremacro.trade.network_macro` (`baqaee_farhi_decomposition`,
+  `solve_exact_ces_network_prices`, `NetworkMacroDecompositionResult`) for
+  Baqaee–Farhi (2019, 2020) 2nd-order nonlinear input-output macro aggregation,
+  analytical macroeconomic Hessians, and markup allocative efficiency wedges.
+- `puremacro.spatial.dynamic_hat` (`DynamicSpatialHatModel`,
+  `solve_dynamic_spatial_hat`, `DynamicSpatialHatResult`) for Caliendo–Parro–Rossi-Hansberg
+  (2019) dynamic spatial migration hat-algebra transitions.
+- `puremacro.study.studio` (`CounterfactualGrid`, `PolicyStudioCell`,
+  `PolicyStudioResult`, `run_policy_studio`) and
+  `puremacro.reports.result_to_interactive_html` for self-auditing counterfactual
+  grids and zero-server interactive HTML5 + inline SVG explorers.
+- Bilingual showcase notebook 71 (`notebooks/71_frontier_macro_workflows.py` and
+  `notebooks/71_frontier_macro_workflows_es.py`) and end-to-end verification suite
+  (`tests/test_e2e_frontier_v59.py`).
+
 ## 5.8.0 (2026-10-24)
 
 **Exact Sylvester factorization reuse, sparse transition JVP caching, separable Chebyshev fitting, and constrained Newton–Krylov.**

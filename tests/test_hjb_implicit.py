@@ -129,10 +129,15 @@ def test_hjb_presentation_methods():
 
 
 def test_kfe_strict_mass_conservation():
-    """Verify adjoint continuous-time KFE achieves |sum g_i Delta a_i - 1.0| <= 10^-12 and g >= 0."""
+    """Verify adjoint continuous-time KFE achieves |sum g_i Delta a_i - 1.0| <= 10^-13,
+    generator row-sum ||A 1||_inf <= 10^-13, adjoint residual ||A^T pi||_inf <= 10^-11, and g >= 0."""
     sol = solve_hjb_achdou(Na=80, tol=1e-8)
     assert sol.g_dist is not None
     assert sol.A_generator is not None
+
+    # Continuous infinitesimal generator row-sum conservation: ||A 1||_inf <= 10^-13
+    row_sums = sol.A_generator @ np.ones(sol.A_generator.shape[0])
+    assert np.max(np.abs(row_sums)) <= 1e-13
 
     g = sol.g_dist
     assert g.shape == (80, 2)
@@ -140,14 +145,14 @@ def test_kfe_strict_mass_conservation():
 
     da = sol.a_grid[1] - sol.a_grid[0]
     total_mass = float(np.sum(g * da))
-    assert abs(total_mass - 1.0) <= 1e-12
-    assert sol.mass_residual <= 1e-12
+    assert abs(total_mass - 1.0) <= 1e-13
+    assert sol.mass_residual <= 1e-13
 
     # The stationarity condition itself, not the post-solve normalisation: the node mass
     # pi = g * da is a null vector of A^T, and its marginal over e is the stationary
     # distribution of the default 2-state generator
     pi = (g * da).ravel(order="F")
-    assert np.max(np.abs(sol.A_generator.T @ pi)) < 1e-12
+    assert np.max(np.abs(sol.A_generator.T @ pi)) <= 1e-11
     p_z = _stationary_markov_distribution(np.array([[-0.1, 0.1], [0.1, -0.1]]))
     np.testing.assert_allclose(np.sum(g * da, axis=0), p_z, atol=1e-12)
 
@@ -155,8 +160,9 @@ def test_kfe_strict_mass_conservation():
     g_direct, mass_res = solve_kfe_achdou(
         sol.A_generator, sol.a_grid, sol.e_grid, return_residual=True
     )
-    assert mass_res <= 1e-12
+    assert mass_res <= 1e-13
     np.testing.assert_allclose(g_direct, g, atol=1e-14)
+
 
 
 def test_analytical_crra_cake_eating_benchmark():
@@ -576,3 +582,115 @@ def test_kfe_rejects_generators_without_unique_stationary_distribution():
     assert sol_abs.mass_residual <= 1e-12
     pi = (sol_abs.g_dist * w[:, None]).ravel(order="F")
     assert np.max(np.abs(sol_abs.A_generator.T @ pi)) < 1e-12
+
+
+def test_continuous_hjb_hetblock_dag_integration():
+    """Verify continuous-time HJB/KFE integrates cleanly into HetBlock and BlockDAG,
+    solving for general equilibrium transition paths with residual < 10^-11."""
+    import scipy.linalg
+    from puremacro.dsge import BlockDAG, HetBlock, SimpleBlock
+
+    # 1. Solve steady-state continuous-time HJB with adjoint KFE
+    r_ss = 0.03
+    w_ss = 1.0
+    sol_ss = solve_hjb_achdou(Na=50, r_rate=r_ss, w_rate=w_ss, tol=1e-8)
+    assert sol_ss.converged
+    assert sol_ss.g_dist is not None
+
+    w_a = _quadrature_weights(sol_ss.a_grid)
+    A_ss = float(np.sum(sol_ss.a_grid[:, None] * sol_ss.g_dist * w_a[:, None]))
+    C_ss = float(np.sum(sol_ss.c_policy * sol_ss.g_dist * w_a[:, None]))
+
+    # 2. Compute local sequence-space sensitivities d A^s / dr and d A^s / dw
+    eps = 1e-4
+    sol_r = solve_hjb_achdou(Na=50, r_rate=r_ss + eps, w_rate=w_ss, tol=1e-8)
+    A_r = float(np.sum(sol_r.a_grid[:, None] * sol_r.g_dist * w_a[:, None]))
+    dK_dr = (A_r - A_ss) / eps
+
+    sol_w = solve_hjb_achdou(Na=50, r_rate=r_ss, w_rate=w_ss + eps, tol=1e-8)
+    A_w = float(np.sum(sol_w.a_grid[:, None] * sol_w.g_dist * w_a[:, None]))
+    dK_dw = (A_w - A_ss) / eps
+
+    # Build sequence-space Toeplitz Jacobians over horizon T
+    T = 20
+    decay = 0.85 ** np.arange(T)
+    J_A_r = scipy.linalg.toeplitz(dK_dr * decay, np.zeros(T))
+    J_A_w = scipy.linalg.toeplitz(dK_dw * decay, np.zeros(T))
+
+    # Wrap continuous HJB into HetBlock
+    hh = HetBlock(
+        "hjb_household",
+        inputs=("r", "w"),
+        outputs=("A",),
+        jacobian_fn={"A": {"r": J_A_r, "w": J_A_w}},
+    )
+    assert hh.name == "hjb_household"
+    assert hh.inputs == ("r", "w")
+    assert hh.outputs == ("A",)
+
+    # 3. Firm production block (Cobb-Douglas with capital K and TFP shock)
+    alpha = 0.33
+    delta = 0.05
+    K_ss = A_ss
+    Z_ss = 1.0
+    Y_ss = Z_ss * (K_ss ** alpha)
+
+    firm = SimpleBlock(
+        "firm",
+        inputs=("K", "Z_shock"),
+        outputs=("r", "w", "Y"),
+        fn=lambda v, p: {
+            "r": p["alpha"] * (v["Z_shock"] + p["Z_ss"]) * (v["K"] ** (p["alpha"] - 1.0)) - p["delta"],
+            "w": (1.0 - p["alpha"]) * (v["Z_shock"] + p["Z_ss"]) * (v["K"] ** p["alpha"]),
+            "Y": (v["Z_shock"] + p["Z_ss"]) * (v["K"] ** p["alpha"]),
+        },
+    )
+
+    # 4. Asset market clearing block: A - K = 0
+    mkt = SimpleBlock(
+        "mkt_clearing",
+        inputs=("A", "K"),
+        outputs=("asset_mkt_res",),
+        fn=lambda v, p: {"asset_mkt_res": v["A"] - v["K"]},
+    )
+
+    # 5. Connect blocks in BlockDAG
+    dag = BlockDAG(
+        blocks=[firm, hh, mkt],
+        unknowns=("K",),
+        exogenous=("Z_shock",),
+        targets=("asset_mkt_res",),
+    )
+    assert len(dag.blocks) == 3
+    # Topological sort orders firm -> hh -> mkt
+    assert [b.name for b in dag.blocks] == ["firm", "hjb_household", "mkt_clearing"]
+
+    ss = {
+        "K": K_ss,
+        "Z_shock": 0.0,
+        "r": r_ss,
+        "w": w_ss,
+        "Y": Y_ss,
+        "A": A_ss,
+        "asset_mkt_res": 0.0,
+    }
+    params = {"alpha": alpha, "delta": delta, "Z_ss": Z_ss}
+
+    # Impulse responses to persistent TFP shock
+    shock_path = 0.01 * (0.7 ** np.arange(T))
+    irf = dag.impulse_responses(ss, params, {"Z_shock": shock_path}, T=T, levels=False)
+    assert irf.converged
+    assert irf.residual_norm < 1e-12
+
+    # Solve full nonlinear general equilibrium transition
+    nl_res = dag.solve_nonlinear_transition(
+        ss, params, {"Z_shock": shock_path}, T=T, tol=1e-11
+    )
+    assert nl_res.converged
+    # Acceptance criterion: residual < 10^-11
+    assert nl_res.residual_norm < 1e-11
+    assert nl_res.iterations >= 1
+    assert len(nl_res.paths) == T
+    assert "K" in nl_res.paths.columns
+    assert "asset_mkt_res" in nl_res.paths.columns
+

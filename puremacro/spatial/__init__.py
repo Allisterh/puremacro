@@ -64,6 +64,11 @@ from .panel import spatial_panel, SpatialPanelResult
 from .lp import (spatial_lp, SpatialLPResult, higher_order_weights, spatial_lag_panel,
                  SpatialLPBootstrap, SpatialLPBootstrapResult)
 from .allen_arkolakis import AllenArkolakisModel, AllenArkolakisResult
+from .dynamic_hat import (
+    DynamicSpatialHatModel,
+    DynamicSpatialHatResult,
+    solve_dynamic_spatial_hat,
+)
 
 __all__ = [
     "SpatialLPBootstrap", "SpatialLPBootstrapResult",
@@ -109,4 +114,7 @@ __all__ = [
     # quantitative spatial general equilibrium
     "AllenArkolakisModel",
     "AllenArkolakisResult",
+    "DynamicSpatialHatModel",
+    "DynamicSpatialHatResult",
+    "solve_dynamic_spatial_hat",
 ]
