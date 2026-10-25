@@ -51,7 +51,7 @@ def _discretize_endowment(
     for i in range(n_y):
         mu_i = rho_y * log_y_grid[i]
         p_trans[i, 0] = norm.cdf((log_y_grid[0] - mu_i + step / 2.0) / sigma_y)
-        p_trans[i, n_y - 1] = 1.0 - norm.cdf((log_y_grid[n_y - 1] - mu_i - step / 2.0) / sigma_y)
+        p_trans[i, n_y - 1] = norm.sf((log_y_grid[n_y - 1] - mu_i - step / 2.0) / sigma_y)
         for j in range(1, n_y - 1):
             hi = norm.cdf((log_y_grid[j] - mu_i + step / 2.0) / sigma_y)
             lo = norm.cdf((log_y_grid[j] - mu_i - step / 2.0) / sigma_y)

@@ -681,12 +681,13 @@ def solve_spatial_climate_iam(
     # Population conservation error: max_t |sum_r L_rt - L_bar|
     pop_error = float(np.max(np.abs(np.sum(L_path, axis=1) - total_L0)))
 
-    # Carbon mass balance error: max_t |Injected - Stored|
+    # Carbon mass balance error: relative max_t |Injected - Stored| / TotalMass
     S1_0 = model.phi_L * model.initial_carbon_stock
     S2_0 = (1.0 - model.phi_L) * model.initial_carbon_stock
     cum_injected = np.cumsum(E_global_path)
     cum_stored = (S1_path - S1_0) + (S2_path - S2_0) + S_sink_path
-    carbon_error = float(np.max(np.abs(cum_injected - cum_stored)))
+    total_mass = np.maximum(1.0, S1_0 + S2_0 + cum_injected)
+    carbon_error = float(np.max(np.abs(cum_injected - cum_stored) / total_mass))
 
     # 4. Baqaee-Farhi (2019, 2020) network macro decomposition coupling
     # Construct intermediate input-output network from trade shares

@@ -18,16 +18,21 @@ acotado hacia una aplicación más amplia.
 | ¿Cómo evalúo una intervención? | 10 → 15 → 24 → 29 → 60 | Grupos de comparación, estimandos, incertidumbre y solapamiento |
 | ¿Cómo pronostico con muchos indicadores? | 34 → 19 → 48 → 59 | Observaciones reservadas, referencia, publicaciones y revisiones |
 | ¿Cómo construyo un índice de incertidumbre? | 11 → 13 → 30 → 37 | Procedencia del corpus, normalización y validación de la medida |
-| ¿Por qué importa la heterogeneidad? | 01 → 03 → 05 → 31 → 44 | Restricciones presupuestarias, distribuciones y equilibrio |
-| ¿Cómo resuelvo y estimo modelos estructurales? | 21 → 41 → 42 → 43 | Residuos de equilibrio, identificación y diagnóstico del muestreo |
-| ¿Qué método numérico necesita mi modelo? | 22 → 51 → 52 → 53 → 56 → 70 → 71 | Error de aproximación, sensibilidad a la malla y convergencia |
-| ¿Cómo se propagan los aranceles? | 55 → 61 → 62 → 63 → 65; después 64 | Calibración, contabilidad, definición de bienestar y límites del solucionador |
+| ¿Por qué importa la heterogeneidad? | 01 → 03 → 05 → 31 → 44 → 74 | Restricciones presupuestarias, distribuciones, LP distributiva y equilibrio |
+| ¿Cómo resuelvo y estimo modelos estructurales? | 21 → 41 → 42 → 43 → 74 | Residuos de equilibrio, identificación, SMC templado y diagnóstico del muestreo |
+| ¿Qué método numérico necesita mi modelo? | 22 → 51 → 52 → 53 → 56 → 70 → 71 → 72 | Error de aproximación, sensibilidad a la malla, SSJ no lineal global y convergencia |
+| ¿Cómo se propagan los aranceles? | 55 → 61 → 62 → 63 → 65; después 64 → 75 | Calibración, contabilidad, definición de bienestar, cuellos de botella CES y límites del solucionador |
+| ¿Cómo modelo las crisis de deuda soberana y el riesgo de default? | 36 → 50 → 73 | Incentivos endógenos de default, madurez de deuda, paradas súbitas y reestructuración |
+| ¿Cómo interactúan las cadenas de suministro, la política climática y la migración espacial? | 32 → 55 → 65 → 71 → 75 | Curvatura de red de 2.º orden, ajustes en frontera por carbono, álgebra dinámica de sombreros y auditorías PolicyStudio |
 | ¿Cómo conservo un experimento empírico o de modelo completo? | 69 → 06 → 55 | Unidades y supuestos explícitos, auditorías, archivos verificables y límites de escenarios |
 | ¿Cómo verifico un solucionador contra un resultado publicado? | 66 → 67 → 68 → 12 | Formas cerradas, rutas de solución independientes, tolerancias y criterio de evaluación |
 
 Para una primera sesión, elija 06, 10, 11 o 34. Elija 69 para el tutorial
-de tres flujos y exportación de estudios (Puremacro 5.6.0). Cada uno plantea una pregunta
-concreta antes de pasar a ejercicios amplios de política.
+de tres flujos y exportación de estudios (Puremacro 5.6.0). Para los flujos insignia
+y pedagógicos de v6.0.0, explore 72 para la suite unificada de extremo a extremo,
+73 para default soberano cuantitativo, 74 para HANK distributivo de micro a macro,
+o 75 para redes de cadenas de suministro y política climática espacial. Cada uno
+plantea una pregunta concreta antes de pasar a ejercicios amplios de política.
 
 Este catálogo corresponde a la biblioteca de la copia del repositorio. La
 [edición del curso MAV](https://github.com/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/README.md)
@@ -147,6 +152,43 @@ un experimento; no establece su precisión ni su generalidad.
   variaciones relativas espacial dinámica de Caliendo–Parro–Rossi-Hansberg y
   mallas contrafactuales con autoauditoría en `PolicyStudio` con exportación
   HTML5/SVG interactiva sin servidor.
+- **72 — flujos insignia de v6.0.0:** demuestra el protocolo unificado `DifferentiableModel`
+  con gradientes exactos de AD hacia adelante, SMC templado adaptativo vectorizado
+  (`smc_sample`), transiciones HANK no lineales dependientes del estado
+  (`solve_hank_nonlinear_transition`) y perturbación de riesgo agregado de 2.º orden
+  (`solve_hank_aggregate_risk_order2`), default soberano cuantitativo (Arellano,
+  Chatterjee–Eyigungor) con paradas súbitas de Mendoza y reestructuración por quita,
+  proyecciones locales distributivas funcionales y cuantílicas con aditividad exacta
+  ($\max_h |\sum_b \hat{\beta}_{b,h}| < 10^{-12}$), y el IAM climático espacial
+  multirregional con análisis de fuga bajo CBAM.
+- **73 — crisis de deuda soberana y reestructuración:** comprueba que la curva de
+  precios de bonos satisface las cotas teóricas $q(b', y) \in [0, (1+r)^{-1}]$ y
+  la monotonicidad débil $\partial q/\partial b' \le 0$; evalúa la amplificación por
+  ventas forzosas bajo la restricción colateral de Mendoza ($\mu_t > 0$ durante
+  paradas súbitas); y audita la compresión de la estructura temporal de diferenciales
+  soberanos bajo reestructuración por quita vs extensión de vencimiento.
+- **74 — desigualdad, LP distributiva y HANK:** verifica las restricciones empíricas
+  de aditividad transversal exacta entre deciles y tramos cuantílicos ($\sum_b \Delta s_{b,h} = 0$
+  a $< 10^{-12}$); diagnostica la aceptación del templado SMC y el tamaño muestral
+  efectivo ($ESS \ge 0.5N$); alinea las respuestas al impulso empíricas por decil con
+  las respuestas estructurales HANK de `HetBlock` / `BlockDAG` mediante
+  `bridge_hank_distributional_irf`; y contrasta el SSJ lineal con la masa de restricción
+  de endeudamiento activa ($\Phi_t$) ante choques contractivos grandes.
+- **75 — redes en la transición verde e IAM espacial:** verifica la conservación exacta
+  de la población global ($\sum_r L_{r,t} = \bar{L}$ a $< 10^{-12}$) y el balance de
+  masa de carbono atmosférico; documenta la amplificación por hessiano macroeconómico
+  de 2.º orden en cadenas de suministro CES ante choques en sectores de cuello de botella;
+  contrasta la fuga de emisiones y la incidencia espacial del bienestar bajo impuestos
+  unilaterales al carbono frente a mecanismos de ajuste en frontera (CBAM); y exporta
+  un informe contrafactual interactivo HTML5/SVG auditado y autónomo mediante `PolicyStudio`.
+
+Para deducciones detalladas, exposición matemática y tablas de referencia de parámetros de los motores de v6.0.0, consulte las guías de documentación dedicadas:
+- [AD hacia adelante y protocolo de modelo diferenciable](autodiff_and_protocol.md)
+- [Inferencia por SMC templado vectorizado](smc_inference.md)
+- [HANK en espacio de secuencias y riesgo agregado](hank_ssj_and_aggregate_risk.md)
+- [Default soberano cuantitativo y paradas súbitas](sovereign_default.md)
+- [Proyecciones locales distributivas y cuantílicas](distributional_lp.md)
+- [Redes de producción, migración espacial e IAM climático](network_spatial_climate_iam.md)
 
 La [plantilla de cuadernos](https://github.com/jalonso1979/puremacro/blob/main/notebooks/_TEMPLATE.md)
 conecta pregunta, ecuaciones, intuición, código, interpretación, ejercicio y
@@ -233,4 +275,7 @@ Cada título abre un cuaderno ejecutado; «fuente» abre su archivo `.py` editab
 | [70_nonlinear_dsge_workflows_and_accuracy_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/70_nonlinear_dsge_workflows_and_accuracy_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/70_nonlinear_dsge_workflows_and_accuracy_es.py) | Comandos `.mod` ordenados, condicionamiento de Sylvester, políticas separables de Chebyshev y transiciones restringidas Newton–Krylov | [70_nonlinear_dsge_workflows_and_accuracy](https://github.com/jalonso1979/puremacro/blob/main/notebooks/70_nonlinear_dsge_workflows_and_accuracy.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/70_nonlinear_dsge_workflows_and_accuracy.py) |
 | [71_frontier_macro_workflows_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/71_frontier_macro_workflows_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/71_frontier_macro_workflows_es.py) | Suite macroeconómica de frontera: AD hacia adelante, HANK en secuencias, OccBin podado, nowcasting, HJB continuo, GE redes/espacial y PolicyStudio | [71_frontier_macro_workflows](https://github.com/jalonso1979/puremacro/blob/main/notebooks/71_frontier_macro_workflows.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/71_frontier_macro_workflows.py) |
 | [72_macro_v6_flagship_workflows_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/72_macro_v6_flagship_workflows_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/72_macro_v6_flagship_workflows_es.py) | Suite insignia de puremacro v6.0.0: protocolo diferenciable, SMC templado, HANK no lineal y riesgo agregado, default soberano cuantitativo, LP distributiva e IAM climático espacial | [72_macro_v6_flagship_workflows](https://github.com/jalonso1979/puremacro/blob/main/notebooks/72_macro_v6_flagship_workflows.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/72_macro_v6_flagship_workflows.py) |
+| [73_sovereign_debt_crises_and_restructuring_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/73_sovereign_debt_crises_and_restructuring_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/73_sovereign_debt_crises_and_restructuring_es.py) | Crisis de deuda soberana: default endógeno de Arellano, deuda de largo plazo de Chatterjee–Eyigungor, paradas súbitas de Mendoza y reestructuración de deuda | [73_sovereign_debt_crises_and_restructuring](https://github.com/jalonso1979/puremacro/blob/main/notebooks/73_sovereign_debt_crises_and_restructuring.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/73_sovereign_debt_crises_and_restructuring.py) |
+| [74_inequality_distributional_lp_and_hank_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/74_inequality_distributional_lp_and_hank_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/74_inequality_distributional_lp_and_hank_es.py) | Desigualdad de micro a macro: LP distributiva funcional/cuantílica con aditividad exacta, puente estructural HANK, SMC templado y transiciones no lineales | [74_inequality_distributional_lp_and_hank](https://github.com/jalonso1979/puremacro/blob/main/notebooks/74_inequality_distributional_lp_and_hank.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/74_inequality_distributional_lp_and_hank.py) |
+| [75_green_transition_networks_and_spatial_iam_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/75_green_transition_networks_and_spatial_iam_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/75_green_transition_networks_and_spatial_iam_es.py) | Transición verde e IAM espacial: cuellos de botella en redes CES de 2.º orden de Baqaee–Farhi, migración espacial dinámica, ajustes en frontera por carbono y PolicyStudio | [75_green_transition_networks_and_spatial_iam](https://github.com/jalonso1979/puremacro/blob/main/notebooks/75_green_transition_networks_and_spatial_iam.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/75_green_transition_networks_and_spatial_iam.py) |
 | [local_llm_uncertainty_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty_es.py) | Inferencia local con motores opcionales de escritorio; respaldo simulado sin conexión | [local_llm_uncertainty](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty.py) |

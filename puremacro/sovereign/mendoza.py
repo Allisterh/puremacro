@@ -47,7 +47,7 @@ def _discretize_productivity(
     for i in range(n_z):
         mu_i = rho_z * log_z_grid[i]
         p_trans[i, 0] = norm.cdf((log_z_grid[0] - mu_i + step / 2.0) / sigma_z)
-        p_trans[i, n_z - 1] = 1.0 - norm.cdf((log_z_grid[n_z - 1] - mu_i - step / 2.0) / sigma_z)
+        p_trans[i, n_z - 1] = norm.sf((log_z_grid[n_z - 1] - mu_i - step / 2.0) / sigma_z)
         for j in range(1, n_z - 1):
             hi = norm.cdf((log_z_grid[j] - mu_i + step / 2.0) / sigma_z)
             lo = norm.cdf((log_z_grid[j] - mu_i - step / 2.0) / sigma_z)

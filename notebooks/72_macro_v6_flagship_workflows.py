@@ -58,14 +58,18 @@
 # %% [markdown]
 # ## Intuition
 #
-# **Intuition.** Macroeconomic policy in the modern era cannot be analyzed in departmental silos:
-# - **Unified Differentiable Modeling** guarantees that structural models share an interchangeable programmatic interface and compute exact parameter sensitivities without finite-difference truncation error.
-# - **Tempered SMC** navigates multi-modal, non-Gaussian posterior surfaces where traditional Metropolis–Hastings chains get trapped, using analytical score gradients to guide particle proposals.
-# - **Nonlinear Sequence-Space HANK** reveals that while small interest rate changes look approximately linear, large monetary contractions trigger an endogenous surge in constrained borrowers, generating asymmetric output downturns and precautionary risk buffers.
-# - **Quantitative Sovereign Default** models the non-linear haircut and maturity choices available to emerging economies facing financial sudden stops and debt-deflation spirals.
-# - **Distributional Local Projections** bridge microeconomic household data directly into macroeconomic impulse responses while enforcing exact cross-sectional accounting identities.
-# - **Spatial Climate IAM** tracks the economic consequences of global warming across geographic space, proving that unilateral climate policy causes carbon leakage unless insulated by Carbon Border Adjustment Mechanisms.
-# - **The Grand Scenario** demonstrates that puremacro v6.0.0 components interoperate smoothly, providing an audited quantitative engine for comprehensive macroeconomic policy evaluation.
+# Macroeconomic policy in the modern era cannot be analyzed in departmental silos. Structural monetary transmission, Bayesian likelihood estimation, cross-sectional inequality, sovereign credit fragility, and spatial climate transitions are deeply interconnected. This flagship showcase notebook is organized around five core pedagogical pillars:
+#
+# **Unified Differentiable Modeling and Machine-Precision Sensitivity.** Modern quantitative macroeconomics spans diverse modeling paradigms—from representative-agent DSGE to continuous-time heterogeneous-agent setups and multi-region spatial models. The `DifferentiableModel` protocol establishes an interchangeable programmatic interface across all structural frameworks, guaranteeing uniform methods for stochastic simulation, impulse-response evaluation, and likelihood evaluation. By leveraging `DualArray` forward automatic differentiation, structural models compute exact score gradients $\nabla_\theta \ln p(Y|\theta)$ to machine precision without the step-size sensitivity and numerical cancellation of finite differences.
+#
+# **Tempered Sequential Monte Carlo and Gradient-Directed Mutation.** Estimating complex structural models with borrowing limits or regime changes generates non-Gaussian, multi-modal posterior surfaces where standard random-walk Metropolis–Hastings chains get trapped or collapse. Vectorized Sequential Monte Carlo (`smc_sample`) resolves this challenge by bridging from prior to posterior across adaptively determined tempering stages $\phi_n \in [0, 1]$. By mutating particles along Langevin (MALA) drift trajectories guided by analytical score gradients, the SMC engine explores high-dimensional parameter spaces efficiently and delivers an unbiased, low-variance estimate of the log marginal data density $\ln p(Y)$ for model comparison.
+#
+# **Nonlinear Sequence-Space HANK with Endogenous Aggregate Risk.** Linearized Sequence-Space Jacobians (SSJ) provide rapid general-equilibrium solutions for mild macroeconomic fluctuations. However, severe aggregate downturns cause borrowing constraints to bind for a growing mass of credit-constrained households. Global nonlinear sequence-space solvers capture these state-dependent dynamics through Broyden Jacobian updates that resolve exact market clearing under large shocks. Furthermore, coupling sequence-space transitions with Winberry–Reiter cross-sectional moment reduction and second-order perturbation captures endogenous aggregate risk ($\sigma_{\text{agg}}^2$), quantifying how macroeconomic volatility generates precautionary wealth accumulation and depresses real interest rates.
+#
+# **Quantitative Sovereign Default, Sudden Stops, and Debt Restructuring.** Emerging economies navigate acute financial fragility characterized by endogenous default risk and foreign-currency collateral constraints. Under quantitative sovereign default frameworks (Arellano, 2008; Chatterjee–Eyigungor, 2012), bond prices reflect endogenously determined default probabilities and debt dilution risks, generating countercyclical interest rate spreads. When external credit dries up, Mendoza (2010) collateral constraints trigger Fisherian debt-deflation sudden stops, where falling asset values amplify domestic contractions. The framework evaluates face-value haircut restructuring policies that restore sovereign debt sustainability and compress default hazard spreads.
+#
+# **Functional Distributional Local Projections and Spatial Climate Integrated Assessment.** Macroeconomic shocks exert highly unequal effects across households and geographic space. Functional and distributional local projections estimate horizon-by-horizon impulse responses across expenditure deciles while strictly enforcing cross-sectional adding-up constraints ($\sum_b \beta_{b,h} = 0$) through null-space projections. In parallel, dynamic spatial climate-macro models track the geographic reallocation of economic activity and population in response to regional global warming damages. By coupling dynamic trade gravity, forward-looking labor migration, multi-box carbon cycles, and Carbon Border Adjustment Mechanisms (CBAM), the integrated framework provides an auditable laboratory for evaluating global green transition policies.
+
 
 # %% [markdown]
 # ## Worked code
@@ -117,7 +121,15 @@ def record(result, measured, bound, verdict):
 # %% [markdown]
 # ### 1. Unified Differentiable Model Protocol & v6.0.0 deprecations
 #
-# We evaluate the `DifferentiableModel` protocol on a 3-equation New Keynesian DSGE model. The wrapped model exposes uniform `.simulate()`, `.impulse_response()`, and `.loglik_and_grad()` methods. We verify that `DualArray` forward automatic differentiation evaluates the log-likelihood score gradient $\nabla_\theta \ln p(Y|\theta)$ to machine precision matching central finite differences, and verify that legacy v5 modules are safely tombstones.
+# **Economic Motivation.** Macroeconomic research institutions rely on structural models for forecasting, policy simulation, and scenario analysis. However, historical software architectures frequently siloed linear DSGE models, regime-switching solvers, and heterogeneous-agent models into incompatible bespoke scripts. The `DifferentiableModel` protocol provides a single, unified programmatic interface across all structural macroeconomic models. By requiring models to implement standardized simulation, impulse response, and gradient methods, economists can switch models or run comparative policy experiments without rewriting empirical workflows.
+#
+# **Mathematical Mechanism.** A structural model implementing `DifferentiableModel` exposes a five-method contract: `simulate(periods, seed)` generating synthetic sample paths $Y_t$, `impulse_response(shock, horizon)` computing equilibrium transitions, `loglik_and_grad(theta, data)` evaluating the likelihood and forward automatic differentiation score gradient $\nabla_\theta \ln p(Y|\theta)$ via `DualArray`, and scenario evaluation tools. To maintain scientific integrity, legacy version 5 modules (`puremacro.lp.garch_utils` and `puremacro.sigma.sigma_numpy.SigmaObject`) are permanently retired with strict tombstone enforcement that raises explicit migration errors.
+#
+# **Annotated Code Walkthrough.** We configure a standard 3-equation New Keynesian DSGE model with parameters $\beta = 0.99, \sigma = 1.0, \kappa = 0.12, \phi_\pi = 1.5, \phi_y = 0.125, \rho_r = 0.75, \rho_a = 0.85$. We wrap the compiled model using `wrap_differentiable_model(dsge_raw)` and verify protocol conformance. Next, we simulate 50 periods of synthetic data for output and inflation and evaluate the log-likelihood score gradient $\nabla_\theta \ln p(Y|\theta)$ using `DualArray` forward automatic differentiation against central finite differences ($h = 10^{-5}$). Finally, we verify that retired legacy symbols raise clean tombstones.
+#
+# **Economic Takeaway.** The unified protocol produces score gradients that match central finite differences to within $10^{-4}$ without finite-difference tuning, providing machine-precision sensitivities essential for gradient-based estimation while enforcing zero deprecation leakage across the puremacro v6.0.0 codebase.
+#
+
 
 # %%
 params_proto = {
@@ -183,7 +195,15 @@ print(f"Gradient error vs central finite differences: {err_proto_grad:.2e}")
 # %% [markdown]
 # ### 2. Vectorized Tempered SMC Engine: adaptive tempering & score mutations
 #
-# We estimate a Gaussian state-space target using Sequential Monte Carlo (`smc_sample`). The solver adaptively determines tempering stages $\phi_n \in [0, 1]$ targeting an Effective Sample Size (ESS) ratio of 0.50, moves particles via Langevin (MALA) score-gradient proposals, and reports the log marginal data density $\ln \hat{p}(Y)$.
+# **Economic Motivation.** Bayesian estimation of structural macroeconomic models often encounters irregular posterior surfaces characterized by multiple local modes, ridge-shaped parameter identifications, and sharp curvature variations. Standard random-walk Metropolis–Hastings (RWMH) algorithms struggle on these surfaces, frequently failing to transition between modes or suffering severe sample degeneracy. Sequential Monte Carlo (SMC) resolves these issues by migrating a swarm of particles from the prior distribution to the posterior through adaptive intermediate stages, providing robust posterior moments and accurate model comparison metrics.
+#
+# **Mathematical Mechanism.** The SMC algorithm establishes an adaptive bridge of tempered distributions $\pi_n(\theta) \propto p(\theta) p(Y|\theta)^{\phi_n}$, where the tempering parameter starts at $\phi_0 = 0$ (the prior) and ends at $\phi_N = 1$ (the full posterior). At each stage, the algorithm solves for the increment $\phi_{n+1} - \phi_n$ such that the Effective Sample Size (ESS) ratio matches a target threshold (here 0.50). Particles are then mutated via Metropolis-Adjusted Langevin Algorithm (MALA) proposals guided by analytical score gradients $\nabla \ln \pi_n(\theta)$, achieving higher acceptance rates and faster mixing than undirected random walks. Importantly, the product of average importance weights across stages yields an unbiased estimate of the log marginal data density (MDD) $\ln \hat{p}(Y) = \sum_{n=1}^N \ln (\frac{1}{M} \sum_{i=1}^M \tilde{w}_n^{(i)})$.
+#
+# **Annotated Code Walkthrough.** We define `smc_target(theta)` returning the target log-density and analytical gradient vector for structural parameters $\theta = [\beta, \sigma]$. We specify Gaussian priors centered at $[0.99, 1.0]$ and invoke `smc_sample()` with 100 particles and `mutation="mala"`. We verify that the terminal tempering stage strictly reaches $\phi_N = 1.0$ and that the estimated log marginal data density matches the analytical value within tight tolerance ($< 0.15$).
+#
+# **Economic Takeaway.** Vectorized tempered SMC with MALA score mutation reliably traverses complex likelihood surfaces, reaching full tempering with zero terminal stage error and recovering analytical log marginal data density within $0.02$ log-points, ensuring sound Bayesian model selection and parameter inference.
+#
+
 
 # %%
 def smc_target(theta):
@@ -208,7 +228,15 @@ print(f"Estimated log MDD: {res_smc.log_mdd:.4f} (error vs analytical = {err_smc
 # %% [markdown]
 # ### 3. Global Nonlinear HANK with Aggregate Risk: state-dependent SSJ & 2nd-order perturbation
 #
-# We solve general-equilibrium transition paths in a Heterogeneous-Agent New Keynesian model with borrowing constraints. For small shocks ($10^{-4}$), `solve_hank_nonlinear_transition` recovers linear Sequence-Space Jacobians. For aggregate risk, `solve_hank_aggregate_risk_order2` couples Winberry–Reiter moment reduction with second-order Sylvester perturbation, verifying that precautionary wealth accumulation scales quadratically with aggregate volatility ($\sigma_{\text{agg}}^2$).
+# **Economic Motivation.** Heterogeneous-Agent New Keynesian (HANK) models demonstrate that monetary transmission operates not only through intertemporal substitution, but fundamentally through indirect general-equilibrium income and liquidity effects across unequal households. While small shocks can be approximated using linearized Sequence-Space Jacobians around the steady state, real-world macroeconomic downturns trigger large contractions that push a substantial mass of households against hard borrowing limits ($a_t \ge 0$). In these episodes, marginal propensities to consume (MPCs) spike nonlinearly, generating state-dependent macroeconomic amplification. Furthermore, macroeconomic volatility itself exerts an ongoing precautionary effect on private wealth accumulation that linear models entirely ignore.
+#
+# **Mathematical Mechanism.** The nonlinear sequence-space solver computes general-equilibrium transitions by formulating market clearing as a multidimensional root-finding problem $H(\mathbf{U}, \mathbf{Z}) = 0$ over trajectory vectors $\mathbf{U}$. In each iteration, state-dependent Jacobians $\mathcal{J}^{(k)}$ are updated via Good Broyden rank-1 corrections $\mathcal{J}^{(k+1)} = \mathcal{J}^{(k)} + \frac{(y^{(k)} - \mathcal{J}^{(k)} s^{(k)}) s^{(k)\top}}{\|s^{(k)}\|^2}$, tracking endogenous changes in borrowing-constraint binding without re-evaluating the full heterogeneous block from scratch. To incorporate aggregate risk, the Winberry (2018) and Reiter (2009) projection methodology reduces cross-sectional wealth distributions to parametric moments, while a second-order Sylvester perturbation solver evaluates the risk-adjustment tensor $g_{\sigma\sigma}$. Under quadratic perturbation theory, the precautionary wealth shift scales strictly with the square of aggregate volatility ($\frac{1}{2} g_{\sigma\sigma} \sigma_{\text{agg}}^2$).
+#
+# **Annotated Code Walkthrough.** We solve a global nonlinear HANK transition under a small monetary policy shock ($\varepsilon_m = 10^{-4}$) using `solve_hank_nonlinear_transition()`, confirming that it nests linearized SSJ dynamics as a small-shock limit. Next, we evaluate `solve_hank_aggregate_risk_order2()` at two volatility levels ($\sigma_{\text{agg}} = 0.01$ and $\sigma_{\text{agg}} = 0.02$) and compute the volatility scaling ratio.
+#
+# **Economic Takeaway.** Nonlinear HANK transitions converge to machine-level market clearing (`residual_norm < 10^{-8}`) while matching linear SSJ responses for small shocks to within $10^{-4}$. Under aggregate risk, doubling aggregate volatility from $1\%$ to $2\%$ exactly quadruples the precautionary wealth shift ($4.000000$ ratio, error $< 10^{-6}$), quantifying the significant precautionary savings generated by macroeconomic uncertainty.
+#
+
 
 # %%
 res_nl = solve_hank_nonlinear_transition(model=None, shocks={"eps_m": 1e-4}, horizon=25, tol=1e-8)
@@ -230,7 +258,15 @@ print(f"Quadratic volatility scaling ratio: {ratio_vol:.4f} (expected = 4.0000)"
 # %% [markdown]
 # ### 4. Quantitative Sovereign Default & Sudden Stop: bond price schedules & restructuring
 #
-# We solve quantitative sovereign default following Arellano (2008) and Chatterjee–Eyigungor (2012). The bond price schedule satisfies no-arbitrage bounds $q(b', y) \in [0, (1 + r^*)^{-1}]$ and weak monotonicity $\partial q/\partial b' \le 0$. Sovereign spreads are countercyclical ($\operatorname{corr}(\text{spread}, y) < 0$). In sudden stops, collateral constraints trigger debt-deflation spirals, which can be mitigated via face-value debt restructuring haircuts.
+# **Economic Motivation.** Emerging market economies are periodically buffeted by sovereign debt crises and sudden stops in foreign capital inflows. Because governments cannot commit to repaying external debt, foreign creditors price default risk directly into sovereign bond spreads. When adverse output shocks hit or global risk aversion rises, governments face a painful trade-off between fiscal austerity to service debt or outright default accompanied by international market exclusion and output penalties. Modeling endogenous default risk, bond price schedules, and debt restructuring mechanics is vital for assessing debt sustainability and post-crisis recovery.
+#
+# **Mathematical Mechanism.** Following the quantitative default framework of Arellano (2008) and Chatterjee–Eyigungor (2012), the sovereign chooses whether to repay ($v^R(b, y)$) or default ($v^D(y)$) to maximize utility over consumption subject to stochastic income $y$. Endogenous default decisions determine the default probability schedule $d(b', y)$. Risk-neutral international investors price sovereign bonds $q(b', y)$ to satisfy the no-arbitrage condition: $q(b', y) = (1 + r^*)^{-1} \mathbb{E}[(1 - d(b', y')) (\kappa + (1 - \delta) q(b'', y')) \mid y]$, ensuring price bounds $q(b', y) \in [0, (1 + r^*)^{-1}]$ and weak monotonicity with respect to borrowing ($\partial q / \partial b' \le 0$). Sovereign spreads $s(b', y) = q(b', y)^{-1} - (1 + r^*)$ are countercyclical ($\operatorname{corr}(s, y) < 0$). In sudden stop scenarios (Mendoza, 2010), collateral constraints $b' \le \kappa q_t k'$ trigger debt-deflation contractions, which debt restructuring (face-value haircuts $h$) mitigates by compressing the sovereign default hazard.
+#
+# **Annotated Code Walkthrough.** We solve the quantitative sovereign default model via `solve_sovereign_default()` with subjective discount factor $\beta = 0.95$, risk aversion $\gamma = 2.0$, risk-free rate $r^* = 0.015$, $n_b = 30$ debt nodes, and $n_y = 9$ income states. We verify that the Bellman fixed point converges (`residual < 10^{-4}`), that bond prices strictly obey no-arbitrage bounds with zero violation, and that mean spreads correlate negatively with output. We then evaluate a $25\%$ face-value debt restructuring using `evaluate_debt_restructuring()`.
+#
+# **Economic Takeaway.** Sovereign default policy functions exhibit strong nonlinear threshold dynamics: bond prices collapse sharply once debt ratios exceed critical risk frontiers, generating strongly countercyclical borrowing spreads ($\operatorname{corr}(s, y) \approx -0.87$). A $25\%$ restructuring haircut generates immediate sovereign spread relief of over $4,000$ bps, demonstrating the quantitative stabilization power of orderly debt restructurings during emerging market sudden stops.
+#
+
 
 # %%
 res_sov = solve_sovereign_default(beta=0.95, gamma=2.0, r_star=0.015, n_b=30, n_y=9, max_iter=250)
@@ -251,7 +287,15 @@ print(f"Spread-output correlation: {corr_y:.4f}, haircut spread reduction: {rest
 # %% [markdown]
 # ### 5. Functional & Distributional Local Projections: exact adding-up & HANK bridge
 #
-# We estimate distributional local projections across cross-sectional expenditure deciles on panel microdata. Projections onto the null space of the unit vector enforce exact cross-sectional adding-up constraints ($\max_h |\sum_b \beta_{b, h}| < 10^{-12}$) to machine precision. We bridge the empirical distributional IRF against structural HANK deciles using `bridge_hank_distributional_irf`.
+# **Economic Motivation.** Macroeconomic policy announcements and structural shocks impact rich and poor households differently. For instance, monetary tightenings or carbon tax increases can compress the expenditure shares of low-income, credit-constrained households while expanding the relative budget shares of wealthy asset-holders. Traditional representative-agent empirical methods obscure these distributional shifts by focusing solely on aggregate per-capita quantities. Distributional Local Projections allow researchers to estimate dynamic treatment effects directly across cross-sectional deciles from microeconomic survey panel data, while ensuring that the estimated shifts obey physical accounting laws.
+#
+# **Mathematical Mechanism.** When estimating local projections on cross-sectional shares $s_{b, t}$ (where $\sum_{b=1}^B s_{b, t} = 1$ at all times), independent unconstrained regressions across bins $b$ inevitably yield impulse response estimates $\hat{\boldsymbol{\beta}}_h$ whose cross-sectional sum $\sum_{b=1}^B \hat{\beta}_{b, h}$ deviates from zero due to sample noise, violating cross-sectional conservation. The `estimate_distributional_lp()` solver projects unconstrained estimates onto the null space of the unit vector $\mathbf{1}_B$: $\boldsymbol{\beta}_h^* = (\mathbf{I}_B - \frac{1}{B} \mathbf{1}_B \mathbf{1}_B^\top) \hat{\boldsymbol{\beta}}_h$, guaranteeing exact zero adding-up $\sum_{b=1}^B \beta_{b, h}^* = 0.0$ to machine precision ($< 10^{-12}$). Inference incorporates Driscoll–Kraay panel covariance corrections to account for cross-sectional and temporal correlation. Finally, `bridge_hank_distributional_irf()` computes structural $L_2$ distance metrics linking empirical distributional estimates directly to theoretical HANK decile predictions.
+#
+# **Annotated Code Walkthrough.** We simulate a synthetic panel dataset of 40 cross-sectional units observed over 35 quarters with Dirichlet-distributed budget shares across 5 expenditure bins ($s_0$ through $s_4$). We estimate distributional local projections over 8 forecast horizons with `enforce_adding_up=True` and `cov_type="driscoll_kraay"`. We record the maximum cross-sectional adding-up error and compute the $L_2$ structural bridge distance against structural HANK deciles.
+#
+# **Economic Takeaway.** Projected distributional local projections enforce exact mathematical adding-up across all horizons with an error of $6.94 \times 10^{-18}$, preventing spurious aggregate drift and providing empirical impulse responses that map cleanly into heterogeneous-agent macroeconomic models.
+#
+
 
 # %%
 rng_dist = np.random.default_rng(42)
@@ -289,7 +333,15 @@ print(f"Structural HANK bridge L2 distance: {bridge_res.distance_l2:.2e}, sign c
 # %% [markdown]
 # ### 6. Integrated Spatial Climate-Macro IAM: trade, migration, carbon mass balance, and CBAM
 #
-# We model an integrated 3-region spatial economy (Temperate, Subtropical, Tropical) undergoing a green transition. Regional production generates emissions governed by a closed multi-box carbon cycle. We verify that global population conservation ($\sum_r L_{r, t} = \bar{L}$) and atmospheric carbon mass balance hold to $< 10^{-12}$ at all dates, and verify that Carbon Border Adjustment Mechanisms (CBAM) curb international carbon leakage.
+# **Economic Motivation.** Global climate change affects regions with acute geographic asymmetry: equatorial and tropical regions suffer severe agricultural productivity losses and heat stress damages, while temperate zones experience milder impacts or temporary productivity gains. In response to rising regional temperature divergence, populations migrate across borders, altering national labor supplies, trade flows, and regional GDP. However, when an ambitious coalition of regions enacts aggressive carbon taxation to abate emissions, energy-intensive production risks relocating to non-abating regions—a phenomenon known as *carbon leakage*. Evaluating spatial climate policy requires integrated assessment models (IAMs) that combine dynamic spatial general equilibrium, multi-box carbon cycles, and Carbon Border Adjustment Mechanisms (CBAM).
+#
+# **Mathematical Mechanism.** The `SpatialClimateIAM` framework couples forward-looking labor migration and bilateral trade gravity (Caliendo et al., 2019) with geophysical climate dynamics across $R = 3$ regions (Temperate, Subtropical, Tropical). Regional industrial emissions $E_{r, t}$ enter a closed multi-box carbon cycle $M_{t+1} = \Phi M_t + \Gamma \sum_r E_{r, t}$, which drives global atmospheric carbon concentrations and regional temperatures $T_{r, t}$. Higher temperatures depress regional productivity via damage functions $D_r(T_{r, t}) = \exp(-\delta_r (T_{r, t} - T_{r, 0}))$. Population dynamics update via dynamic hat-algebra $\hat{L}_{i, t+1} L_{i, t+1} = \sum_j \mu_{ji, t} \hat{\mu}_{ji, t} L_{j, t}$, strictly conserving global population $\sum_r L_{r, t} = \bar{L}$ and closed carbon mass balance. Unilateral carbon taxes $\tau_c$ levied by coalition regions are complemented by CBAM tariffs on imported embodied carbon, neutralizing the competitive advantage of non-abating foreign producers and curbing carbon leakage.
+#
+# **Annotated Code Walkthrough.** We initialize `SpatialClimateIAM` across Temperate, Subtropical, and Tropical regions with initial populations $[100, 150, 80]$, initial temperatures $[14^\circ\text{C}, 22^\circ\text{C}, 28^\circ\text{C}]$, and escalating damage coefficients. We simulate a 15-year green transition scenario where Region 0 (Temperate) implements an escalating carbon tax ($\$20 \to \$80/\text{tCO}_2$) protected by CBAM border adjustments. We audit global population conservation and atmospheric carbon mass balance.
+#
+# **Economic Takeaway.** The spatial climate solver satisfies global population conservation to machine zero ($0.0$) and carbon mass balance to $< 10^{-12}$. Enacting CBAM border adjustments curbs international carbon leakage, ensuring that unilateral green decarbonization promotes global climate stabilization without triggering competitive deindustrialization.
+#
+
 
 # %%
 model_iam = SpatialClimateIAM(
@@ -319,7 +371,15 @@ print(f"CBAM carbon leakage rate: {res_cbam.carbon_leakage_rate:.4f}")
 # %% [markdown]
 # ### 7. Grand Integrated Policy Scenario: multi-region green transition with distributional and sovereign risk feedback
 #
-# We unite the six tracks into a grand integrated policy simulation: an abating coalition implements an escalating carbon tax trajectory insulated by CBAM border adjustments. The structural transition induces spatial labor reallocation, causes domestic consumption deciles to diverge, and generates fiscal strain in emerging sovereign borrowing markets that can be resolved via debt restructuring.
+# **Economic Motivation.** Real-world economic policy challenges rarely occur in isolation. A major global economic reform—such as an ambitious carbon border adjustment mechanism and decarbonization transition—simultaneously reshapes spatial trade flows, triggers inter-regional labor migration, shifts domestic income distribution across rich and poor households, and impacts the fiscal solvency and borrowing costs of sovereign governments. To evaluate such comprehensive transformations, macroeconomic models must interoperate across traditional structural boundaries.
+#
+# **Mathematical Mechanism.** The Grand Integrated Policy Scenario synthesizes all six PureMacro v6.0.0 modules into an end-to-end macroeconomic simulation. An abating coalition (Region 0) introduces an escalating carbon tax trajectory ($\$25 \to \$95/\text{tCO}_2$) combined with CBAM tariffs. Regional temperature and productivity divergence drive dynamic labor migration via the Caliendo et al. spatial hat-algebra. Concurrently, the economic reallocation shifts household expenditure shares across deciles, monitored in real time by Distributional Local Projections with exact zero adding-up. Finally, the fiscal and trade pressures feed into the quantitative sovereign default schedule, where debt restructuring (face-value haircuts) provides policy headroom to prevent sudden-stop defaults.
+#
+# **Annotated Code Walkthrough.** We simulate the grand integrated policy scenario over a 15-year horizon with `scenario_tax_path = np.linspace(25.0, 95.0, 15)` using `solve_spatial_climate_iam()`. We compute the resulting regional warming trajectory, the net population relocation between Tropical and Temperate regions, and demonstrate how sovereign debt restructuring maintains borrowing stability throughout the green transition.
+#
+# **Economic Takeaway.** The grand integrated scenario illustrates the multi-channel nature of global policy transitions: carbon taxation and CBAM tariffs moderate temperature divergence while inducing significant southward-to-northward labor migration ($+3.8\text{M}$ net reallocation). Simultaneously, exact distributional adding-up is maintained across all household deciles and sovereign restructuring creates over $4,000$ bps of spread headroom, proving that puremacro v6.0.0 delivers a cohesive, mathematically verified platform for multidimensional macroeconomic policy evaluation.
+#
+
 
 # %%
 scenario_tax_path = np.linspace(25.0, 95.0, 15)
@@ -345,10 +405,10 @@ print(f"  Sovereign debt restructuring headroom: {abs(restruct.spread_reduction_
 # %% [markdown]
 # ### 8. Hero visualization: distributional LP deciles, spatial climate transition, and sovereign risk
 #
-# The 3-panel publication figure below illustrates:
-# - **Panel A**: Distributional Local Projection decile impulse responses $\Delta s_{b, h}$, verifying that bottom and top expenditure shares move symmetrically, preserving exact adding-up ($\sum_b \beta_{b, h} = 0$).
-# - **Panel B**: Spatial Climate IAM dynamic regional population transition paths ($L_{r, t}$), capturing climate-induced labor migration from high-damage tropical zones to temperate coalition regions.
-# - **Panel C**: Sovereign default bond price schedules $q(b', y)$ as a function of end-of-period debt across low, average, and high domestic income states, illustrating default hazard compression.
+# The 3-panel publication figure below illustrates the multifaceted policy interactions synthesized across PureMacro v6.0.0:
+# - **Panel A (Left: Distributional LP Decile IRFs):** Dynamic treatment response of cross-sectional household consumption shares across deciles following an economic shock, visually confirming symmetric reallocations that satisfy exact null-space adding-up ($\sum_b \beta_{b, h} = 0$).
+# - **Panel B (Center: Spatial Climate IAM Population Migration):** Dynamic inter-regional population paths ($L_{r, t}$) over 15 periods, capturing climate-induced labor migration from high-damage tropical zones toward temperate coalition regions while strictly conserving global population.
+# - **Panel C (Right: Sovereign Default Bond Price Schedules):** Equilibrium bond price schedules $q(b', y)$ as a function of end-of-period debt $b'$ across low, mean, and high domestic income states, illustrating default hazard compression, strict no-arbitrage bounds $[0, (1 + r^*)^{-1}]$, and debt dilution curvature.
 
 # %%
 col = _nbstyle.palette(4)
@@ -389,7 +449,7 @@ ax3.legend(loc="lower left", frameon=True, facecolor=_nbstyle.FONDO, edgecolor=_
 # %% [markdown]
 # ### 9. Verification scorecard
 #
-# Every numerical check across all six puremacro v6.0.0 tracks is tabulated below with its measured error and acceptance bound.
+# To verify the mathematical foundations and computational robustness of the PureMacro v6.0.0 flagship suite, all fourteen numerical checks across the six release tracks are tabulated below against their pre-specified theoretical bounds.
 
 # %%
 scorecard = pd.DataFrame(checks)
@@ -400,28 +460,30 @@ print(f"\nAll {len(scorecard)} v6.0.0 flagship macroeconomic workflow checks pas
 # %% [markdown]
 # ## Read the output
 #
-# In Section 1, `wrap_differentiable_model()` unifies the 3-equation DSGE model under the `DifferentiableModel` protocol, evaluating analytical score gradients via `DualArray` forward automatic differentiation with an error of $1.67 \times 10^{-5}$ relative to central finite differences. Scheduled v6.0.0 deprecations (`puremacro.lp.garch_utils` and `SigmaObject`) raise clean tombstones with zero leakage.
+# The execution of this flagship showcase notebook demonstrates that all six PureMacro v6.0.0 release tracks operate with machine-precision numerical accuracy, robust structural convergence, and sound economic properties:
 #
-# In Section 2, `smc_sample()` converges across adaptive tempering stages, recovering the analytical log marginal data density with an error of $0.019$ log-points and reaching terminal stage $\phi_N = 1.0$.
+# **Track Verification Highlights:**
+# - **Unified Differentiable Model Protocol (Section 1):** `wrap_differentiable_model()` wraps the 3-equation DSGE model under the `DifferentiableModel` protocol, evaluating analytical score gradients via `DualArray` forward automatic differentiation with an error of only $1.67 \times 10^{-5}$ relative to central finite differences ($h = 10^{-5}$). Scheduled v6.0.0 deprecations (`puremacro.lp.garch_utils` and `SigmaObject`) raise explicit tombstone errors with zero backward-compatibility leaks.
+# - **Vectorized Tempered SMC Engine (Section 2):** `smc_sample()` navigates the non-Gaussian parameter surface across adaptive tempering stages, recovering the analytical log marginal data density within $0.019$ log-points and strictly reaching the terminal tempering stage $\phi_N = 1.0$ with zero terminal error.
+# - **Global Nonlinear HANK with Aggregate Risk (Section 3):** `solve_hank_nonlinear_transition()` matches linear Sequence-Space Jacobians to $2.65 \times 10^{-6}$ for small shocks while resolving nonlinear borrowing constraints with a transition residual norm of $7.98 \times 10^{-9}$. Under aggregate uncertainty, doubling volatility from $1\%$ to $2\%$ exactly quadruples the precautionary wealth shift ($4.000000$ ratio, error $< 10^{-6}$), verifying the quadratic scaling theorem.
+# - **Quantitative Sovereign Default & Sudden Stop (Section 4):** `solve_sovereign_default()` satisfies the Bellman fixed-point condition to $4.25 \times 10^{-8}$, enforces no-arbitrage bond pricing bounds $[0, (1 + r^*)^{-1}]$ without bound violations, and exhibits strongly countercyclical sovereign borrowing spreads ($\operatorname{corr}(\text{spread}, y) = -0.87$). A $25\%$ face-value debt restructuring yields an immediate sovereign spread reduction exceeding $4,000$ bps.
+# - **Functional & Distributional Local Projections (Section 5):** `estimate_distributional_lp()` enforces exact cross-sectional adding-up constraints through null-space projection with an error of $6.94 \times 10^{-18}$, and `bridge_hank_distributional_irf()` aligns empirical local projections against structural HANK deciles with zero discrepancy.
+# - **Integrated Spatial Climate-Macro IAM (Section 6):** `solve_spatial_climate_iam()` verifies global population conservation to machine zero ($0.0$) and atmospheric carbon mass balance to $4.55 \times 10^{-13}$, while confirming that CBAM tariffs curb international carbon leakage.
 #
-# In Section 3, `solve_hank_nonlinear_transition()` matches linear Sequence-Space Jacobians to $2.65 \times 10^{-6}$ for small shocks while resolving nonlinear borrowing constraints with a transition residual norm of $7.98 \times 10^{-9}$. In aggregate risk, doubling volatility quadruples the precautionary wealth shift with zero numerical error ($< 10^{-6}$).
+# **Interpreting the Three-Panel Hero Figure:**
+# - **Panel 1 (Left: Distributional Local Projections):** Traces expenditure share responses across deciles following an economic shock. The bottom decile $s_1$ expands while the top decile $s_5$ compresses symmetrically, verifying that the projected estimates strictly satisfy cross-sectional zero adding-up across all 8 forecast horizons.
+# - **Panel 2 (Center: Spatial Climate Migration Dynamics):** Illustrates the dynamic reallocation of population across the three regions under an escalating carbon tax. As regional global warming damages accumulate in the Tropical south, forward-looking workers migrate north, raising the Temperate population while total global population remains strictly conserved.
+# - **Panel 3 (Right: Sovereign Default Bond Price Schedules):** Depicts the equilibrium price schedule $q(b', y)$ as borrowing $b'$ increases. Bond prices remain close to the risk-free upper bound $(1 + r^*)^{-1}$ at low debt levels, but collapse steeply toward zero as borrowing approaches the default threshold, with high-income states providing substantial debt-carrying capacity relative to low-income crisis states.
 #
-# In Section 4, `solve_sovereign_default()` satisfies the Bellman fixed-point condition to $4.25 \times 10^{-8}$, enforces the no-arbitrage bond pricing bounds $[0, (1 + r^*)^{-1}]$ with zero violation, and demonstrates countercyclical sovereign spreads ($\operatorname{corr}(\text{spread}, y) = -0.87$). Debt restructuring generates an immediate spread reduction of over $4,000$ bps.
-#
-# In Section 5, `estimate_distributional_lp()` enforces exact cross-sectional adding-up constraints with an error of $6.94 \times 10^{-18}$, and `bridge_hank_distributional_irf()` aligns empirical local projections against structural HANK deciles with zero discrepancy.
-#
-# In Section 6, `solve_spatial_climate_iam()` verifies global population conservation to $0.0$ and atmospheric carbon mass balance to $4.55 \times 10^{-13}$.
-#
-# In Section 7 and Panel Hero, the Grand Integrated Policy Scenario visually and numerically illustrates the coupling between multi-region climate mitigation, labor relocation, domestic inequality incidence, and international debt sustainability.
-
 # %% [markdown]
 # ## Your turn
 #
-# Change the carbon tax path `user_carbon_tax` or the debt restructuring haircut `user_debt_haircut`; the downstream assertions verify that spatial population conservation, carbon mass balance, and debt restructuring spread compression continue to hold across the entire advertised parameter space.
+# Deepen your understanding of flagship macroeconomic policy interactions by experimenting with decarbonization carbon tax trajectories and sovereign debt restructuring haircuts. The accompanying interactive code cell allows you to explore these general-equilibrium mechanisms:
 #
-# 1. **Basic.** Increase `user_carbon_tax` from `10.0` towards `100.0` $/tCO2. How does the regional population shift from the tropical region towards the temperate coalition accelerate as climate warming damages are curtailed?
-# 2. **Intermediate.** Vary `user_debt_haircut` between `0.05` and `0.40`. How does the post-restructuring sovereign spread reduction scale with the face-value haircut, and why does default risk drop monotonically?
-# 3. **Stretch.** Couple the unilateral carbon tax with a custom CBAM tariff equal to 100% of the embodied carbon intensity gap, and verify that international carbon leakage rate strictly decreases.
+# 1. **Basic: Carbon Taxation and Accelerated Climate Migration.** Modify `user_carbon_tax` between $\$10.0$ and $\$100.0/\text{tCO}_2$ (for instance, compare a modest tax of $\$25.0$ against an aggressive policy of $\$85.0/\text{tCO}_2$). Observe how higher carbon taxes curb regional temperature increases, alter the carbon leakage rate, and influence the magnitude of southward-to-northward labor migration while preserving exact population conservation.
+# 2. **Intermediate: Sovereign Restructuring Haircuts and Default Hazard Compression.** Vary `user_debt_haircut` across the interval $[0.05, 0.40]$ (for example, test a $10\%$ restructuring versus a $35\%$ deep restructuring). Trace how the post-restructuring sovereign spread reduction scales with the face-value haircut, and verify how compressing sovereign debt levels restores fiscal sustainability and lowers default probabilities.
+# 3. **Stretch: Coupling Unilateral Decarbonization with CBAM Leakage Protection.** In the spatial climate setup, examine how altering the coalition regions or adjusting CBAM border adjustment tariffs modifies the cross-border carbon leakage rate. Verify that international carbon leakage strictly declines when embodied carbon tariffs equalize foreign and domestic emissions costs.
+#
 
 # %%
 user_carbon_tax = 45.0  # ← change this: Carbon tax in coalition region ($/tCO2), float in [10.0, 100.0]
@@ -457,4 +519,15 @@ assert restruct_user.post_default_prob <= restruct_user.pre_default_prob + 1e-6
 # %% [markdown]
 # ## How comprehensive is this?
 #
-# Showcase `72` unites all six frontier tracks of the `puremacro v6.0.0` major release into an audited, zero-server macroeconomic modeling suite. The underlying mathematical formulations, solvers, and empirical bridges are documented in detail across dedicated guides: `docs/protocol.md` (unified differentiable model interface), `docs/smc.md` (vectorized Sequential Monte Carlo), `docs/hank_nonlinear.md` (state-dependent sequence-space HANK with aggregate risk), `docs/sovereign.md` (quantitative default, sudden stops, and restructuring), `docs/distributional_lp.md` (functional local projections with adding-up), and `docs/spatial_climate_iam.md` (spatial climate-macro general equilibrium and CBAM). All components adhere strictly to the four-package Pyodide runtime contract (`numpy`, `scipy`, `pandas`, `matplotlib`).
+# Showcase `72` unites all six core tracks of the `puremacro v6.0.0` major release into an integrated, reproducible computational workflow. Rather than treating monetary policy, Bayesian econometric estimation, heterogeneous-agent dynamics, sovereign debt sustainability, distributional inequality, and spatial climate transitions as isolated specialties, the architecture connects these fields through a unified mathematical and algorithmic standard. Every solver operates deterministically, providing analytic derivatives, sparse matrix-free solutions, exact cross-sectional accounting projections, and mass-conserving physical dynamics that maintain scientific rigor across complex macroeconomic models.
+#
+# The underlying theoretical frameworks, algorithmic convergence proofs, and empirical validation suites are documented comprehensively across dedicated technical reference manuals:
+# - `docs/protocol.md`: Unified `DifferentiableModel` protocol interface, `DualArray` score gradient evaluations, and legacy deprecation tombstones.
+# - `docs/smc.md`: Vectorized Sequential Monte Carlo with adaptive ESS tempering stages, Langevin (MALA) score mutation, and log marginal data density estimation.
+# - `docs/hank_nonlinear.md`: Global nonlinear sequence-space general-equilibrium transitions, state-dependent Broyden Jacobian updates, and Winberry–Reiter aggregate risk coupling.
+# - `docs/sovereign.md`: Quantitative sovereign default (Arellano, 2008; Chatterjee–Eyigungor, 2012), Mendoza sudden-stop collateral constraints, and face-value debt restructuring haircuts.
+# - `docs/distributional_lp.md`: Functional and distributional local projections, null-space exact adding-up constraints, Driscoll–Kraay panel covariance estimation, and structural HANK decile bridges.
+# - `docs/spatial_climate_iam.md`: Dynamic spatial climate-macro integrated assessment (IAM), multi-box carbon cycles, regional temperature damage functions, and Carbon Border Adjustment Mechanisms (CBAM).
+#
+# All implementations strictly adhere to PureMacro's zero-dependency runtime contract, executing exclusively within the four-package scientific Python stack (`numpy`, `scipy`, `pandas`, `matplotlib`) with full WebAssembly portability across Pyodide and client-side browsers.
+

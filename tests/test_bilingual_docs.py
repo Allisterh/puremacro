@@ -108,6 +108,13 @@ _USER_DOCS = [
     "local_llm.md",
     # Release announcements kit (2.0.0).
     "ANNOUNCEMENTS_2_0.md",
+    # puremacro v6.0.0 flagship guides.
+    "autodiff_and_protocol.md",
+    "smc_inference.md",
+    "hank_ssj_and_aggregate_risk.md",
+    "sovereign_default.md",
+    "distributional_lp.md",
+    "network_spatial_climate_iam.md",
 ]
 
 

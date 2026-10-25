@@ -59,14 +59,16 @@
 # %% [markdown]
 # ## Intuition
 #
-# **Intuition.** Frontier macroeconomic modeling requires bridging microeconomic heterogeneity, nonlinear constraints, and empirical observability:
-# - **Forward automatic differentiation** replaces error-prone numerical step-size tuning with exact hyper-dual numbers, enabling machine-precision parameter tangents and Hessian operators inside NumPy.
-# - **Sequence-space DAGs and Whittle likelihood** eliminate the curse of dimensionality in heterogeneous-agent (HANK) models: general equilibrium transitions are computed as linear sequence-space block operations, and frequency-domain estimation matches empirical spectra without costly state-space simulation.
-# - **Pruned higher-order OccBin** captures the state-dependent asymmetry of macroeconomic crises—such as liquidity traps and binding borrowing constraints—while retaining stochastic precautionary risk buffers ($\sigma > 0$).
-# - **Differentiable mixed-frequency nowcasting** isolates the macroeconomic "news" driving GDP revisions in real time, tracing forecast movements directly to unexpected surprises in specific high-frequency releases.
-# - **Continuous-time finite-volume HJB and adjoint KFE** guarantee conservative probability flow and mass preservation by construction, creating an exact sparse bridge to macro sequence-space models.
-# - **Second-order network macro and dynamic spatial migration** capture nonlinear bottlenecks, supply-chain substitution wedges, and regional labor adjustment frictions where linear approximations fail.
-# - **Self-auditing PolicyStudio** ensures that every cell across high-dimensional counterfactual grids satisfies mathematical conservation laws and convergence criteria before publishing zero-server interactive visual reports.
+# Frontier quantitative macroeconomics demands a synthesis of microeconomic heterogeneity, nonlinear boundary constraints, empirical real-time data flows, and spatial production networks. This notebook is organized around four core pedagogical pillars:
+#
+# **Differentiable Macroeconomics and Machine-Precision Tangents.** Traditional computational macroeconomics relies on numerical finite differences to compute sensitivity gradients, impulse-response derivatives, and econometric Hessians. However, finite differences inevitably force researchers into an intractable trade-off between truncation error (when the step size $h$ is too large) and catastrophic floating-point cancellation (when $h$ is too small). By leveraging pure-NumPy forward automatic differentiation through hyper-dual algebras (`DualArray` and `HyperDualArray`), economists can propagate exact first- and second-order derivatives alongside function evaluations. Every parameter tangent, policy elasticity, and likelihood gradient is evaluated to machine precision ($\approx 10^{-16}$) with zero step-size tuning, unlocking robust gradient-based estimation and rigorous local sensitivity analysis.
+#
+# **Overcoming the Curse of Dimensionality in HANK via Sequence Space and Frequency Domain.** Solving Heterogeneous-Agent New Keynesian (HANK) models has historically required simulating thousands of idiosyncratic wealth and income states over long time horizons. The Sequence-Space Jacobian (SSJ) methodology resolves this bottleneck by linearizing market-clearing conditions directly in sequence space around the stationary distribution. By representing macroeconomic equilibrium as a composable Directed Acyclic Graph (DAG) of economic blocks (such as Taylor rules, Fisher relations, and heterogeneous household blocks), general-equilibrium transition dynamics reduce to fast, modular linear matrix operations. Furthermore, in empirical estimation, the frequency-domain Whittle likelihood matches empirical second moments against structural model spectral densities, bypassing computationally burdensome time-domain Kalman filtering while maintaining exact asymptotic properties.
+#
+# **Crisis Asymmetries, Precautionary Risk Buffers, and Real-Time Macroeconomic News.** Standard linear DSGE models treat economic downturns and expansions symmetrically. Yet real-world economic crises—such as liquidity traps where the nominal interest rate is pinned at the Effective Lower Bound (ELB) or episodes with binding household borrowing limits—feature severe state-dependent asymmetries. Pruned higher-order OccBin couples piecewise regime-switching with second- and third-order Taylor state curvature and stochastic precautionary risk shifts ($\frac{1}{2} g_{\sigma\sigma} \sigma^2$), capturing how the risk of future crises alters private behavior even before constraints bind. Simultaneously, policy institutions require high-frequency monitoring of current macroeconomic activity. Differentiable mixed-frequency state-space nowcasting handles the irregular 'ragged edge' of incoming monthly data releases and applies the exact Banbura–Modugno news decomposition to trace GDP forecast revisions directly to specific statistical surprises.
+#
+# **Production Networks, Spatial Migration Geography, and Auditable Policy Design.** Aggregate macroeconomic performance is fundamentally anchored in microeconomic supply chains and geographic labor mobility. The second-order Baqaee–Farhi input-output framework demonstrates how nonlinear substitution elasticities across production sectors govern supply-chain bottlenecks: while Cobb–Douglas networks satisfy Hulten's theorem (where second-order GDP curvature collapses to zero), Leontief-type complementarities trigger severe nonlinear output drops following upstream sector disruptions. In spatial economics, Caliendo–Parro–Rossi-Hansberg dynamic hat-algebra simulates forward-looking labor migration across regions while conserving total population and maintaining row-stochastic migration matrices. Finally, before counterfactual simulations are published, `PolicyStudio` executes declarative automated audits across high-dimensional parameter grids, verifying convergence and physical conservation laws prior to generating zero-server interactive HTML5/SVG dashboards.
+#
 
 # %% [markdown]
 # ## Worked code
@@ -118,7 +120,14 @@ def record(result, measured, bound, verdict):
 # %% [markdown]
 # ### 1. Pure-NumPy forward automatic differentiation: exact gradients and Hessians
 #
-# We evaluate the forward automatic differentiation engine on a standard CRRA macro utility objective $u(c, \gamma) = \frac{c^{1-\gamma}-1}{1-\gamma}$. Evaluating at $c = 2.0, \gamma = 1.5$, `value_and_grad()` computes the analytical marginal utility $u_c = c^{-\gamma} = 2^{-1.5} \approx 0.35355339$, and `hessian_forward()` evaluates the full $2 \times 2$ Hessian tensor via dual-number perturbations $(\varepsilon_1, \varepsilon_2)$ with zero truncation error.
+# **Economic Motivation.** In structural macroeconomics and micro-founded econometrics, policy functions and likelihood surfaces are governed by utility parameters, such as the coefficient of relative risk aversion $\gamma$ and consumption levels $c$. Evaluating marginal utility $u_c(c)$ and second-order risk aversion $u_{cc}(c)$ is essential for asset pricing Euler equations, risk-premia calculations, and Hessian-based optimization. Finite-difference approximations frequently introduce truncation noise or loss of precision. Forward automatic differentiation provides machine-precision tangents and curvature directly through standard NumPy operations.
+#
+# **Mathematical Mechanism.** The forward automatic differentiation engine extends real numbers $x \in \mathbb{R}$ into hyper-dual numbers $x + \varepsilon_1 \dot{x}_1 + \varepsilon_2 \dot{x}_2 + \varepsilon_1 \varepsilon_2 \ddot{x}$, where dual units satisfy $\varepsilon_1^2 = \varepsilon_2^2 = 0$. By evaluating the objective function under dual arithmetic, the dual coefficients collect the exact first gradient $\nabla f(x)$ and symmetric Hessian $\nabla^2 f(x)$. For a standard Constant Relative Risk Aversion (CRRA) utility function $u(c, \gamma) = \frac{c^{1-\gamma}-1}{1-\gamma}$, the analytical gradient with respect to $\theta = (c, \gamma)$ is $\nabla u = (c^{-\gamma}, - \frac{\partial}{\partial \gamma}[\frac{c^{1-\gamma}-1}{1-\gamma}])$, and the second derivative with respect to consumption is $u_{cc} = -\gamma c^{-\gamma - 1}$.
+#
+# **Annotated Code Walkthrough.** We define `crra_utility(theta)` operating on parameter vector $\theta = [c, \gamma] = [2.0, 1.5]$. We call `value_and_grad()` to obtain the function value and analytical gradient, and `hessian_forward()` to extract the $2 \times 2$ Hessian matrix. We then benchmark these results against closed-form analytical expressions.
+#
+# **Economic Takeaway.** Forward AD achieves zero error ($< 10^{-14}$) relative to analytical calculus for both first-order marginal utility and second-order prudence curvature $u_{cc}$, while guaranteeing exact Hessian symmetry ($|H_{12} - H_{21}| < 10^{-14}$) without requiring manual symbolic differentiation or finite-difference step-size tuning.
+#
 
 # %%
 def crra_utility(theta):
@@ -150,7 +159,14 @@ print(f"Forward AD Hessian:\n{H_ad}\nu_cc analytical error = {err_u_cc:.2e}")
 # %% [markdown]
 # ### 2. Generalized sequence-space DAG & Whittle HANK estimation
 #
-# We construct a composable 4-block New Keynesian / HANK DAG (Taylor rule, Fisher equation, New Keynesian Phillips Curve, and Euler block). The sequence-space Jacobian compiler evaluates the impulse response to an AR(1) monetary policy contraction shock ($\rho_m = 0.60$) over horizon $T = 30$, matching the closed-form analytical response. In the frequency domain, `hank_loglik_whittle()` evaluates the Whittle likelihood on white-noise innovations, reproducing the exact Parseval Gaussian likelihood.
+# **Economic Motivation.** Heterogeneous-Agent New Keynesian (HANK) models explain how wealth and income inequality shape monetary and fiscal transmission. However, simulating general-equilibrium transitions under aggregate shocks is computationally demanding. By formulating the macroeconomic model as a Directed Acyclic Graph (DAG) in sequence space, economists can decompose the economy into modular blocks—monetary policy Taylor rules, the Fisher real rate relation, the New Keynesian Phillips Curve (NKPC), and household consumption Euler dynamics—solving general-equilibrium impulse responses efficiently across time horizons $T$.
+#
+# **Mathematical Mechanism.** In sequence space over horizon $T = 30$, each economic variable is a $T$-dimensional trajectory vector. The DAG connects endogenous variables (such as inflation $\pi$, output $Y$, nominal rate $i$, and real rate $r$) to structural shock sequences (monetary innovation $\varepsilon_m$). Sequence-Space Jacobians $\mathcal{J}_{\mathbf{U}}$ and $\mathcal{J}_{\mathbf{Z}}$ linearize the equilibrium system $\mathcal{J}_{\mathbf{U}} \mathrm{d}\mathbf{U} + \mathcal{J}_{\mathbf{Z}} \mathrm{d}\mathbf{Z} = 0$, yielding impulse responses $\mathrm{d}\mathbf{U} = -\mathcal{J}_{\mathbf{U}}^{-1} \mathcal{J}_{\mathbf{Z}} \mathrm{d}\mathbf{Z}$. In the frequency domain, the Whittle log-likelihood evaluates the distance between the model spectral density $S_y(\omega; \theta)$ and empirical periodograms without requiring simulation.
+#
+# **Annotated Code Walkthrough.** We construct four composable blocks using `SimpleBlock`: `taylor` ($i_t = r_{\text{ss}} + \phi_\pi \pi_t + \varepsilon_{m,t}$ with $\phi_\pi = 1.5$), `fisher` ($r_t = i_t - \pi_{t+1}$), `nkpc` ($\pi_t = \beta \pi_{t+1} + \kappa C_t$ with $\beta = 0.99, \kappa = 0.10$), and `euler` ($C_t = C_{t+1} - \sigma^{-1} r_t$ with $\sigma = 1.0$). We compile the system into a `BlockDAG` and simulate an AR(1) monetary contraction shock ($\rho_m = 0.60, \varepsilon_{0} = 0.01$). We then evaluate the Whittle likelihood `hank_loglik_whittle()` on white-noise innovations.
+#
+# **Economic Takeaway.** The sequence-space DAG impulse response matches the analytical closed-form solution across all periods to $< 10^{-9}$ with a residual norm below $10^{-12}$. The Whittle likelihood matches the exact Parseval Gaussian likelihood to $< 10^{-10}$, proving that sequence-space and frequency-domain tools provide machine-precision macroeconomic analysis without the curse of dimensionality.
+#
 
 # %%
 taylor = SimpleBlock(
@@ -220,7 +236,14 @@ print(f"Whittle log-likelihood: {ll_whittle:.4f}, Parseval error: {err_whittle:.
 # %% [markdown]
 # ### 3. 2nd/3rd-Order pruned nonlinear OccBin with precautionary risk shifts
 #
-# We solve an occasionally binding effective lower bound (ELB: $i_t \ge -0.01$) under a large negative demand contraction shock ($u_e = -0.05$). The pruned perturbation solver couples piecewise regime iteration with second-order Taylor state curvature and a stochastic precautionary risk shift ($\frac{1}{2} g_{\sigma\sigma} \sigma^2$). The nominal interest rate floor is enforced without bound violations, and the precautionary shift norm is strictly non-zero.
+# **Economic Motivation.** A major flaw of linear policy rules is their inability to capture the asymmetric severity of severe economic recessions. When hit by large adverse demand shocks, the central bank cuts its policy rate until it hits the Effective Lower Bound (ELB, $i_t \ge i_{\text{floor}}$). Beyond this point, conventional interest rate cuts can no longer cushion the fall in output and inflation. Furthermore, in the presence of aggregate uncertainty, forward-looking households recognize that future monetary policy may become constrained, which induces an upward precautionary shift in expected interest rates and inflates risk premia.
+#
+# **Mathematical Mechanism.** Pruned higher-order OccBin couples piecewise linear regime switching with second- and third-order perturbation dynamics. The unconstrained reference model `m_ref` and the constrained regime `m_zlb` (where $i_t = i_{\text{floor}} = -0.01$) are compiled via `build_dynare`. The algorithm iterates over guess vectors of binding durations $T_{\text{bind}}$ until the regime sequence converges. Crucially, the pruned trajectory includes the second-order precautionary risk shift $\frac{1}{2} g_{\sigma\sigma} \sigma^2$, which shifts the ergodic mean of the policy rate away from the deterministic steady state when uncertainty is active ($\sigma = 1.0$).
+#
+# **Annotated Code Walkthrough.** We configure a New Keynesian model with parameters $\beta = 0.99, \sigma = 2.0, \kappa = 0.15, \phi_\pi = 1.5, \rho = 0.80$, and interest rate lower bound $i_{\text{floor}} = -0.01$ (annualized $-400$ bps). We subject the economy to a large demand shock $u_e = -0.05$ and solve the path using `solve_nonlinear_occbin()` at `order=2, sigma=1.0`. We compare this against the certainty-equivalent linear OccBin solution (`order=1, sigma=0.0`).
+#
+# **Economic Takeaway.** The nonlinear OccBin solver enforces the lower bound constraint without numerical violation (`max_bound_violation < 10^{-12}`). Incorporating second-order pruned perturbation generates a strictly positive precautionary risk shift norm ($\|\frac{1}{2} g_{\sigma\sigma} \sigma^2\| \approx 0.014131$), capturing how macroeconomic uncertainty raises medium-term interest rate paths and delays the onset of monetary liftoff relative to linear certainty-equivalent projections.
+#
 
 # %%
 params_nk = {"beta": 0.99, "sigma": 2.0, "kappa": 0.15, "phi_pi": 1.5, "rho": 0.8, "i_floor": -0.01}
@@ -282,7 +305,14 @@ print(f"Precautionary risk shift norm: {risk_shift:.6f}")
 # %% [markdown]
 # ### 4. Differentiable mixed-frequency nowcasting & Banbura–Modugno news decomposition
 #
-# We fit a 4-variable mixed-frequency dynamic factor model (`DynamicFactorModel`) on monthly macroeconomic indicators (GDP, industrial production, retail sales, and CPI) with ragged edge patterns. When new releases arrive for industrial production and retail sales, `banbura_modugno_news()` executes an exact release-by-release news decomposition, satisfying the Banbura–Modugno additivity identity ($\sum_j \text{impact}_j = \text{total revision}$) to numerical precision.
+# **Economic Motivation.** Central banks and financial markets cannot wait for quarterly GDP releases, which arrive with months of lag. Policymakers monitor high-frequency monthly indicators (such as industrial production, retail sales, and consumer price indices) to form real-time estimates—or *nowcasts*—of quarterly GDP growth. However, incoming indicators arrive asynchronously in an irregular 'ragged edge' pattern. When a new data release is published, policymakers must know not only how the GDP nowcast changed, but exactly which indicator and which statistical surprise caused the revision.
+#
+# **Mathematical Mechanism.** The `DynamicFactorModel` casts mixed-frequency indicators into a state-space system $s_t = \Phi s_{t-1} + \eta_t, y_t = \Lambda s_t + \varepsilon_t$, using the Mariano–Murasawa quarterly-monthly aggregation scheme. When a new information vintage $v$ arrives, the Banbura–Modugno (2014) news decomposition expresses the revision in the nowcast $\hat{y}_{t|v} - \hat{y}_{t|v-1}$ as a linear weighted sum of news surprises: $\Delta \hat{y}_{t|v} = \sum_{j \in \mathcal{I}_v} w_j (z_{j,v} - \hat{z}_{j,v|v-1})$. The additivity identity guarantees that the sum of individual data impacts equals the total nowcast revision to machine precision.
+#
+# **Annotated Code Walkthrough.** We simulate a 4-variable monthly dataset (GDP, industrial production, retail sales, and CPI) spanning 36 months, introducing ragged edges in the final two periods. We fit `DynamicFactorModel(n_factors=1, p=1)` on the baseline vintage `df_old`. We then create an updated vintage `df_new` incorporating new releases for industrial production and retail sales, and execute `banbura_modugno_news()` targeting quarterly GDP.
+#
+# **Economic Takeaway.** The Banbura–Modugno news decomposition satisfies the mathematical additivity identity with an error below $10^{-12}$, providing policymakers with a fully transparent, auditable breakdown showing how individual statistical releases drive real-time revisions in macroeconomic forecasts.
+#
 
 # %%
 rng_now = np.random.default_rng(101)
@@ -316,7 +346,14 @@ print(f"Decomposition additivity error: {err_news_decomp:.2e}")
 # %% [markdown]
 # ### 5. Continuous-time HJB/KFE Achdou upwind solver & HetBlock bridge
 #
-# We solve the continuous-time Huggett–Aiyagari household model using the implicit upwind finite-difference scheme of Achdou et al. (2022). The numerical generator matrix $A$ conserves probability flux with row sums identically zero ($A \mathbf{1} = 0$). The stationary Kolmogorov Forward Equation (KFE) is evaluated via the adjoint transpose $A^\top \pi = 0$, conserving total probability mass. The resulting policy functions bridge directly into a sequence-space `HetBlock`.
+# **Economic Motivation.** Heterogeneous-agent macroeconomic models often feature complex borrowing constraints and wealth accumulation dynamics. In continuous time, household optimization yields a Hamilton–Jacobi–Bellman (HJB) partial differential equation, while the evolution of the cross-sectional wealth distribution is governed by the adjoint Kolmogorov Forward Equation (KFE). Solving these coupled equations efficiently allows economists to embed realistic microeconomic heterogeneity directly into general-equilibrium macroeconomic models.
+#
+# **Mathematical Mechanism.** On a wealth grid $a \in [a_{\min}, a_{\max}]$ with $N_a = 30$ nodes, households choose consumption $c$ to maximize utility subject to a borrowing constraint $a \ge 0$, earning interest rate $r = 0.03$ and wage $w = 1.0$, while facing Poisson idiosyncratic labor productivity jumps with intensity $\Lambda$. The Achdou et al. (2022) implicit upwind finite-difference scheme constructs a discrete infinitesimal generator matrix $A \in \mathbb{R}^{N \times N}$. Upwind switching guarantees that the generator matrix satisfies conservation of probability flux ($A \mathbf{1} = \mathbf{0}$). The stationary cross-sectional wealth distribution $g$ is the exact sparse adjoint solution $A^\top g = \mathbf{0}$, normalized such that $\sum_i g_i \Delta a_i = 1$.
+#
+# **Annotated Code Walkthrough.** We solve the continuous-time Huggett–Aiyagari model using `solve_hjb_achdou(r_rate=0.03, w_rate=1.0, rho_val=0.05, gamma_r=2.0, Na=30)` and verify the generator matrix properties. We then construct the stationary distribution via `solve_kfe_achdou()` and demonstrate how the resulting aggregate consumption sensitivity $\mathcal{J} = \partial C / \partial r$ wraps seamlessly into a sequence-space `HetBlock` for general-equilibrium analysis.
+#
+# **Economic Takeaway.** The numerical generator matrix satisfies row-sum conservation ($A \mathbf{1} = \mathbf{0}$) with error $< 10^{-13}$, while the adjoint stationary distribution satisfies the KFE equation with residual $< 10^{-12}$. This creates an exact, mass-conserving bridge linking continuous-time microeconomic distribution dynamics to sequence-space HANK modeling.
+#
 
 # %%
 hjb_sol = solve_hjb_achdou(r_rate=0.03, w_rate=1.0, rho_val=0.05, gamma_r=2.0, Na=30, max_iter=30)
@@ -338,7 +375,14 @@ print(f"Generator row-sum error: {err_gen_rowsum:.2e}, KFE stationarity: {err_kf
 # %% [markdown]
 # ### 6. Baqaee–Farhi 2nd-order network macro & dynamic spatial migration hat-algebra
 #
-# We evaluate the Baqaee–Farhi (2019) second-order production network aggregation on a 3-sector economy (Energy, Manufacturing, Services). Under Cobb–Douglas preferences ($\theta = 1.0$), second-order macroeconomic curvature reduces identically to zero ($\mathrm{d}^2 \ln Y = 0$), matching Hulten's theorem. In dynamic spatial economics, `solve_dynamic_spatial_hat()` solves the Caliendo–Parro–Rossi-Hansberg (2019) migration hat-algebra across 3 regions, conserving total national population and preserving row-stochastic migration matrices.
+# **Economic Motivation.** Modern economies are defined by dense input-output production networks and regional labor mobility. Linear macroeconomic approximations rely on Hulten's theorem, which asserts that the aggregate impact of a microeconomic shock equals its initial Domar sales share $\lambda_i$. However, when supply-chain disruptions hit specialized upstream sectors (such as energy or semiconductors), substitution possibilities across inputs are limited. Under low elasticity of substitution, negative sectoral shocks trigger nonlinear macroeconomic bottlenecks that amplify aggregate GDP losses far beyond linear predictions. Similarly, regional labor markets adjust to local shocks through forward-looking worker migration, requiring dynamic spatial general equilibrium modeling.
+#
+# **Mathematical Mechanism.** In the Baqaee–Farhi (2019, 2020) framework, second-order log GDP changes decompose into Domar first-order effects and a second-order macroeconomic Hessian term: $\Delta \ln Y = \lambda^\top \Delta \ln z + \frac{1}{2} (\Delta \ln z)^\top \mathcal{H} (\Delta \ln z)$. Under unitary elasticity of substitution (Cobb–Douglas, $\theta = 1.0$), expenditure shares are constant, and the macroeconomic Hessian collapses to zero ($\mathcal{H} = 0$), recovering Hulten's theorem. When inputs are complementary ($\theta < 1$), the Hessian is negative definite, generating severe second-order GDP contractions. In spatial economics, the Caliendo–Parro–Rossi-Hansberg (2019) dynamic hat-algebra solves worker migration across regions over horizon $T$, preserving total national population $\sum_r L_{r,t} = \bar{L}$ and maintaining row-stochastic migration matrices $\sum_j \mu_{ij,t} = 1$.
+#
+# **Annotated Code Walkthrough.** We configure a 3-sector input-output economy (Energy, Manufacturing, Services) with input matrix $\Omega$ and final consumption shares $b$. We call `baqaee_farhi_decomposition()` with $\theta = 1.0$ under productivity shock $z = [-0.08, 0.02, -0.01]$ to verify Hulten's theorem. Next, we initialize `DynamicSpatialHatModel` across 3 regions (North, Center, South) with populations $L_0 = [100, 100, 100]$ and solve dynamic transitions using `solve_dynamic_spatial_hat()`.
+#
+# **Economic Takeaway.** Under Cobb–Douglas preferences, the second-order GDP curvature is zero to machine precision ($< 10^{-14}$), confirming Hulten's theorem. In the spatial model, aggregate population conservation is satisfied to $< 10^{-12}$ and migration matrix row-stochasticity holds to $< 10^{-14}$, establishing a mathematically rigorous foundation for multi-sector and multi-region macroeconomic analysis.
+#
 
 # %%
 Omega_bf = np.array(
@@ -377,7 +421,14 @@ print(f"Dynamic Spatial Hat: population conservation error = {err_pop_conserv:.2
 # %% [markdown]
 # ### 7. Self-auditing `PolicyStudio` counterfactual grid & zero-server interactive HTML5/SVG export
 #
-# We construct a 2D counterfactual policy grid over CES substitution elasticities ($\theta \in \{0.4, 0.7, 1.0\}$) and upstream energy supply shocks ($z_1 \in \{-0.10, -0.05\}$). `run_policy_studio()` evaluates and audits every cell, tracking convergence and mathematical residuals. `to_interactive_html()` compiles the results into a self-contained HTML5 document with inline SVG graphics and client-side JavaScript controls, requiring zero external CDN connections.
+# **Economic Motivation.** Macroeconomic policy research routinely evaluates multidimensional counterfactual grids—for example, testing how varying input substitution elasticities $\theta$ alters the macroeconomic costs of upstream energy supply disruptions. However, in high-dimensional simulations, individual grid cells may fail to converge, violate equilibrium accounting identities, or produce economic anomalies. Before publishing policy recommendations or visual dashboards, every simulation cell must be independently audited against pre-specified scientific verification criteria.
+#
+# **Mathematical Mechanism.** `CounterfactualGrid` constructs a Cartesian product $\mathcal{G} = \prod_k \mathcal{A}_k$ over policy and structural parameters. `run_policy_studio()` evaluates the economic model across every parameter combination $\theta \in \mathcal{G}$, recording solution convergence, execution times, and maximum residuals $\mathcal{R}(\theta)$. An automated auditor assigns status labels: `PASS` if residuals satisfy tight tolerances, `WARN` if secondary conditions degrade, and `FAIL` if algorithms diverge or violate constraints. Finally, `result_to_interactive_html()` serializes the audited grid into a standalone HTML5 document featuring inline `<svg>` polylines, CSS styling, and pure client-side JavaScript sliders, eliminating all external CDN dependencies and cloud server requirements.
+#
+# **Annotated Code Walkthrough.** We configure a 2D counterfactual grid over substitution elasticities $\theta \in \{0.4, 0.7, 1.0\}$ and upstream energy shocks $z_1 \in \{-0.10, -0.05\}$. We run `run_policy_studio()`, auditing second-order curvature and residual bounds. We then export the results to an interactive dashboard via `to_interactive_html()`, validating that all cells pass and verifying the absence of external CDN URLs.
+#
+# **Economic Takeaway.** All 6 counterfactual grid cells achieve `PASS` status with zero warnings or failures. The exported HTML5 dashboard operates completely offline without external web dependencies, providing a tamper-proof, auditable platform for presenting frontier macroeconomic simulations to policymakers.
+#
 
 # %%
 grid_studio = CounterfactualGrid(
@@ -449,7 +500,8 @@ _ = cbar.set_label(r"$\frac{1}{2} z^\top \mathcal{H} z$ (%)", rotation=90)
 # %% [markdown]
 # ### 9. Verification scorecard
 #
-# Every numerical check across all seven frontier tracks is tabulated below with its measured error and acceptance bound.
+# To ensure reproducibility and scientific integrity, all sixteen numerical audits across the seven frontier tracks are compiled in a unified scorecard. We evaluate measured errors against tight, predetermined theoretical bounds.
+#
 
 # %%
 scorecard = pd.DataFrame(checks)
@@ -460,28 +512,31 @@ print(f"\nAll {len(scorecard)} frontier macroeconomic workflow checks pass.")
 # %% [markdown]
 # ## Read the output
 #
-# In Section 1, `value_and_grad()` and `hessian_forward()` evaluate the CRRA utility derivatives with zero error ($< 10^{-14}$) relative to analytical calculus, verifying that the forward automatic differentiation engine produces machine-precision gradients and Hessians without finite-difference truncation noise.
+# The execution of this showcase notebook verifies that the entire suite of seven PureMacro frontier tracks operates with machine precision and robust economic consistency:
 #
-# In Section 2, the composable `BlockDAG` solves sequence-space general-equilibrium transitions to machine precision (`residual_norm` $< 10^{-18}$), matching the analytical New Keynesian impulse response in Panel 1 to $3.9 \times 10^{-10}$. In the frequency domain, `hank_loglik_whittle()` reproduces the Parseval white-noise Gaussian likelihood to $7.1 \times 10^{-15}$.
+# **Track Verification Highlights:**
+# - **Automatic Differentiation (Section 1):** `value_and_grad()` and `hessian_forward()` evaluate CRRA utility derivatives with zero error ($< 10^{-14}$) relative to analytical formulas, proving that hyper-dual forward automatic differentiation computes exact policy tangents and Hessians without numerical step-size tuning.
+# - **Sequence-Space DAGs and Whittle Likelihood (Section 2):** The composable `BlockDAG` solves sequence-space general-equilibrium transitions to machine precision (`residual_norm` $< 10^{-18}$), reproducing the analytical New Keynesian impulse response with a gap of only $3.9 \times 10^{-10}$. In the frequency domain, `hank_loglik_whittle()` evaluates the Whittle spectral likelihood on white-noise innovations, matching the Parseval Gaussian likelihood to $7.1 \times 10^{-15}$.
+# - **Pruned Nonlinear OccBin (Section 3):** `solve_nonlinear_occbin()` enforces the nominal interest rate lower bound ($i_t \ge -0.01$) without bound violation (`max_bound_violation` $= 0.0$). The second-order pruned trajectory incorporates a significant precautionary risk shift ($\|\frac{1}{2} g_{\sigma\sigma} \sigma^2\| = 0.014131$), elevating expected policy rates and reflecting the upward risk premium induced by macro uncertainty.
+# - **Mixed-Frequency Nowcasting (Section 4):** `banbura_modugno_news()` achieves exact release-by-release news additivity (`decomposition_error` $= 2.8 \times 10^{-17}$), proving that incoming data releases for industrial production and retail sales fully explain the GDP nowcast revision.
+# - **Continuous-Time HJB/KFE (Section 5):** `solve_hjb_achdou()` converges in 7 iterations with generator row-sum errors below $5.6 \times 10^{-17}$, while the stationary adjoint distribution satisfies KFE stationarity to $4.8 \times 10^{-17}$, establishing a robust bridge to sequence-space `HetBlock` models.
+# - **Network Macro and Dynamic Spatial Hat-Algebra (Section 6):** `baqaee_farhi_decomposition()` proves that second-order macroeconomic curvature collapses identically to zero under Cobb–Douglas preferences ($\theta = 1.0$), matching Hulten's theorem, while `solve_dynamic_spatial_hat()` conserves aggregate population across all 15 simulation periods with zero error.
+# - **Self-Auditing PolicyStudio (Section 7):** `run_policy_studio()` audits all 6 counterfactual cells on the $(\theta, z_1)$ grid, achieving `PASS (6/6 verified)` with zero warnings or failures. The interactive HTML5 dashboard is fully self-contained with zero external CDN dependencies.
 #
-# In Section 3, `solve_nonlinear_occbin()` enforces the nominal interest rate lower bound ($i_t \ge -0.01$) without bound violation (`max_bound_violation` $= 0.0$). In Panel 2, the second-order pruned trajectory exhibits a noticeable precautionary risk shift ($\|\frac{1}{2} g_{\sigma\sigma} \sigma^2\| = 0.014131$) that raises interest rate expectations relative to the certainty-equivalent linear path.
+# **Interpreting the Three-Panel Hero Figure:**
+# - **Panel 1 (Left: Sequence-Space DAG vs. Analytical IRF):** Compares the general-equilibrium impulse response of inflation $\pi_t$ (solid curve) and the nominal interest rate $i_t$ (dashed curve) to a contractionary monetary policy shock. The DAG solution overlays the closed-form analytical response indistinguishably, demonstrating the high accuracy of sequence-space matrix operations.
+# - **Panel 2 (Center: Nonlinear OccBin ELB Binding Spell):** Illustrates the annualized policy rate trajectory following a large $-5\%$ contractionary shock. Under linear OccBin (dashed line), the rate drops to the $-400$ bps floor and exits quickly. Under second-order pruned OccBin with aggregate risk ($\sigma = 1.0$, solid curve), the precautionary risk shift raises the policy path, moderating the depth of the liquidity trap while prolonging the duration of the binding spell.
+# - **Panel 3 (Right: PolicyStudio 2D Counterfactual Curvature Heatmap):** Plots the second-order percentage loss in aggregate GDP ($\frac{1}{2} z^\top \mathcal{H} z$) across substitution elasticities $\theta \in [0.4, 1.0]$ and upstream energy shocks $z_1 \in [-0.10, -0.05]$. When $\theta = 1.0$ (Cobb–Douglas), the curvature is uniformly zero across all shock sizes, verifying Hulten's theorem. As $\theta$ falls toward $0.4$ (strong complementarity), supply-chain bottlenecks amplify, generating significant nonlinear GDP contractions. The title confirms that 100% of grid cells passed automated audit validation.
 #
-# In Section 4, `banbura_modugno_news()` achieves exact release-by-release news additivity (`decomposition_error` $= 2.8 \times 10^{-17}$), demonstrating that incoming industrial production and retail sales data fully explain the GDP nowcast revision.
-#
-# In Section 5, `solve_hjb_achdou()` converges in 7 iterations with generator row-sum errors below $5.6 \times 10^{-17}$, while the stationary adjoint distribution satisfies KFE stationarity to $4.8 \times 10^{-17}$.
-#
-# In Section 6, `baqaee_farhi_decomposition()` proves that second-order macroeconomic curvature collapses identically to zero under Cobb–Douglas preferences ($\theta = 1.0$), while `solve_dynamic_spatial_hat()` conserves aggregate population across periods to $0.0$.
-#
-# In Section 7, `run_policy_studio()` audits all 6 counterfactual cells on the $(\theta, z_1)$ grid, achieving `PASS (6/6 verified)` with zero warnings or failures. Panel 3 displays the resulting second-order GDP curvature heatmap, and `to_interactive_html()` exports a self-contained zero-server HTML5 report with zero external CDN dependencies.
-
 # %% [markdown]
 # ## Your turn
 #
-# Change the substitution elasticity `user_elasticity` or the contraction shock `user_zlb_shock`; the downstream assertions verify that second-order network curvature and nonlinear OccBin bound satisfaction continue to hold across the entire advertised parameter space.
+# Deepen your understanding of frontier macroeconomic mechanisms by experimenting with input substitution elasticities and crisis shock magnitudes. The accompanying interactive code cell allows you to explore these nonlinear trade-offs:
 #
-# 1. **Basic.** Increase `user_elasticity` from `0.20` towards `1.00`. How does the second-order GDP loss from the upstream energy shock shrink as input substitution possibilities expand?
-# 2. **Intermediate.** Vary `user_zlb_shock` between `-0.08` and `-0.02`. How does the number of binding quarters at the effective lower bound scale with the contraction shock, and does the precautionary risk shift increase or decrease?
-# 3. **Stretch.** Run `run_policy_studio()` with a custom `audit_fn` that flags any cell with `max_bound_violation > 1e-10` as a warning, and verify how the overall audit status updates.
+# 1. **Basic: Supply-Chain Bottlenecks across Substitution Elasticities.** Vary `user_elasticity` across the interval $[0.20, 1.00]$. Observe how the second-order GDP loss from an upstream energy shock shrinks toward zero as input substitution possibilities expand toward Cobb–Douglas ($\theta = 1.00$), quantifying the economic value of supply-chain flexibility.
+# 2. **Intermediate: Liquidity Trap Severity and Precautionary Shifts.** Vary `user_zlb_shock` across the interval $[-0.08, -0.02]$. Trace how many quarters the policy rate remains trapped at the effective lower bound, and examine how the interaction between shock magnitude and precautionary risk shifts alters the timing of economic recovery.
+# 3. **Stretch: Custom PolicyStudio Audit Rules.** Configure `run_policy_studio()` with a custom `audit_fn` that checks whether the absolute second-order curvature exceeds a policy threshold (e.g., $|\frac{1}{2} z^\top \mathcal{H} z| > 0.005$) and flags those parameter regimes as warning cells. Verify how the overall audit status and interactive HTML5 dashboard update.
+#
 
 # %%
 user_elasticity = 0.50  # ← change this: CES substitution elasticity, float in [0.20, 1.00]
@@ -522,4 +577,15 @@ assert occ_user.max_bound_violation < 1e-10
 # %% [markdown]
 # ## How comprehensive is this?
 #
-# Showcase `71` unites all seven frontier tracks into an end-to-end macroeconomic workflow. The underlying solvers and theoretical guarantees are documented across dedicated guides: `docs/dsge_ssj.md` (sequence-space DAGs and Whittle likelihood), `docs/dsge_occbin.md` (piecewise and higher-order OccBin), `docs/nowcast.md` (mixed-frequency state-space and news decomposition), `docs/vfi_hjb_continuous.md` (Achdou upwind HJB and adjoint KFE), `docs/network_macro.md` (Baqaee–Farhi input-output aggregation), `docs/spatial_hat.md` (Caliendo–Parro–Rossi-Hansberg dynamic hat-algebra), and `docs/policy_studio.md` (PolicyStudio declarative grids and zero-server interactive HTML5). All components adhere strictly to the four-package Pyodide runtime contract (`numpy`, `scipy`, `pandas`, `matplotlib`).
+# Showcase `71` unites all seven frontier macroeconomic tracks into an integrated, reproducible computational workflow. Rather than treating algorithmic advances in isolation, the architecture bridges sequence-space general equilibrium, higher-order pruned piecewise regimes, continuous-time heterogeneous agent distributions, input-output network curvature, dynamic spatial gravity migrations, and mixed-frequency state-space filtering under a common computational standard. Every module operates deterministically, providing analytic derivatives, sparse matrix-free solvers, and exact accounting identities that maintain scientific rigor across complex macroeconomic models.
+#
+# The underlying numerical solvers, convergence theorems, and empirical validation suites are documented comprehensively across dedicated technical reference manuals:
+# - `docs/dsge_ssj.md`: Sequence-space DAG representation, automatic block Jacobian accumulation, and Whittle spectral likelihood computation.
+# - `docs/dsge_occbin.md`: Piecewise-linear and higher-order pruned perturbation algorithms with aggregate uncertainty and occasionally binding constraints.
+# - `docs/nowcast.md`: Mixed-frequency state-space estimation, monthly-to-quarterly aggregation, and Bańbura–Modugno release-by-release news decomposition.
+# - `docs/vfi_hjb_continuous.md`: Achdou et al. upwind finite-difference HJB solutions and stationary adjoint Kolmogorov Forward density propagation.
+# - `docs/network_macro.md`: Baqaee–Farhi propagation, input-output Leontief inverses, and second-order GDP curvature bounds.
+# - `docs/spatial_hat.md`: Caliendo–Parro–Rossi-Hansberg dynamic spatial hat-algebra, gravity bilateral trade flows, and inter-regional population migration.
+# - `docs/policy_studio.md`: Declarative parameter grids, multi-layer automated audit verification, and zero-server interactive HTML5 dashboards.
+#
+# All implementations adhere strictly to PureMacro's zero-dependency runtime standard, executing exclusively within the four-package scientific Python stack (`numpy`, `scipy`, `pandas`, `matplotlib`) with full web-assembly portability across Pyodide and client-side browsers.

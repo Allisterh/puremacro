@@ -18,15 +18,20 @@ from a focused example to a broader application.
 | How do I evaluate a policy intervention? | 10 → 15 → 24 → 29 → 60 | Comparison groups, estimands, uncertainty and overlap |
 | How do I forecast with many indicators? | 34 → 19 → 48 → 59 | Held-out observations, a benchmark, release dates and revisions |
 | How do I build an uncertainty index? | 11 → 13 → 30 → 37 | Corpus provenance, normalization and validation of the measure |
-| Why does household heterogeneity matter? | 01 → 03 → 05 → 31 → 44 | Budget constraints, distributions and equilibrium feedback |
-| How do I solve and estimate structural models? | 21 → 41 → 42 → 43 | Equilibrium residuals, identification and sampling diagnostics |
-| Which numerical method fits my model? | 22 → 51 → 52 → 53 → 56 → 70 → 71 | Approximation error, grid sensitivity and convergence |
-| How do tariffs propagate through production? | 55 → 61 → 62 → 63 → 65; then 64 | Calibration provenance, accounting, welfare definition and solver limits |
+| Why does household heterogeneity matter? | 01 → 03 → 05 → 31 → 44 → 74 | Budget constraints, distributions, distributional LP and equilibrium feedback |
+| How do I solve and estimate structural models? | 21 → 41 → 42 → 43 → 74 | Equilibrium residuals, identification, Tempered SMC and sampling diagnostics |
+| Which numerical method fits my model? | 22 → 51 → 52 → 53 → 56 → 70 → 71 → 72 | Approximation error, grid sensitivity, global nonlinear SSJ and convergence |
+| How do tariffs propagate through production? | 55 → 61 → 62 → 63 → 65; then 64 → 75 | Calibration provenance, accounting, welfare definition, CES supply-chain bottlenecks and solver limits |
+| How do I model sovereign debt crises and default risk? | 36 → 50 → 73 | Endogenous default incentives, debt maturity, collateral sudden stops and debt restructuring |
+| How do supply chains, climate policy and spatial migration interact? | 32 → 55 → 65 → 71 → 75 | 2nd-order network curvature, carbon border adjustments, dynamic spatial hat-algebra and PolicyStudio audits |
 | How do I preserve a complete empirical or model experiment? | 69 → 06 → 55 | Explicit units and assumptions, retained audits, archive round-trips and scenario limits |
 | How do I check a solver against a published result? | 66 → 67 → 68 → 12 | Closed forms, independent solution routes, tolerances and the evaluation criterion |
 
 For a first session, choose one of 06, 10, 11 or 34. Choose 69 for a complete
-three-workflow study/export tutorial (Puremacro 5.6.0). Each gives a specific
+three-workflow study/export tutorial (Puremacro 5.6.0). For v6.0.0 flagship and
+pedagogical workflows, explore 72 for the unified end-to-end suite, 73 for
+quantitative sovereign default, 74 for distributional micro-to-macro HANK, or
+75 for supply-chain networks and spatial climate policy. Each gives a specific
 question to answer before moving to a larger policy exercise.
 
 This catalog follows the library in the repository checkout. The separate
@@ -141,6 +146,39 @@ they do not establish its accuracy or generality.
   Caliendo–Parro–Rossi-Hansberg dynamic spatial migration hat-algebra, and
   self-auditing `PolicyStudio` counterfactual grids with zero-server interactive
   HTML5/SVG export.
+- **72 — flagship v6.0.0 workflows:** demonstrates the unified `DifferentiableModel`
+  protocol with exact forward AD gradients, vectorized adaptive tempered SMC
+  (`smc_sample`), state-dependent nonlinear HANK transitions (`solve_hank_nonlinear_transition`)
+  and 2nd-order aggregate risk perturbation (`solve_hank_aggregate_risk_order2`),
+  quantitative sovereign default (Arellano, Chatterjee–Eyigungor) with Mendoza collateral
+  sudden stops and haircut restructuring, functional and quantile distributional local
+  projections with exact adding-up ($\max_h |\sum_b \hat{\beta}_{b,h}| < 10^{-12}$),
+  and multi-region spatial climate IAM with CBAM leakage analysis.
+- **73 — sovereign debt crises and restructuring:** checks that the endogenous bond
+  price schedule satisfies theoretical bounds $q(b', y) \in [0, (1+r)^{-1}]$ and
+  monotonicity $\partial q/\partial b' \le 0$; evaluates Mendoza collateral-constraint
+  fire-sale amplification ($\mu_t > 0$ during sudden stops); and audits sovereign spread
+  term-structure compression under haircut vs maturity-extension restructuring.
+- **74 — inequality, distributional LP and HANK:** verifies exact empirical cross-sectional
+  adding-up constraints across deciles and quantile bins ($\sum_b \Delta s_{b,h} = 0$ to
+  $< 10^{-12}$); diagnoses SMC tempering acceptance and effective sample size ($ESS \ge 0.5N$);
+  aligns empirical decile impulse responses with structural `HetBlock` / `BlockDAG` HANK
+  responses via `bridge_hank_distributional_irf`; and contrasts linear SSJ with nonlinear
+  borrowing-constraint binding mass ($\Phi_t$) under large contractionary shocks.
+- **75 — green transition networks and spatial IAM:** verifies exact global population
+  conservation ($\sum_r L_{r,t} = \bar{L}$ to $< 10^{-12}$) and atmospheric carbon mass
+  balance; documents 2nd-order macroeconomic Hessian amplification in CES supply chains under
+  bottleneck sector shocks; contrasts emissions leakage and spatial welfare incidence under
+  unilateral carbon pricing vs Carbon Border Adjustment Mechanisms (CBAM); and exports an
+  audited, self-contained interactive HTML5/SVG counterfactual report via `PolicyStudio`.
+
+For detailed derivations, mathematical exposition, and parameter reference tables of the underlying v6.0.0 engines, see the dedicated documentation guides:
+- [Forward AD and the Differentiable Model Protocol](autodiff_and_protocol.md)
+- [Vectorized Tempered SMC Inference](smc_inference.md)
+- [Sequence-Space HANK and Aggregate Risk](hank_ssj_and_aggregate_risk.md)
+- [Quantitative Sovereign Default and Sudden Stops](sovereign_default.md)
+- [Distributional and Quantile Local Projections](distributional_lp.md)
+- [Production Networks, Spatial Migration and Climate IAM](network_spatial_climate_iam.md)
 
 The [notebook template](https://github.com/jalonso1979/puremacro/blob/main/notebooks/_TEMPLATE.md)
 connects a motivating question, equations, intuition, runnable code, output
@@ -227,4 +265,7 @@ Each title opens an executed notebook; “source” opens its editable `.py` fil
 | [70_nonlinear_dsge_workflows_and_accuracy](https://github.com/jalonso1979/puremacro/blob/main/notebooks/70_nonlinear_dsge_workflows_and_accuracy.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/70_nonlinear_dsge_workflows_and_accuracy.py) | Ordered `.mod` commands, Sylvester conditioning, separable Chebyshev policies and constrained Newton–Krylov transitions | [70_nonlinear_dsge_workflows_and_accuracy_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/70_nonlinear_dsge_workflows_and_accuracy_es.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/70_nonlinear_dsge_workflows_and_accuracy_es.py) |
 | [71_frontier_macro_workflows](https://github.com/jalonso1979/puremacro/blob/main/notebooks/71_frontier_macro_workflows.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/71_frontier_macro_workflows.py) | Frontier macro suite: forward AD, sequence-space HANK, pruned OccBin, mixed-frequency nowcasting, continuous HJB, network/spatial GE & PolicyStudio | [71_frontier_macro_workflows_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/71_frontier_macro_workflows_es.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/71_frontier_macro_workflows_es.py) |
 | [72_macro_v6_flagship_workflows](https://github.com/jalonso1979/puremacro/blob/main/notebooks/72_macro_v6_flagship_workflows.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/72_macro_v6_flagship_workflows.py) | puremacro v6.0.0 flagship suite: differentiable protocol, tempered SMC, nonlinear HANK & aggregate risk, quantitative sovereign default, distributional LP & spatial climate IAM | [72_macro_v6_flagship_workflows_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/72_macro_v6_flagship_workflows_es.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/72_macro_v6_flagship_workflows_es.py) |
+| [73_sovereign_debt_crises_and_restructuring](https://github.com/jalonso1979/puremacro/blob/main/notebooks/73_sovereign_debt_crises_and_restructuring.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/73_sovereign_debt_crises_and_restructuring.py) | Sovereign debt crises: Arellano endogenous default, Chatterjee–Eyigungor long-term debt, Mendoza collateral sudden stops and debt restructuring | [73_sovereign_debt_crises_and_restructuring_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/73_sovereign_debt_crises_and_restructuring_es.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/73_sovereign_debt_crises_and_restructuring_es.py) |
+| [74_inequality_distributional_lp_and_hank](https://github.com/jalonso1979/puremacro/blob/main/notebooks/74_inequality_distributional_lp_and_hank.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/74_inequality_distributional_lp_and_hank.py) | Micro to macro inequality: functional/quantile distributional LPs with exact adding-up, structural HANK bridge, Tempered SMC and nonlinear transitions | [74_inequality_distributional_lp_and_hank_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/74_inequality_distributional_lp_and_hank_es.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/74_inequality_distributional_lp_and_hank_es.py) |
+| [75_green_transition_networks_and_spatial_iam](https://github.com/jalonso1979/puremacro/blob/main/notebooks/75_green_transition_networks_and_spatial_iam.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/75_green_transition_networks_and_spatial_iam.py) | Green transition and spatial IAM: Baqaee–Farhi 2nd-order supply chain bottlenecks, dynamic spatial migration, carbon border adjustments and PolicyStudio | [75_green_transition_networks_and_spatial_iam_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/75_green_transition_networks_and_spatial_iam_es.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/75_green_transition_networks_and_spatial_iam_es.py) |
 | [local_llm_uncertainty](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty.py) | Local inference with optional desktop engines; offline mock fallback | [local_llm_uncertainty_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty_es.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty_es.py) |

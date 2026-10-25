@@ -75,6 +75,7 @@ nav:
           - BVAR with Stochastic Volatility: bvar_sv.md
           - Local Projections: lp.md
           - Smooth Local Projections: smooth_lp.md
+          - Distributional & Quantile Local Projections: distributional_lp.md
           - Modern Difference-in-Differences: did.md
           - Honest DiD Sensitivity: honest_did.md
           - Double / Debiased Machine Learning: causal_dml.md
@@ -84,6 +85,7 @@ nav:
           - Dependence-aware bootstrap inference: dependence_bootstrap.md
           - DSGE Estimation & Diagnostics: dsge_estimation.md
           - Multichain MCMC diagnostics: mcmc_diagnostics.md
+          - Vectorized Tempered SMC & Marginal Likelihood: smc_inference.md
           - GDP Nowcasting: nowcast.md
           - Latin America Real-Time Nowcasting & News: nowcast_latam_news.md
           - Penalized Forecasting: forecast.md
@@ -94,9 +96,11 @@ nav:
           - Sequence-Space HANK: models.md
           - Non-Linear HANK Transitions: hank_nonlinear.md
           - Editable HANK equations and panels: hank_model_closure.md
+          - Nonlinear HANK & 2nd-Order Aggregate Risk: hank_ssj_and_aggregate_risk.md
           - Monetary Transmission Simulator: monetary_transmission.md
           - Macroeconomic Policy Simulators & Browser Labs: policy_simulators.md
           - Gertler-Karadi (2011) DSGE: gertler_karadi.md
+          - Quantitative Sovereign Default & Sudden Stops: sovereign_default.md
           - Climate Macro (DICE): climate.md
           - DSGE Sketchpad & Dynare: dsge_build.md
           - Inspecting and running .mod commands: dsge_mod_inspection.md
@@ -120,9 +124,11 @@ nav:
           - Continuous-Time HJB & Adjoint KFE: vfi_hjb_continuous.md
           - Continuous Transition Dynamics: vfi_continuous_transition.md
           - Parameter Gradients (IFT): vfi_analytic_gradients.md
+          - Forward AD & Differentiable Model Protocol: autodiff_and_protocol.md
       - Frontier Macro & Spatial Economics:
           - Deep Macro & Neural Networks: deep_macro.md
           - Quantitative Spatial Economics & Gravity Trade GE: spatial_and_trade_ge.md
+          - Production Networks, Spatial Climate IAM & PolicyStudio: network_spatial_climate_iam.md
           - Consistent trade accounting: trade_accounting.md
           - Hicksian consumption welfare: trade_welfare.md
           - Hicksian tariff policy and solver recovery: trade_policy.md
@@ -177,6 +183,7 @@ nav:
           - BVAR con volatilidad estocástica: es/bvar_sv.md
           - Proyecciones locales: es/lp.md
           - Proyecciones locales suavizadas: es/smooth_lp.md
+          - Proyecciones locales distribucionales y cuantílicas: es/distributional_lp.md
           - Diferencias en diferencias modernas: es/did.md
           - Sensibilidad en DiD honesto: es/honest_did.md
           - Aprendizaje automático doble / desesgado: es/causal_dml.md
@@ -186,6 +193,7 @@ nav:
           - Inferencia bootstrap con dependencia: es/dependence_bootstrap.md
           - Estimación y diagnósticos DSGE: es/dsge_estimation.md
           - Diagnósticos MCMC entre cadenas: es/mcmc_diagnostics.md
+          - Inferencia SMC temperada y verosimilitud marginal: es/smc_inference.md
           - Nowcasting del PIB: es/nowcast.md
           - Nowcasting en tiempo real de América Latina y descomposición de noticias: es/nowcast_latam_news.md
           - Pronóstico penalizado: es/forecast.md
@@ -196,9 +204,11 @@ nav:
           - HANK en el espacio de secuencias: es/models.md
           - Transiciones no lineales en HANK: es/hank_nonlinear.md
           - Ecuaciones HANK editables y paneles: es/hank_model_closure.md
+          - HANK no lineal y riesgo agregado de 2.º orden: es/hank_ssj_and_aggregate_risk.md
           - Simulador de transmisión monetaria: es/monetary_transmission.md
           - Simuladores de política macroeconómica y laboratorios interactivos: es/policy_simulators.md
           - DSGE de Gertler-Karadi (2011): es/gertler_karadi.md
+          - Default soberano cuantitativo y paradas repentinas: es/sovereign_default.md
           - Macroeconomía del clima (DICE): es/climate.md
           - Cuaderno de bocetos DSGE y Dynare: es/dsge_build.md
           - Inspección y ejecución de comandos .mod: es/dsge_mod_inspection.md
@@ -222,9 +232,11 @@ nav:
           - HJB en tiempo continuo y KFE adjunta: es/vfi_hjb_continuous.md
           - Dinámica de transición continua: es/vfi_continuous_transition.md
           - Gradientes paramétricos (TFI): es/vfi_analytic_gradients.md
+          - Autodiferenciación forward y protocolo de modelos diferenciables: es/autodiff_and_protocol.md
       - Macroeconomía de frontera y economía espacial:
           - Deep Macro y redes neuronales: es/deep_macro.md
           - Economía espacial cuantitativa y GE de comercio con gravedad: es/spatial_and_trade_ge.md
+          - Redes de producción, IAM climático espacial y PolicyStudio: es/network_spatial_climate_iam.md
           - Contabilidad comercial consistente: es/trade_accounting.md
           - Bienestar hicksiano de consumo: es/trade_welfare.md
           - Política arancelaria hicksiana y recuperación del solver: es/trade_policy.md

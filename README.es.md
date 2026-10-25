@@ -24,8 +24,8 @@ python -m pip install puremacro
 | **Simular políticas** | Declare un modelo de hogares con [programación dinámica](docs/es/dp.md), estudie la [transmisión monetaria](docs/es/monetary_transmission.md) o construya un [contrafactual comercial](docs/es/trade_accounting.md). |
 | **Aprender o enseñar** | Elija una [ruta de cuadernos](docs/es/notebooks.md) o use el [curso bilingüe y sus laboratorios interactivos](curso/README.md). Use la edición fija del curso indicada abajo. |
 
-**Versión publicada 5.7.1.** Instale la [versión verificada de PyPI](https://pypi.org/project/puremacro/5.7.1/); consulte el [registro de publicación y validación](https://github.com/jalonso1979/puremacro/releases/tag/v5.7.1).
-Estas páginas corresponden a 5.7.1; consulte el
+**Versión publicada 6.0.0.** Instale la [versión verificada de PyPI](https://pypi.org/project/puremacro/6.0.0/); consulte el [registro de publicación y validación](https://github.com/jalonso1979/puremacro/releases/tag/v6.0.0).
+Estas páginas corresponden a 6.0.0; consulte el
 [historial de cambios](CHANGELOG.md) y use la documentación correspondiente
 a su versión instalada.
 
@@ -796,6 +796,7 @@ Si proviene de Stata, MATLAB/Dynare o statsmodels:
 Las replicaciones de extremo a extremo de artículos canónicos y cuadernos pedagógicos se encuentran en `notebooks/` y `puremacro/examples/`:
 - **Estudios reproducibles, flujos DSGE no lineales y macroeconomía de frontera**: flujos de trabajo de VAR monetario con datos congelados, transferencias a hogares y aranceles en redes de producción, con archivos portátiles del estudio y diagnósticos conservados (`69`), comandos `.mod` ordenados, condicionamiento de Sylvester, políticas separables de Chebyshev y transiciones restringidas Newton–Krylov (`70`), y la suite completa de frontera que une AD hacia adelante, HANK en espacio de secuencias, OccBin podado de orden superior, nowcasting de frecuencia mixta, HJB en tiempo continuo, equilibrio general de redes/espacial y mallas contrafactuales con autoauditoría en `PolicyStudio` (`71`).
 - **Suite insignia de frontera v6.0.0**: Protocolo unificado de modelo diferenciable con gradientes analíticos de score por AD hacia adelante, motor SMC templado vectorizado, HANK no lineal en espacio de secuencias con riesgo agregado, default soberano cuantitativo con paradas súbitas y colateral, proyecciones locales distributivas con aditividad exacta e IAM espacial climático dinámico integrado (`72`).
+- **Cuadernos tutoriales pedagógicos v6.0.0**: Default soberano cuantitativo, vencimiento de deuda de largo plazo, paradas súbitas con restricciones de colateral y contrafactuales de reestructuración de deuda (`73`); proyecciones locales distributivas funcionales y cuantílicas con aditividad transversal exacta, puentes estructurales hacia HANK, SMC templado adaptativo y transiciones no lineales en espacio de secuencias (`74`); cuellos de botella en cadenas de suministro con CES de 2.º orden de Baqaee–Farhi, álgebra dinámica de sombreros de migración espacial, IAM climático integrado multirregional y reportes interactivos autoauditados con PolicyStudio (`75`).
 - **Replicaciones de resultados publicados**: discreción óptima, regla simple y compromiso atemporal de Clarida, Galí y Gertler (1999) verificados fórmula por fórmula, con la advertencia sobre pérdidas incondicionales y condicionales (`66`), las tablas de Huggett (1993) y Aiyagari (1994) resueltas de nuevo, con cotas de error numérico, un solucionador independiente y el efecto de la cadena de Markov (`67`), y la perturbación de tercer orden verificada tensor por tensor con formas cerradas y Dynare 7.0 en vivo (`68`).
 - **Nowcasting regional, ML causal y política comercial**: nowcasting sintético de América Latina con atribución de noticias por añadas (`59`), Double ML interactivo IRM y DML-IV (`60`), simuladores de política comercial y HANK (`61`), bloques del CGE comercial flexible (`62`), juegos arancelarios hicksianos con recuperación auditada del equilibrio (`63`), cotas espectrales y continuación de Keller (`64`), y cascadas de costes en cadenas globales de valor con atribución de la VE/VC hicksiana (`65`).
 - **ML causal, HJB en tiempo continuo y tiempo real regional**: HJB implícito con KFE adjunta y EG de Aiyagari (`56`), OccBin multirrestricción acoplado con DML (`57`) y añadas macroeconómicas en tiempo real de América Latina (`58`).
@@ -808,6 +809,12 @@ Todos los cuadernos cumplen estrictamente el contrato con Pyodide y la arquitect
 ## Documentación
 
 - **`docs/es/quickstart.md`** — Guía de inicio rápido en 2 minutos cubriendo estimadores principales y exportación para publicaciones.
+- **`docs/es/autodiff_and_protocol.md`** — Diferenciación automática hacia adelante con `DualArray` y protocolo unificado `DifferentiableModel` entre modelos DSGE, HANK BlockDAG, DFM nowcast y espacial/climático (`puremacro._autodiff`, `puremacro.core.protocol`).
+- **`docs/es/smc_inference.md`** — Monte Carlo secuencial templado adaptativo vectorizado (SMC), mutación por gradientes Langevin/MALA y estimación de densidad marginal de datos (`puremacro.inference.smc`, `puremacro.dsge.hank_estimate`).
+- **`docs/es/hank_ssj_and_aggregate_risk.md`** — Jacobianos de espacio de secuencias con `BlockDAG` composicional, transiciones HANK no lineales con Broyden dependiente del estado y perturbación de riesgo agregado de 2.º orden con reducción de momentos de corte transversal (`puremacro.dsge.ssj_dag`, `puremacro.dsge.hank_nonlinear`, `puremacro.dsge.occbin_nonlinear`).
+- **`docs/es/sovereign_default.md`** — Default soberano cuantitativo con deuda de corto y largo plazo (Arellano, Chatterjee–Eyigungor), gradientes de curva de bonos con `DualArray`, paradas súbitas con restricción colateral de Mendoza y reestructuraciones con quita vs. extensión de vencimiento (`puremacro.sovereign`).
+- **`docs/es/distributional_lp.md`** — Proyecciones locales funcionales, cuantílicas y distributivas con restricciones exactas de aditividad transversal y puentes de funciones de respuesta al impulso hacia HANK (`puremacro.lp.distributional`).
+- **`docs/es/network_spatial_climate_iam.md`** — Agregación no lineal de redes de producción de 2.º orden de Baqaee–Farhi, álgebra de sombreros dinámica de migración espacial de Caliendo–Parro–Rossi-Hansberg, IAM climático espacial multirregional y exportación interactiva HTML5/SVG con `PolicyStudio` (`puremacro.trade.network_macro`, `puremacro.spatial.dynamic_hat`, `puremacro.climate.spatial_iam`, `puremacro.study.studio`).
 - **`docs/es/vfi_continuous_projection.md`** — Programación dinámica en espacio de estados continuo: colocación con polinomios de Chebyshev y proyección Galerkin por elementos finitos con restricciones de endeudamiento de Fischer-Burmeister.
 - **`docs/es/vfi_splines_and_sparse_grids.md`** — B-splines cúbicos que preservan forma, splines cuadráticos de Schumaker y mallas dispersas de Smolyak en alta dimensión ($d \in [2, 6]$).
 - **`docs/es/dp.md`** — Programación dinámica declarativa (`puremacro.dp`): modelos como ecuaciones, compilados a VFI, EGM y DC-EGM, HJB en tiempo continuo y Krusell-Smith.
@@ -835,7 +842,7 @@ Todos los cuadernos cumplen estrictamente el contrato con Pyodide y la arquitect
 - **`docs/es/trade_dynamic.md`** — MRIO dinámico con capital específico por sector (`puremacro.trade.dynamic`): estados estacionarios, transiciones con previsión perfecta, aceptación del horizonte y el diagnóstico de determinación.
 - **`docs/es/trade_gpu.md`** — Backends de hardware para comercio y GE espacial (`puremacro.trade.gpu`): jacobianos por lotes en PyTorch y Apple MLX, la política float64 y la continuación homotópica.
 - **`docs/es/data_ecosystem.md`** — Ecosistema de datos macro globales: emisiones, transición energética, materias primas, estabilidad financiera internacional y constructores modulares de panel (`build_climate_panel`, `build_financial_panel`).
-- **`docs/es/notebooks.md`** — Catálogo completo de cuadernos (00–72), arquitectura pedagógica de 7 secciones y suites de política aplicada.
+- **`docs/es/notebooks.md`** — Catálogo completo de cuadernos (00–75), arquitectura pedagógica de 7 secciones y suites de política aplicada.
 - **`docs/es/dsge_build.md`** — Modelos DSGE desde ecuaciones, cargador de archivos `.mod`, poda de 2do orden, CLI `puremacro-dynare`, OccBin ZLB, relajación no lineal y MCMC bayesiano.
 - **`docs/es/dsge_workflows.md`**, **`docs/es/dsge_nonlinear.md`**, **`docs/es/dsge_transitions.md`**, **`docs/es/dsge_global.md`** — Especificaciones no lineales, comandos deterministas ordenados, continuación y anuncios, políticas globales y auditorías de precisión local (versiones inglesas en `docs/`).
 - **`docs/es/models.md`** — Modelos estructurales: HANK en el espacio de secuencias, algoritmo Fake News, transferencias focalizadas y búsqueda y emparejamiento DMP.
@@ -887,10 +894,10 @@ verificación y la orden que reconstruye el archivo, se distribuye como
 
 ## Estado
 
-La versión publicada **5.7.1** incluye `puremacro.trade` y sus módulos MRIO, reincorporados
+La versión publicada **6.0.0** incluye `puremacro.trade` y sus módulos MRIO, reincorporados
 en 5.2.0, junto con las adiciones y correcciones del
 [historial de cambios](CHANGELOG.md). Instale la
-[distribución 5.7.1 de PyPI](https://pypi.org/project/puremacro/5.7.1/). La versión 4.8.1 es la última con los estudios de investigación
+[distribución 6.0.0 de PyPI](https://pypi.org/project/puremacro/6.0.0/). La versión 4.8.1 es la última con los estudios de investigación
 retirados en 5.x (`pip install "puremacro<5"`). Los [niveles de estabilidad](ARCHITECTURE.md#stability-tiers)
 identifican las superficies estables, experimentales y de soporte limitado.
 Los cálculos estructurales tienen [límites de validación](docs/es/STRUCTURAL_VALIDATION_STATUS.md)

@@ -52,7 +52,15 @@ NEW_MODULE_DOCS = [
     "trade_household.md",
     "trade_dynamic.md",
 ]
-BILINGUAL_PAGES = NEW_TRADE_DOCS + NEW_MODULE_DOCS
+NEW_V6_DOCS = [
+    "autodiff_and_protocol.md",
+    "smc_inference.md",
+    "hank_ssj_and_aggregate_risk.md",
+    "sovereign_default.md",
+    "distributional_lp.md",
+    "network_spatial_climate_iam.md",
+]
+BILINGUAL_PAGES = NEW_TRADE_DOCS + NEW_MODULE_DOCS + NEW_V6_DOCS
 
 _FENCED_BLOCK = re.compile(r"```[^\n]*\n(.*?)```", re.S)
 _RELEASE_IN_PARENS = re.compile(r"\((\d+)\.(\d+)\.(\d+)\)")

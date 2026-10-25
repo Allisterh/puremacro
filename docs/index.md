@@ -22,21 +22,13 @@ python -m pip install puremacro
 | **Simulate policy** | Declare a household model with [dynamic programming](dp.md), study [monetary transmission](monetary_transmission.md), or build a [trade counterfactual](trade_accounting.md). |
 | **Learn or teach** | Choose a [notebook learning path](notebooks.md) or use the [bilingual course and interactive labs](https://github.com/jalonso1979/puremacro/tree/main/curso). Use the pinned course edition below. |
 
-**Published version 5.7.1.** Install the [verified PyPI release](https://pypi.org/project/puremacro/5.7.1/); see the [release and validation record](https://github.com/jalonso1979/puremacro/releases/tag/v5.7.1).
-These examples describe the 5.7.1 API; see the [changelog](https://github.com/jalonso1979/puremacro/blob/main/CHANGELOG.md)
+**Published version 6.0.0.** Install the [verified PyPI release](https://pypi.org/project/puremacro/6.0.0/); see the [release and validation record](https://github.com/jalonso1979/puremacro/releases/tag/v6.0.0).
+These examples describe the 6.0.0 API; see the [changelog](https://github.com/jalonso1979/puremacro/blob/main/CHANGELOG.md)
 for additions and fixes. Match your installed version to the documentation.
 
-New in 5.7: [DSGE workflows and method selection](dsge_workflows.md), [nonlinear models](dsge_nonlinear.md), [transitions and announcements](dsge_transitions.md), and [local/global accuracy](dsge_global.md).
+New in v6.0.0: [Forward AD & Differentiable Model Protocol](autodiff_and_protocol.md), [Vectorized Tempered SMC](smc_inference.md), [Nonlinear HANK & 2nd-Order Aggregate Risk](hank_ssj_and_aggregate_risk.md), [Quantitative Sovereign Default](sovereign_default.md), [Distributional Local Projections](distributional_lp.md), and [Production Networks, Spatial Climate IAM & PolicyStudio](network_spatial_climate_iam.md).
 
-Also included from the 5.6.0 development cycle: [DP in `.mod` files](dp_modfiles.md), [reproducible studies](studies.md), [editable HANK equations](hank_model_closure.md) and [three complete applications](study_workflows.md). Review the [experimental inference limits](dependence_bootstrap.md).
-
-Since 5.5.0: [read-only `.mod` inspection and opt-in ordered execution](dsge_mod_inspection.md),
-and [audits of supported solved results](result_audits.md). Inspection
-checks syntax and command support without a numerical solve. Result audits
-separate convergence from equation, Euler/KKT and distribution evidence, and
-name unsupported or unchecked cases. Neither establishes economic validity.
-Users of `STEADY_STATE()` in nonlinear trajectories should review the
-[correctness advisory](ADVISORY.md) and re-run affected calculations.
+Also included from previous cycles: [DSGE workflows and method selection](dsge_workflows.md), [nonlinear models](dsge_nonlinear.md), [transitions and announcements](dsge_transitions.md), and [local/global accuracy](dsge_global.md). Review the [experimental inference limits](dependence_bootstrap.md) and [audits of supported solved results](result_audits.md). Users of `STEADY_STATE()` in nonlinear trajectories should review the [correctness advisory](ADVISORY.md) and re-run affected calculations.
 
 The bilingual [course edition `course-2026A-5.5.0`](https://github.com/jalonso1979/puremacro/blob/course-2026A-5.5.0/curso/notebooks/README.md)
 pins `puremacro==5.5.0` and requires **Python 3.12 or later**. All 72 notebooks
@@ -57,6 +49,55 @@ best effort, with limits on file formats, network access and computation. See th
 [runtime guide](tablet.md) and the [structural validation status](STRUCTURAL_VALIDATION_STATUS.md)
 for the scope of the evidence.
 
+```mermaid
+flowchart TD
+    subgraph Core [Pyodide Core Stack: Python stdlib + NumPy, SciPy, pandas, Matplotlib]
+        direction TB
+        AD["puremacro._autodiff\n(DualArray & HyperDualArray Forward AD)"]
+        PROTO["puremacro.core.protocol\n(DifferentiableModel & StateSpaceProtocol)"]
+        AD --- PROTO
+    end
+
+    subgraph Econometrics [1. Econometric Engines]
+        VAR["VAR, SVAR & FAVAR"]
+        LP["Local Projections & Smooth LP"]
+        DLP["Distributional & Quantile LP\n(distributional_lp.md)"]
+        SMC["Vectorized Tempered SMC\n(smc_inference.md)"]
+        DML["Double / Debiased ML & DiD"]
+    end
+
+    subgraph Structural [2. Structural Macro & Dynamic Programming]
+        DSGE["DSGE Perturbation & OccBin"]
+        SSJ["BlockDAG Sequence-Space Jacobians"]
+        HANK["Nonlinear HANK & Aggregate Risk\n(hank_ssj_and_aggregate_risk.md)"]
+        DP["Continuous DP, EGM & HJB/KFE"]
+    end
+
+    subgraph SpatialClimate [3. Sovereign, Spatial & Climate GE]
+        SOV["Quantitative Sovereign Default\n(sovereign_default.md)"]
+        NET["Baqaee-Farhi Production Networks"]
+        SPAT["Dynamic Spatial Hat-Algebra"]
+        IAM["Spatial Climate IAM & CBAM\n(network_spatial_climate_iam.md)"]
+    end
+
+    subgraph Studio [4. PolicyStudio & Reporting]
+        GRID["CounterfactualGrid Scenarios"]
+        AUDIT["Self-Auditing Verification Invariants"]
+        HTML["Zero-Server HTML5 / SVG & LaTeX / Typst"]
+    end
+
+    PROTO --> Econometrics
+    PROTO --> Structural
+    PROTO --> SpatialClimate
+    Econometrics & Structural & SpatialClimate --> Studio
+
+    style Core fill:#f8f9fa,stroke:#495057,stroke-width:2px
+    style Econometrics fill:#e9ecef,stroke:#343a40,stroke-width:2px
+    style Structural fill:#dee2e6,stroke:#212529,stroke-width:2px
+    style SpatialClimate fill:#ced4da,stroke:#212529,stroke-width:2px
+    style Studio fill:#adb5bd,stroke:#212529,stroke-width:2px
+```
+
 ### Key Subsystems
 
 1. **Structural DSGE & Dynare Parity**:
@@ -76,14 +117,18 @@ for the scope of the evidence.
    - **HANK Sequence-Space Bridge**: Declare `hetagent_block` directly inside standard Dynare `.mod` files.
    - **Targeted Fiscal Transfers**: Dynamic consumption IRFs and cumulative fiscal multipliers across wealth deciles.
    - **Continuous-Time HJB**: Achdou et al. (2022) **implicit** upwind finite-difference M-matrix schemes, the adjoint Kolmogorov forward equation for the stationary density, and continuous-time Aiyagari general equilibrium.
+   - **Nonlinear HANK Transitions & 2nd-Order Aggregate Risk**: Composable `BlockDAG` general equilibrium sequence-space Jacobians, nonlinear transitions with Good Broyden updates, and Reiter–Winberry aggregate risk perturbation with precautionary interest rate discounts ([Guide](hank_ssj_and_aggregate_risk.md)).
 
 3. **Econometric Engines & Local Projections**:
    - **Unified `LPResult`**: Standardized Local Projections (`lp_hac`, `lp_iv`, `lp_state_dep`, `panel_lp`) with Newey-West HAC, fixed-$b$, and Driscoll-Kraay standard errors.
+   - **Distributional & Quantile Local Projections**: Cross-sectional share and quantile impulse response functions strictly satisfying exact adding-up ($\sum \beta_b = 0$) with Driscoll–Kraay covariance and direct structural bridging to `HetBlock` HANK models ([Guide](distributional_lp.md)).
+   - **Vectorized Tempered Sequential Monte Carlo (SMC)**: Adaptive $\phi_n$ tempering schedules, analytical score-guided Langevin/Hamiltonian mutations, and log marginal data density ($\ln p(Y)$) estimation ([Guide](smc_inference.md)).
    - **Structural VARs & FAVAR**: Cholesky, Blanchard-Quah, Sign Restrictions, Narrative Sign Restrictions, Proxy/External Instruments, Max-Share/News, and Factor-Augmented VAR.
    - **Modern Difference-in-Differences**: Staggered adoption estimators robust to treatment heterogeneity (Callaway & Sant'Anna, Sun & Abraham, Borusyak-Jaravel-Spiess, Synthetic DiD, Honest DiD).
    - **Spatial Econometrics & Global VAR**: Conley spatial HAC, spatial autoregressive models (`sar`, `sem`, `sdm`), spatial local projections, and the Pesaran Global VAR (`var.gvar`).
 
 4. **Applied Macroeconomic Policy Suites**:
+   - **Quantitative Sovereign Default & Sudden Stops**: Arellano (2008) and Chatterjee–Eyigungor (2012) long-term debt with extreme-value taste shocks, Mendoza (2010) collateral constraints, spread term-structure decompositions, and debt restructuring counterfactuals ([Guide](sovereign_default.md)).
    - **Central Bank Policy Stance & Fan Charts**: Real-time monetary policy stance evaluation against counterfactual Taylor rules, multi-period fan chart projections, and statement sentiment extraction ([Guide](notebooks.md)).
    - **Real-Time Nowcasting & News Decomposition**: Giannone-Reichlin-Small mixed-frequency dynamic factor models (DFM), handling asynchronous ragged-edge data vintages and release-day news attribution ([Guide](nowcast.md)).
    - **Macroprudential Risk & Financial Stability**: Adrian-Boyarchenko-Giannone Growth-at-Risk (GaR) conditional skew-$t$ densities, and Diebold-Yilmaz systemic connectedness networks ([Guide](notebooks.md)).
@@ -103,16 +148,22 @@ for the scope of the evidence.
    - **Montiel Olea-Pflueger Weak-IV Inference**: Effective $F$-statistic critical values from the closed form $\chi^2_{K,\,1-\alpha}(K/\tau)/K$, and multi-instrument Anderson-Rubin sets inverted exactly rather than on a grid ([Guide](lp.md)).
    - **Latin American Real-Time Connectors**: Banco de México, INEGI, Banco Central do Brasil and Banco Central de Chile. These four sources publish only the current edition, so their vintage date is the local *snapshot* date and revision history accumulates only across repeated captures on different days.
 
-7. **International Trade and MRIO** — restored in the published 5.2.0 package:
+7. **International Trade, Production Networks & Spatial Climate IAM**:
+   - **Production Networks & Spatial Climate IAM**: Baqaee–Farhi second-order input-output aggregation, Caliendo–Parro–Rossi-Hansberg dynamic spatial migration hat-algebra, and multi-region climate IAM with Carbon Border Adjustment Mechanisms (CBAM) ([Guide](network_spatial_climate_iam.md)).
    - **Policy Counterfactuals**: Multi-country, multi-sector trade models with producer/purchaser accounting, explicit fiscal receipts and an explicit equilibrium closure ([Guide](trade_accounting.md)).
    - **Reproducible OECD Data**: The bundled OECD ICIO table (2023 edition, reference year 2019) covers the 19 G20 member countries plus the rest of the world and 20 ISIC sections, with a rebuild script and source attribution ([Data and models](spatial_and_trade_ge.md)).
    - **Household Incidence**: Static EV/CV welfare comparisons conditional on supplied purchaser prices, income changes and fiscal transfers; household demand does not feed back into the trade equilibrium ([Guide](trade_distributional.md)).
 
-8. **Publication-Grade Reporting**:
-   - Zero-dependency, camera-ready table export directly to **LaTeX** (`.to_latex()`), **Typst** (`.to_typst()`), and **Markdown** (`.to_markdown()`), complete with standard errors and significance stars ([Guide](reporting.md)).
+8. **Publication-Grade Reporting & PolicyStudio**:
+   - **Declarative PolicyStudio & Zero-Server Interactive HTML5**: Counterfactual scenario matrix grids with automated verification of numerical invariants and self-contained interactive visual reporting ([Guide](network_spatial_climate_iam.md)).
+   - **Manuscript Exports**: Zero-dependency, camera-ready table export directly to **LaTeX** (`.to_latex()`), **Typst** (`.to_typst()`), and **Markdown** (`.to_markdown()`), complete with standard errors and significance stars ([Guide](reporting.md)).
 
 9. **Running Anywhere**:
    - A Pyodide-compatible numerical core for browser notebooks, with best-effort tablet and browser support ([Guide](tablet.md)), Google Colab offloading helpers (`runtime.colab`), chunked long-run execution (`longrun`), and portable `.pmz` data cartridges (`pocket`).
+
+10. **Forward AD Engine & Unified Differentiable Model Protocol**:
+    - **Forward Automatic Differentiation**: Exact first- and second-order derivatives via `DualArray` and `HyperDualArray` through NumPy ufuncs, implicit linear solves, and Sylvester systems without external frameworks ([Guide](autodiff_and_protocol.md)).
+    - **Unified `DifferentiableModel` Protocol**: A universal programmatic interface spanning DSGE, HANK DAGs, DFM nowcasting, SVARs, and trade networks with standardized methods for impulse responses, simulation, counterfactuals, and analytical scores ([Guide](autodiff_and_protocol.md)).
 
 ---
 
