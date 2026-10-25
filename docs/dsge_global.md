@@ -211,9 +211,9 @@ reported evaluation count tracks residual evaluations; numerical-Jacobian probes
 can add residual calls when `transition_jacobian` or `residual_jacobian`
 callbacks are omitted (with `EquilibriumProblem.from_model`, compiled equation
 derivatives are reused automatically via `TrajectoryJacobian`).
-`result.callback_evaluations` separately tracks `"transition"`, `"residual"`,
-`"transition_jacobian"`, `"residual_jacobian"`, `"admissible"`,
-`"control_bounds"`, `"shock_rule"`, and `"trial_rejections"`. Neither the
+`result.callback_evaluations` separately tracks `"transition_evaluations"`,
+`"residual_evaluations"`, `"transition_jacobian_evaluations"`,
+`"residual_jacobian_evaluations"`, and `"trial_rejections"`. Neither the
 iteration budget nor `max_nodes` is a wall-clock or total-memory guarantee.
 
 The initial policy can be a callable, one constant `(nx,)` vector, or a nodal

@@ -60,7 +60,7 @@ sys.path.insert(0, str(repo))
 sys.path.insert(0, str(repo / "notebooks"))
 import _nbstyle
 _nbstyle.apply_style()
-from puremacro.dsge import load_mod
+from puremacro.dsge import diagnose_perturbation, load_mod
 
 # A variable with no first-order response (the claim's price) has no first-order variance
 # decomposition; theoretical_moments warns about that, and it is expected here.
@@ -235,10 +235,12 @@ else:
 # %% [markdown]
 # ### 3. Lo que una comparación de trayectorias no puede ver, y lo que sí ve la simetría de Schwarz
 #
-# El 20 de septiembre de 2026 la comprobación en vivo encontró que el tensor $g_{xxu}$ del RBC difería en 0.0012928883 mientras todas las trayectorias simuladas coincidían. El error era antisimétrico en los dos índices de estado: sumaba un valor a la entrada (capital, tecnología) y lo restaba de la entrada (tecnología, capital). Cada observación contrae $g_{xxu}$ con $\hat x\otimes\hat x\otimes u$, que es simétrico en esos dos índices, así que el error se cancela en toda trayectoria simulada. Una comprobación interna de la simetría de Schwarz, $g_{xxu,(k,a,e)}=g_{xxu,(a,k,e)}$, detecta de inmediato la parte antisimétrica sin necesitar Dynare, mientras que un error simétrico en esa misma derivada cruzada pasa la prueba de Schwarz y exige un oráculo externo. La celda siguiente verifica la simetría de Schwarz de $g_{xxu}$ y mide lo que los errores plantados hacen en ambas pruebas.
+# El 20 de septiembre de 2026 la comprobación en vivo encontró que el tensor $g_{xxu}$ del RBC difería en 0.0012928883 mientras todas las trayectorias simuladas coincidían. El error era antisimétrico en los dos índices de estado: sumaba un valor a la entrada (capital, tecnología) y lo restaba de la entrada (tecnología, capital). Cada observación contrae $g_{xxu}$ con $\hat x\otimes\hat x\otimes u$, que es simétrico en esos dos índices, así que el error se cancela en toda trayectoria simulada. Una comprobación interna de la simetría de Schwarz, $g_{xxu,(k,a,e)}=g_{xxu,(a,k,e)}$, detecta de inmediato la parte antisimétrica sin necesitar Dynare, mientras que un error simétrico en esa misma derivada cruzada pasa la prueba de Schwarz y exige un oráculo externo. Junto con `diagnose_perturbation()`, que distingue el condicionamiento de los bloques diagonales de Schur (`schur_block_condition`) del condicionamiento del operador completo de Sylvester (`curvature_operator_condition`), verifica los residuos algebraicos de las ecuaciones de Sylvester y de riesgo (`sylvester_residuals`) y reporta la reutilización de bloques simétricos (`sylvester_work`), la celda siguiente verifica la simetría de Schwarz de $g_{xxu}$ y mide lo que los errores plantados hacen en ambas pruebas.
 
 # %%
 rbc = load_mod(RBC, order=3)
+rbc_diag = diagnose_perturbation(rbc, max_curvature_order=3)
+sylv_res_max = max(rbc_diag.sylvester_residuals.values())
 dr, T = labelled_tensors(rbc)
 states, shocks = list(dr.state_variables), list(dr.shock_names)
 cols = list(T["ghxxu"].columns)
@@ -257,10 +259,13 @@ blind = pd.DataFrame({name: {"largest tensor error": np.max(np.abs(D)),
                              "largest effect on a simulated observation": np.max(np.abs(kron @ D.T)) / 2}
                       for name, D in planted.items()})
 print(f"Solved RBC g_xxu Schwarz asymmetry |g(k,a,e) - g(a,k,e)|: {schwarz_err:.2e}")
+print(f"Sylvester algebraic residuals (max={sylv_res_max:.2e}):", {k: f"{v:.2e}" for k, v in rbc_diag.sylvester_residuals.items()})
+print(rbc_diag.curvature_frame().to_string(index=False, float_format=lambda v: f"{v:.3e}"))
 print(blind.to_string(float_format=lambda v: f"{v:.2e}"))
 record("Internal symmetry: RBC g_xxu Schwarz check |g(k,a,e) - g(a,k,e)|", schwarz_err, 1e-15, "exact")
+record("Internal algebra: RBC Sylvester residuals (ghxx, ghs2, ghxxx, ghxss, ghuss)", sylv_res_max, 1e-13, "exact")
 record("Blind spot: path effect of the antisymmetric error", blind.loc["largest effect on a simulated observation", "antisymmetric"], 1e-15, "invisible")
-assert schwarz_err < 1e-15
+assert schwarz_err < 1e-15 and sylv_res_max < 1e-13 and rbc_diag.sylvester_work[3].lu_cache_hits > 0
 assert blind.loc["largest effect on a simulated observation", "antisymmetric"] < 1e-15
 assert blind.loc["Schwarz asymmetry |D(k,a,e) - D(a,k,e)|", "antisymmetric"] > 2e-3
 assert blind.loc["Schwarz asymmetry |D(k,a,e) - D(a,k,e)|", "symmetric"] == 0.0

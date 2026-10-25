@@ -38,6 +38,13 @@ additions are included in 5.4.2. See the [release procedure](RELEASING.md).
   domain-safe feasible backtracking (`trial_rejections` in `history` and
   `callback_evaluations`), separable 1D Kronecker LU Chebyshev fitting
   (`collocation_matrix_allocated`, `storage_bytes`), and batched shock integration.
+- Bilingual showcase notebook `notebooks/70_nonlinear_dsge_workflows_and_accuracy.ipynb`
+  (`notebooks/70_nonlinear_dsge_workflows_and_accuracy_es.ipynb`) demonstrating
+  exact Sylvester conditioning diagnostics, separable Chebyshev global time
+  iteration with analytic Jacobians, matrix-free Newton–Krylov MCP and
+  `terminal_policy` transitions, and ordered `.mod` execution with mid-script
+  parameter reassignment and lag-indexed `histval`, plus Sylvester residual and
+  LU cache-reuse checks in `notebooks/68_third_order_perturbation_trust.ipynb`.
 
 ### Fixed
 

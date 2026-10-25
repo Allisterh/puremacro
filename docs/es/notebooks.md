@@ -20,7 +20,7 @@ acotado hacia una aplicación más amplia.
 | ¿Cómo construyo un índice de incertidumbre? | 11 → 13 → 30 → 37 | Procedencia del corpus, normalización y validación de la medida |
 | ¿Por qué importa la heterogeneidad? | 01 → 03 → 05 → 31 → 44 | Restricciones presupuestarias, distribuciones y equilibrio |
 | ¿Cómo resuelvo y estimo modelos estructurales? | 21 → 41 → 42 → 43 | Residuos de equilibrio, identificación y diagnóstico del muestreo |
-| ¿Qué método numérico necesita mi modelo? | 22 → 51 → 52 → 53 → 56 | Error de aproximación, sensibilidad a la malla y convergencia |
+| ¿Qué método numérico necesita mi modelo? | 22 → 51 → 52 → 53 → 56 → 70 | Error de aproximación, sensibilidad a la malla y convergencia |
 | ¿Cómo se propagan los aranceles? | 55 → 61 → 62 → 63 → 65; después 64 | Calibración, contabilidad, definición de bienestar y límites del solucionador |
 | ¿Cómo conservo un experimento empírico o de modelo completo? | 69 → 06 → 55 | Unidades y supuestos explícitos, auditorías, archivos verificables y límites de escenarios |
 | ¿Cómo verifico un solucionador contra un resultado publicado? | 66 → 67 → 68 → 12 | Formas cerradas, rutas de solución independientes, tolerancias y criterio de evaluación |
@@ -125,10 +125,18 @@ un experimento; no establece su precisión ni su generalidad.
   que esas diferencias.
 - **68 — tercer orden:** que las trayectorias simuladas coincidan no demuestra que un
   tensor sea correcto; el cuaderno compara cada tensor con formas cerradas y con
-  resultados de Dynare en vivo. Los momentos exactos con poda coinciden con una forma
+  resultados de Dynare en vivo, y verifica el condicionamiento y los residuos
+  algebraicos de Sylvester. Los momentos exactos con poda coinciden con una forma
   cerrada y con las medias y varianzas de Dynare. Las autocorrelaciones de orden 3 de
   Dynare no: una forma cerrada y las propias simulaciones largas de Dynare las
   rechazan. La asimetría y la curtosis siguen saliendo de simulaciones.
+- **70 — flujos DSGE no lineales:** los comandos `.mod` ordenados conservan
+  instantáneas de parámetros por instrucción; el condicionamiento del operador
+  completo de Sylvester (`curvature_operator_condition`) se distingue del
+  condicionamiento de los bloques diagonales de Schur (`schur_block_condition`);
+  la iteración temporal separable de Chebyshev y las transiciones restringidas
+  Newton–Krylov sin matriz (`mcp=True`, `terminal_policy`) coinciden con los
+  métodos directos en el dominio y horizonte declarados.
 
 La [plantilla de cuadernos](https://github.com/jalonso1979/puremacro/blob/main/notebooks/_TEMPLATE.md)
 conecta pregunta, ecuaciones, intuición, código, interpretación, ejercicio y
@@ -212,4 +220,5 @@ Cada título abre un cuaderno ejecutado; «fuente» abre su archivo `.py` editab
 | [67_bewley_classics_replication_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/67_bewley_classics_replication_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/67_bewley_classics_replication_es.py) | Replicación de Huggett (1993) y Aiyagari (1994): Tabla I exacta, ordenamientos de las tablas de equilibrio, sus decimales frente al error numérico y la cadena de Markov | [67_bewley_classics_replication](https://github.com/jalonso1979/puremacro/blob/main/notebooks/67_bewley_classics_replication.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/67_bewley_classics_replication.py) |
 | [68_third_order_perturbation_trust_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/68_third_order_perturbation_trust_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/68_third_order_perturbation_trust_es.py) | Perturbación de tercer orden verificada con formas cerradas y Dynare 7.0 en vivo, un error tensorial que ninguna trayectoria ve, y lo que dice el tercer orden verificado | [68_third_order_perturbation_trust](https://github.com/jalonso1979/puremacro/blob/main/notebooks/68_third_order_perturbation_trust.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/68_third_order_perturbation_trust.py) |
 | [69_reproducible_studies_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies_es.py) | VAR mexicano, transferencia a hogares y arancel OCDE reproducibles: supuestos, auditorías, figuras y archivos portátiles | [69_reproducible_studies](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies.py) |
+| [70_nonlinear_dsge_workflows_and_accuracy_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/70_nonlinear_dsge_workflows_and_accuracy_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/70_nonlinear_dsge_workflows_and_accuracy_es.py) | Comandos `.mod` ordenados, condicionamiento de Sylvester, políticas separables de Chebyshev y transiciones restringidas Newton–Krylov | [70_nonlinear_dsge_workflows_and_accuracy](https://github.com/jalonso1979/puremacro/blob/main/notebooks/70_nonlinear_dsge_workflows_and_accuracy.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/70_nonlinear_dsge_workflows_and_accuracy.py) |
 | [local_llm_uncertainty_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty_es.py) | Inferencia local con motores opcionales de escritorio; respaldo simulado sin conexión | [local_llm_uncertainty](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty.py) |

@@ -214,9 +214,9 @@ aproximaciones numéricas del Jacobiano pueden añadir llamadas al residuo cuand
 se omiten `transition_jacobian` o `residual_jacobian` (con
 `EquilibriumProblem.from_model`, las derivadas compiladas de las ecuaciones se
 reutilizan automáticamente mediante `TrajectoryJacobian`).
-`result.callback_evaluations` registra por separado `"transition"`,
-`"residual"`, `"transition_jacobian"`, `"residual_jacobian"`, `"admissible"`,
-`"control_bounds"`, `"shock_rule"` y `"trial_rejections"`. Ni ese presupuesto ni
+`result.callback_evaluations` registra por separado `"transition_evaluations"`,
+`"residual_evaluations"`, `"transition_jacobian_evaluations"`,
+`"residual_jacobian_evaluations"` y `"trial_rejections"`. Ni ese presupuesto ni
 `max_nodes` garantizan un límite de tiempo o memoria total.
 
 La política inicial puede ser un callable, un vector constante `(nx,)` o un

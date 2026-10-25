@@ -60,7 +60,7 @@ sys.path.insert(0, str(repo))
 sys.path.insert(0, str(repo / "notebooks"))
 import _nbstyle
 _nbstyle.apply_style()
-from puremacro.dsge import load_mod
+from puremacro.dsge import diagnose_perturbation, load_mod
 
 # A variable with no first-order response (the claim's price) has no first-order variance
 # decomposition; theoretical_moments warns about that, and it is expected here.
@@ -235,10 +235,12 @@ else:
 # %% [markdown]
 # ### 3. What a path check cannot see, and what Schwarz symmetry can
 #
-# On 20 September 2026 the live check found the RBC tensor $g_{xxu}$ off by 0.0012928883 while every simulated path matched. The error was antisymmetric in the two state indices: it added a value to the (capital, technology) entry and subtracted it from the (technology, capital) entry. Every observation contracts $g_{xxu}$ with $\hat x\otimes\hat x\otimes u$, which is symmetric in those two indices, so the error cancels on every simulated path. A reference-free check of Schwarz symmetry, $g_{xxu,(k,a,e)}=g_{xxu,(a,k,e)}$, catches the antisymmetric part immediately without needing Dynare, whereas a symmetric error in the same cross-derivative passes Schwarz symmetry and requires an external oracle. The cell below checks Schwarz symmetry of the solved $g_{xxu}$ and measures what planted antisymmetric and symmetric errors do to both checks.
+# On 20 September 2026 the live check found the RBC tensor $g_{xxu}$ off by 0.0012928883 while every simulated path matched. The error was antisymmetric in the two state indices: it added a value to the (capital, technology) entry and subtracted it from the (technology, capital) entry. Every observation contracts $g_{xxu}$ with $\hat x\otimes\hat x\otimes u$, which is symmetric in those two indices, so the error cancels on every simulated path. A reference-free check of Schwarz symmetry, $g_{xxu,(k,a,e)}=g_{xxu,(a,k,e)}$, catches the antisymmetric part immediately without needing Dynare, whereas a symmetric error in the same cross-derivative passes Schwarz symmetry and requires an external oracle. Together with `diagnose_perturbation()`, which separates diagonal Schur-block conditioning (`schur_block_condition`) from full higher-order Sylvester operator conditioning (`curvature_operator_condition`), verifies the algebraic Sylvester and risk residuals (`sylvester_residuals`), and reports symmetric Schur-block reuse (`sylvester_work`), the cell below checks Schwarz symmetry of the solved $g_{xxu}$ and measures what planted antisymmetric and symmetric errors do to both checks.
 
 # %%
 rbc = load_mod(RBC, order=3)
+rbc_diag = diagnose_perturbation(rbc, max_curvature_order=3)
+sylv_res_max = max(rbc_diag.sylvester_residuals.values())
 dr, T = labelled_tensors(rbc)
 states, shocks = list(dr.state_variables), list(dr.shock_names)
 cols = list(T["ghxxu"].columns)
@@ -257,10 +259,13 @@ blind = pd.DataFrame({name: {"largest tensor error": np.max(np.abs(D)),
                              "largest effect on a simulated observation": np.max(np.abs(kron @ D.T)) / 2}
                       for name, D in planted.items()})
 print(f"Solved RBC g_xxu Schwarz asymmetry |g(k,a,e) - g(a,k,e)|: {schwarz_err:.2e}")
+print(f"Sylvester algebraic residuals (max={sylv_res_max:.2e}):", {k: f"{v:.2e}" for k, v in rbc_diag.sylvester_residuals.items()})
+print(rbc_diag.curvature_frame().to_string(index=False, float_format=lambda v: f"{v:.3e}"))
 print(blind.to_string(float_format=lambda v: f"{v:.2e}"))
 record("Internal symmetry: RBC g_xxu Schwarz check |g(k,a,e) - g(a,k,e)|", schwarz_err, 1e-15, "exact")
+record("Internal algebra: RBC Sylvester residuals (ghxx, ghs2, ghxxx, ghxss, ghuss)", sylv_res_max, 1e-13, "exact")
 record("Blind spot: path effect of the antisymmetric error", blind.loc["largest effect on a simulated observation", "antisymmetric"], 1e-15, "invisible")
-assert schwarz_err < 1e-15
+assert schwarz_err < 1e-15 and sylv_res_max < 1e-13 and rbc_diag.sylvester_work[3].lu_cache_hits > 0
 assert blind.loc["largest effect on a simulated observation", "antisymmetric"] < 1e-15
 assert blind.loc["Schwarz asymmetry |D(k,a,e) - D(a,k,e)|", "antisymmetric"] > 2e-3
 assert blind.loc["Schwarz asymmetry |D(k,a,e) - D(a,k,e)|", "symmetric"] == 0.0

@@ -102,7 +102,6 @@ from __future__ import annotations
 
 import inspect
 import math
-import resource
 import sys
 import time
 import warnings
@@ -178,11 +177,15 @@ def _norm_inf(x: np.ndarray) -> float:
 
 
 def _peak_rss_bytes() -> int:
-    try:
-        rss = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
-        return rss if sys.platform == "darwin" else rss * 1024
-    except Exception:
-        return 0
+    if sys.platform != "win32":
+        try:
+            import resource
+
+            rss = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+            return rss if sys.platform == "darwin" else rss * 1024
+        except Exception:
+            return 0
+    return 0
 
 
 class _FrozenRecord(dict):

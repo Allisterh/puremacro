@@ -20,7 +20,7 @@ from a focused example to a broader application.
 | How do I build an uncertainty index? | 11 → 13 → 30 → 37 | Corpus provenance, normalization and validation of the measure |
 | Why does household heterogeneity matter? | 01 → 03 → 05 → 31 → 44 | Budget constraints, distributions and equilibrium feedback |
 | How do I solve and estimate structural models? | 21 → 41 → 42 → 43 | Equilibrium residuals, identification and sampling diagnostics |
-| Which numerical method fits my model? | 22 → 51 → 52 → 53 → 56 | Approximation error, grid sensitivity and convergence |
+| Which numerical method fits my model? | 22 → 51 → 52 → 53 → 56 → 70 | Approximation error, grid sensitivity and convergence |
 | How do tariffs propagate through production? | 55 → 61 → 62 → 63 → 65; then 64 | Calibration provenance, accounting, welfare definition and solver limits |
 | How do I preserve a complete empirical or model experiment? | 69 → 06 → 55 | Explicit units and assumptions, retained audits, archive round-trips and scenario limits |
 | How do I check a solver against a published result? | 66 → 67 → 68 → 12 | Closed forms, independent solution routes, tolerances and the evaluation criterion |
@@ -121,10 +121,17 @@ they do not establish its accuracy or generality.
   choice of Markov chain moves Aiyagari's rates by more than those differences.
 - **68 — third order:** matching simulated paths does not show that a tensor is
   right; the notebook compares every tensor with closed forms and with live Dynare
-  output. The exact pruned moments match a closed form and Dynare's means and
+  output, and checks higher-order Sylvester conditioning and algebraic residuals.
+  The exact pruned moments match a closed form and Dynare's means and
   variances. Dynare's order-3 autocorrelations do not: a closed form and Dynare's
   own long simulations both reject them. Skewness and kurtosis still come from
   simulations.
+- **70 — nonlinear DSGE workflows:** ordered `.mod` commands preserve per-statement
+  parameter snapshots; third-order Sylvester operator conditioning
+  (`curvature_operator_condition`) is distinct from diagonal Schur-block
+  conditioning (`schur_block_condition`); separable Chebyshev time iteration and
+  constrained matrix-free Newton–Krylov transitions (`mcp=True`, `terminal_policy`)
+  agree with direct solvers on the declared domain and horizon.
 
 The [notebook template](https://github.com/jalonso1979/puremacro/blob/main/notebooks/_TEMPLATE.md)
 connects a motivating question, equations, intuition, runnable code, output
@@ -208,4 +215,5 @@ Each title opens an executed notebook; “source” opens its editable `.py` fil
 | [67_bewley_classics_replication](https://github.com/jalonso1979/puremacro/blob/main/notebooks/67_bewley_classics_replication.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/67_bewley_classics_replication.py) | Replication of Huggett (1993) and Aiyagari (1994): Table I exactly, the equilibrium tables' orderings, their decimals against numerical error, and the Markov chain | [67_bewley_classics_replication_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/67_bewley_classics_replication_es.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/67_bewley_classics_replication_es.py) |
 | [68_third_order_perturbation_trust](https://github.com/jalonso1979/puremacro/blob/main/notebooks/68_third_order_perturbation_trust.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/68_third_order_perturbation_trust.py) | Third-order perturbation checked against closed forms and live Dynare 7.0, a tensor error no path can see, and what the checked third order says | [68_third_order_perturbation_trust_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/68_third_order_perturbation_trust_es.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/68_third_order_perturbation_trust_es.py) |
 | [69_reproducible_studies](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies.py) | Reproducible Mexico VAR, household transfer and OECD tariff studies: assumptions, audits, figures and portable archives | [69_reproducible_studies_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies_es.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/69_reproducible_studies_es.py) |
+| [70_nonlinear_dsge_workflows_and_accuracy](https://github.com/jalonso1979/puremacro/blob/main/notebooks/70_nonlinear_dsge_workflows_and_accuracy.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/70_nonlinear_dsge_workflows_and_accuracy.py) | Ordered `.mod` commands, Sylvester conditioning, separable Chebyshev policies and constrained Newton–Krylov transitions | [70_nonlinear_dsge_workflows_and_accuracy_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/70_nonlinear_dsge_workflows_and_accuracy_es.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/70_nonlinear_dsge_workflows_and_accuracy_es.py) |
 | [local_llm_uncertainty](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty.py) | Local inference with optional desktop engines; offline mock fallback | [local_llm_uncertainty_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty_es.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty_es.py) |
