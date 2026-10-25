@@ -7,7 +7,9 @@ This changelog describes versioned source changes. Check
 Versions 5.3.0, 5.4.0 and 5.4.1 were tagged but not published to PyPI; their
 additions are included in 5.4.2. See the [release procedure](RELEASING.md).
 
-## Unreleased
+## 5.8.0 (2026-10-24)
+
+**Exact Sylvester factorization reuse, sparse transition JVP caching, separable Chebyshev fitting, and constrained Newton–Krylov.**
 
 ### Added
 
