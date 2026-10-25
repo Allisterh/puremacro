@@ -13,7 +13,13 @@ import pandas as pd
 from ._parser import Parser, Tokenizer
 from ._results import DynareCommandInvocation, DynareCommandResults
 from .inspection import _ORDERED_OPTIONS, _PF_COMMANDS, _data_schema_error
-from .model import NonlinearModel, _evaluate_assignments, _evaluate_covariance, read_mod
+from .model import (
+    NonlinearModel,
+    _evaluate_assignments,
+    _evaluate_covariance,
+    _propagate_auxiliary_values,
+    read_mod,
+)
 
 
 @dataclass(frozen=True)
@@ -105,6 +111,7 @@ def _execute_deterministic(model: Any, data: pd.DataFrame | None, sigma: Any,
             raise ValueError("Requested first_obs/nobs sample lies outside supplied data")
         frames[statement.index] = frame
 
+    aux_info: dict[str, dict[str, Any]] = dict(getattr(base._dag, "auxiliary_variables", None) or {})
     initial = dict.fromkeys(base.variables + base.shocks, 0.0)
     terminal: dict[str, float] | None = None
     history: dict[str, float] = {}
@@ -113,6 +120,14 @@ def _execute_deterministic(model: Any, data: pd.DataFrame | None, sigma: Any,
     prepared: PerfectForesightSetup | None = None
     invocations: list[DynareCommandInvocation] = []
     aliases: dict[str, Any] = {}
+    phase_started = False
+    recalibrated_in_phase: set[str] = set()
+    active_initval_defs: dict[str, Any] = {}
+    active_endval_defs: dict[str, Any] = {}
+    active_endval_indexed_zero: set[str] = set()
+    active_histval_defs: dict[str, Any] = {}
+    active_histval_indexed_zero: set[str] = set()
+    active_shock_excerpts: list[str] = []
 
     def results() -> DynareCommandResults:
         return DynareCommandResults(**aliases, histval=deepcopy(history) or None,
@@ -161,34 +176,167 @@ def _execute_deterministic(model: Any, data: pd.DataFrame | None, sigma: Any,
         name = statement.name
         options = dict(statement.effective_options)
         current_result: Any = None
+        if statement.category == "calibration assignment":
+            if phase_started:
+                parser = _block_parser(statement.excerpt, base, config)
+                pname = str(parser._advance().value)
+                parser._expect("ASSIGN")
+                p_expr = parser.parse_expression()
+                parser._expect("SEMI")
+                new_params = dict(base.parameter_values)
+                val = float(p_expr.eval({}, new_params))
+                if not np.isfinite(val):
+                    raise ValueError(f"Nonfinite parameter assignment to {pname}")
+                new_params[pname] = val
+                recalibrated_in_phase.add(pname)
+                param_ast_defs = dict(getattr(base._dag, "param_assignments", None) or {})
+                param_ast_defs[pname] = p_expr
+                changed = {pname}
+                updated_deps: set[str] = set()
+                for _ in range(len(param_ast_defs) + 1):
+                    progress = False
+                    for dep_name, dep_expr in param_ast_defs.items():
+                        if (
+                            dep_name not in recalibrated_in_phase
+                            and dep_name not in updated_deps
+                            and (dep_expr.parameters() & changed)
+                        ):
+                            dep_val = float(dep_expr.eval({}, new_params))
+                            if not np.isfinite(dep_val):
+                                raise ValueError(f"Nonfinite dependent parameter assignment to {dep_name}")
+                            new_params[dep_name] = dep_val
+                            changed.add(dep_name)
+                            updated_deps.add(dep_name)
+                            progress = True
+                    if not progress:
+                        break
+                supplied_ss = base._dag.evaluate_steady_state(new_params) if base._dag is not None else None
+                new_guess = base._dag.evaluate_initval(new_params) if base._dag is not None else None
+                new_dag = (
+                    replace(
+                        base._dag,
+                        parameter_values=dict(new_params),
+                        param_assignments=dict(param_ast_defs),
+                        steady_state=supplied_ss,
+                        guess=new_guess,
+                    )
+                    if base._dag is not None
+                    else None
+                )
+                base = replace(
+                    base,
+                    parameter_values=dict(new_params),
+                    steady_state=supplied_ss,
+                    guess=new_guess,
+                    _dag=new_dag,
+                    _compiled=None,
+                )
+                if active_shock_excerpts:
+                    re_config: dict[str, Any] = {
+                        key: {} for key in ("stderrs", "variances", "covariances", "correlations", "anticipated")
+                    }
+                    for shock_excerpt in active_shock_excerpts:
+                        s_parser = _block_parser(shock_excerpt, base, re_config)
+                        s_parser._parse_shocks_block()
+                        re_config = s_parser.shocks_config
+                    config = re_config
+                shock_cov = _evaluate_covariance(
+                    config, base.shocks, base.parameter_values, default=np.eye(len(base.shocks))
+                )
+                base = replace(base, shock_cov=shock_cov.copy())
+                # Reset boundary/steady-state seeds to the current calibration's declarations
+                initial = dict.fromkeys(base.variables + base.shocks, 0.0)
+                if active_initval_defs:
+                    evaluated_init = _evaluate_assignments(
+                        active_initval_defs, base.parameter_values, initial, auxiliary=aux_info
+                    )
+                    initial.update(evaluated_init)
+                    _propagate_auxiliary_values(initial, evaluated_init, aux_info, mode="all")
+                if terminal is not None:
+                    terminal = dict(initial)
+                    if active_endval_defs:
+                        evaluated_end = _evaluate_assignments(
+                            active_endval_defs, base.parameter_values, terminal, auxiliary=aux_info
+                        )
+                        terminal.update(evaluated_end)
+                        _propagate_auxiliary_values(
+                            terminal,
+                            evaluated_end,
+                            aux_info,
+                            mode="all",
+                            indexed_zero=active_endval_indexed_zero,
+                        )
+                if history and active_histval_defs:
+                    history = {}
+                    evaluated_hist = _evaluate_assignments(
+                        active_histval_defs, base.parameter_values, initial, auxiliary=aux_info
+                    )
+                    history.update(evaluated_hist)
+                    _propagate_auxiliary_values(
+                        history,
+                        evaluated_hist,
+                        aux_info,
+                        mode="histval",
+                        indexed_zero=active_histval_indexed_zero,
+                    )
+            continue
         if name in {"initval", "histval", "endval"}:
             parser = _block_parser(statement.excerpt, base, config)
             definitions = parser._parse_assignment_block(name)
+            idx_zero = set(getattr(parser, "_indexed_zero_targets", set()))
             if name == "initval":
+                active_initval_defs = dict(definitions)
+                active_endval_defs = {}
+                active_endval_indexed_zero = set()
+                active_histval_defs = {}
+                active_histval_indexed_zero = set()
                 initial = dict.fromkeys(base.variables + base.shocks, 0.0)
-                initial.update(_evaluate_assignments(definitions, base.parameter_values, initial))
+                evaluated = _evaluate_assignments(definitions, base.parameter_values, initial, auxiliary=aux_info)
+                initial.update(evaluated)
+                _propagate_auxiliary_values(initial, evaluated, aux_info, mode="all", indexed_zero=idx_zero)
                 terminal = None
                 history = {}
             elif name == "endval":
+                active_endval_defs.update(definitions)
+                active_endval_indexed_zero |= idx_zero
                 terminal = dict(initial if terminal is None else terminal)
-                terminal.update(_evaluate_assignments(definitions, base.parameter_values, terminal))
+                evaluated = _evaluate_assignments(definitions, base.parameter_values, terminal, auxiliary=aux_info)
+                terminal.update(evaluated)
+                _propagate_auxiliary_values(terminal, evaluated, aux_info, mode="all", indexed_zero=idx_zero)
             else:
-                history.update(_evaluate_assignments(definitions, base.parameter_values, initial))
+                active_histval_defs.update(definitions)
+                active_histval_indexed_zero |= idx_zero
+                evaluated = _evaluate_assignments(
+                    definitions, base.parameter_values, {**initial, **history}, auxiliary=aux_info
+                )
+                history.update(evaluated)
+                _propagate_auxiliary_values(history, evaluated, aux_info, mode="histval", indexed_zero=idx_zero)
             continue
         if name == "shocks":
+            head = statement.excerpt.split(";", 1)[0]
+            if "overwrite" in head:
+                active_shock_excerpts = [statement.excerpt]
+            else:
+                active_shock_excerpts.append(statement.excerpt)
             parser = _block_parser(statement.excerpt, base, config)
             parser._parse_shocks_block()
             config = parser.shocks_config
-            shock_cov = _evaluate_covariance(config, base.shocks, base.parameter_values)
+            shock_cov = _evaluate_covariance(
+                config, base.shocks, base.parameter_values, default=np.eye(len(base.shocks))
+            )
+            base = replace(base, shock_cov=shock_cov.copy())
             continue
         if name not in _ORDERED_OPTIONS and name != "steady":
             continue
 
+        phase_started = True
+        recalibrated_in_phase = set()
         state = snapshot()
         if prepared is not None and name == "perfect_foresight_solver":
             state["prepared"] = dict(periods=prepared.periods, y_init=prepared.y_init.tolist(),
                 y_end=prepared.y_end.tolist(), shocks=prepared.exogenous_path.tolist(),
-                initial_path=prepared.initial_path.tolist())
+                initial_path=prepared.initial_path.tolist(),
+                parameters=dict(prepared.parameters))
         if statement.index in frames:
             state["data_hash"] = hashlib.sha256(pd.util.hash_pandas_object(
                 frames[statement.index], index=True).to_numpy().tobytes()).hexdigest()
@@ -214,7 +362,21 @@ def _execute_deterministic(model: Any, data: pd.DataFrame | None, sigma: Any,
                     raise ValueError("perfect_foresight_solver requires a preceding perfect_foresight_setup")
                 if int(options["periods"]) != prepared.periods:
                     raise ValueError("Solver periods differ from setup; run perfect_foresight_setup again")
-                current_result = solve_perfect_foresight(base, periods=prepared.periods,
+                solve_base = (
+                    base
+                    if prepared.parameters == base.parameter_values
+                    else replace(
+                        base,
+                        parameter_values=dict(prepared.parameters),
+                        _dag=(
+                            replace(base._dag, parameter_values=dict(prepared.parameters))
+                            if base._dag is not None
+                            else None
+                        ),
+                        _compiled=None,
+                    )
+                )
+                current_result = solve_perfect_foresight(solve_base, periods=prepared.periods,
                     y_init=prepared.y_init, y_end=prepared.y_end,
                     shocks=prepared.exogenous_path, initial_path=prepared.initial_path,
                     tol=float(options["tol"]), max_iter=int(options["maxit"]),

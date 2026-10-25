@@ -102,6 +102,8 @@ from __future__ import annotations
 
 import inspect
 import math
+import resource
+import sys
 import time
 import warnings
 from dataclasses import dataclass, field
@@ -175,6 +177,14 @@ def _norm_inf(x: np.ndarray) -> float:
     return float(np.max(np.abs(x), initial=0.0))
 
 
+def _peak_rss_bytes() -> int:
+    try:
+        rss = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+        return rss if sys.platform == "darwin" else rss * 1024
+    except Exception:
+        return 0
+
+
 class _FrozenRecord(dict):
     """A ``dict`` whose contents cannot change after construction (one linear-history record).
 
@@ -217,6 +227,78 @@ def _check_positive_float(value: Any, name: str) -> float:
     if not np.isfinite(out) or out <= 0.0:
         raise ValueError(f"{name} must be a finite positive number, got {value!r}")
     return out
+
+
+def _mcp_date_transform(
+    yc: np.ndarray,
+    f_val: np.ndarray,
+    mcp_specs: Sequence[tuple[int, int, float, str, float | None, float | None, str]],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, tuple[str, ...]]:
+    """Evaluate Fischer-Burmeister MCP residuals, Clarke row multipliers and active-set tags."""
+    f_mcp = f_val.copy()
+    m = len(mcp_specs)
+    c_v = np.zeros(m, dtype=float)
+    c_f = np.ones(m, dtype=float)
+    tags: list[str] = []
+    inv_sqrt2_comp = 1.0 - 1.0 / math.sqrt(2.0)
+    for k, (v_idx, e_idx, s_sign, kind, lb_val, ub_val, _) in enumerate(mcp_specs):
+        val = float(yc[v_idx])
+        fe = float(f_val[e_idx])
+        if kind == "PINNED":
+            assert lb_val is not None
+            f_mcp[e_idx] = val - lb_val
+            c_v[k] = 1.0
+            c_f[k] = 0.0
+            tags.append("PINNED")
+        elif kind == "LOWER":
+            assert lb_val is not None
+            a = val - lb_val
+            b = s_sign * fe
+            hyp = math.hypot(a, b)
+            f_mcp[e_idx] = a + b - hyp
+            da = 1.0 - a / hyp if hyp >= 1e-15 else inv_sqrt2_comp
+            db = 1.0 - b / hyp if hyp >= 1e-15 else inv_sqrt2_comp
+            c_v[k] = da
+            c_f[k] = db * s_sign
+            tags.append("ACTIVE_LOWER" if a <= b else "FREE")
+        elif kind == "UPPER":
+            assert ub_val is not None
+            a = ub_val - val
+            b = -s_sign * fe
+            hyp = math.hypot(a, b)
+            f_mcp[e_idx] = a + b - hyp
+            da = 1.0 - a / hyp if hyp >= 1e-15 else inv_sqrt2_comp
+            db = 1.0 - b / hyp if hyp >= 1e-15 else inv_sqrt2_comp
+            c_v[k] = -da
+            c_f[k] = -db * s_sign
+            tags.append("ACTIVE_UPPER" if a <= b else "FREE")
+        elif kind == "TWO_SIDED":
+            assert lb_val is not None and ub_val is not None
+            a_u = ub_val - val
+            b_u = -s_sign * fe
+            hyp_u = math.hypot(a_u, b_u)
+            dau = 1.0 - a_u / hyp_u if hyp_u >= 1e-15 else inv_sqrt2_comp
+            dbu = 1.0 - b_u / hyp_u if hyp_u >= 1e-15 else inv_sqrt2_comp
+            phi_u = a_u + b_u - hyp_u
+            a_l = val - lb_val
+            b_l = -phi_u
+            hyp_l = math.hypot(a_l, b_l)
+            dal = 1.0 - a_l / hyp_l if hyp_l >= 1e-15 else inv_sqrt2_comp
+            dbl = 1.0 - b_l / hyp_l if hyp_l >= 1e-15 else inv_sqrt2_comp
+            f_mcp[e_idx] = a_l + b_l - hyp_l
+            c_f[k] = dbl * dbu * s_sign
+            c_v[k] = dal + dbl * dau
+            if a_l <= b_l:
+                tags.append("ACTIVE_LOWER")
+            elif a_u <= b_u:
+                tags.append("ACTIVE_UPPER")
+            else:
+                tags.append("FREE")
+        else:
+            c_v[k] = 0.0
+            c_f[k] = 1.0
+            tags.append("FREE")
+    return f_mcp, c_v, c_f, tuple(tags)
 
 
 # ---------------------------------------------------------------------------
@@ -280,13 +362,19 @@ class StackedProblem:
                  jvp_fn: Callable | None = None, blocks_fn: Callable | None = None,
                  jvp_method: str = "central", stacked_jvp_factory: Callable | None = None,
                  variable_names: Sequence[str] | None = None, fd_step: float = 1e-7,
-                 steady_exogenous: Any = None):
+                 steady_exogenous: Any = None, terminal_policy: Callable | None = None,
+                 terminal_jacobian: Callable | None = None,
+                 mcp_specs: Sequence[tuple[int, int, float, str, float | None, float | None, str]] | None = None):
         if not callable(equations_fn):
             raise TypeError("equations_fn must be callable")
         for name, value in (("jvp_fn", jvp_fn), ("blocks_fn", blocks_fn),
-                            ("stacked_jvp_factory", stacked_jvp_factory)):
+                            ("stacked_jvp_factory", stacked_jvp_factory),
+                            ("terminal_policy", terminal_policy),
+                            ("terminal_jacobian", terminal_jacobian)):
             if value is not None and not callable(value):
                 raise TypeError(f"{name} must be callable or None")
+        if terminal_jacobian is not None and terminal_policy is None:
+            raise ValueError("terminal_jacobian requires terminal_policy")
         y0 = np.asarray(y_init, dtype=float).ravel()
         yT = np.asarray(y_end, dtype=float).ravel()
         if y0.size == 0:
@@ -338,6 +426,12 @@ class StackedProblem:
         self._blocks_fn = blocks_fn
         self._factory = stacked_jvp_factory
         self._fd_rule = jvp_method
+        self._terminal_policy = terminal_policy
+        self._terminal_jacobian = terminal_jacobian
+        self._mcp_specs = tuple(mcp_specs or ())
+        self._mcp_v_indices = np.array([int(s[0]) for s in self._mcp_specs], dtype=int)
+        self._mcp_e_indices = np.array([int(s[1]) for s in self._mcp_specs], dtype=int)
+        self._symbolic = getattr(getattr(blocks_fn, "__self__", None), "_symbolic_jacobian", None)
         self._y_init = _readonly(y0)
         self._y_end = _readonly(yT)
         self._exo = _readonly(exo)
@@ -346,8 +440,15 @@ class StackedProblem:
         self._n_vars = n
         self._T = T
         self._cache_x: np.ndarray | None = None
+        self._cache_f_raw: np.ndarray | None = None
         self._cache_f: np.ndarray | None = None
+        self._cache_mcp_cv: np.ndarray | None = None
+        self._cache_mcp_cf: np.ndarray | None = None
+        self._cache_active_set: tuple[tuple[str, ...], ...] = ()
         self._steady_blocks: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None
+        self.operator_builds: int = 0
+        self.jvp_evaluations: int = 0
+        self.active_set_invalidations: int = 0
 
     # -- geometry ---------------------------------------------------------
     @property
@@ -391,6 +492,16 @@ class StackedProblem:
         return self._names
 
     @property
+    def has_mcp(self) -> bool:
+        """True when complementarity row specifications are attached."""
+        return bool(self._mcp_specs)
+
+    @property
+    def has_terminal_policy(self) -> bool:
+        """True when a state-dependent terminal policy replaces the fixed terminal state."""
+        return self._terminal_policy is not None
+
+    @property
     def jvp_method(self) -> str:
         """Effective Jacobian-vector rule: 'stacked_factory', 'analytic', 'central' or 'complex'."""
         if self._factory is not None:
@@ -411,10 +522,48 @@ class StackedProblem:
         w = (np.arange(1, self._T + 1, dtype=float) / (self._T + 1.0))[:, None]
         return (1.0 - w) * self._y_init[None, :] + w * self._y_end[None, :]
 
+    def terminal_value(self, last: Any, dtype=float) -> np.ndarray:
+        """Evaluate the terminal lead state at the last interior state ``last``."""
+        if self._terminal_policy is None:
+            return self._y_end.astype(dtype)
+        value = np.asarray(self._terminal_policy(np.asarray(last).copy()), dtype=dtype).ravel()
+        if value.size != self._n_vars or not np.isfinite(value).all():
+            raise ValueError("terminal_policy must return one finite value per variable")
+        return value
+
+    def terminal_derivative(self, last: Any) -> np.ndarray:
+        """Evaluate ``d terminal_policy(last) / d last`` at ``last``."""
+        last_arr = np.asarray(last, dtype=float).ravel()
+        if self._terminal_policy is None:
+            return np.zeros((self._n_vars, self._n_vars), dtype=float)
+        if self._terminal_jacobian is not None:
+            derivative = np.asarray(self._terminal_jacobian(last_arr.copy()), dtype=float)
+        else:
+            n = self._n_vars
+            derivative = np.empty((n, n), dtype=float)
+            for j in range(n):
+                step = 1e-6 * max(1.0, abs(last_arr[j]))
+                plus, minus = last_arr.copy(), last_arr.copy()
+                plus[j] += step
+                minus[j] -= step
+                derivative[:, j] = (self.terminal_value(plus) - self.terminal_value(minus)) / (2.0 * step)
+        if derivative.shape != (self._n_vars, self._n_vars) or not np.isfinite(derivative).all():
+            raise ValueError("terminal_jacobian must be a finite square variable matrix")
+        return derivative
+
+    def invalidate_derivative_cache(self) -> None:
+        """Invalidate cached derivative/JVP assumptions after an active-set change."""
+        self.active_set_invalidations += 1
+        if self._symbolic is not None and hasattr(self._symbolic, "invalidate_cache"):
+            self._symbolic.invalidate_cache()
+
     # -- residual ---------------------------------------------------------
     def _date_args(self, Y: np.ndarray, t: int, y0: np.ndarray, yT: np.ndarray):
         yl = y0 if t == 0 else Y[t - 1]
-        yp = yT if t == self._T - 1 else Y[t + 1]
+        if t == self._T - 1:
+            yp = self.terminal_value(Y[t], dtype=Y.dtype) if self._terminal_policy is not None else yT
+        else:
+            yp = Y[t + 1]
         return yp, Y[t], yl, self._exo[t]
 
     def _evaluate(self, yp, yc, yl, eps, t: int, dtype=float) -> np.ndarray:
@@ -431,14 +580,54 @@ class StackedProblem:
                 f"equations_fn returned {out.size} equations at t={t + 1}, expected {self._n_vars}")
         return out
 
-    def _stack(self, Y: np.ndarray, dtype=float) -> np.ndarray:
+    def _stack(self, Y: np.ndarray, dtype=float, *, vp_last: np.ndarray | None = None,
+               yp_last_base: np.ndarray | None = None) -> np.ndarray:
         y0 = self._y_init.astype(dtype)
         yT = self._y_end.astype(dtype)
         R = np.empty((self._T, self._n_vars), dtype=dtype)
         for t in range(self._T):
-            yp, yc, yl, eps = self._date_args(Y, t, y0, yT)
+            if t == self._T - 1 and vp_last is not None and yp_last_base is not None:
+                yl = y0 if t == 0 else Y[t - 1]
+                yp = yp_last_base.astype(dtype) + vp_last
+                yc = Y[t]
+                eps = self._exo[t]
+            else:
+                yp, yc, yl, eps = self._date_args(Y, t, y0, yT)
             R[t] = self._evaluate(yp, yc, yl, eps, t, dtype)
         return R.ravel()
+
+    def _ensure_evaluated(self, Y: np.ndarray) -> None:
+        flat = Y.ravel()
+        if self._cache_x is not None and self._cache_f is not None and np.array_equal(flat, self._cache_x):
+            return
+        R_raw = self._stack(Y, dtype=float).reshape(self._T, self._n_vars)
+        if not np.isfinite(R_raw).all():
+            raise StackedNewtonError("Nonfinite stacked residual")
+        if self._mcp_specs:
+            m = len(self._mcp_specs)
+            R_mcp = np.empty_like(R_raw)
+            cv_mat = np.empty((self._T, m), dtype=float)
+            cf_mat = np.empty((self._T, m), dtype=float)
+            active_rows: list[tuple[str, ...]] = []
+            for t in range(self._T):
+                R_mcp[t], cv_mat[t], cf_mat[t], tags_t = _mcp_date_transform(
+                    Y[t], R_raw[t], self._mcp_specs
+                )
+                active_rows.append(tags_t)
+            F = R_mcp.ravel()
+            if not np.isfinite(F).all():
+                raise StackedNewtonError("Nonfinite stacked residual")
+            self._cache_mcp_cv = cv_mat
+            self._cache_mcp_cf = cf_mat
+            self._cache_active_set = tuple(active_rows)
+        else:
+            F = R_raw.ravel()
+            self._cache_mcp_cv = None
+            self._cache_mcp_cf = None
+            self._cache_active_set = ()
+        self._cache_x = flat.copy()
+        self._cache_f_raw = R_raw.copy()
+        self._cache_f = F.copy()
 
     def residual(self, Y_flat: Any) -> np.ndarray:
         """Stacked residual F(Y), shape ``(T * n_vars,)``.
@@ -447,47 +636,81 @@ class StackedProblem:
         line search can reject the trial point.
         """
         Y = self.reshape(np.asarray(Y_flat, dtype=float))
-        flat = Y.ravel()
-        if self._cache_x is not None and self._cache_f is not None and np.array_equal(flat, self._cache_x):
-            return self._cache_f.copy()
-        F = self._stack(Y)
-        if not np.isfinite(F).all():
-            raise StackedNewtonError("Nonfinite stacked residual")
-        self._cache_x = flat.copy()
-        self._cache_f = F.copy()
-        return F
+        self._ensure_evaluated(Y)
+        assert self._cache_f is not None
+        return self._cache_f.copy()
 
     def residual_matrix(self, Y_flat: Any) -> np.ndarray:
         """Stacked residual reshaped to ``(T, n_vars)``."""
         return self.residual(Y_flat).reshape(self._T, self._n_vars)
+
+    def active_set(self, Y_flat: Any) -> tuple[tuple[str, ...], ...]:
+        """Discrete MCP active-set signature across all dates at ``Y_flat``."""
+        if not self._mcp_specs:
+            return ()
+        Y = self.reshape(np.asarray(Y_flat, dtype=float))
+        self._ensure_evaluated(Y)
+        return self._cache_active_set
 
     # -- Jacobian-vector product ------------------------------------------
     def jvp(self, Y_flat: Any) -> Callable[[np.ndarray], np.ndarray]:
         """Return ``matvec(v) = J(Y) v`` for the stacked Jacobian at ``Y``."""
         Y = np.array(self.reshape(np.asarray(Y_flat, dtype=float)), copy=True)
         flat = Y.ravel()
+        self.operator_builds += 1
+        cv_mat: np.ndarray | None = None
+        cf_mat: np.ndarray | None = None
+        if self._mcp_specs:
+            self._ensure_evaluated(Y)
+            assert self._cache_mcp_cv is not None and self._cache_mcp_cf is not None
+            cv_mat = self._cache_mcp_cv.copy()
+            cf_mat = self._cache_mcp_cf.copy()
+        v_indices = self._mcp_v_indices
+        e_indices = self._mcp_e_indices
+
         if self._factory is not None:
             inner = self._factory(flat.copy())
             if not callable(inner):
                 raise TypeError("stacked_jvp_factory must return a callable")
 
             def matvec_factory(v):
-                v = np.asarray(v, dtype=float).ravel()
-                out = np.asarray(inner(v), dtype=float).ravel()
+                self.jvp_evaluations += 1
+                v_arr = np.asarray(v, dtype=float).ravel()
+                out = np.asarray(inner(v_arr), dtype=float).ravel()
                 if out.size != self.n:
                     raise ValueError("stacked_jvp_factory product has the wrong size")
+                if cv_mat is not None and cf_mat is not None:
+                    V = self.reshape(v_arr)
+                    out_2d = out.reshape(self._T, self._n_vars).copy()
+                    out_2d[:, e_indices] = cf_mat * out_2d[:, e_indices] + cv_mat * V[:, v_indices]
+                    return out_2d.ravel()
                 return out
             return matvec_factory
         if self._jvp_fn is not None:
-            return self._analytic_matvec(Y)
-        if self._fd_rule == "complex":
-            return self._complex_matvec(Y)
-        return self._central_matvec(Y)
+            raw_mv = self._analytic_matvec(Y)
+        elif self._fd_rule == "complex":
+            raw_mv = self._complex_matvec(Y)
+        else:
+            raw_mv = self._central_matvec(Y)
+
+        def counted_matvec(v):
+            self.jvp_evaluations += 1
+            v_arr = np.asarray(v, dtype=float)
+            out = raw_mv(v_arr)
+            if cv_mat is not None and cf_mat is not None:
+                V = self.reshape(v_arr)
+                out_2d = out.reshape(self._T, self._n_vars).copy()
+                out_2d[:, e_indices] = cf_mat * out_2d[:, e_indices] + cv_mat * V[:, v_indices]
+                return out_2d.ravel()
+            return out
+
+        return counted_matvec
 
     def _analytic_matvec(self, Y: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
         T, n = self._T, self._n_vars
         zero = np.zeros(n)
         y0, yT = self._y_init, self._y_end
+        D_term = self.terminal_derivative(Y[-1]) if self._terminal_policy is not None else None
 
         def matvec(v):
             V = self.reshape(np.asarray(v, dtype=float))
@@ -495,7 +718,10 @@ class StackedProblem:
             for t in range(T):
                 yp, yc, yl, eps = self._date_args(Y, t, y0, yT)
                 vl = zero if t == 0 else V[t - 1]
-                vp = zero if t == T - 1 else V[t + 1]
+                if t == T - 1:
+                    vp = (D_term @ V[t]) if D_term is not None else zero
+                else:
+                    vp = V[t + 1]
                 row = np.asarray(self._jvp_fn(yp, yc, yl, eps, vp, V[t], vl), dtype=float).ravel()
                 if row.size != n:
                     raise ValueError(f"jvp_fn returned {row.size} entries at t={t + 1}, expected {n}")
@@ -505,6 +731,8 @@ class StackedProblem:
 
     def _central_matvec(self, Y: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
         scale = max(1.0, _norm_inf(Y))
+        D_term = self.terminal_derivative(Y[-1]) if self._terminal_policy is not None else None
+        yp_last_base = self.terminal_value(Y[-1]) if self._terminal_policy is not None else None
 
         def matvec(v):
             V = self.reshape(np.asarray(v, dtype=float))
@@ -512,19 +740,31 @@ class StackedProblem:
             if vmax == 0.0:
                 return np.zeros(self.n)
             h = self._fd_step * scale / vmax
-            plus = self._stack(Y + h * V)
-            minus = self._stack(Y - h * V)
+            if D_term is not None and yp_last_base is not None:
+                vp_last = D_term @ V[-1]
+                plus = self._stack(Y + h * V, vp_last=h * vp_last, yp_last_base=yp_last_base)
+                minus = self._stack(Y - h * V, vp_last=-h * vp_last, yp_last_base=yp_last_base)
+            else:
+                plus = self._stack(Y + h * V)
+                minus = self._stack(Y - h * V)
             return (plus - minus) / (2.0 * h)
         return matvec
 
     def _complex_matvec(self, Y: np.ndarray) -> Callable[[np.ndarray], np.ndarray]:
+        D_term = self.terminal_derivative(Y[-1]) if self._terminal_policy is not None else None
+        yp_last_base = self.terminal_value(Y[-1]) if self._terminal_policy is not None else None
+
         def matvec(v):
             V = self.reshape(np.asarray(v, dtype=float))
             if not np.any(V):
                 return np.zeros(self.n)
             Z = Y.astype(complex) + 1j * _COMPLEX_STEP * V
             try:
-                out = self._stack(Z, dtype=complex)
+                if D_term is not None and yp_last_base is not None:
+                    vp_last = 1j * _COMPLEX_STEP * (D_term @ V[-1])
+                    out = self._stack(Z, dtype=complex, vp_last=vp_last, yp_last_base=yp_last_base)
+                else:
+                    out = self._stack(Z, dtype=complex)
             except TypeError as exc:
                 raise self._complex_type_error(exc) from exc
             return out.imag / _COMPLEX_STEP
@@ -612,13 +852,27 @@ class StackedProblem:
         """Blocks ``(A_t, B_t, C_t)`` at date ``t`` (0-based) of the path ``Y``.
 
         All three derivatives are returned; the stacked Jacobian ignores ``A_{T-1}``
-        and ``C_0`` because the boundary states are fixed.
+        and ``C_0`` because the boundary states are fixed. When ``terminal_policy``
+        or ``mcp_specs`` is present, ``date_blocks`` includes the terminal chain
+        rule at ``t = T - 1`` and the semismooth Clarke row derivatives.
         """
         Y = self.reshape(np.asarray(Y_flat, dtype=float))
-        if not 0 <= int(t) < self._T:
+        t_idx = int(t)
+        if not 0 <= t_idx < self._T:
             raise ValueError(f"date index {t} outside 0..{self._T - 1}")
-        yp, yc, yl, eps = self._date_args(Y, int(t), self._y_init, self._y_end)
-        return self.blocks_at(yp, yc, yl, eps)
+        yp, yc, yl, eps = self._date_args(Y, t_idx, self._y_init, self._y_end)
+        A_t, B_t, C_t = (np.array(b, dtype=float, copy=True) for b in self.blocks_at(yp, yc, yl, eps))
+        if t_idx == self._T - 1 and self._terminal_policy is not None:
+            B_t = B_t + A_t @ self.terminal_derivative(yc)
+        if self._mcp_specs:
+            f_val = self._evaluate(yp, yc, yl, eps, t_idx, float)
+            _, cv, cf, _ = _mcp_date_transform(yc, f_val, self._mcp_specs)
+            for k, (v_idx, e_idx, _, _, _, _, _) in enumerate(self._mcp_specs):
+                A_t[e_idx, :] *= cf[k]
+                B_t[e_idx, :] *= cf[k]
+                B_t[e_idx, v_idx] += cv[k]
+                C_t[e_idx, :] *= cf[k]
+        return A_t, B_t, C_t
 
     def steady_blocks(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Constant blocks at ``(y_end, y_end, y_end, steady_exogenous)`` (cached)."""
@@ -628,6 +882,54 @@ class StackedProblem:
                 raise ValueError("steady-state blocks are not finite; check y_end and steady_exogenous")
             self._steady_blocks = (_readonly(A), _readonly(B), _readonly(C))
         return self._steady_blocks
+
+    def preconditioner_blocks(
+        self,
+        Y_flat: Any = None,
+        *,
+        active_set: tuple[tuple[str, ...], ...] | None = None,
+        terminal_derivative: np.ndarray | None = None,
+        use_active_rows: bool = True,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Blocks for steady/active-row preconditioning at ``Y_flat``."""
+        A_ss, B_ss, C_ss = self.steady_blocks()
+        if not self._mcp_specs and self._terminal_policy is None:
+            return A_ss, B_ss, C_ss
+        T, n = self._T, self._n_vars
+        A = np.broadcast_to(A_ss, (T, n, n)).copy()
+        B = np.broadcast_to(B_ss, (T, n, n)).copy()
+        C = np.broadcast_to(C_ss, (T, n, n)).copy()
+        if self._terminal_policy is not None:
+            if terminal_derivative is None:
+                y_last = self.reshape(Y_flat)[-1] if Y_flat is not None else self._y_end
+                D_term = self.terminal_derivative(y_last)
+            else:
+                D_term = np.asarray(terminal_derivative, dtype=float)
+            B[T - 1] = B[T - 1] + A[T - 1] @ D_term
+        if self._mcp_specs:
+            if active_set is None:
+                Y_ref = Y_flat if Y_flat is not None else self.linear_initial_path()
+                active_set = self.active_set(Y_ref)
+            for t in range(T):
+                tags_t = active_set[t] if t < len(active_set) else ()
+                for k, (v_idx, e_idx, s_sign, kind, _, _, _) in enumerate(self._mcp_specs):
+                    tag = tags_t[k] if (use_active_rows and k < len(tags_t)) else ("PINNED" if kind == "PINNED" else "FREE")
+                    if tag in ("PINNED", "ACTIVE_LOWER"):
+                        A[t, e_idx, :] = 0.0
+                        C[t, e_idx, :] = 0.0
+                        B[t, e_idx, :] = 0.0
+                        B[t, e_idx, v_idx] = 1.0
+                    elif tag == "ACTIVE_UPPER":
+                        A[t, e_idx, :] = 0.0
+                        C[t, e_idx, :] = 0.0
+                        B[t, e_idx, :] = 0.0
+                        B[t, e_idx, v_idx] = -1.0
+                    else:
+                        row_sign = -s_sign if kind == "UPPER" else s_sign
+                        A[t, e_idx, :] *= row_sign
+                        B[t, e_idx, :] *= row_sign
+                        C[t, e_idx, :] *= row_sign
+        return A, B, C
 
     def stacked_jacobian(self, Y_flat: Any) -> sp.csc_matrix:
         """Sparse block-tridiagonal Jacobian assembled from :meth:`date_blocks`.
@@ -715,8 +1017,10 @@ def _assemble_sparse(A: np.ndarray, B: np.ndarray, C: np.ndarray, T: int, n: int
             rows.append((t + 1) * n + ii)
             cols.append(t * n + jj)
             vals.append(C[t + 1].ravel())
-    return sp.csc_matrix((np.concatenate(vals), (np.concatenate(rows), np.concatenate(cols))),
-                         shape=(T * n, T * n))
+    mat = sp.csc_matrix((np.concatenate(vals), (np.concatenate(rows), np.concatenate(cols))),
+                        shape=(T * n, T * n))
+    mat.eliminate_zeros()
+    return mat
 
 
 class _ThomasFactor:
@@ -865,11 +1169,23 @@ class BlockTridiagonalPreconditioner:
                 self._factors.append((count * H, rem, tail))
         else:
             self._main_batched = None
+            factor_cache: dict[tuple[int, bytes, bytes, bytes], _ThomasFactor] = {}
             start = 0
             while start < T:
                 length = min(H, T - start)
-                block = _ThomasFactor(self._A[start:start + length], self._B[start:start + length],
-                                      self._C[start:start + length])
+                A_sub = self._A[start:start + length]
+                B_sub = self._B[start:start + length]
+                C_sub = self._C[start:start + length]
+                key = (
+                    length,
+                    np.ascontiguousarray(A_sub).tobytes(),
+                    np.ascontiguousarray(B_sub).tobytes(),
+                    np.ascontiguousarray(C_sub).tobytes(),
+                )
+                block = factor_cache.get(key)
+                if block is None:
+                    block = _ThomasFactor(A_sub, B_sub, C_sub)
+                    factor_cache[key] = block
                 self._factors.append((start, length, block))
                 start += length
         seen = set()
@@ -994,7 +1310,9 @@ class BlockTridiagonalPreconditioner:
 
     def as_linear_operator(self) -> spla.LinearOperator:
         """SciPy ``LinearOperator`` wrapping :meth:`apply`."""
-        return spla.LinearOperator(self.shape, matvec=self.apply, dtype=float)
+        op = spla.LinearOperator(self.shape, matvec=self.apply, dtype=float)
+        op.memory_bytes = self.memory_bytes  # type: ignore[attr-defined]
+        return op
 
 
 class StructuredBlockTridiagonalPreconditioner:
@@ -1116,16 +1434,28 @@ class StructuredBlockTridiagonalPreconditioner:
 
     def as_linear_operator(self) -> spla.LinearOperator:
         """SciPy ``LinearOperator`` wrapping :meth:`apply`."""
-        return spla.LinearOperator(self.shape, matvec=self.apply, dtype=float)
+        op = spla.LinearOperator(self.shape, matvec=self.apply, dtype=float)
+        op.memory_bytes = int(getattr(self, "memory_bytes", 0))  # type: ignore[attr-defined]
+        return op
 
 
 def _as_operator(obj: Any, shape: tuple[int, int] | None = None) -> spla.LinearOperator | None:
     """Coerce ``None``, arrays, sparse matrices, LinearOperators or preconditioner objects."""
     if obj is None:
         return None
+    mem = getattr(obj, "memory_bytes", None)
+    if mem is None:
+        if sp.issparse(obj):
+            mem = int(getattr(obj, "data", np.empty(0)).nbytes +
+                      getattr(obj, "indices", np.empty(0)).nbytes +
+                      getattr(obj, "indptr", np.empty(0)).nbytes)
+        elif isinstance(obj, np.ndarray):
+            mem = int(obj.nbytes)
     if hasattr(obj, "as_linear_operator"):
         obj = obj.as_linear_operator()
     op = spla.aslinearoperator(obj)
+    if mem is not None and not hasattr(op, "memory_bytes"):
+        op.memory_bytes = int(mem)  # type: ignore[attr-defined]
     if shape is not None and tuple(op.shape) != tuple(shape):
         raise ValueError(f"operator has shape {op.shape}, expected {shape}")
     return op
@@ -1464,13 +1794,20 @@ def _build_block_preconditioner(A: Any, B: Any, C: Any, T: int, method: str, tim
             "preconditioner=None") from exc
 
 
-def _resolve_preconditioner(problem: StackedProblem, preconditioner: Any, time_block: int | None
-                            ) -> tuple[str, Callable[[np.ndarray], spla.LinearOperator | None]]:
+def _resolve_preconditioner(
+    problem: StackedProblem,
+    preconditioner: Any,
+    time_block: int | None,
+    initial_x: np.ndarray | None = None,
+    prec_state: dict[str, int] | None = None,
+) -> tuple[str, Callable[[np.ndarray], spla.LinearOperator | None]]:
     """Return ``(name, factory)`` with ``factory(x) -> LinearOperator | None``.
 
     Bad option values raise ``ValueError``/``TypeError``; a steady-state matrix that
     cannot be factored raises :class:`StackedNewtonError` (the caller attaches the state).
     """
+    if prec_state is None:
+        prec_state = {"builds": 0, "reuses": 0, "invalidations": 0}
     T = problem.n_periods
     if preconditioner is None or (isinstance(preconditioner, str) and preconditioner == "none"):
         return "none", lambda x: None
@@ -1481,36 +1818,115 @@ def _resolve_preconditioner(problem: StackedProblem, preconditioner: Any, time_b
                              "or a factory callable")
         if preconditioner == "current_block_tridiagonal":
             cached_blocks: tuple[np.ndarray, ...] | None = None
+            cached_active: tuple[tuple[str, ...], ...] | None = None
             cached_operator: spla.LinearOperator | None = None
 
             def factory_current(x):
-                nonlocal cached_blocks, cached_operator
+                nonlocal cached_blocks, cached_active, cached_operator
+                curr_active = problem.active_set(x) if problem.has_mcp else ()
                 A, B, C = problem.current_blocks(x)
                 blocks = (A, B, C)
                 # Reuse only identical numerical systems, never model identity or
                 # approximate equality. Copies prevent mutable block callbacks
                 # from changing the cache key underneath a factorization.
-                if cached_blocks is not None and all(
-                    a.dtype == b.dtype and a.shape == b.shape and np.array_equal(a, b)
-                    for a, b in zip(blocks, cached_blocks)
+                if (
+                    cached_blocks is not None
+                    and curr_active == cached_active
+                    and all(
+                        a.dtype == b.dtype and a.shape == b.shape and np.array_equal(a, b)
+                        for a, b in zip(blocks, cached_blocks)
+                    )
                 ):
+                    prec_state["reuses"] += 1
                     return cached_operator
+                if cached_operator is not None:
+                    prec_state["invalidations"] += 1
                 pre, _ = _build_block_preconditioner(A, B, C, T, "thomas", time_block)
+                prec_state["builds"] += 1
                 cached_blocks = tuple(a.copy() for a in blocks)
+                cached_active = curr_active
                 cached_operator = pre.as_linear_operator()
                 return cached_operator
             return "current_block_tridiagonal", factory_current
-        A, B, C = problem.steady_blocks()
-        if preconditioner == "steady_block_tridiagonal":
-            pre, fell_back = _build_block_preconditioner(A, B, C, T, "thomas", time_block)
-        elif preconditioner == "steady_splu":
-            pre, fell_back = _build_block_preconditioner(A, B, C, T, "splu", time_block)
-        else:  # time_block_jacobi
-            pre, fell_back = _build_block_preconditioner(A, B, C, T, "thomas",
-                                                         1 if time_block is None else time_block)
-        name = pre.name[:-1] + ", thomas_pivot_fallback]" if fell_back else pre.name
-        op = pre.as_linear_operator()
-        return name, lambda x: op
+        if not problem.has_mcp and not problem.has_terminal_policy:
+            A, B, C = problem.steady_blocks()
+            if preconditioner == "steady_block_tridiagonal":
+                pre, fell_back = _build_block_preconditioner(A, B, C, T, "thomas", time_block)
+            elif preconditioner == "steady_splu":
+                pre, fell_back = _build_block_preconditioner(A, B, C, T, "splu", time_block)
+            else:  # time_block_jacobi
+                pre, fell_back = _build_block_preconditioner(A, B, C, T, "thomas",
+                                                             1 if time_block is None else time_block)
+            prec_state["builds"] += 1
+            name = pre.name[:-1] + ", thomas_pivot_fallback]" if fell_back else pre.name
+            op = pre.as_linear_operator()
+            first_steady = [True]
+
+            def factory_steady(x):
+                if first_steady[0]:
+                    first_steady[0] = False
+                else:
+                    prec_state["reuses"] += 1
+                return op
+            return name, factory_steady
+
+        method = "splu" if preconditioner == "steady_splu" else "thomas"
+        eff_tb = (1 if time_block is None else time_block) if preconditioner == "time_block_jacobi" else time_block
+
+        def _build_for_state(x_vec: np.ndarray):
+            act = problem.active_set(x_vec) if problem.has_mcp else ()
+            if problem.has_terminal_policy:
+                D_term = problem.terminal_derivative(problem.reshape(x_vec)[-1])
+                term_bytes = np.ascontiguousarray(D_term).tobytes()
+            else:
+                D_term = None
+                term_bytes = b""
+            A_m, B_m, C_m = problem.preconditioner_blocks(
+                x_vec, active_set=act, terminal_derivative=D_term, use_active_rows=True
+            )
+            try:
+                pre_obj, fb = _build_block_preconditioner(A_m, B_m, C_m, T, method, eff_tb)
+            except StackedNewtonError:
+                if not problem.has_mcp:
+                    raise
+                A_f, B_f, C_f = problem.preconditioner_blocks(
+                    x_vec, active_set=act, terminal_derivative=D_term, use_active_rows=False
+                )
+                pre_obj, fb = _build_block_preconditioner(A_f, B_f, C_f, T, method, eff_tb)
+            return (act, term_bytes), pre_obj, fb
+
+        x0 = initial_x if initial_x is not None else problem.linear_initial_path().ravel()
+        cached_key, pre0, fell_back0 = _build_for_state(x0)
+        prec_state["builds"] += 1
+        name = pre0.name[:-1] + ", thomas_pivot_fallback]" if fell_back0 else pre0.name
+        cached_op: spla.LinearOperator | None = pre0.as_linear_operator()
+        first_call = [initial_x is not None]
+
+        def factory_active(x):
+            nonlocal cached_key, cached_op
+            curr_act = problem.active_set(x) if problem.has_mcp else ()
+            if problem.has_terminal_policy:
+                D_term = problem.terminal_derivative(problem.reshape(x)[-1])
+                curr_term_bytes = np.ascontiguousarray(D_term).tobytes()
+            else:
+                D_term = None
+                curr_term_bytes = b""
+            curr_key = (curr_act, curr_term_bytes)
+            if curr_key == cached_key and cached_op is not None:
+                if first_call[0]:
+                    first_call[0] = False
+                else:
+                    prec_state["reuses"] += 1
+                return cached_op
+            first_call[0] = False
+            prec_state["invalidations"] += 1
+            _, pre_now, _ = _build_for_state(x)
+            prec_state["builds"] += 1
+            cached_key = curr_key
+            cached_op = pre_now.as_linear_operator()
+            return cached_op
+
+        return name, factory_active
     if hasattr(preconditioner, "as_linear_operator") or isinstance(preconditioner, spla.LinearOperator) \
             or sp.issparse(preconditioner) or isinstance(preconditioner, np.ndarray):
         op = _as_operator(preconditioner, (problem.n, problem.n))
@@ -1710,13 +2126,35 @@ def solve_stacked_newton_krylov(
     initial_res = res
     history: list[dict[str, Any]] = []
     prec_name = preconditioner if isinstance(preconditioner, str) else "unbuilt"
+    prec_bytes = int(getattr(preconditioner, "memory_bytes", 0) or 0)
+    krylov_basis_bytes = int((inner_m + (outer_k + 2 if krylov_method == "lgmres" else 1)) * N * 8)
+    prec_state: dict[str, int] = {"builds": 0, "reuses": 0, "invalidations": 0}
+    prec_factory_ref: list[Any] = [None]
+    active_set_changes = 0
+    prev_active_set: tuple[tuple[str, ...], ...] | None = None
 
     def build_result(x_now: np.ndarray, f_now: np.ndarray, converged: bool, steps: int,
                      converged_by: str) -> StackedNewtonResult:
         Y = _readonly(x_now.reshape(T, n))
         path = pd.DataFrame(Y, index=pd.RangeIndex(1, T + 1, name="t"),
                             columns=list(problem.variable_names), copy=False)
-        meta = {
+        pf_obj = prec_factory_ref[0]
+        prec_builds = max(
+            int(prec_state.get("builds", 0)),
+            int(getattr(pf_obj, "builds", 0) or 0),
+            int(getattr(preconditioner, "builds", 0) or 0),
+        )
+        prec_reuses = max(
+            int(prec_state.get("reuses", 0)),
+            int(getattr(pf_obj, "reuses", 0) or 0),
+            int(getattr(preconditioner, "reuses", 0) or 0),
+        )
+        prec_invals = max(
+            int(prec_state.get("invalidations", 0)),
+            int(getattr(pf_obj, "invalidations", 0) or 0),
+            int(getattr(preconditioner, "invalidations", 0) or 0),
+        )
+        meta: dict[str, Any] = {
             "tol": tol, "tolerance_scale": jac_scale, "step_tol": step_tol,
             "forcing": (eta_min, eta_max), "krylov_method": krylov_method, "inner_m": inner_m,
             "outer_k": outer_k, "krylov_maxiter": krylov_maxiter, "side": side,
@@ -1728,8 +2166,24 @@ def solve_stacked_newton_krylov(
             "exogenous_path": _readonly(problem.exogenous_path),
             "seconds": time.perf_counter() - tic,
             "linear_solves": sum(1 for h in history if "krylov_status" in h),
+            "operator_builds": int(problem.operator_builds),
+            "jvp_evaluations": int(problem.jvp_evaluations),
+            "preconditioner_storage_bytes": int(prec_bytes),
+            "krylov_basis_bytes": krylov_basis_bytes,
+            "process_peak_rss_bytes": _peak_rss_bytes(),
             "converged_by": converged_by,
+            "has_mcp": bool(problem.has_mcp),
+            "has_terminal_policy": bool(problem.has_terminal_policy),
+            "dense_jvp_blocks": 0,
+            "active_set_changes": int(active_set_changes),
+            "active_set_invalidations": max(int(problem.active_set_invalidations), prec_invals),
+            "preconditioner_builds": prec_builds,
+            "preconditioner_reuses": prec_reuses,
+            "preconditioner_invalidations": prec_invals,
         }
+        if problem.has_terminal_policy:
+            meta["terminal_policy_input"] = _readonly(Y[-1])
+            meta["terminal_policy_output"] = _readonly(problem.terminal_value(Y[-1]))
         return StackedNewtonResult(
             path=path, converged=bool(converged), iterations=int(steps),
             residual_norm=_norm_inf(f_now), initial_residual_norm=float(initial_res),
@@ -1738,7 +2192,10 @@ def solve_stacked_newton_krylov(
             variable_names=tuple(problem.variable_names), metadata=meta)
 
     try:
-        prec_name, prec_factory = _resolve_preconditioner(problem, preconditioner, time_block)
+        prec_name, prec_factory = _resolve_preconditioner(
+            problem, preconditioner, time_block, initial_x=x, prec_state=prec_state
+        )
+        prec_factory_ref[0] = prec_factory
     except StackedNewtonError as exc:
         raise StackedNewtonError(
             f"Preconditioner {preconditioner!r} failed before the first Newton iteration: {exc}",
@@ -1774,10 +2231,18 @@ def solve_stacked_newton_krylov(
             break
         if it == max_iter and not small_res:
             break
+        current_active_set = problem.active_set(x) if problem.has_mcp else ()
+        active_changed = bool(prev_active_set is not None and current_active_set != prev_active_set)
+        if active_changed:
+            active_set_changes += 1
+            problem.invalidate_derivative_cache()
+        prev_active_set = current_active_set
         eta = max(eta_min, min(eta_max, math.sqrt(res / jac_scale)))
         rhs_norm = float(np.linalg.norm(f))
         try:
             M = prec_factory(x)
+            if M is not None:
+                prec_bytes = max(prec_bytes, int(getattr(M, "memory_bytes", 0) or 0))
         except (StackedNewtonError, ValueError, np.linalg.LinAlgError) as exc:
             raise StackedNewtonError(f"Preconditioner failed at Newton iteration {it + 1}: {exc}",
                                      build_result(x, f, False, steps, "preconditioner_failure")) from exc
@@ -1811,7 +2276,9 @@ def solve_stacked_newton_krylov(
             history.append({"newton_iteration": it + 1, "residual_before": res,
                             "krylov_outer_iterations": int(count[0]), "linear_solve_failed": True,
                             "error": f"{type(exc).__name__}: {exc}",
-                            "seconds_linear": time.perf_counter() - linear_start})
+                            "seconds_linear": time.perf_counter() - linear_start,
+                            "active_set_changed": active_changed,
+                            "active_count": len(current_active_set)})
             raise StackedNewtonError(
                 f"Linear solve failed at Newton iteration {it + 1} (residual {res:.3g}): "
                 f"{type(exc).__name__}: {exc}",
@@ -1822,6 +2289,8 @@ def solve_stacked_newton_krylov(
             "true_linear_residual": true_res, "requested_tolerance": eta * rhs_norm,
             "rhs_norm": rhs_norm, "direction_norm": _norm_inf(d) if np.isfinite(d).all() else float("inf"),
             "seconds_linear": time.perf_counter() - linear_start,
+            "active_set_changed": active_changed,
+            "active_count": len(current_active_set),
         }
         if not np.isfinite(d).all():
             history.append(record)

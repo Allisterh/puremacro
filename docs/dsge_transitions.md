@@ -206,8 +206,8 @@ builds; it does not count every factorization inside a user-supplied operator.
 | Direct + ordinary equations, domains/scales or MCP | Supported. |
 | Direct + terminal policy, including explicit MCP mapping | Supported; the terminal chain rule is included. |
 | Krylov + ordinary equations and domain/scale transforms | Supported. |
-| Krylov + MCP bounds or `mcp=True` | Rejected explicitly. |
-| Krylov + `terminal_policy` | Rejected explicitly. |
+| Krylov + MCP bounds or `mcp=True` | Supported; active-row preconditioned semismooth Newton–Krylov. |
+| Krylov + `terminal_policy` | Supported; terminal chain rule enters the date-`T` JVP and preconditioner block. |
 | Direct + any non-`None` `krylov_options` | Rejected explicitly. |
 | `terminal_jacobian` without `terminal_policy` | Rejected explicitly. |
 
@@ -534,7 +534,11 @@ select the native MCP solver. Without explicit mappings/tags, the older Python
 bound interface retains its loading-based row/sign heuristic; supplying the
 mapping is clearer when equations have economic sign restrictions. This is the
 native semismooth solver and does not claim equivalence to every Dynare
-complementarity algorithm or option. MCP remains direct-only.
+complementarity algorithm or option. Both `linear_solver="direct"` and
+`linear_solver="krylov"` support MCP bounds and tags; Krylov updates its active
+row projection and preconditioner when the active constraint set changes, and
+records `physical_mcp_feasibility`, `physical_complementarity_residual`, and
+`physical_residual_norm` on both `MCPResult` and `TransitionResult`.
 
 ## Terminal policies and the final Jacobian block
 
@@ -547,10 +551,12 @@ becomes
 \frac{d f_T}{d y_T}=B_T+A_T Dg(y_T).
 \]
 
-Provide `terminal_jacobian(last_state)` as a square matrix, or let the direct
-solver differentiate the map centrally. With domains/scales, `solve_transition`
+Provide `terminal_jacobian(last_state)` as a square matrix, or let the solver
+differentiate the map centrally. With domains/scales, `solve_transition`
 accepts these callbacks in physical coordinates and composes their chain rule
-with the coordinate transformation.
+with the coordinate transformation (`physical_scale` and
+`normalized_horizon_tolerance` also provide unit-invariant horizon acceptance
+when variables span disparate scales).
 
 For the linear example, a stable tail `x_t=r^t*x_0` satisfies
 `0.25*r**2-r+0.4=0`. Using its smaller root gives an exact tail for this specific
@@ -572,8 +578,9 @@ assert np.max(np.abs(terminal_audit.maps["path_equations"])) < 1e-9
 ```
 
 A local linear terminal map in a nonlinear model is an approximation whose
-adequacy still needs a horizon or economic check. Krylov rejects terminal
-policies. Ordinary retained path audits replay the policy and preserve the fixed
+adequacy still needs a horizon or economic check. Both `"direct"` and `"krylov"`
+support terminal policies and retain the same audit replay metadata. Ordinary
+retained path audits replay the policy and preserve the fixed
 reference; they also compare its original terminal input/output to detect
 changed callable state. Keep callbacks unchanged after solving. That replay is
 not a mathematical identity check over the whole policy domain. MCP paths need

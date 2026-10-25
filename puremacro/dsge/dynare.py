@@ -61,6 +61,9 @@ from puremacro.dsge._macro import preprocess_macro, DynareMacroError
 from puremacro.dsge._parser import parse_mod_to_dag, DynareParseError, ParsedModelDAG
 from puremacro.dsge._symbolic import compile_derivatives, CompiledDerivatives
 from puremacro.dsge._sylvester import (
+    SylvesterWorkCounts,
+    _solve_consistent_linear,
+    solve_dense_sylvester_fallback,
     solve_generalized_sylvester_kronecker,
     solve_order3_sylvester_kronecker,
     solve_order1_sylvester,
@@ -858,6 +861,14 @@ def solve_dynare_2nd_order(
         if compiled is not None:
             object.__setattr__(sol, "_compiled", compiled)
         object.__setattr__(sol, "_is_linear", True)
+        A_plus_lin = np.asarray(m._A_plus, dtype=float)
+        A_0_lin = np.asarray(m._A_0, dtype=float)
+        A_hat_lin = A_0_lin + A_plus_lin @ g_x @ P_s
+        object.__setattr__(sol, "_sylvester_work", {})
+        object.__setattr__(sol, "_A_hat", A_hat_lin)
+        object.__setattr__(sol, "_A_plus", A_plus_lin)
+        object.__setattr__(sol, "_K_xx", np.zeros((N, n_x**2), dtype=float))
+        object.__setattr__(sol, "_rhs_sig", np.zeros(N, dtype=float))
         return sol
 
     # 2. First and second derivatives of f at the steady state, stacked
@@ -1005,17 +1016,23 @@ def solve_dynare_2nd_order(
 
     # (A_0 + A_+ g_x P_s) g_xx + A_+ g_xx (h_x ⊗ h_x) = -K_xx
     A_hat = A_0 + A_plus @ g_x @ P_s
+    sylvester_work: dict[int, SylvesterWorkCounts] = {}
     try:
-        g_xx = solve_generalized_sylvester_kronecker(A_hat, A_plus, h_x, K_xx_tensor)
-    except Exception:
-        hx_kron = np.kron(h_x, h_x)
-        sys_mat = np.kron(np.eye(n_x**2), A_hat) + np.kron(hx_kron.T, A_plus)
-        rhs_xx = -K_xx_tensor.reshape(-1, order="F")
-        try:
-            vec_gxx = scipy.linalg.solve(sys_mat, rhs_xx)
-        except scipy.linalg.LinAlgError:
-            vec_gxx = scipy.linalg.lstsq(sys_mat, rhs_xx)[0]
-        g_xx = vec_gxx.reshape((N, n_x**2), order="F")
+        g_xx_res = solve_generalized_sylvester_kronecker(
+            A_hat, A_plus, h_x, K_xx_tensor, return_work_counts=True,
+        )
+        assert isinstance(g_xx_res, tuple)
+        g_xx, sylvester_work[2] = g_xx_res
+    except np.linalg.LinAlgError as exc:
+        if "inconsistent" in str(exc).lower():
+            raise
+        g_xx = solve_dense_sylvester_fallback(
+            A_hat, A_plus, h_x, K_xx_tensor, order=2, cause=exc,
+        )
+    except Exception as exc:
+        g_xx = solve_dense_sylvester_fallback(
+            A_hat, A_plus, h_x, K_xx_tensor, order=2, cause=exc,
+        )
 
     H_xx = P_s @ g_xx
     G_xx = P_c @ g_xx
@@ -1023,10 +1040,7 @@ def solve_dynare_2nd_order(
     # State-shock cross terms: A_hat g_xu = -[ A_+ g_xx (h_x ⊗ h_u) + K_xu ]
     hx_hu = np.kron(h_x, h_u)
     rhs_xu = -(A_plus @ g_xx @ hx_hu + K_xu_tensor)
-    try:
-        g_xu = scipy.linalg.solve(A_hat, rhs_xu)
-    except scipy.linalg.LinAlgError:
-        g_xu = scipy.linalg.lstsq(A_hat, rhs_xu)[0]
+    g_xu = _solve_consistent_linear(A_hat, rhs_xu, context="Order-2 state-shock cross term (ghxu)")
 
     H_xu = P_s @ g_xu
     G_xu = P_c @ g_xu
@@ -1034,10 +1048,7 @@ def solve_dynare_2nd_order(
     # Shock quadratic terms: A_hat g_uu = -[ A_+ g_xx (h_u ⊗ h_u) + K_uu ]
     hu_hu = np.kron(h_u, h_u)
     rhs_uu = -(A_plus @ g_xx @ hu_hu + K_uu_tensor)
-    try:
-        g_uu = scipy.linalg.solve(A_hat, rhs_uu)
-    except scipy.linalg.LinAlgError:
-        g_uu = scipy.linalg.lstsq(A_hat, rhs_uu)[0]
+    g_uu = _solve_consistent_linear(A_hat, rhs_uu, context="Order-2 shock quadratic term (ghuu)")
 
     H_uu = P_s @ g_uu
     G_uu = P_c @ g_uu
@@ -1064,10 +1075,7 @@ def solve_dynare_2nd_order(
     rhs_sig = -(A_plus @ g_uu @ vec_sigma + W_vec)
 
     sys_sig = A_hat + A_plus
-    try:
-        g_ss = scipy.linalg.solve(sys_sig, rhs_sig)
-    except scipy.linalg.LinAlgError:
-        g_ss = scipy.linalg.lstsq(sys_sig, rhs_sig)[0]
+    g_ss = _solve_consistent_linear(sys_sig, rhs_sig, context="Order-2 volatility correction (ghs2)")
 
     H_ss = P_s @ g_ss
     G_ss = P_c @ g_ss
@@ -1105,6 +1113,11 @@ def solve_dynare_2nd_order(
     if compiled is not None:
         object.__setattr__(sol, "_compiled", compiled)
     object.__setattr__(sol, "_is_linear", False)
+    object.__setattr__(sol, "_sylvester_work", sylvester_work)
+    object.__setattr__(sol, "_A_hat", A_hat)
+    object.__setattr__(sol, "_A_plus", A_plus)
+    object.__setattr__(sol, "_K_xx", K_xx_tensor)
+    object.__setattr__(sol, "_rhs_sig", rhs_sig)
     return sol
 
 
@@ -1298,6 +1311,17 @@ def solve_dynare_3rd_order(
         if compiled is not None:
             object.__setattr__(sol, "_compiled", compiled)
         object.__setattr__(sol, "_is_linear", True)
+        A_plus_lin = np.asarray(m._A_plus, dtype=float)
+        A_0_lin = np.asarray(m._A_0, dtype=float)
+        A_hat_lin = A_0_lin + A_plus_lin @ g_x @ P_s
+        object.__setattr__(sol, "_sylvester_work", {})
+        object.__setattr__(sol, "_A_hat", A_hat_lin)
+        object.__setattr__(sol, "_A_plus", A_plus_lin)
+        object.__setattr__(sol, "_K_xx", np.zeros((N, n_x**2), dtype=float))
+        object.__setattr__(sol, "_K_xxx", np.zeros((N, n_x**3), dtype=float))
+        object.__setattr__(sol, "_K_x_ss", np.zeros((N, n_x), dtype=float))
+        object.__setattr__(sol, "_rhs_sig", np.zeros(N, dtype=float))
+        object.__setattr__(sol, "_rhs_uss", np.zeros((N, n_e), dtype=float))
         return sol
 
     # 2. Coordinates and derivative evaluation
@@ -1409,31 +1433,31 @@ def solve_dynare_3rd_order(
         K_uu_tensor[i] = (M_u.T @ H_f[i] @ M_u).flatten()
 
     A_hat = A_0 + A_plus @ g_x @ P_s
+    sylvester_work_3: dict[int, SylvesterWorkCounts] = {}
     try:
-        g_xx = solve_generalized_sylvester_kronecker(A_hat, A_plus, h_x, K_xx_tensor)
-    except Exception:
-        hx_kron = np.kron(h_x, h_x)
-        sys_mat = np.kron(np.eye(n_x**2), A_hat) + np.kron(hx_kron.T, A_plus)
-        rhs_xx = -K_xx_tensor.reshape(-1, order="F")
-        try:
-            vec_gxx = scipy.linalg.solve(sys_mat, rhs_xx)
-        except scipy.linalg.LinAlgError:
-            vec_gxx = scipy.linalg.lstsq(sys_mat, rhs_xx)[0]
-        g_xx = vec_gxx.reshape((N, n_x**2), order="F")
+        g_xx_res = solve_generalized_sylvester_kronecker(
+            A_hat, A_plus, h_x, K_xx_tensor, return_work_counts=True,
+        )
+        assert isinstance(g_xx_res, tuple)
+        g_xx, sylvester_work_3[2] = g_xx_res
+    except np.linalg.LinAlgError as exc:
+        if "inconsistent" in str(exc).lower():
+            raise
+        g_xx = solve_dense_sylvester_fallback(
+            A_hat, A_plus, h_x, K_xx_tensor, order=2, cause=exc,
+        )
+    except Exception as exc:
+        g_xx = solve_dense_sylvester_fallback(
+            A_hat, A_plus, h_x, K_xx_tensor, order=2, cause=exc,
+        )
 
     hx_hu = np.kron(h_x, h_u)
     rhs_xu = -(A_plus @ g_xx @ hx_hu + K_xu_tensor)
-    try:
-        g_xu = scipy.linalg.solve(A_hat, rhs_xu)
-    except scipy.linalg.LinAlgError:
-        g_xu = scipy.linalg.lstsq(A_hat, rhs_xu)[0]
+    g_xu = _solve_consistent_linear(A_hat, rhs_xu, context="Order-3 state-shock cross term (ghxu)")
 
     hu_hu = np.kron(h_u, h_u)
     rhs_uu = -(A_plus @ g_xx @ hu_hu + K_uu_tensor)
-    try:
-        g_uu = scipy.linalg.solve(A_hat, rhs_uu)
-    except scipy.linalg.LinAlgError:
-        g_uu = scipy.linalg.lstsq(A_hat, rhs_uu)[0]
+    g_uu = _solve_consistent_linear(A_hat, rhs_uu, context="Order-3 shock quadratic term (ghuu)")
 
     W_vec = np.zeros(N)
     for i in range(N):
@@ -1442,10 +1466,7 @@ def solve_dynare_3rd_order(
     vec_sigma = sigma_u.flatten()
     rhs_sig = -(A_plus @ g_uu @ vec_sigma + W_vec)
     sys_sig = A_hat + A_plus
-    try:
-        g_ss = scipy.linalg.solve(sys_sig, rhs_sig)
-    except scipy.linalg.LinAlgError:
-        g_ss = scipy.linalg.lstsq(sys_sig, rhs_sig)[0]
+    g_ss = _solve_consistent_linear(sys_sig, rhs_sig, context="Order-3 volatility correction (ghs2)")
 
     h_xx = P_s @ g_xx
     h_xu = P_s @ g_xu
@@ -1507,16 +1528,21 @@ def solve_dynare_3rd_order(
 
     K_xxx = T_xxx + S_xxx + cross_chain
     try:
-        g_xxx = solve_order3_sylvester_kronecker(A_hat, A_plus, h_x, K_xxx)
-    except Exception:
-        hx3 = np.kron(np.kron(h_x, h_x), h_x)
-        sys_3 = np.kron(np.eye(n_x**3), A_hat) + np.kron(hx3.T, A_plus)
-        rhs_3 = -K_xxx.reshape(-1, order="F")
-        try:
-            vec_gxxx = scipy.linalg.solve(sys_3, rhs_3)
-        except scipy.linalg.LinAlgError:
-            vec_gxxx = scipy.linalg.lstsq(sys_3, rhs_3)[0]
-        g_xxx = vec_gxxx.reshape((N, n_x**3), order="F")
+        g_xxx_res = solve_order3_sylvester_kronecker(
+            A_hat, A_plus, h_x, K_xxx, return_work_counts=True,
+        )
+        assert isinstance(g_xxx_res, tuple)
+        g_xxx, sylvester_work_3[3] = g_xxx_res
+    except np.linalg.LinAlgError as exc:
+        if "inconsistent" in str(exc).lower():
+            raise
+        g_xxx = solve_dense_sylvester_fallback(
+            A_hat, A_plus, h_x, K_xxx, order=3, cause=exc,
+        )
+    except Exception as exc:
+        g_xxx = solve_dense_sylvester_fallback(
+            A_hat, A_plus, h_x, K_xxx, order=3, cause=exc,
+        )
 
     # 4b. Solve g_xxu
     T_xxu = T_f.contract(M_x, M_x, M_u)
@@ -1542,10 +1568,7 @@ def solve_dynare_3rd_order(
         cross_xxu = A_plus @ C_xxu.reshape(N, (n_x**2) * n_e)
 
     rhs_xxu = -(A_g_xxx_h + T_xxu + S_xxu + cross_xxu)
-    try:
-        g_xxu = scipy.linalg.solve(A_hat, rhs_xxu)
-    except scipy.linalg.LinAlgError:
-        g_xxu = scipy.linalg.lstsq(A_hat, rhs_xxu)[0]
+    g_xxu = _solve_consistent_linear(A_hat, rhs_xxu, context="Order-3 state-state-shock term (ghxxu)")
 
     # 4c. Solve g_xuu
     T_xuu = T_f.contract(M_x, M_u, M_u)
@@ -1567,10 +1590,7 @@ def solve_dynare_3rd_order(
         cross_xuu = A_plus @ C_xuu.reshape(N, n_x * (n_e**2))
 
     rhs_xuu = -(A_g_xxx_hu + T_xuu + S_xuu + cross_xuu)
-    try:
-        g_xuu = scipy.linalg.solve(A_hat, rhs_xuu)
-    except scipy.linalg.LinAlgError:
-        g_xuu = scipy.linalg.lstsq(A_hat, rhs_xuu)[0]
+    g_xuu = _solve_consistent_linear(A_hat, rhs_xuu, context="Order-3 state-shock-shock term (ghxuu)")
 
     # 4d. Solve g_uuu
     T_uuu = T_f.contract(M_u, M_u, M_u)
@@ -1591,10 +1611,7 @@ def solve_dynare_3rd_order(
             cross_uuu = A_plus @ sym_Cu.reshape(N, n_e**3)
 
     rhs_uuu = -(A_g_uuu + T_uuu + S_uuu + cross_uuu)
-    try:
-        g_uuu = scipy.linalg.solve(A_hat, rhs_uuu)
-    except scipy.linalg.LinAlgError:
-        g_uuu = scipy.linalg.lstsq(A_hat, rhs_uuu)[0]
+    g_uuu = _solve_consistent_linear(A_hat, rhs_uuu, context="Order-3 shock cubic term (ghuuu)")
 
     # Differentiate E[f(U(q, sigma, e_next))] with respect to q and twice
     # with respect to the perturbation scale sigma. At zero scale:
@@ -1625,12 +1642,17 @@ def solve_dynare_3rd_order(
 
     K_x_ss = risk_rhs(M_x, h_x)
     if n_x:
-        g_x_ss = solve_order1_sylvester(A_hat, A_plus, h_x, K_x_ss)
+        g_x_ss_res = solve_order1_sylvester(
+            A_hat, A_plus, h_x, K_x_ss, return_work_counts=True,
+        )
+        assert isinstance(g_x_ss_res, tuple)
+        g_x_ss, sylvester_work_3[1] = g_x_ss_res
     else:
         g_x_ss = np.zeros((N, 0))
+    rhs_uss = np.zeros((N, 0))
     if n_e:
         rhs_uss = -(risk_rhs(M_u, h_u) + A_plus @ g_x_ss @ h_u)
-        g_u_ss = scipy.linalg.solve(A_hat, rhs_uss)
+        g_u_ss = _solve_consistent_linear(A_hat, rhs_uss, context="Order-3 shock risk slope (ghuss)")
     else:
         g_u_ss = np.zeros((N, 0))
 
@@ -1685,6 +1707,14 @@ def solve_dynare_3rd_order(
     if compiled is not None:
         object.__setattr__(sol, "_compiled", compiled)
     object.__setattr__(sol, "_is_linear", False)
+    object.__setattr__(sol, "_sylvester_work", sylvester_work_3)
+    object.__setattr__(sol, "_A_hat", A_hat)
+    object.__setattr__(sol, "_A_plus", A_plus)
+    object.__setattr__(sol, "_K_xx", K_xx_tensor)
+    object.__setattr__(sol, "_K_xxx", K_xxx)
+    object.__setattr__(sol, "_K_x_ss", K_x_ss)
+    object.__setattr__(sol, "_rhs_sig", rhs_sig)
+    object.__setattr__(sol, "_rhs_uss", rhs_uss)
     return sol
 
 

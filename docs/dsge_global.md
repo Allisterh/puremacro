@@ -206,17 +206,28 @@ for the broader numerical framework.
 | `max_nodes=10000` | State-grid construction guard; not an accuracy target |
 | `strict=False` | Keep a failed result with a warning; `True` raises on numerical nonconvergence |
 
-`inner_max_iter` forwards SciPy's `max_nfev` budget. The reported evaluation
-count follows that solver's accounting; numerical-Jacobian probes can add
-residual calls. Neither the iteration budget nor `max_nodes` is a wall-clock
-or total-memory guarantee.
+`inner_max_iter` bounds the damped Newton iterations per collocation node. The
+reported evaluation count tracks residual evaluations; numerical-Jacobian probes
+can add residual calls when `transition_jacobian` or `residual_jacobian`
+callbacks are omitted (with `EquilibriumProblem.from_model`, compiled equation
+derivatives are reused automatically via `TrajectoryJacobian`).
+`result.callback_evaluations` separately tracks `"transition"`, `"residual"`,
+`"transition_jacobian"`, `"residual_jacobian"`, `"admissible"`,
+`"control_bounds"`, `"shock_rule"`, and `"trial_rejections"`. Neither the
+iteration budget nor `max_nodes` is a wall-clock or total-memory guarantee.
 
 The initial policy can be a callable, one constant `(nx,)` vector, or a nodal
 array matching the constructed grid. It must be finite and satisfy control
-bounds and `admissible` at the nodes. The inner solve enforces box bounds;
+bounds and `admissible` at the nodes. The inner solve enforces box bounds and
+uses domain-safe feasible backtracking (`trial_rejections` in `history` and
+`callback_evaluations`) if a full nodal or outer policy update would violate
+bounds or `admissible` at collocation or quadrature successor states;
 `admissible` is a feasibility check, **not** a general nonlinear-constraint
-optimizer. Keep the residual finite on relevant trial controls through the
-economic parameterization and bounds.
+optimizer. Tensor Chebyshev fitting uses separable 1D LU factorizations along
+each state axis rather than assembling a dense N-dimensional Vandermonde
+inverse (`policy.collocation_matrix_allocated` is `False`). Keep the residual
+finite on relevant trial controls through the economic parameterization and
+bounds.
 
 `result.converged` requires the updated node audit, a small control update, and
 no failed node solve. A small least-squares gradient or a small update alone is
@@ -533,17 +544,20 @@ number depends on equation and variable units. Missing Jacobians are reported
 as not checked. A near-unit transition root is evidence of persistence and
 sensitivity, not by itself a proof of an invalid equilibrium.
 
-**Known higher-order accuracy issue in 5.7.1.** The existing Sylvester solver
-rounds scalar LU-cache keys to 12 decimal places, so distinct Schur products
-can reuse a factorization. A determinate analytic example with transition
-roots near `0.9999998` shows relative second-/third-order coefficient errors
-up to approximately `3.8e-7`. The near-unit-root warning does not measure this
-curvature error, and the dynamic Jacobian condition number is not the condition
-number of the higher-order operator. See the public-API reproducer attached to
-the [release record](https://github.com/jalonso1979/puremacro/releases/tag/v5.7.1).
-Exact cache keys and independent higher-order operator checks are planned
-follow-up work. This example does not demonstrate a general failure of unit
-invariance.
+**Higher-order Sylvester conditioning and exact factorization reuse.** The
+recursive Real Schur (Bartels–Stewart) Sylvester solver keys its LU cache by
+exact IEEE-754 floating-point values (`float` for $1\times 1$ blocks and four
+floats for $2\times 2$ blocks), eliminating the 12-decimal rounding collision
+reported in 5.7.1 where distinct near-unit Schur products could reuse a
+factorization. `diagnose_perturbation(solution, max_curvature_order=3)` reports
+`schur_block_condition` (the fast diagonal Schur-block lower bound on the
+higher-order operator condition number), `curvature_operator_condition` and
+`curvature_coupling_amplification` (the full Kronecker operator condition number
+and off-diagonal Schur coupling ratio, summarized in `curvature_conditioning`),
+`sylvester_residuals` (`ghxx`, `ghs2`, `ghxxx`, `ghxss`, `ghuss`), and
+`sylvester_work` (`SylvesterWorkCounts`) so higher-order operator
+ill-conditioning is distinguished from the first-order dynamic Jacobian
+condition number.
 
 Pruning avoids recursively generating terms beyond the chosen approximation
 order and carries separate state components. The distinction between a raw

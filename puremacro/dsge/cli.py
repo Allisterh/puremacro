@@ -70,17 +70,60 @@ class DynareParser(argparse.ArgumentParser):
         self._inspect_parser.add_argument("--output", help="Explicit path to write the report; default stdout only")
         self._inspect_parser.add_argument("--macro-limit", type=int, default=100000)
         self._inspect_parser.set_defaults(command="inspect")
+        self._execute_parser = argparse.ArgumentParser(
+            prog="puremacro-dynare execute",
+            description="Inspect and execute a source-ordered .mod command program without a QZ prerequisite.",
+        )
+        self._execute_parser.add_argument("model", help="Path to the Dynare .mod file.")
+        self._execute_parser.add_argument(
+            "--outdir",
+            type=str,
+            default="./dynare_results",
+            help="Directory to save deterministic command outputs. Default: ./dynare_results.",
+        )
+        self._execute_parser.add_argument(
+            "--format",
+            choices=["markdown", "latex", "typst", "all", "json"],
+            default="all",
+            help="Export format for summary tables. Default: all.",
+        )
+        self._execute_parser.add_argument(
+            "--data",
+            type=str,
+            default=None,
+            metavar="DATA_CSV",
+            help="Optional CSV dataset for calib_smoother or shock_decomposition commands.",
+        )
+        self._execute_parser.add_argument(
+            "--macro-limit",
+            type=int,
+            default=100000,
+            help="Maximum macro expansion budget. Default: 100000.",
+        )
+        self._execute_parser.add_argument(
+            "--plot",
+            action="store_true",
+            help="Save trajectory or IRF figures (PNG) in outdir.",
+        )
+        self._execute_parser.add_argument(
+            "--quiet",
+            action="store_true",
+            help="Suppress terminal output.",
+        )
+        self._execute_parser.set_defaults(command="execute", ordered=True)
 
     def parse_args(self, args=None, namespace=None):
         if args is None:
             args = sys.argv[1:]
         if args and args[0] == "inspect":
             return self._inspect_parser.parse_args(args[1:], namespace=namespace)
+        if args and args[0] == "execute":
+            return self._execute_parser.parse_args(args[1:], namespace=namespace)
         if args and args[0] == "parity":
             return self._parity_parser.parse_args(args[1:], namespace=namespace)
         ns = super().parse_args(args, namespace=namespace)
         if not hasattr(ns, "command"):
-            ns.command = "solve"
+            ns.command = "execute" if getattr(ns, "ordered", False) else "solve"
         return ns
 
 
@@ -148,6 +191,24 @@ def create_parser() -> argparse.ArgumentParser:
         help="Compute and display steady state without solving dynamic perturbation.",
     )
     parser.add_argument(
+        "--ordered",
+        action="store_true",
+        help="Execute the .mod file as a validated source-ordered command program via read_mod.",
+    )
+    parser.add_argument(
+        "--data",
+        type=str,
+        default=None,
+        metavar="DATA_CSV",
+        help="Optional CSV dataset for ordered calib_smoother or shock_decomposition commands.",
+    )
+    parser.add_argument(
+        "--macro-limit",
+        type=int,
+        default=100000,
+        help="Maximum macro expansion budget when inspecting ordered programs.",
+    )
+    parser.add_argument(
         "--quiet",
         action="store_true",
         help="Suppress interactive terminal output.",
@@ -203,6 +264,213 @@ def _bk_status_line(model) -> str:
     return "Blanchard-Kahn status: not reported by this solution object."
 
 
+def run_ordered_cli(args: argparse.Namespace) -> int:
+    """Inspect and execute a source-ordered .mod command program without a QZ prerequisite."""
+    import json
+    from ._mod_execution import ModCompatibilityError, ModExecutionError
+    from .inspection import inspect_mod
+    from .model import read_mod
+
+    mod_path = Path(args.model)
+    if not mod_path.exists():
+        sys.stderr.write(f"Error: Model file '{mod_path}' not found.\n")
+        return 1
+
+    data_df: pd.DataFrame | None = None
+    data_arg = getattr(args, "data", None) or getattr(args, "shock_decomp", None)
+    if data_arg is not None:
+        data_path = Path(data_arg)
+        if not data_path.exists():
+            sys.stderr.write(f"Error: Data file '{data_path}' not found.\n")
+            return 1
+        try:
+            data_df = pd.read_csv(data_path, index_col=0)
+        except Exception as exc:
+            sys.stderr.write(f"Error reading data file '{data_path}': {exc}\n")
+            return 2
+
+    macro_limit = int(getattr(args, "macro_limit", 100000))
+    try:
+        report = inspect_mod(
+            mod_path,
+            entry_point="execute_mod_commands",
+            ordered=True,
+            data=data_df,
+            macro_limit=macro_limit,
+        )
+    except Exception as exc:
+        sys.stderr.write(f"Error inspecting model: {exc}\n")
+        return 2
+
+    if report.exit_code != 0:
+        sys.stderr.write(report.summary() + "\n")
+        return int(report.exit_code)
+
+    if not args.quiet:
+        sys.stdout.write("=" * 72 + "\n")
+        sys.stdout.write(f"  puremacro-dynare: Executing ordered program {mod_path.name}\n")
+        sys.stdout.write("=" * 72 + "\n")
+
+    try:
+        model = read_mod(mod_path)
+    except Exception as exc:
+        sys.stderr.write(f"Error compiling model: {exc}\n")
+        return 2
+
+    def _serialize_invocations(res_obj) -> list[dict[str, object]]:
+        items: list[dict[str, object]] = []
+        for inv in getattr(res_obj, "invocations", ()):
+            src = getattr(inv, "source", None)
+            items.append(
+                {
+                    "index": int(inv.index),
+                    "command": str(inv.command),
+                    "status": str(inv.status),
+                    "requested_variables": list(inv.requested_variables),
+                    "explicit_options": dict(inv.explicit_options),
+                    "effective_options": dict(inv.effective_options),
+                    "input_fingerprint": str(inv.input_fingerprint),
+                    "source": (
+                        {
+                            "source": str(src.source),
+                            "line": int(src.line),
+                            "column": None if src.column is None else int(src.column),
+                        }
+                        if src is not None and hasattr(src, "source")
+                        else None
+                    ),
+                    "error": inv.error,
+                }
+            )
+        return items
+
+    out_dir = Path(getattr(args, "outdir", "./dynare_results"))
+
+    try:
+        results = model.execute_mod_commands(data=data_df, ordered=True)
+    except ModCompatibilityError as exc:
+        sys.stderr.write(str(exc) + "\n")
+        return int(exc.report.exit_code or 1)
+    except ModExecutionError as exc:
+        sys.stderr.write(f"Error executing model commands: {exc}\n")
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "model": mod_path.name,
+                "status": "failed",
+                "source_hashes": dict(model.source_hashes),
+                "commands_executed": list(exc.results.commands_executed),
+                "invocations": _serialize_invocations(exc.results),
+            }
+            (out_dir / "command_summary.json").write_text(
+                json.dumps(payload, indent=2, sort_keys=True, default=float) + "\n",
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
+        return 3
+    except ValueError as exc:
+        sys.stderr.write(f"Error validating execution inputs: {exc}\n")
+        return 2
+    except Exception as exc:
+        sys.stderr.write(f"Error executing model: {exc}\n")
+        return 3
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    def write_exports(base_name: str, md_text: str, tex_text: str, typ_text: str) -> None:
+        if args.format in ("markdown", "all"):
+            (out_dir / f"{base_name}.md").write_text(md_text, encoding="utf-8")
+        if args.format in ("latex", "all"):
+            (out_dir / f"{base_name}.tex").write_text(tex_text, encoding="utf-8")
+        if args.format in ("typst", "all"):
+            (out_dir / f"{base_name}.typ").write_text(typ_text, encoding="utf-8")
+
+    payload = {
+        "model": mod_path.name,
+        "status": "success",
+        "source_hashes": dict(model.source_hashes),
+        "commands_executed": list(results.commands_executed),
+        "invocations": _serialize_invocations(results),
+    }
+    (out_dir / "command_summary.json").write_text(
+        json.dumps(payload, indent=2, sort_keys=True, default=float) + "\n",
+        encoding="utf-8",
+    )
+    write_exports(
+        "command_summary",
+        results.to_markdown(),
+        results.to_latex(),
+        results.to_typst(),
+    )
+
+    for inv in results.invocations:
+        if inv.status != "success" or inv.result is None:
+            continue
+        if inv.command in ("perfect_foresight_solver", "simul") and hasattr(inv.result, "path"):
+            sel_df = (
+                inv.selected_result
+                if isinstance(inv.selected_result, pd.DataFrame)
+                else inv.result.path
+            )
+            sel_df.to_csv(out_dir / f"invocation_{inv.index}_{inv.command}.csv", index=True)
+            inv.result.path.to_csv(out_dir / "perfect_foresight_path.csv", index=True)
+            write_exports(
+                "perfect_foresight",
+                inv.result.to_markdown(),
+                inv.result.to_latex(),
+                inv.result.to_typst(),
+            )
+            if getattr(args, "plot", False):
+                try:
+                    import matplotlib.pyplot as plt
+
+                    fig = inv.result.plot(style="publication")
+                    if fig is not None:
+                        fig.savefig(out_dir / "perfect_foresight.png", dpi=300, bbox_inches="tight")
+                        plt.close(fig)
+                except Exception:
+                    pass
+        elif inv.command == "steady" and isinstance(inv.result, pd.Series):
+            inv.result.to_csv(out_dir / f"invocation_{inv.index}_steady.csv", header=True)
+            inv.result.to_csv(out_dir / "steady_state.csv", header=True)
+        elif inv.command == "stoch_simul":
+            sim_res = inv.selected_result if inv.selected_result is not None else inv.result
+            write_exports(
+                "model_moments",
+                sim_res.to_markdown(),
+                sim_res.to_latex(),
+                sim_res.to_typst(),
+            )
+            if getattr(sim_res, "irfs", None):
+                pd.DataFrame(sim_res.irfs).to_csv(out_dir / "irfs.csv", index=True)
+                pd.DataFrame(sim_res.irfs).to_csv(
+                    out_dir / f"invocation_{inv.index}_irfs.csv", index=True
+                )
+        elif inv.command == "calib_smoother":
+            sm_res = inv.selected_result if inv.selected_result is not None else inv.result
+            if hasattr(sm_res, "states"):
+                sm_res.states.to_csv(out_dir / "smoothed_states.csv", index=True)
+                sm_res.states.to_csv(
+                    out_dir / f"invocation_{inv.index}_calib_smoother.csv", index=True
+                )
+        elif inv.command == "shock_decomposition":
+            sd_res = inv.selected_result if inv.selected_result is not None else inv.result
+            write_exports(
+                "shock_decomposition",
+                sd_res.to_markdown(),
+                sd_res.to_latex(),
+                sd_res.to_typst(),
+            )
+
+    if not args.quiet:
+        sys.stdout.write(results.summary() + "\n")
+        sys.stdout.write(f"All results saved to: {out_dir.resolve()}\n")
+        sys.stdout.write("=" * 72 + "\n")
+
+    return 0
+
+
 def run_cli(argv: Sequence[str] | None = None) -> int:
     parser = create_parser()
     args = parser.parse_args(argv)
@@ -221,6 +489,8 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
         except (ValueError, OSError) as exc:
             sys.stderr.write(f"Error inspecting model: {exc}\n")
             return 2
+    if getattr(args, "command", None) == "execute" or getattr(args, "ordered", False):
+        return run_ordered_cli(args)
     if getattr(args, "command", None) == "parity":
         return run_parity_cli(args)
 

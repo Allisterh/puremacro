@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
+import math
 import warnings
 
 import numpy as np
@@ -37,6 +38,10 @@ class TransitionResult:
     horizon_history: tuple[dict[str, Any], ...]
     scaled_residual_norm: float
     preconditioner_builds: int = 0
+    physical_residual_norm: float = float("nan")
+    physical_mcp_feasibility: float = 0.0
+    physical_complementarity_residual: float = 0.0
+    normalized_horizon_error: float | None = None
 
     @property
     def path(self) -> pd.DataFrame:
@@ -142,9 +147,10 @@ def _equations(model, names):
 
 
 class _Coordinates:
-    def __init__(self, names, bounds, scale):
+    def __init__(self, names, bounds, scale, physical_scale=None):
         n = len(names)
         self.scale = _scale(scale, names, "variable_scale")
+        self.physical_scale = _scale(physical_scale, names, "physical_scale")
         self.lower, self.upper = np.full(n, -np.inf), np.full(n, np.inf)
         for key, pair in dict(bounds or {}).items():
             index = names.index(key) if isinstance(key, str) else int(key)
@@ -157,24 +163,30 @@ class _Coordinates:
                 self.upper[index] = float(hi)
         if np.isnan(self.lower).any() or np.isnan(self.upper).any() or np.any(self.lower >= self.upper):
             raise ValueError("variable_bounds must be ordered open intervals")
+        self.signature = (
+            tuple(self.lower.tolist()),
+            tuple(self.upper.tolist()),
+            tuple(self.scale.tolist()),
+            tuple(self.physical_scale.tolist()),
+        )
 
     def encode(self, y):
         y = np.asarray(y, dtype=float)
         if not np.isfinite(y).all() or np.any(y <= self.lower) or np.any(y >= self.upper):
             raise ValueError("boundary/initial path lies outside the open variable_bounds domain")
-        z = y.copy()
+        z = y / self.physical_scale
         for j, (lo, hi) in enumerate(zip(self.lower, self.upper)):
             if np.isfinite(lo) and np.isfinite(hi):
                 z[..., j] = np.log((y[..., j] - lo) / (hi - y[..., j]))
             elif np.isfinite(lo):
-                z[..., j] = np.log(y[..., j] - lo)
+                z[..., j] = np.log((y[..., j] - lo) / self.physical_scale[j])
             elif np.isfinite(hi):
-                z[..., j] = -np.log(hi - y[..., j])
+                z[..., j] = -np.log((hi - y[..., j]) / self.physical_scale[j])
         return z / self.scale
 
     def decode(self, z):
         raw = np.asarray(z) * self.scale
-        y = raw.copy()
+        y = raw * self.physical_scale
         with np.errstate(over="ignore", under="ignore", invalid="ignore"):
             for j, (lo, hi) in enumerate(zip(self.lower, self.upper)):
                 if np.isfinite(lo) and np.isfinite(hi):
@@ -182,21 +194,21 @@ class _Coordinates:
                     sigmoid = np.where(r.real >= 0, 1 / (1 + np.exp(-r)), np.exp(r) / (1 + np.exp(r)))
                     y[..., j] = lo + (hi - lo) * sigmoid
                 elif np.isfinite(lo):
-                    y[..., j] = lo + np.exp(raw[..., j])
+                    y[..., j] = lo + self.physical_scale[j] * np.exp(raw[..., j])
                 elif np.isfinite(hi):
-                    y[..., j] = hi - np.exp(-raw[..., j])
+                    y[..., j] = hi - self.physical_scale[j] * np.exp(-raw[..., j])
         return y
 
     def derivative(self, z):
-        y = self.decode(z)
-        derivative = self.scale.copy()
+        y = np.asarray(self.decode(z), dtype=float)
+        derivative = np.broadcast_to(self.scale * self.physical_scale, y.shape).copy()
         for j, (lo, hi) in enumerate(zip(self.lower, self.upper)):
             if np.isfinite(lo) and np.isfinite(hi):
-                derivative[j] *= (y[j] - lo) * (hi - y[j]) / (hi - lo)
+                derivative[..., j] = self.scale[j] * (y[..., j] - lo) * (hi - y[..., j]) / (hi - lo)
             elif np.isfinite(lo):
-                derivative[j] *= y[j] - lo
+                derivative[..., j] = self.scale[j] * (y[..., j] - lo)
             elif np.isfinite(hi):
-                derivative[j] *= hi - y[j]
+                derivative[..., j] = self.scale[j] * (hi - y[..., j])
         return derivative
 
 
@@ -219,18 +231,179 @@ class _SteadyPreconditionerCache:
         self.operator = None
         self.builds = 0
         self.reuses = 0
+        self.invalidations = 0
 
     def get(self, problem):
         from .stacked_newton import _build_block_preconditioner
         blocks = problem.steady_blocks()
         key = (problem.n_periods, *((block.shape, block.dtype.str, block.tobytes()) for block in blocks))
         if key != self.key:
+            if self.key is not None:
+                self.invalidations += 1
             self.operator, _ = _build_block_preconditioner(*blocks, problem.n_periods, "thomas", None)
             self.key = key
             self.builds += 1
         else:
             self.reuses += 1
         return self.operator
+
+    def for_problem(self, problem):
+        if not problem.has_mcp and not problem.has_terminal_policy:
+            return self.get(problem)
+        from .stacked_newton import _build_block_preconditioner
+        cache = self
+
+        class _ProblemPreconditionerFactory:
+            @property
+            def builds(self) -> int:
+                return cache.builds
+
+            @property
+            def reuses(self) -> int:
+                return cache.reuses
+
+            @property
+            def invalidations(self) -> int:
+                return cache.invalidations
+
+            def __call__(self, x):
+                blocks = problem.steady_blocks()
+                active_key = problem.active_set(x) if problem.has_mcp else ()
+                term_bytes = None
+                if problem.has_terminal_policy:
+                    Y_curr = problem.reshape(x)
+                    term_jac = problem.terminal_derivative(Y_curr[-1])
+                    term_bytes = (term_jac.shape, term_jac.dtype.str, term_jac.tobytes())
+                key = (
+                    problem.n_periods,
+                    *((block.shape, block.dtype.str, block.tobytes()) for block in blocks),
+                    active_key,
+                    term_bytes,
+                )
+                if key != cache.key:
+                    if cache.key is not None:
+                        cache.invalidations += 1
+                    A_list, B_list, C_list = problem.preconditioner_blocks(x, active_set=active_key)
+                    try:
+                        cache.operator, _ = _build_block_preconditioner(
+                            A_list, B_list, C_list, problem.n_periods, "thomas", None
+                        )
+                    except StackedNewtonError:
+                        if not problem.has_mcp:
+                            raise
+                        A_list, B_list, C_list = problem.preconditioner_blocks(
+                            x, active_set=active_key, use_active_rows=False
+                        )
+                        cache.operator, _ = _build_block_preconditioner(
+                            A_list, B_list, C_list, problem.n_periods, "thomas", None
+                        )
+                    cache.key = key
+                    cache.builds += 1
+                else:
+                    cache.reuses += 1
+                return cache.operator
+
+        return _ProblemPreconditionerFactory()
+
+
+def _resolve_mcp_specs(names, raw_eval, y_ss, eps0, mcp_bounds, mcp_equations):
+    n = len(names)
+    specs = []
+    if not mcp_bounds:
+        return specs
+    B_test = None
+    if mcp_equations is None:
+        B_test = np.zeros((n, n), dtype=float)
+        for j in range(n):
+            yp_c = y_ss.copy()
+            yp_c[j] += 1e-6
+            ym_c = y_ss.copy()
+            ym_c[j] -= 1e-6
+            fp = np.asarray(raw_eval(y_ss, yp_c, y_ss, eps0), dtype=float).ravel()
+            fm = np.asarray(raw_eval(y_ss, ym_c, y_ss, eps0), dtype=float).ravel()
+            B_test[:, j] = (fp - fm) / (2.0 * 1e-6)
+    for k, (lo, hi) in mcp_bounds.items():
+        v_idx = int(k) if isinstance(k, int) else names.index(str(k))
+        explicit = mcp_equations.get(k) if mcp_equations is not None else None
+        if explicit is not None:
+            e_idx, s_sign = (int(explicit), 1.0) if isinstance(explicit, (int, np.integer)) else (int(explicit[0]), float(explicit[1]))
+        else:
+            assert B_test is not None
+            e_idx = v_idx if abs(B_test[v_idx, v_idx]) > 1e-5 else int(np.argmax(np.abs(B_test[:, v_idx])))
+            s_sign = 1.0 if B_test[e_idx, v_idx] >= 0 else -1.0
+        lb_val = None if lo is None else float(lo)
+        ub_val = None if hi is None else float(hi)
+        if lb_val is not None and ub_val is not None and abs(lb_val - ub_val) < 1e-12:
+            kind = "PINNED"
+        elif lb_val is not None and ub_val is None:
+            kind = "LOWER"
+        elif lb_val is None and ub_val is not None:
+            kind = "UPPER"
+        elif lb_val is not None and ub_val is not None:
+            kind = "TWO_SIDED"
+        else:
+            kind = "NONE"
+        specs.append((v_idx, e_idx, s_sign, kind, lb_val, ub_val, str(k)))
+    return specs
+
+
+def _evaluate_physical_mcp(physical: np.ndarray, residuals: np.ndarray, specs: Sequence[tuple], converged: bool):
+    feas = 0.0
+    comp = 0.0
+    fb_residuals = residuals.copy()
+    for (v_idx, e_idx, s_sign, kind, lb_val, ub_val, _) in specs:
+        for t in range(len(physical)):
+            val = float(physical[t, v_idx])
+            f_val = float(residuals[t, e_idx])
+            if kind == "PINNED":
+                assert lb_val is not None
+                feas = max(feas, abs(val - lb_val))
+                comp = max(comp, abs(val - lb_val))
+                fb_residuals[t, e_idx] = val - lb_val
+                if converged and abs(val - lb_val) <= 1e-12:
+                    physical[t, v_idx] = lb_val
+            elif kind == "LOWER":
+                assert lb_val is not None
+                feas = max(feas, max(0.0, lb_val - val), max(0.0, -s_sign * f_val))
+                if converged and lb_val - 1e-12 <= val < lb_val:
+                    physical[t, v_idx] = lb_val
+                    val = lb_val
+                comp = max(comp, abs((val - lb_val) * f_val))
+                a = val - lb_val
+                b = s_sign * f_val
+                fb_residuals[t, e_idx] = a + b - math.hypot(a, b)
+            elif kind == "UPPER":
+                assert ub_val is not None
+                feas = max(feas, max(0.0, val - ub_val), max(0.0, s_sign * f_val))
+                if converged and ub_val < val <= ub_val + 1e-12:
+                    physical[t, v_idx] = ub_val
+                    val = ub_val
+                comp = max(comp, abs((ub_val - val) * f_val))
+                a = ub_val - val
+                b = -s_sign * f_val
+                fb_residuals[t, e_idx] = a + b - math.hypot(a, b)
+            elif kind == "TWO_SIDED":
+                assert lb_val is not None and ub_val is not None
+                feas = max(feas, max(0.0, lb_val - val, val - ub_val))
+                if val <= lb_val + 1e-6:
+                    feas = max(feas, max(0.0, -s_sign * f_val))
+                elif val >= ub_val - 1e-6:
+                    feas = max(feas, max(0.0, s_sign * f_val))
+                if converged and lb_val - 1e-12 <= val < lb_val:
+                    physical[t, v_idx] = lb_val
+                    val = lb_val
+                elif converged and ub_val < val <= ub_val + 1e-12:
+                    physical[t, v_idx] = ub_val
+                    val = ub_val
+                comp = max(comp, min(abs(val - lb_val), abs(ub_val - val)) * abs(f_val))
+                a_u = ub_val - val
+                b_u = -s_sign * f_val
+                phi_u = a_u + b_u - math.hypot(a_u, b_u)
+                a_l = val - lb_val
+                b_l = -phi_u
+                fb_residuals[t, e_idx] = a_l + b_l - math.hypot(a_l, b_l)
+    phys_norm = float(np.max(np.abs(fb_residuals))) if fb_residuals.size else 0.0
+    return phys_norm, feas, comp, fb_residuals
 
 
 def solve_transition(
@@ -247,12 +420,17 @@ def solve_transition(
     min_step: float = 1 / 1024,
     max_solves: int = 40,
     horizon_tolerance: float | None = None,
+    normalized_horizon_tolerance: float | None = None,
     compare_periods: int = 20,
     max_periods: int | None = None,
     shock_tail: Any = None,
     variable_bounds: Mapping | None = None,
     equation_scale: Any = None,
     variable_scale: Any = None,
+    physical_scale: Any = None,
+    physical_tol: float | None = None,
+    mcp_feasibility_tol: float | None = None,
+    mcp_complementarity_tol: float | None = None,
     variable_names: Sequence[str] | None = None,
     initial_path: Any = None,
     reuse_preconditioner: bool = True,
@@ -299,6 +477,15 @@ def solve_transition(
         raise ValueError("The explicit shocks/boundaries define this transition; conflicting solver options")
     if horizon_tolerance is not None:
         horizon_tolerance = _positive(horizon_tolerance, "horizon_tolerance")
+    if normalized_horizon_tolerance is not None:
+        normalized_horizon_tolerance = _positive(normalized_horizon_tolerance, "normalized_horizon_tolerance")
+    if physical_tol is not None:
+        physical_tol = _positive(physical_tol, "physical_tol")
+    if mcp_feasibility_tol is not None:
+        mcp_feasibility_tol = _positive(mcp_feasibility_tol, "mcp_feasibility_tol")
+    if mcp_complementarity_tol is not None:
+        mcp_complementarity_tol = _positive(mcp_complementarity_tol, "mcp_complementarity_tol")
+    if horizon_tolerance is not None or normalized_horizon_tolerance is not None:
         compare_periods = _positive(compare_periods, "compare_periods", integer=True)
         if compare_periods > T:
             raise ValueError("compare_periods cannot exceed the initial horizon")
@@ -307,7 +494,7 @@ def solve_transition(
         max_periods = _positive(max_periods, "max_periods", integer=True)
         if max_periods <= T:
             raise ValueError("max_periods must exceed the initial horizon")
-    coords = _Coordinates(names, variable_bounds, variable_scale)
+    coords = _Coordinates(names, variable_bounds, variable_scale, physical_scale=physical_scale)
     coords.encode(initial)
     coords.encode(terminal)
     if continuation:
@@ -323,6 +510,10 @@ def solve_transition(
     solves = 0
     last = None
     last_scaled = float("inf")
+    last_physical = float("inf")
+    last_mcp_feas = 0.0
+    last_mcp_comp = 0.0
+    last_norm_horizon: float | None = None
     dag = getattr(model_or_equations, "_dag", None)
     params = dict(getattr(model_or_equations, "_params", None) or
                   getattr(model_or_equations, "parameter_values", {}))
@@ -334,7 +525,7 @@ def solve_transition(
             raise ValueError("baseline_params must contain known finite calibrated parameters")
 
     def attempt(exogenous, boundary, guess, fraction):
-        nonlocal solves, last, last_scaled
+        nonlocal solves, last, last_scaled, last_physical, last_mcp_feas, last_mcp_comp
         solves += 1
         opts = dict(options)
         stage_params = params
@@ -369,11 +560,15 @@ def solve_transition(
                 return np.full(len(names), np.inf)
             return raw(*values, eps) / scales
         original_jacobian = opts.pop("jacobian_fn", None)
+        symbolic_stage = None
+        jacobian = None
         if original_jacobian is None and dag is not None and options.get("method", "auto") in ("auto", "analytic"):
             from ._transition_derivatives import TrajectoryJacobian
-            original_jacobian = TrajectoryJacobian(dag, stage_params, boundary).blocks
-        jacobian = None
-        if original_jacobian is not None:
+            symbolic_stage = TrajectoryJacobian(
+                dag, stage_params, boundary, coords=coords, equation_scale=scales,
+            )
+            jacobian = symbolic_stage.blocks
+        elif original_jacobian is not None:
             def jacobian(zp, zc, zl, eps):
                 blocks = original_jacobian(coords.decode(zp), coords.decode(zc), coords.decode(zl), eps)
                 return tuple(np.asarray(block) * coords.derivative(z)[None, :] / scales[:, None]
@@ -391,6 +586,7 @@ def solve_transition(
                     return (np.asarray(policy_jacobian(physical)) * coords.derivative(z)[None, :]
                             / coords.derivative(output)[:, None])
                 opts["terminal_jacobian"] = mapped_terminal_jacobian
+        raw_mcp_bounds = dict(opts["mcp_bounds"]) if opts.get("mcp_bounds") else None
         if opts.get("mcp_bounds"):
             converted = {}
             for key, (lo, hi) in opts["mcp_bounds"].items():
@@ -426,8 +622,25 @@ def solve_transition(
             if (reuse_preconditioner and opts.get("linear_solver") == "krylov" and
                     "preconditioner" not in krylov_settings and "time_block" not in krylov_settings):
                 from .stacked_newton import StackedProblem
-                problem = StackedProblem(transformed, z0, zend, exogenous, blocks_fn=jacobian)
-                opts["krylov_options"] = dict(opts.get("krylov_options") or {}, preconditioner=cache.get(problem))
+                mcp_specs_trans = (
+                    _resolve_mcp_specs(
+                        names, transformed, zend, exogenous[0],
+                        opts.get("mcp_bounds"), opts.get("mcp_equations"),
+                    )
+                    if (opts.get("mcp") or opts.get("mcp_bounds")) else None
+                )
+                problem = StackedProblem(
+                    transformed, z0, zend, exogenous,
+                    variable_names=names,
+                    blocks_fn=(symbolic_stage.steady_or_date_blocks if symbolic_stage is not None else jacobian),
+                    terminal_policy=opts.get("terminal_policy"),
+                    terminal_jacobian=opts.get("terminal_jacobian"),
+                    mcp_specs=mcp_specs_trans or None,
+                )
+                opts["krylov_options"] = dict(
+                    opts.get("krylov_options") or {},
+                    preconditioner=cache.for_problem(problem),
+                )
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter("always", RuntimeWarning)
                 numerical = solve_perfect_foresight(
@@ -437,12 +650,33 @@ def solve_transition(
                 )
             physical = coords.decode(numerical.path.to_numpy())
             residuals = evaluate_path(physical)
-            last_scaled = (float(numerical.residual_norm) if isinstance(numerical, MCPResult) else
-                           float(np.max(np.abs(residuals / scales))))
+            if isinstance(numerical, MCPResult):
+                last_scaled = float(numerical.residual_norm)
+                mcp_specs_phys = _resolve_mcp_specs(
+                    names, raw, boundary, exogenous[0], raw_mcp_bounds, opts.get("mcp_equations"),
+                )
+                last_physical, last_mcp_feas, last_mcp_comp, _ = _evaluate_physical_mcp(
+                    physical, residuals, mcp_specs_phys, bool(numerical.converged),
+                )
+                residuals = evaluate_path(physical)
+            else:
+                last_scaled = float(np.max(np.abs(residuals / scales)))
+                last_physical = float(np.max(np.abs(residuals)))
+                last_mcp_feas = 0.0
+                last_mcp_comp = 0.0
             success = bool(numerical.converged and np.isfinite(last_scaled) and last_scaled <= tolerance)
-            replacements = dict(path=pd.DataFrame(physical, index=numerical.path.index, columns=names),
-                                converged=success,
-                                terminal_error=float(np.max(np.abs(physical[-1] - boundary))))
+            if physical_tol is not None:
+                success = bool(success and np.isfinite(last_physical) and last_physical <= physical_tol)
+            if isinstance(numerical, MCPResult):
+                if mcp_feasibility_tol is not None:
+                    success = bool(success and np.isfinite(last_mcp_feas) and last_mcp_feas <= mcp_feasibility_tol)
+                if mcp_complementarity_tol is not None:
+                    success = bool(success and np.isfinite(last_mcp_comp) and last_mcp_comp <= mcp_complementarity_tol)
+            replacements: dict[str, Any] = dict(
+                path=pd.DataFrame(physical, index=numerical.path.index, columns=names),
+                converged=success,
+                terminal_error=float(np.max(np.abs(physical[-1] - boundary))),
+            )
             if isinstance(numerical, PerfectForesightResult):
                 context = dict(mode="perfect_foresight", equations=raw, y_init=initial.copy(),
                                y_end=boundary.copy(), exogenous_path=np.asarray(exogenous).copy(),
@@ -450,15 +684,36 @@ def solve_transition(
                 if policy is not None:
                     context.update(terminal_policy_input=physical[-1].copy(),
                                    terminal_policy_output=np.asarray(policy(physical[-1].copy())).copy())
-                replacements.update(residual_norm=float(np.max(np.abs(residuals))),
+                replacements.update(residual_norm=last_physical,
                                     initial_residual_norm=float(np.max(np.abs(initial_residuals))), _audit_context=context,
                                     solver_diagnostics=dict(numerical.solver_diagnostics,
                                         scaled_residual_norm=last_scaled, equation_scale=scales.copy(),
-                                        original_equation_residual_norm=float(np.max(np.abs(residuals))),
+                                        physical_scale=coords.physical_scale.copy(),
+                                        original_equation_residual_norm=last_physical,
+                                        physical_residual_norm=last_physical,
                                         coordinate_transform=True))
+            elif isinstance(numerical, MCPResult):
+                replacements.update(
+                    physical_residual_norm=last_physical,
+                    physical_mcp_feasibility=last_mcp_feas,
+                    physical_complementarity_residual=last_mcp_comp,
+                    solver_diagnostics=dict(
+                        numerical.solver_diagnostics,
+                        scaled_residual_norm=last_scaled,
+                        equation_scale=scales.copy(),
+                        physical_scale=coords.physical_scale.copy(),
+                        physical_residual_norm=last_physical,
+                        physical_mcp_feasibility=last_mcp_feas,
+                        physical_complementarity_residual=last_mcp_comp,
+                        coordinate_transform=True,
+                    ),
+                )
             last = replace(numerical, **replacements)
             attempts.append(dict(solve=solves, fraction=fraction, periods=len(exogenous),
                                  converged=success, scaled_residual_norm=last_scaled,
+                                 physical_residual_norm=last_physical,
+                                 physical_mcp_feasibility=last_mcp_feas,
+                                 physical_complementarity_residual=last_mcp_comp,
                                  parameters=dict(stage_params),
                                  iterations=numerical.iterations, warnings=tuple(str(w.message) for w in caught)))
             return last if success else None
@@ -468,8 +723,14 @@ def solve_transition(
             return None
 
     def result(success, reason):
-        return TransitionResult(last, success, reason, solves, tuple(attempts), tuple(horizons),
-                                last_scaled, cache.builds)
+        return TransitionResult(
+            last, success, reason, solves, tuple(attempts), tuple(horizons),
+            last_scaled, cache.builds,
+            physical_residual_norm=last_physical,
+            physical_mcp_feasibility=last_mcp_feas,
+            physical_complementarity_residual=last_mcp_comp,
+            normalized_horizon_error=last_norm_horizon,
+        )
 
     accepted = None
     if continuation:
@@ -496,7 +757,7 @@ def solve_transition(
         accepted = attempt(target, terminal, initial_path, 1.0)
         if accepted is None:
             return result(False, "target_failed")
-    if horizon_tolerance is None:
+    if horizon_tolerance is None and normalized_horizon_tolerance is None:
         return result(True, "target_solved")
     assert max_periods is not None
     while True:
@@ -515,13 +776,22 @@ def solve_transition(
         trial = attempt(target, terminal, guess, 1.0)
         if trial is None:
             return result(False, "horizon_solve_failed")
-        difference = float(np.max(np.abs(trial.path.iloc[:compare_periods].to_numpy() -
-                                         accepted.path.iloc[:compare_periods].to_numpy())))
+        diff_matrix = np.abs(trial.path.iloc[:compare_periods].to_numpy() -
+                             accepted.path.iloc[:compare_periods].to_numpy())
+        difference = float(np.max(diff_matrix))
+        norm_difference = float(np.max(diff_matrix / coords.physical_scale[None, :]))
+        last_norm_horizon = norm_difference
+        abs_ok = True if horizon_tolerance is None else (difference <= horizon_tolerance)
+        norm_ok = True if normalized_horizon_tolerance is None else (norm_difference <= normalized_horizon_tolerance)
+        horizon_ok = bool(abs_ok and norm_ok)
         horizons.append(dict(periods=T, refined_periods=new_T, compare_periods=compare_periods,
-                             max_absolute_difference=difference, tolerance=horizon_tolerance,
-                             accepted=difference <= horizon_tolerance))
+                             max_absolute_difference=difference,
+                             normalized_difference=norm_difference,
+                             tolerance=horizon_tolerance,
+                             normalized_tolerance=normalized_horizon_tolerance,
+                             accepted=horizon_ok))
         accepted, T = trial, new_T
-        if difference <= horizon_tolerance:
+        if horizon_ok:
             return result(True, "horizon_accepted")
         if T == max_periods:
             return result(False, "horizon_budget_exhausted")

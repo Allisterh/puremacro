@@ -17,6 +17,8 @@ print(informe.to_json())
 puremacro-dynare inspect estudio.mod --ordered
 puremacro-dynare inspect estudio.mod --ordered --format json
 puremacro-dynare inspect estudio.mod --entry-point load_mod --output informe.txt
+puremacro-dynare execute estudio.mod --outdir out/
+puremacro-dynare estudio.mod --ordered --outdir out/
 ```
 
 Solo `--output` solicita escribir un archivo. Los códigos de salida son `0`
@@ -80,16 +82,17 @@ también puede usar `execute_mod_commands(ordered=True)` en un modelo ya cargado
 pero en ese caso la resolución de carga ya ocurrió.
 
 El subconjunto estocástico admite `stoch_simul`, `calib_smoother` y
-`shock_decomposition` repetidos con calibración fija. La extensión de desarrollo
-5.7.0 también reproduce bloques de frontera, declaraciones de choques y comandos
+`shock_decomposition` repetidos con calibración fija o actualizada entre comandos.
+La extensión de desarrollo 5.7.0 también reproduce bloques de frontera,
+declaraciones de choques, reasignaciones intercaladas de parámetros y comandos
 repetidos de preparación/resolución de previsión perfecta, incluidos programas
 deterministas y estocásticos combinados. Use
-`read_mod(source).execute_mod_commands()` para empezar sin resolver implícitamente
-el estado estacionario ni la perturbación; la [guía de modelos no lineales](dsge_nonlinear.md)
-describe las opciones y las instantáneas admitidas. Las reasignaciones intercaladas
-de parámetros y los comandos de política y HANK siguen fuera del soporte ordenado.
-Las incompatibilidades conocidas, el esquema de datos y los intervalos muestrales
-se validan antes del primer comando numérico.
+`read_mod(source).execute_mod_commands()` (o `puremacro-dynare execute estudio.mod`) para
+empezar sin resolver implícitamente el estado estacionario ni la perturbación;
+la [guía de modelos no lineales](dsge_nonlinear.md) describe las opciones y las
+instantáneas admitidas. Los comandos de política y HANK siguen fuera del soporte
+ordenado. Las incompatibilidades conocidas, el esquema de datos y los intervalos
+muestrales se validan antes del primer comando numérico.
 
 | Comando | Opciones explícitas soportadas | Valores iniciales |
 |---|---|---|

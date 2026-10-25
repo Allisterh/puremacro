@@ -314,3 +314,324 @@ def test_mod_bridge_preserves_conditional_euler_and_neoclassical_labor():
     assert audit.passed and audit.max_residual < 1e-5
     assert audit.diagnostics.next_state_outside_mass.max() == 0
     assert audit_policy(problem, initial, points, tol=1e-5).max_residual > 1e-4
+
+
+def test_separable_1d_chebyshev_fitting_avoids_dense_n_by_n_matrix():
+    from scipy.linalg import lu_factor, lu_solve
+    from puremacro.dsge.global_solution import _Basis
+
+    # 1. Exact agreement with dense N x N LU solve on a 3D anisotropic tensor grid.
+    small_problem = EquilibriumProblem(
+        ("s1", "s2", "s3"),
+        ("u1", "u2"),
+        ((-1.0, 2.0), (0.5, 1.5), (-0.4, 0.8)),
+        lambda s, x, e: s,
+        lambda s, x, sp, xp, e: x,
+    )
+    small_basis = _Basis(small_problem, (4, 3, 2), "chebyshev", max_nodes=1000)
+    assert not small_basis.collocation_matrix_allocated
+    assert small_basis.factor is None
+    assert small_basis.factors_1d is not None and len(small_basis.factors_1d) == 3
+
+    nodes_small = small_basis.nodes
+    values_small = np.column_stack((
+        np.sin(nodes_small[:, 0]) + nodes_small[:, 1] ** 2 - 0.5 * nodes_small[:, 2],
+        np.cos(nodes_small[:, 1]) * nodes_small[:, 0] + nodes_small[:, 2] ** 2,
+    ))
+    policy_separable = small_basis.fit(values_small, extrapolation="allow")
+    dense_coeffs = lu_solve(lu_factor(small_basis.matrix(nodes_small)), values_small)
+    assert policy_separable.coefficients is not None
+    np.testing.assert_allclose(policy_separable.coefficients, dense_coeffs, rtol=0, atol=1e-12)
+
+    # 2. 4-state orders=(8, 8, 8, 8) (9^4 = 6561 nodes) fit without N x N allocation.
+    four_state_problem = EquilibriumProblem(
+        ("k1", "k2", "z1", "z2"),
+        ("c", "i"),
+        ((0.8, 1.2), (0.5, 1.5), (-0.1, 0.1), (-0.2, 0.2)),
+        lambda s, x, e: 0.5 * s,
+        lambda s, x, sp, xp, e: x - np.array([
+            s[0] ** 2 - 0.3 * s[1] * s[2] + s[3] ** 3,
+            0.4 * s[0] * s[3] + s[1] ** 2 - s[2] ** 2,
+        ]),
+    )
+    basis_4d = _Basis(four_state_problem, (8, 8, 8, 8), "chebyshev", max_nodes=10000)
+    assert len(basis_4d.nodes) == 6561
+    assert not basis_4d.collocation_matrix_allocated
+    assert basis_4d.factor is None
+    # Dense 6561 x 6561 float64 matrix would be ~344 MB; 4 separable 9 x 9 factors < 4 KB.
+    assert basis_4d.storage_bytes < 4096
+
+    n_4d = basis_4d.nodes
+    exact_values = np.column_stack((
+        n_4d[:, 0] ** 2 - 0.3 * n_4d[:, 1] * n_4d[:, 2] + n_4d[:, 3] ** 3,
+        0.4 * n_4d[:, 0] * n_4d[:, 3] + n_4d[:, 1] ** 2 - n_4d[:, 2] ** 2,
+    ))
+    fitted_4d = basis_4d.fit(exact_values, extrapolation="raise")
+    assert not fitted_4d.collocation_matrix_allocated
+    assert fitted_4d.storage_bytes < 4096
+
+    off_grid = np.array([
+        [0.85, 0.65, -0.07, 0.13],
+        [1.12, 1.35, 0.04, -0.11],
+        [0.99, 1.01, -0.02, 0.05],
+    ])
+    expected_off_grid = np.column_stack((
+        off_grid[:, 0] ** 2 - 0.3 * off_grid[:, 1] * off_grid[:, 2] + off_grid[:, 3] ** 3,
+        0.4 * off_grid[:, 0] * off_grid[:, 3] + off_grid[:, 1] ** 2 - off_grid[:, 2] ** 2,
+    ))
+    np.testing.assert_allclose(fitted_4d(off_grid), expected_off_grid, rtol=0, atol=1e-10)
+
+
+def test_expected_residual_jacobian_chain_rule_and_batched_callback_reduction():
+    from puremacro.dsge.global_solution import _expected, _expected_details, _expected_jacobian_analytic_or_hybrid
+
+    alpha, beta, delta, gamma, rho = 0.33, 0.96, 0.08, 1.0, 0.9
+    shocks, weights = gaussian_quadrature([[0.015 ** 2]], order=5)
+
+    def make_problem(*, with_jacobians: bool, batched: bool):
+        counts = {"transition": 0, "residual": 0, "transition_jac": 0, "residual_jac": 0}
+
+        if not batched:
+            def transition(s, x, e):
+                counts["transition"] += 1
+                k_lag, a = s
+                c, l = x
+                y = np.exp(a) * (k_lag ** alpha) * (l ** (1.0 - alpha))
+                k_next = y + (1.0 - delta) * k_lag - c
+                return np.array([k_next, rho * a + e[0]])
+
+            def residual(s, x, sp, xp, e):
+                counts["residual"] += 1
+                k_lag, a = s
+                c, l = x
+                k_next, a_next = sp
+                c_next, l_next = xp
+                y = np.exp(a) * (k_lag ** alpha) * (l ** (1.0 - alpha))
+                y_next = np.exp(a_next) * (k_next ** alpha) * (l_next ** (1.0 - alpha))
+                euler = 1.0 / c - beta * (1.0 / c_next) * (alpha * y_next / k_next + 1.0 - delta)
+                intra = gamma * c / (1.0 - l) - (1.0 - alpha) * y / l
+                return np.array([euler, intra])
+
+            def transition_jacobian(s, x, e):
+                counts["transition_jac"] += 1
+                k_lag, a = s
+                _, l = x
+                dy_dl = (1.0 - alpha) * np.exp(a) * (k_lag ** alpha) * (l ** (-alpha))
+                return np.array([[-1.0, dy_dl], [0.0, 0.0]])
+
+            def residual_jacobian(s, x, sp, xp, e):
+                counts["residual_jac"] += 1
+                k_lag, a = s
+                c, l = x
+                k_next, a_next = sp
+                c_next, l_next = xp
+                y = np.exp(a) * (k_lag ** alpha) * (l ** (1.0 - alpha))
+                dy_dl = (1.0 - alpha) * y / l
+                y_next = np.exp(a_next) * (k_next ** alpha) * (l_next ** (1.0 - alpha))
+                mpk_next = alpha * y_next / k_next
+                dmpk_dkp = alpha * (alpha - 1.0) * y_next / (k_next ** 2)
+                dmpk_dap = mpk_next
+                dmpk_dlp = alpha * (1.0 - alpha) * y_next / (k_next * l_next)
+                gross_r = mpk_next + 1.0 - delta
+
+                r_x = np.array([
+                    [-1.0 / (c ** 2), 0.0],
+                    [gamma / (1.0 - l), gamma * c / ((1.0 - l) ** 2) + (1.0 - alpha) * alpha * y / (l ** 2)],
+                ])
+                r_sp = np.array([
+                    [-beta * (1.0 / c_next) * dmpk_dkp, -beta * (1.0 / c_next) * dmpk_dap],
+                    [0.0, 0.0],
+                ])
+                r_xp = np.array([
+                    [beta * gross_r / (c_next ** 2), -beta * (1.0 / c_next) * dmpk_dlp],
+                    [0.0, 0.0],
+                ])
+                # Avoid unused warning for dy_dl while keeping expressions explicit
+                _ = dy_dl
+                return r_x, r_sp, r_xp
+        else:
+            def transition(s, x, e):
+                counts["transition"] += 1
+                k_lag, a = s[:, 0], s[:, 1]
+                c, l = x[:, 0], x[:, 1]
+                y = np.exp(a) * (k_lag ** alpha) * (l ** (1.0 - alpha))
+                k_next = y + (1.0 - delta) * k_lag - c
+                return np.column_stack((k_next, rho * a + e[:, 0]))
+
+            def residual(s, x, sp, xp, e):
+                counts["residual"] += 1
+                k_lag, a = s[:, 0], s[:, 1]
+                c, l = x[:, 0], x[:, 1]
+                k_next, a_next = sp[:, 0], sp[:, 1]
+                c_next, l_next = xp[:, 0], xp[:, 1]
+                y = np.exp(a) * (k_lag ** alpha) * (l ** (1.0 - alpha))
+                y_next = np.exp(a_next) * (k_next ** alpha) * (l_next ** (1.0 - alpha))
+                euler = 1.0 / c - beta * (1.0 / c_next) * (alpha * y_next / k_next + 1.0 - delta)
+                intra = gamma * c / (1.0 - l) - (1.0 - alpha) * y / l
+                return np.column_stack((euler, intra))
+
+            def transition_jacobian(s, x, e):
+                counts["transition_jac"] += 1
+                k_lag, a = s[:, 0], s[:, 1]
+                l = x[:, 1]
+                dy_dl = (1.0 - alpha) * np.exp(a) * (k_lag ** alpha) * (l ** (-alpha))
+                q = len(s)
+                out = np.zeros((q, 2, 2), dtype=float)
+                out[:, 0, 0] = -1.0
+                out[:, 0, 1] = dy_dl
+                return out
+
+            def residual_jacobian(s, x, sp, xp, e):
+                counts["residual_jac"] += 1
+                k_lag, a = s[:, 0], s[:, 1]
+                c, l = x[:, 0], x[:, 1]
+                k_next, a_next = sp[:, 0], sp[:, 1]
+                c_next, l_next = xp[:, 0], xp[:, 1]
+                y = np.exp(a) * (k_lag ** alpha) * (l ** (1.0 - alpha))
+                y_next = np.exp(a_next) * (k_next ** alpha) * (l_next ** (1.0 - alpha))
+                mpk_next = alpha * y_next / k_next
+                dmpk_dkp = alpha * (alpha - 1.0) * y_next / (k_next ** 2)
+                dmpk_dap = mpk_next
+                dmpk_dlp = alpha * (1.0 - alpha) * y_next / (k_next * l_next)
+                gross_r = mpk_next + 1.0 - delta
+                q = len(s)
+                r_x = np.zeros((q, 2, 2), dtype=float)
+                r_x[:, 0, 0] = -1.0 / (c ** 2)
+                r_x[:, 1, 0] = gamma / (1.0 - l)
+                r_x[:, 1, 1] = gamma * c / ((1.0 - l) ** 2) + (1.0 - alpha) * alpha * y / (l ** 2)
+
+                r_sp = np.zeros((q, 2, 2), dtype=float)
+                r_sp[:, 0, 0] = -beta * (1.0 / c_next) * dmpk_dkp
+                r_sp[:, 0, 1] = -beta * (1.0 / c_next) * dmpk_dap
+
+                r_xp = np.zeros((q, 2, 2), dtype=float)
+                r_xp[:, 0, 0] = beta * gross_r / (c_next ** 2)
+                r_xp[:, 0, 1] = -beta * (1.0 / c_next) * dmpk_dlp
+                return r_x, r_sp, r_xp
+
+        prob = EquilibriumProblem(
+            ("k_lag", "a"),
+            ("c", "l"),
+            ((1.8, 3.6), (-0.08, 0.08)),
+            transition,
+            residual,
+            shocks,
+            weights,
+            admissible=lambda s, x: (
+                x[0] > 0.0
+                and 0.0 < x[1] < 1.0
+                and (np.exp(s[1]) * (s[0] ** alpha) * (x[1] ** (1.0 - alpha)) + (1.0 - delta) * s[0] - x[0]) > 0.0
+            ),
+            transition_jacobian=transition_jacobian if with_jacobians else None,
+            residual_jacobian=residual_jacobian if with_jacobians else None,
+            batched=batched,
+        )
+        return prob, counts
+
+    def initial_guess(s):
+        k_lag, a = s
+        l0 = 0.42
+        y0 = np.exp(a) * (k_lag ** alpha) * (l0 ** (1.0 - alpha))
+        c0 = 0.72 * y0
+        return np.array([c0, l0])
+
+    prob_fd, counts_fd = make_problem(with_jacobians=False, batched=False)
+    prob_jac, counts_jac = make_problem(with_jacobians=True, batched=False)
+    prob_batch, counts_batch = make_problem(with_jacobians=True, batched=True)
+
+    res_fd = solve_time_iteration(
+        prob_fd, initial_guess, orders=(5, 2), tol=1e-7, require_domain=False, extrapolation="allow"
+    )
+    res_jac = solve_time_iteration(
+        prob_jac, initial_guess, orders=(5, 2), tol=1e-7, require_domain=False, extrapolation="allow"
+    )
+    res_batch = solve_time_iteration(
+        prob_batch, initial_guess, orders=(5, 2), tol=1e-7, require_domain=False, extrapolation="allow"
+    )
+
+    assert res_fd.converged and res_jac.converged and res_batch.converged
+
+    # Verify the full future-policy chain rule dR/dx' * d pi(s')/ds' * dg/dx against finite differences.
+    s_test = np.array([2.55, 0.015])
+    x_test = res_jac(s_test)
+    _, _, _, next_s, next_x = _expected_details(prob_jac, s_test, x_test, res_jac.policy)
+    analytic_total_jac = _expected_jacobian_analytic_or_hybrid(
+        prob_jac, s_test, x_test, res_jac.policy, next_s, next_x
+    )
+    fd_total_jac = np.zeros((2, 2), dtype=float)
+    for j in range(2):
+        h = 1e-7
+        xp, xm = x_test.copy(), x_test.copy()
+        xp[j] += h
+        xm[j] -= h
+        rp, _, _ = _expected(prob_jac, s_test, xp, res_jac.policy)
+        rm, _, _ = _expected(prob_jac, s_test, xm, res_jac.policy)
+        fd_total_jac[:, j] = (rp - rm) / (2.0 * h)
+    np.testing.assert_allclose(analytic_total_jac, fd_total_jac, rtol=0, atol=1e-7)
+
+    # Off-grid accuracy agreement across all three solver modes.
+    points = np.column_stack((np.linspace(2.2, 3.1, 25), np.linspace(-0.03, 0.03, 25)))
+    np.testing.assert_allclose(res_jac(points), res_fd(points), rtol=0, atol=1e-6)
+    np.testing.assert_allclose(res_batch(points), res_fd(points), rtol=0, atol=1e-6)
+    assert audit_policy(prob_fd, res_jac, points, tol=2e-5).passed
+    assert audit_policy(prob_fd, res_batch, points, tol=2e-5).passed
+
+    # Direct callback instrumentation: >= 50% reduction in economic callback evaluations.
+    fd_total_callbacks = counts_fd["transition"] + counts_fd["residual"]
+    jac_total_callbacks = counts_jac["transition"] + counts_jac["residual"]
+    batch_total_callbacks = counts_batch["transition"] + counts_batch["residual"]
+    assert jac_total_callbacks <= 0.5 * fd_total_callbacks
+    assert batch_total_callbacks <= 0.2 * fd_total_callbacks
+
+
+def test_open_domain_trial_rejection_and_feasible_backtracking():
+    # 2-control problem with open domain c > 0 and 0 < l < 1 (no artificial interior box bounds).
+    # From the initial guess, the full Newton step alpha=1 overshoots into c <= 0 or l >= 1.
+    def transition(s, x, e):
+        return np.array([0.5 * s[0] + x[0]])
+
+    def residual(s, x, sp, xp, e):
+        c, l = x
+        if c <= 0.0 or l <= 0.0 or l >= 1.0:
+            raise ValueError("open domain violated: c <= 0 or l outside (0, 1)")
+        # Steep curvature near initial guess (c=1.8, l=0.05) causes full Newton step to cross c <= 0 / l >= 1
+        # while true solution is interior at c* = 0.25, l* = 0.65.
+        eq1 = (c ** -0.25) - (0.25 ** -0.25) - 0.05 * (xp[0] - 0.25)
+        eq2 = ((1.0 - l) ** -0.25) - (0.35 ** -0.25)
+        return np.array([eq1, eq2])
+
+    problem = EquilibriumProblem(
+        ("k",),
+        ("c", "l"),
+        ((0.2, 1.0),),
+        transition,
+        residual,
+        admissible=lambda s, x: x[0] > 0.0 and 0.0 < x[1] < 1.0,
+    )
+    initial = lambda s: np.array([1.8, 0.05])
+    result = solve_time_iteration(problem, initial, orders=2, tol=1e-8)
+    assert result.converged
+    assert result.callback_evaluations["trial_rejections"] > 0
+    points = np.linspace(0.25, 0.95, 15)[:, None]
+    np.testing.assert_allclose(result(points)[:, 0], 0.25, atol=1e-7)
+    np.testing.assert_allclose(result(points)[:, 1], 0.65, atol=1e-7)
+    assert audit_policy(problem, result, points, tol=1e-7).passed
+
+
+def test_exhausted_feasible_backtracking_reports_explicit_diagnostic():
+    # Every step away from initial guess x0=0.5 toward the root x*=0.2 is rejected by admissible.
+    problem = EquilibriumProblem(
+        ("s",),
+        ("x",),
+        ((0.0, 1.0),),
+        lambda s, x, e: s,
+        lambda s, x, sp, xp, e: x - 0.2,
+        admissible=lambda s, x: x[0] >= 0.5,
+    )
+    with pytest.warns(RuntimeWarning, match="feasible backtracking exhausted"):
+        result = solve_time_iteration(problem, [0.5], orders=2, tol=1e-7)
+    assert not result.converged
+    assert "feasible backtracking exhausted" in result.message
+    with pytest.raises(RuntimeError, match="feasible backtracking exhausted"):
+        solve_time_iteration(problem, [0.5], orders=2, tol=1e-7, strict=True)
+

@@ -7,6 +7,46 @@ This changelog describes versioned source changes. Check
 Versions 5.3.0, 5.4.0 and 5.4.1 were tagged but not published to PyPI; their
 additions are included in 5.4.2. See the [release procedure](RELEASING.md).
 
+## Unreleased
+
+### Added
+
+- Ordered `.mod` execution now supports mid-script parameter reassignments between
+  commands, multi-lag indexed `histval` (`k(0)`, `k(-1)`, ...) and lead-indexed
+  `endval` mapped onto parser-generated `AUX_LAG_*` / `AUX_LEAD_*` / `AUX_EXO_LAG_*` /
+  `AUX_EXO_LEAD_*` variables, and CLI execution via
+  `puremacro-dynare execute <file.mod> [--outdir DIR] [--data CSV]` (or
+  `puremacro-dynare <file.mod> --ordered`).
+- `diagnose_perturbation(solution, max_curvature_order=3)` reports higher-order
+  Schur-block conditioning (`schur_block_condition`), full Kronecker curvature
+  operator conditioning (`curvature_operator_condition`, `curvature_coupling_amplification`,
+  `curvature_conditioning`), normalized Sylvester equation residuals
+  (`sylvester_residuals` for `ghxx`, `ghs2`, `ghxxx`, `ghxss`, `ghuss`), and
+  work counts (`sylvester_work` / `SylvesterWorkCounts`).
+- `solve_perfect_foresight(..., linear_solver="krylov")`, `solve_transition`, and
+  `StackedProblem` now support `terminal_policy` / `terminal_jacobian` and
+  `mcp=True` / `mcp_bounds` / `mcp_equations` via active-row preconditioned
+  semismooth Newton–Krylov, with physical bound/complementarity diagnostics
+  (`physical_mcp_feasibility`, `physical_complementarity_residual`,
+  `physical_residual_norm`), `physical_scale` / `normalized_horizon_tolerance`,
+  and compiled sparse derivative value-reuse across Newton steps (`TrajectoryJacobian`).
+- `solve_time_iteration` and `EquilibriumProblem` add analytic expected-residual
+  Jacobian callbacks (`transition_jacobian`, `residual_jacobian`, and automatic
+  compiled equation derivative reuse in `EquilibriumProblem.from_model`),
+  domain-safe feasible backtracking (`trial_rejections` in `history` and
+  `callback_evaluations`), separable 1D Kronecker LU Chebyshev fitting
+  (`collocation_matrix_allocated`, `storage_bytes`), and batched shock integration.
+
+### Fixed
+
+- The higher-order Bartels–Stewart Sylvester solver (`puremacro.dsge._sylvester`)
+  now keys its LU cache by exact IEEE-754 floating-point values (`float` and
+  4-tuples of `float`) instead of 12-decimal rounded scalars, eliminating the
+  near-unit-root factorization collision reported in 5.7.1.
+- `_compile_dag_derivatives` and `TrajectoryJacobian` now key their compiled
+  derivative caches by symbolic equation structure rather than `id(dag)`,
+  preventing stale cache hits after garbage collection.
+
 ## 5.7.1 (2026-10-23)
 
 **Fix the opt-in course test bootstrap and publish the retained 5.7.0 features.**

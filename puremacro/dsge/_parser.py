@@ -763,6 +763,7 @@ class ParsedModelDAG:
     perfect_foresight_options: dict[str, Any] = field(default_factory=dict)
     commands: list[dict[str, Any]] = field(default_factory=list)
     source_statements: list[dict[str, Any]] = field(default_factory=list)
+    param_assignments: dict[str, Node] = field(default_factory=dict)
 
     @property
     def varexo_det(self) -> list[str]:
@@ -998,6 +999,8 @@ class Parser:
         self.varobs: list[str] = []
         self.param_assignments: dict[str, Node] = {}
         self.param_values: dict[str, float] = {}
+        self._seen_numerical_command: bool = False
+        self._indexed_zero_targets: set[str] = set()
 
         # Model contents
         self.equations: list[Node] = []
@@ -1412,6 +1415,7 @@ class Parser:
         self._expect("KEYWORD", block_name)
         self._expect("SEMI")
         defs: dict[str, Node] = {}
+        self._indexed_zero_targets = set()
         while self._curr().type != "EOF":
             if self._curr().type == "KEYWORD" and self._curr().value == "end":
                 self._advance()
@@ -1419,19 +1423,44 @@ class Parser:
                 break
             if self._curr().type in ("IDENT", "KEYWORD"):
                 name = str(self._advance().value)
+                idx_val: int | None = None
                 if self._match("LPAREN"):
-                    # Handle possible lead/lag index like y(0) or y(-1)
+                    # Handle possible lead/lag index like y(0), y(-1), y(-2), y(+1)
+                    sign = 1
                     if self._curr().type in ("NUMBER", "INT", "MINUS", "PLUS"):
                         if self._curr().type in ("MINUS", "PLUS"):
-                            self._advance()
+                            if self._advance().type == "MINUS":
+                                sign = -1
                         if self._curr().type in ("NUMBER", "INT"):
-                            self._advance()
+                            raw_idx = self._advance().value
+                            if isinstance(raw_idx, (int, float)) and int(raw_idx) == raw_idx:
+                                idx_val = sign * int(raw_idx)
                     self._expect("RPAREN")
 
                 self._expect("ASSIGN")
                 expr = self.parse_expression()
                 self._expect("SEMI")
-                defs[name] = expr
+                target_key = name
+                if idx_val is not None:
+                    if block_name == "histval":
+                        if name in self.shocks:
+                            if idx_val <= 0:
+                                target_key = f"AUX_EXO_LAG_{name}_{abs(idx_val) + 1}"
+                        elif idx_val == 0:
+                            target_key = name
+                            self._indexed_zero_targets.add(name)
+                        elif idx_val < 0:
+                            target_key = f"AUX_LAG_{name}_{abs(idx_val)}"
+                    elif block_name == "endval":
+                        if name in self.shocks:
+                            if idx_val > 0:
+                                target_key = f"AUX_EXO_LEAD_{name}_{idx_val}"
+                        elif idx_val == 0:
+                            target_key = name
+                            self._indexed_zero_targets.add(name)
+                        elif idx_val > 0:
+                            target_key = f"AUX_LEAD_{name}_{idx_val}"
+                defs[target_key] = expr
             else:
                 if self.collect_only:
                     raise DynareParseError("Unhandled token in recognized block", self._curr().line, self._curr().col)
@@ -2114,6 +2143,7 @@ class Parser:
             start = self.pos
             self._skipped = False
             self._pending_command = None
+            stmt_metadata: dict[str, Any] = {}
             before_commands = len(self.commands)
             t = self._curr()
 
@@ -2202,28 +2232,42 @@ class Parser:
                 elif t.value == "model":
                     self._parse_model_block()
                 elif t.value == "initval":
-                    self.initval_defs = self._parse_assignment_block("initval")
+                    parsed_init = self._parse_assignment_block("initval")
+                    stmt_metadata = {"defs": dict(parsed_init)}
+                    if not self._seen_numerical_command or not self.initval_defs:
+                        self.initval_defs = parsed_init
                 elif t.value == "histval":
-                    self.histval_defs = self._parse_assignment_block("histval")
+                    parsed_hist = self._parse_assignment_block("histval")
+                    stmt_metadata = {"defs": dict(parsed_hist)}
+                    if not self._seen_numerical_command or not self.histval_defs:
+                        self.histval_defs = parsed_hist
+                        self._histval_indexed_zero = set(self._indexed_zero_targets)
                     self.commands.append({"command": "histval"})
                 elif t.value == "endval":
-                    self.endval_defs = self._parse_assignment_block("endval")
+                    parsed_end = self._parse_assignment_block("endval")
+                    stmt_metadata = {"defs": dict(parsed_end)}
+                    if not self._seen_numerical_command or not self.endval_defs:
+                        self.endval_defs = parsed_end
                     self.commands.append({"command": "endval"})
                 elif t.value == "steady_state_model":
                     self.steady_state_defs = self._parse_assignment_block(
                         "steady_state_model"
                     )
+                    stmt_metadata = {"defs": dict(self.steady_state_defs)}
                 elif t.value == "steady":
                     opts, var_list = self._parse_command_options_and_vars("steady")
                     self.commands.append({"command": "steady", "options": opts, "variables": var_list})
+                    self._seen_numerical_command = True
                 elif t.value == "shocks":
                     self._parse_shocks_block()
                 elif t.value == "stoch_simul":
                     self._parse_stoch_simul()
+                    self._seen_numerical_command = True
                 elif t.value == "planner_objective":
                     self._parse_planner_objective()
                 elif t.value in ("ramsey_policy", "ramsey_model"):
                     self._parse_ramsey_policy(str(t.value))
+                    self._seen_numerical_command = True
                 elif t.value == "optim_weights":
                     self._parse_optim_weights_block()
                 elif t.value == "osr_params":
@@ -2233,16 +2277,20 @@ class Parser:
                     self._parse_osr_params_bounds_block()
                 elif t.value == "osr":
                     self._parse_osr_command()
+                    self._seen_numerical_command = True
                 elif t.value == "calib_smoother":
                     self._parse_calib_smoother_command()
+                    self._seen_numerical_command = True
                 elif t.value == "shock_decomposition":
                     self._parse_shock_decomposition_command()
+                    self._seen_numerical_command = True
                 elif t.value in (
                     "perfect_foresight_setup",
                     "perfect_foresight_solver",
                     "simul",
                 ):
                     self._parse_perfect_foresight_command(str(t.value))
+                    self._seen_numerical_command = True
                 elif t.value == "shock_groups":
                     self._parse_shock_groups_block()
                 elif t.value == "hetagent_block":
@@ -2276,7 +2324,9 @@ class Parser:
                     self._expect("ASSIGN")
                     expr = self.parse_expression()
                     self._expect("SEMI")
-                    self.param_assignments[pname] = expr
+                    stmt_metadata = {"expr": expr}
+                    if not self._seen_numerical_command or pname not in self.param_assignments:
+                        self.param_assignments[pname] = expr
                 else:
                     self._skip_unrecognised_statement()
             elif t.type == "SEMI":
@@ -2293,15 +2343,15 @@ class Parser:
                 category = "command"
             elif t.type == "SEMI":
                 category = "empty statement"
-            metadata = {}
+            metadata: dict[str, Any] = dict(stmt_metadata)
             if self._pending_command is not None:
                 explicit_options, requested_variables = self._pending_command
-                metadata = {"command": str(t.value), "options": explicit_options,
-                            "variables": requested_variables}
+                metadata.update({"command": str(t.value), "options": explicit_options,
+                                 "variables": requested_variables})
             elif len(self.commands) > before_commands:
-                metadata = {"command": self.commands[-1].get("command"),
-                            "options": dict(self.commands[-1].get("options", {})),
-                            "variables": list(self.commands[-1].get("variables", []))}
+                metadata.update({"command": self.commands[-1].get("command"),
+                                 "options": dict(self.commands[-1].get("options", {})),
+                                 "variables": list(self.commands[-1].get("variables", []))})
             self._record_statement(start, category, **metadata)
 
         if self.collect_only:
@@ -2313,6 +2363,7 @@ class Parser:
                 is_linear=self.is_linear, varobs=self.varobs, det_shocks=self.det_shocks,
                 commands=self.commands, source_statements=self.source_statements,
                 hetagent_block=self.hetagent_config, local_variables=self.local_var_defs,
+                equation_tags=self.equation_tags,
             )
 
         # ---------------------------------------------------------------------
@@ -2595,15 +2646,33 @@ class Parser:
             for h_name, h_expr in self.histval_defs.items():
                 try:
                     p_scope = {**self.param_values, **{k: v for k, v in h_scope.items() if isinstance(k, str)}}
-                    val = h_expr.eval(h_scope, p_scope)
-                    h_scope[h_name] = float(val)
+                    val = float(h_expr.eval(h_scope, p_scope))
+                    h_scope[h_name] = val
+                    h_scope[(h_name, 0)] = val
+                    if h_name in auxiliary:
+                        info = auxiliary[h_name]
+                        if info.get("kind") == "lag":
+                            h_scope[(info["root"], -int(info["step"]))] = val
+                        elif info.get("kind") == "exo_lag":
+                            h_scope[(info["root"], -(int(info["step"]) - 1))] = val
                 except (ValueError, ArithmeticError, np.linalg.LinAlgError, KeyError, LookupError, AssertionError, TypeError, RuntimeError, OSError, ConnectionError, Exception):
                     pass
             histval_values = {
                 v: h_scope[v]
                 for v in self.histval_defs
-                if v in h_scope
+                if v in h_scope and isinstance(v, str)
             }
+            for h_name in list(histval_values):
+                if h_name.startswith("AUX_LAG_") and h_name not in auxiliary:
+                    m_lag = re.fullmatch(r"AUX_LAG_(.+)_1", h_name)
+                    if m_lag and m_lag.group(1) in self.variables and m_lag.group(1) not in histval_values:
+                        histval_values[m_lag.group(1)] = histval_values.pop(h_name)
+            indexed_zero: set[str] = getattr(self, "_histval_indexed_zero", set())
+            for aux_name, info in auxiliary.items():
+                if info.get("kind") == "lag" and aux_name not in histval_values:
+                    root = info["root"]
+                    if root in histval_values and root not in indexed_zero:
+                        histval_values[aux_name] = histval_values[root]
 
         endval_values: dict[str, float] | None = None
         if self.endval_defs:
@@ -2612,15 +2681,25 @@ class Parser:
             for e_name, e_expr in self.endval_defs.items():
                 try:
                     p_scope = {**self.param_values, **{k: v for k, v in e_scope.items() if isinstance(k, str)}}
-                    val = e_expr.eval(e_scope, p_scope)
-                    e_scope[e_name] = float(val)
+                    val = float(e_expr.eval(e_scope, p_scope))
+                    e_scope[e_name] = val
+                    e_scope[(e_name, 0)] = val
+                    if e_name in auxiliary:
+                        info = auxiliary[e_name]
+                        if info.get("kind") == "lead":
+                            e_scope[(info["root"], int(info["step"]))] = val
                 except (ValueError, ArithmeticError, np.linalg.LinAlgError, KeyError, LookupError, AssertionError, TypeError, RuntimeError, OSError, ConnectionError, Exception):
                     pass
             endval_values = {
                 v: e_scope[v]
                 for v in self.endval_defs
-                if v in e_scope
+                if v in e_scope and isinstance(v, str)
             }
+            for aux_name, info in auxiliary.items():
+                if info.get("kind") in ("lag", "lead") and aux_name not in endval_values:
+                    root = info["root"]
+                    if root in endval_values:
+                        endval_values[aux_name] = endval_values[root]
 
         # ---------------------------------------------------------------------
         # Post-Processing: Shock Covariance Matrix
@@ -2762,6 +2841,7 @@ class Parser:
             perfect_foresight_options=self.perfect_foresight_options,
             commands=self.commands,
             source_statements=self.source_statements,
+            param_assignments=dict(self.param_assignments),
         )
 
 

@@ -93,3 +93,224 @@ def test_near_unit_roots_and_rank_deficiency_remain_visible():
     frame = report.to_frame()
     frame.loc[0, "modulus"] = -99
     assert report.roots.loc[0, "modulus"] >= 0
+
+
+def test_diagnose_perturbation_distinguishes_schur_blocks_from_full_curvature_operator():
+    """Non-normal state transitions amplify full higher-order operator conditioning beyond diagonal Schur blocks."""
+    # Diagonal Schur blocks have eigenvalue 0.5 -> A_hat + 0.5^k A_plus is well-conditioned (cond ~ 1.5),
+    # while large off-diagonal Schur coupling (1e4) makes the full Sylvester operator ill-conditioned.
+    h_x = np.array([
+        [0.5, 1.0e4],
+        [0.0, 0.5],
+    ])
+    A_hat = np.eye(2)
+    A_plus = 0.4 * np.eye(2)
+    sol = SimpleNamespace(
+        G=h_x,
+        _A_minus=np.zeros((2, 2)),
+        _A_0=A_hat,
+        _A_plus=A_plus,
+        A_hat=A_hat,
+        A_plus=A_plus,
+    )
+    report = diagnose_perturbation(sol, condition_warning=1e3, max_curvature_order=3)
+
+    for k in (1, 2, 3):
+        assert report.schur_block_condition[k] < 10.0
+        assert report.curvature_operator_condition[k] > 1e3
+        assert report.curvature_coupling_amplification[k] > 1e3
+        assert report.curvature_condition_method[k] == "exact_2norm"
+
+    assert any(
+        "despite well-conditioned diagonal Schur blocks" in w
+        for w in report.warnings
+    )
+    curv_df = report.curvature_frame()
+    assert list(curv_df["order"]) == [1, 2, 3]
+    assert (curv_df["coupling_amplification"] > 1e3).all()
+
+    # Verify matrix-free 1-norm condition estimation path when max_exact_curvature_dim is small
+    report_est = diagnose_perturbation(
+        sol, condition_warning=1e3, max_curvature_order=3, max_exact_curvature_dim=2,
+    )
+    for k in (1, 2, 3):
+        assert report_est.curvature_condition_method[k] == "onenormest"
+        assert report_est.curvature_operator_condition[k] > 1e3
+
+
+def test_local_order_1_2_3_accuracy_map_zero_risk_vs_stochastic_information():
+    """Compare order 1-3 local rules against zero-risk PF paths and stochastic global policies."""
+    from puremacro.dsge import (
+        read_mod,
+        solve_perfect_foresight,
+        solve_time_iteration,
+    )
+    from puremacro.dsge.global_solution import EquilibriumProblem, gaussian_quadrature
+
+    rbc_mod = """
+        var k c l a;
+        varexo e;
+        parameters beta alpha delta deltapsi rho sigma_e;
+        beta = 0.96;
+        alpha = 0.33;
+        delta = 0.08;
+        deltapsi = 1.0;
+        rho = 0.8;
+        sigma_e = 0.02;
+        model;
+            1 / c = beta * (1 / c(+1)) * (alpha * exp(a(+1)) * (k ^ (alpha - 1)) * (l(+1) ^ (1 - alpha)) + 1 - delta);
+            deltapsi * (l ^ 1.0) = (1 - alpha) * exp(a) * (k(-1) ^ alpha) * (l ^ (-alpha)) / c;
+            k = (1 - delta) * k(-1) + exp(a) * (k(-1) ^ alpha) * (l ^ (1 - alpha)) - c;
+            a = rho * a(-1) + sigma_e * e;
+        end;
+        steady_state_model;
+            a = 0;
+            rk = 1 / beta - (1 - delta);
+            k_l = (alpha / rk) ^ (1 / (1 - alpha));
+            y_l = k_l ^ alpha;
+            c_l = y_l - delta * k_l;
+            l = ((1 - alpha) * y_l / (deltapsi * c_l)) ^ 0.5;
+            k = k_l * l;
+            c = c_l * l;
+        end;
+        shocks;
+            var e; stderr 1.0;
+        end;
+    """
+    model = read_mod(rbc_mod)
+    sol3 = load_mod(rbc_mod, order=3)
+    diag = diagnose_perturbation(sol3, max_curvature_order=3)
+    assert diag.jacobian_rank == 4
+    for key in ("ghxx", "ghs2", "ghxxx", "ghxss", "ghuss"):
+        assert diag.sylvester_residuals[key] < 1e-12
+
+    ss = sol3.decision_rules().ys
+    k_ss = float(ss["k"])
+    y_ss = np.array([float(ss[v]) for v in model.variables], dtype=float)
+
+    # 1. Zero-future-risk limit (sigma=0.0): compare 1st, 2nd, 3rd order Taylor step
+    # against exact nonlinear deterministic perfect foresight (direct & krylov)
+    # across a declared state-deviation ladder.
+    errors_by_order = {1: [], 2: [], 3: []}
+    for scale in (0.04, 0.08, 0.14):
+        k0 = k_ss * (1.0 + scale)
+        a_lag = 0.05 * scale / 0.14
+        e0 = 0.5 * scale / 0.14
+        shocks = np.zeros((80, 1))
+        shocks[0, 0] = e0
+        y_init = np.array([k0, float(ss["c"]), float(ss["l"]), a_lag], dtype=float)
+        pf_direct = solve_perfect_foresight(
+            model, y_init=y_init, y_end=y_ss, periods=80, shocks=shocks,
+            linear_solver="direct", tol=1e-12,
+        )
+        pf_krylov = solve_perfect_foresight(
+            model, y_init=y_init, y_end=y_ss, periods=80, shocks=shocks,
+            linear_solver="krylov", tol=1e-12,
+        )
+        assert pf_direct.converged and pf_krylov.converged
+        np.testing.assert_allclose(pf_krylov.path.to_numpy(), pf_direct.path.to_numpy(), atol=1e-10)
+        y_pf_t1 = pf_direct.path.iloc[0].to_numpy(dtype=float)
+
+        state_names = list(sol3.decision_rules().state_variables)
+        lag_state_vals = np.array([k0 if s == "k" else a_lag for s in state_names], dtype=float)
+        for ord_k in (1, 2, 3):
+            y_pert_zero_risk = evaluate_perturbation(sol3, lag_state_vals, [e0], sigma=0.0, order=ord_k)
+            errors_by_order[ord_k].append(float(np.max(np.abs(y_pert_zero_risk - y_pf_t1))))
+
+        # Verify that sigma=1.0 vs sigma=0.0 reflects precautionary risk (different information problem),
+        # not a deterministic solver discrepancy.
+        y_stoch_2 = evaluate_perturbation(sol3, lag_state_vals, [e0], sigma=1.0, order=2)
+        y_det_2 = evaluate_perturbation(sol3, lag_state_vals, [e0], sigma=0.0, order=2)
+        precautionary_shift = y_stoch_2 - y_det_2
+        np.testing.assert_allclose(
+            precautionary_shift, 0.5 * sol3.decision_rules().ghs2.to_numpy(dtype=float), atol=1e-14
+        )
+        assert np.linalg.norm(precautionary_shift) > 1e-6
+
+    # Higher order is strictly more accurate at every point on the zero-risk state ladder
+    for idx in range(len(errors_by_order[1])):
+        assert errors_by_order[3][idx] < errors_by_order[2][idx] < errors_by_order[1][idx]
+
+    # 2. Stochastic policy comparison under the SAME shock distribution:
+    # Solve the stochastic growth specialization with global Chebyshev time iteration
+    # and compare stochastic accuracy against orders 1, 2, 3 over a state grid.
+    stoch_mod = """
+        var y c k a;
+        varexo e;
+        parameters alpha beta delta;
+        alpha = 0.33;
+        beta = 0.95;
+        delta = 0.10;
+        model;
+            [name='resources'] c + k = y + (1 - delta) * k(-1);
+            [name='production'] y = exp(a) * (k(-1) ^ alpha);
+            [name='Euler'] 1 / c = beta * (1 / c(+1)) * (alpha * y(+1) / k + 1 - delta);
+            [name='productivity'] a = e;
+        end;
+        steady_state_model;
+            rk = 1 / beta - (1 - delta);
+            k = (alpha / rk) ^ (1 / (1 - alpha));
+            y = k ^ alpha;
+            c = y - delta * k;
+            a = 0;
+        end;
+        shocks;
+            var e; stderr 0.02;
+        end;
+    """
+    s_model = read_mod(stoch_mod)
+    s_sol3 = load_mod(stoch_mod, order=3)
+    k_star = float(s_sol3.decision_rules().ys["k"])
+    alpha_s, beta_s, delta_s = 0.33, 0.95, 0.10
+    names_s = tuple(s_model.variables)
+
+    def resources_s(state):
+        return float(np.exp(state[1]) * (state[0] ** alpha_s) + (1.0 - delta_s) * state[0])
+
+    def current_s(state, control):
+        y_val = float(np.exp(state[1]) * (state[0] ** alpha_s))
+        tot = y_val + (1.0 - delta_s) * state[0]
+        vals = {"y": y_val, "c": tot - control[0], "k": control[0], "a": state[1]}
+        return np.array([vals[n] for n in names_s], dtype=float)
+
+    def lagged_s(state):
+        return np.array([state[0] if n == "k" else 0.0 for n in names_s], dtype=float)
+
+    q_nodes, q_weights = gaussian_quadrature([[0.02 ** 2]], order=3)
+    prob_stoch = EquilibriumProblem.from_model(
+        s_model,
+        state_names=("inherited_capital", "observed_log_productivity"),
+        control_names=("savings",),
+        domain=((0.7 * k_star, 1.3 * k_star), (-0.05, 0.05)),
+        current=current_s,
+        lagged=lagged_s,
+        transition=lambda s, x, e_next: np.array([x[0], e_next[0]], dtype=float),
+        equations=("Euler",),
+        exogenous=lambda s: s[1:2],
+        shock_nodes=q_nodes,
+        shock_weights=q_weights,
+        control_bounds=lambda s: [(1e-4, resources_s(s) - 1e-4)],
+        admissible=lambda s, x: 0.0 < x[0] < resources_s(s),
+    )
+    k_idx = list(s_sol3.decision_rules().variable_names).index("k")
+    global_sol = solve_time_iteration(
+        prob_stoch,
+        lambda s: evaluate_perturbation(s_sol3, [s[0]], [s[1]], sigma=1.0, order=2)[[k_idx]],
+        basis="chebyshev",
+        orders=(7, 3),
+        tol=1e-8,
+    )
+    assert global_sol.converged
+
+    # Compare policies at moderate state deviations under sigma=1.0
+    probe_states = np.array([
+        [0.85 * k_star, -0.02],
+        [k_star, 0.0],
+        [1.15 * k_star, 0.02],
+    ])
+    k_global = global_sol(probe_states)[:, 0]
+    k_ord1 = evaluate_perturbation(s_sol3, probe_states[:, :1], probe_states[:, 1:2], sigma=1.0, order=1)[:, k_idx]
+    k_ord2 = evaluate_perturbation(s_sol3, probe_states[:, :1], probe_states[:, 1:2], sigma=1.0, order=2)[:, k_idx]
+    k_ord3 = evaluate_perturbation(s_sol3, probe_states[:, :1], probe_states[:, 1:2], sigma=1.0, order=3)[:, k_idx]
+    assert np.max(np.abs(k_ord3 - k_global)) < np.max(np.abs(k_ord2 - k_global)) < np.max(np.abs(k_ord1 - k_global))
+

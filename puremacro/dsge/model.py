@@ -31,18 +31,66 @@ def _vector(value: Any, names: Sequence[str], label: str) -> np.ndarray:
 
 
 def _evaluate_assignments(definitions: Mapping[str, Any] | None, params: Mapping[str, float],
-                          previous: Mapping[str, float] | None = None) -> dict[str, float]:
+                          previous: Mapping[str, float] | None = None,
+                          auxiliary: Mapping[str, Mapping[str, Any]] | None = None) -> dict[str, float]:
     """Evaluate an assignment block in its explicit sequential value context."""
     values = dict(previous or {})
     out: dict[str, float] = {}
+    aux_map = auxiliary or {}
     for name, node in (definitions or {}).items():
         environment: dict[Any, float] = dict(values)
         environment.update({(key, 0): value for key, value in values.items()})
+        for k_name, k_val in values.items():
+            if k_name in aux_map:
+                info = aux_map[k_name]
+                kind = info.get("kind")
+                step = int(info.get("step", 0))
+                root = str(info.get("root", ""))
+                if kind == "lag":
+                    environment[(root, -step)] = k_val
+                elif kind == "exo_lag":
+                    environment[(root, -(step - 1))] = k_val
+                elif kind in ("lead", "exo_lead"):
+                    environment[(root, step)] = k_val
         value = float(node.eval(environment, {**params, **values}))
         if not np.isfinite(value):
             raise ModelError(f"Nonfinite assignment to {name}")
         values[name] = out[name] = value
     return out
+
+
+def _propagate_auxiliary_values(
+    target: dict[str, float],
+    evaluated: Mapping[str, float],
+    auxiliary: Mapping[str, Mapping[str, Any]] | None,
+    *,
+    mode: str = "all",
+    indexed_zero: set[str] | None = None,
+) -> None:
+    """Propagate root variable assignments to auxiliary lead/lag variables unless explicitly overridden."""
+    if not auxiliary:
+        return
+    idx0 = indexed_zero or set()
+    for aux_name, info in auxiliary.items():
+        if aux_name in evaluated:
+            target[aux_name] = float(evaluated[aux_name])
+            continue
+        root = str(info.get("root", ""))
+        kind = info.get("kind")
+        if root not in evaluated:
+            continue
+        if mode == "histval":
+            if kind == "lag" and root not in idx0:
+                target[aux_name] = float(evaluated[root])
+            elif kind == "exo_lag" and int(info.get("step", 0)) == 1 and root not in idx0:
+                target[aux_name] = float(evaluated[root])
+            elif kind == "lead":
+                target[aux_name] = float(evaluated[root])
+        else:
+            if kind in ("lag", "lead") and root not in idx0:
+                target[aux_name] = float(evaluated[root])
+            elif kind in ("exo_lag", "exo_lead") and root not in idx0:
+                target[aux_name] = float(evaluated[root])
 
 
 def _evaluate_covariance(config: Mapping[str, Any], names: Sequence[str],
@@ -263,12 +311,18 @@ def read_mod(path_or_text: str | Path, *, params: Mapping[str, float] | None = N
                   for i in range(len(dag.equations)))
     timing = {v: tuple(sorted({shift for eq in dag.equations for name, shift in eq.variables() if name == v}))
               for v in dag.variables}
+    hist_eval = _evaluate_assignments(dag.histval, merged, auxiliary=dag.auxiliary_variables)
+    if hist_eval:
+        _propagate_auxiliary_values(hist_eval, dict(hist_eval), dag.auxiliary_variables, mode="histval")
+    end_eval = _evaluate_assignments(dag.endval, merged, auxiliary=dag.auxiliary_variables)
+    if end_eval:
+        _propagate_auxiliary_values(end_eval, dict(end_eval), dag.auxiliary_variables, mode="all")
     result = NonlinearModel(tuple(dag.variables), tuple(dag.shocks), dict(merged), names,
         steady_state=supplied_ss, guess=initial, timing=timing,
         source_hashes=dict(report.source_hashes),
         equation_sources=tuple(s.location for s in report.statements if s.category == "equation"),
-        histval_values=_evaluate_assignments(dag.histval, merged) or None,
-        endval_values=_evaluate_assignments(dag.endval, merged) or None,
+        histval_values=hist_eval or None,
+        endval_values=end_eval or None,
         shock_cov=_evaluate_covariance(dag.shocks_config, dag.shocks, merged, dag.shock_cov),
         _equations=parsed["equations"], _dag=dag, _compiled=parsed["_compiled"],
         _mod_source_text=expanded, _mod_base_dir=source_dir, _ordered_inspection=report,

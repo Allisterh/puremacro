@@ -208,17 +208,29 @@ desarrolla el marco numérico general.
 | `max_nodes=10000` | Límite de construcción de grilla; no es una meta de precisión |
 | `strict=False` | Conserva el resultado fallido con advertencia; `True` lanza una excepción por falta de convergencia numérica |
 
-`inner_max_iter` se transmite al presupuesto `max_nfev` de SciPy. El número de
-evaluaciones sigue la contabilidad de ese algoritmo; las aproximaciones
-numéricas del Jacobiano pueden añadir llamadas al residuo. Ni ese presupuesto
-ni `max_nodes` garantizan un límite de tiempo o memoria total.
+`inner_max_iter` acota las iteraciones de Newton amortiguado por nodo de
+colocación. El número de evaluaciones sigue las llamadas al residuo; las
+aproximaciones numéricas del Jacobiano pueden añadir llamadas al residuo cuando
+se omiten `transition_jacobian` o `residual_jacobian` (con
+`EquilibriumProblem.from_model`, las derivadas compiladas de las ecuaciones se
+reutilizan automáticamente mediante `TrajectoryJacobian`).
+`result.callback_evaluations` registra por separado `"transition"`,
+`"residual"`, `"transition_jacobian"`, `"residual_jacobian"`, `"admissible"`,
+`"control_bounds"`, `"shock_rule"` y `"trial_rejections"`. Ni ese presupuesto ni
+`max_nodes` garantizan un límite de tiempo o memoria total.
 
 La política inicial puede ser un callable, un vector constante `(nx,)` o un
 arreglo nodal que coincida con la grilla construida. Debe ser finita y cumplir
-cotas y `admissible` en los nodos. El problema interno impone cotas por control;
-`admissible` es una comprobación de factibilidad, **no** un optimizador general
-con restricciones no lineales. Diseñe parametrización y cotas para que el
-residuo sea finito en los controles de prueba relevantes.
+cotas y `admissible` en los nodos. El problema interno impone cotas por control
+y utiliza búsqueda de paso factible segura en el dominio (`trial_rejections` en
+`history` y `callback_evaluations`) si una actualización completa viola cotas o
+`admissible` en los nodos o en estados sucesores de cuadratura; `admissible` es
+una comprobación de factibilidad, **no** un optimizador general con
+restricciones no lineales. El ajuste tensorial de Chebyshev utiliza
+factorizaciones LU 1D separables por eje de estado en lugar de invertir una
+matriz de Vandermonde densa multidimensional
+(`policy.collocation_matrix_allocated` es `False`). Diseñe parametrización y
+cotas para que el residuo sea finito en los controles de prueba relevantes.
 
 `result.converged` exige que pase la auditoría nodal actualizada, que el cambio
 de controles sea pequeño y que no fallen soluciones por nodo. Un gradiente de
@@ -538,19 +550,21 @@ de condición depende de las unidades de ecuaciones y variables. Un Jacobiano
 no conservado se informa como no comprobado. Una raíz cercana a uno indica
 persistencia y sensibilidad, no demuestra por sí sola invalidez del equilibrio.
 
-**Problema conocido de precisión de orden superior en 5.7.1.** El solucionador
-de Sylvester existente redondea a 12 decimales las claves escalares de su caché
-LU; productos de Schur distintos pueden reutilizar una factorización. Un
-ejemplo determinado con solución analítica y raíces de transición cercanas a
-`0.9999998` muestra errores relativos en los coeficientes de segundo y tercer
-orden de hasta aproximadamente `3.8e-7`. La advertencia sobre raíces cercanas a
-uno no mide este error de curvatura, y el número de condición del Jacobiano
-dinámico no corresponde al operador de orden superior. El
-[registro de publicación](https://github.com/jalonso1979/puremacro/releases/tag/v5.7.1)
-incluye un ejemplo reproducible que utiliza la API pública. Las claves exactas
-de caché y las comprobaciones independientes del operador de orden superior
-son trabajo posterior previsto. El ejemplo no demuestra un fallo general de
-invariancia respecto de las unidades.
+**Condicionamiento de Sylvester de orden superior y reutilización exacta de factorizaciones.**
+El solucionador recursivo de Schur real (Bartels–Stewart) indexa su caché LU
+mediante valores exactos en punto flotante IEEE-754 (`float` para bloques
+$1\times 1$ y cuatro flotantes para bloques $2\times 2$), eliminando la colisión
+por redondeo a 12 decimales reportada en 5.7.1 cuando productos de Schur
+cercanos a uno reutilizaban una factorización.
+`diagnose_perturbation(solution, max_curvature_order=3)` informa
+`schur_block_condition` (cota inferior rápida por bloques diagonales de Schur
+del número de condición de orden superior), `curvature_operator_condition` y
+`curvature_coupling_amplification` (condicionamiento del operador completo de
+Kronecker y amplificación por acoplamiento fuera de la diagonal, resumidos en
+`curvature_conditioning`), `sylvester_residuals` (`ghxx`, `ghs2`, `ghxxx`,
+`ghxss`, `ghuss`) y `sylvester_work` (`SylvesterWorkCounts`), distinguiendo el
+condicionamiento del operador de orden superior del número de condición del
+Jacobiano dinámico de primer orden.
 
 La poda evita generar recursivamente términos de orden superior al retenido y
 transporta componentes de estado separados. La diferencia entre una regla de

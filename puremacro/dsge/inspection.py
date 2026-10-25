@@ -9,6 +9,7 @@ from dataclasses import asdict, dataclass, field
 import hashlib
 import json
 from pathlib import Path
+import re
 from typing import Any
 import math
 
@@ -316,6 +317,8 @@ def inspect_mod(
                 status, code = "parsed-only", "UNDECLARED_ASSIGNMENT"
                 reason = "Assignment targets an undeclared parameter/script variable."
                 remedy = "Declare the calibrated parameter explicitly, or move the script into Python."
+            elif phase_started and deterministic and not code:
+                reason = "Update parameter calibration and dependent expressions for subsequent deterministic commands."
         if name == "steady" and deterministic:
             allowed_steady = {"tol", "tolf"}
             option_status = {key: "supported" if key in allowed_steady else "unsupported" for key in opts}
@@ -329,6 +332,8 @@ def inspect_mod(
                     "Use a single tolerance spelling.", loc, len(statements)))
             effective_options = {"tol": opts.get("tolf", opts.get("tol", 1e-10))}
             reason = "Compute and verify the active initial or terminal steady state at this source position."
+            phase_started = True
+            assigned_names = set()
         elif name == "steady" and opts:
             status, code = "unsupported", "UNSUPPORTED_OPTION"
             reason, remedy = "Initial steady command options are not consumed by ordered loading.", "Pass supported solve options explicitly to load_mod."
@@ -419,11 +424,17 @@ def inspect_mod(
                     issues.append(ModIssue("PERFECT_FORESIGHT_SETUP_MISMATCH", "unsupported",
                         "Solver periods differ from the preceding setup.",
                         "Run perfect_foresight_setup with the new horizon first.", loc, len(statements)))
+                if name in _PF_COMMANDS and state["mcp"]:
+                    has_mcp_tags = bool(dag and any("mcp" in t for t in getattr(dag, "equation_tags", {}).values()))
+                    if not has_mcp_tags:
+                        issues.append(ModIssue("MCP_TAGS_REQUIRED", "unsupported",
+                            "MCP deterministic execution requires at least one [mcp='...'] equation tag in the model block.",
+                            "Add [mcp='...'] equation tags to the model block or pass mcp_bounds in Python.", loc, len(statements)))
                 if name in _PF_COMMANDS and state["linear_solver"] == "krylov":
-                    if state["mcp"] or "stack_solve_algo" in opts:
+                    if "stack_solve_algo" in opts:
                         issues.append(ModIssue("CONFLICTING_OPTIONS", "unsupported",
-                            "Native Krylov cannot be combined with MCP or an explicit Dynare stack_solve_algo.",
-                            "Use the direct backend for MCP; choose one backend option.", loc, len(statements)))
+                            "Native Krylov cannot be combined with an explicit Dynare stack_solve_algo.",
+                            "Choose one backend option.", loc, len(statements)))
                 if name == "shock_decomposition" and option_state["prefilter"]:
                     issues.append(ModIssue("INHERITED_OPTION_UNSUPPORTED", "unsupported",
                         "shock_decomposition inherits prefilter from calib_smoother, but its native handler does not implement prefilter.",
@@ -480,10 +491,14 @@ def inspect_mod(
                     f"{name} requires a caller-supplied DataFrame; datafile options do not load files.",
                     "Pass data= to execute_mod_commands.", loc, len(statements)))
             phase_started = True
+            if deterministic:
+                assigned_names = set()
         elif ordered and name in _STATEFUL and not (deterministic and name in {"histval", "endval"}):
             status, code = "unsupported", "ORDERED_STATE_UNSUPPORTED"
             reason, remedy = "This state-changing block is outside the ordered fixed-calibration subset.", "Use a separate explicit Python study."
-        if phase_started and not is_command and category in {"declaration", "calibration assignment"} and not (deterministic and name in {"initval", "shocks"}):
+        if phase_started and not is_command and category in {"declaration", "calibration assignment"} and not (
+            deterministic and (name in {"initval", "shocks"} or (category == "calibration assignment" and entry_point != "load_mod"))
+        ):
             status, code = "unsupported", "INTERLEAVED_STATE_CHANGE"
             reason = "Calibration/declarations after a numerical command cannot be replayed against the parser's final calibration."
             remedy = "Move the fixed calibration before all commands, or split the studies."
@@ -495,6 +510,23 @@ def inspect_mod(
     # Inspection is stricter about incomplete blocks than legacy parsing,
     # whose permissive skipped-token behavior is intentionally unchanged.
     if parser:
+        max_var_lag: dict[str, int] = {v: 0 for v in parser.variables}
+        max_var_lead: dict[str, int] = {v: 0 for v in parser.variables}
+        max_exo_lag: dict[str, int] = {s: 0 for s in parser.shocks}
+        max_exo_lead: dict[str, int] = {s: 0 for s in parser.shocks}
+        for eq in list(parser.equations) + list(parser.local_var_defs.values()):
+            for v_name, v_shift in eq.variables():
+                if v_name in max_var_lag:
+                    if v_shift < 0:
+                        max_var_lag[v_name] = max(max_var_lag[v_name], abs(v_shift))
+                    elif v_shift > 0:
+                        max_var_lead[v_name] = max(max_var_lead[v_name], v_shift)
+                elif v_name in max_exo_lag:
+                    if v_shift < 0:
+                        max_exo_lag[v_name] = max(max_exo_lag[v_name], abs(v_shift))
+                    elif v_shift > 0:
+                        max_exo_lead[v_name] = max(max_exo_lead[v_name], v_shift)
+
         blocks = {"model", "initval", "endval", "histval", "steady_state_model", "shocks",
                   "optim_weights", "osr_params_bounds", "estimated_params", "estimated_params_init",
                   "estimated_params_bounds", "shock_groups", "hetagent_block"}
@@ -513,10 +545,37 @@ def inspect_mod(
                         closing = next((j for j, t in enumerate(tail) if t.type == "RPAREN"), None)
                         if closing is not None and closing + 1 < len(tail) and tail[closing + 1].type == "ASSIGN":
                             index_tokens = tail[:closing]
-                            if len(index_tokens) != 1 or index_tokens[0].value != 0:
+                            idx_val: int | None = None
+                            if len(index_tokens) == 1 and index_tokens[0].type in ("NUMBER", "INT"):
+                                raw_v = index_tokens[0].value
+                                if isinstance(raw_v, (int, float)) and int(raw_v) == raw_v:
+                                    idx_val = int(raw_v)
+                            elif (len(index_tokens) == 2
+                                  and index_tokens[0].type in ("MINUS", "PLUS")
+                                  and index_tokens[1].type in ("NUMBER", "INT")):
+                                raw_v = index_tokens[1].value
+                                if isinstance(raw_v, (int, float)) and int(raw_v) == raw_v:
+                                    idx_val = (-1 if index_tokens[0].type == "MINUS" else 1) * int(raw_v)
+
+                            target_sym = str(token.value)
+                            index_ok = False
+                            if record["name"] == "histval" and target_sym in max_exo_lag:
+                                if idx_val is not None and idx_val <= 0:
+                                    index_ok = 1 <= abs(idx_val) + 1 <= max_exo_lag[target_sym]
+                            elif idx_val == 0:
+                                index_ok = True
+                            elif idx_val is not None and record["name"] == "histval" and idx_val < 0:
+                                if target_sym in max_var_lag:
+                                    index_ok = 1 <= abs(idx_val) <= max_var_lag[target_sym] - 1
+                            elif idx_val is not None and record["name"] == "endval" and idx_val > 0:
+                                if target_sym in max_var_lead:
+                                    index_ok = 1 <= idx_val <= max_var_lead[target_sym] - 1
+                                elif target_sym in max_exo_lead:
+                                    index_ok = 1 <= idx_val <= max_exo_lead[target_sym]
+                            if not index_ok:
                                 issues.append(ModIssue("HISTORICAL_INDEX_UNSUPPORTED", "unsupported",
-                                    "The ordered boundary adapter supports only unindexed values or date zero.",
-                                    "Supply an explicitly augmented historical state through the Python API.", loc))
+                                    "The ordered boundary adapter supports only unindexed values, date zero, or declared model lag/lead depths.",
+                                    "Match the variable's declared lag/lead depth or supply an explicitly augmented historical state.", loc))
             if record["name"] in {"var", "varexo", "parameters", "shocks", "shock_groups"} and record["category"] not in {"equation", "model-local", "comment"}:
                 head_tokens = [t for t in parser.tokens if
                     (record["line"], record["col"]) <= (t.line, t.col) < (record["end_line"], record["end_col"])]
@@ -597,16 +656,23 @@ def inspect_mod(
         expression_groups.extend(([node], r) for node, r in zip(parser.local_var_defs.values(), local_records))
         block_defs = {"initval": parser.initval_defs, "steady_state_model": parser.steady_state_defs,
                       "histval": parser.histval_defs, "endval": parser.endval_defs}
+        def _root_target(k: str) -> str:
+            m = re.match(r"^AUX_(?:EXO_)?(?:LAG|LEAD)_(.+)_\d+$", str(k))
+            return m.group(1) if m else str(k)
+
         for record in records:
             if record["name"] in block_defs:
-                expression_groups.append((list(block_defs[record["name"]].values()), record))
-            elif record["category"] == "calibration assignment" and record["name"] in parser.param_assignments:
-                expression_groups.append(([parser.param_assignments[record["name"]]], record))
+                defs_map = record.get("defs") or block_defs[record["name"]]
+                expression_groups.append((list(defs_map.values()), record))
+            elif record["category"] == "calibration assignment":
+                expr_node = record.get("expr") or parser.param_assignments.get(record["name"])
+                if expr_node is not None:
+                    expression_groups.append(([expr_node], record))
         for record in records:
             if record["name"] in block_defs and record["category"] not in {"equation", "model-local"}:
-                definitions = block_defs[record["name"]]
+                definitions = record.get("defs") or block_defs[record["name"]]
                 used_names = set().union(*(node.parameters() for node in definitions.values())) if definitions else set()
-                invalid_targets = set(definitions) - set(parser.variables + parser.shocks + parser.parameters) - used_names
+                invalid_targets = {_root_target(k) for k in definitions} - set(parser.variables + parser.shocks + parser.parameters) - used_names
                 if invalid_targets:
                     loc, _ = _span(record, expanded, trace)
                     issues.append(ModIssue("UNKNOWN_ASSIGNMENT_TARGET", "unsupported",

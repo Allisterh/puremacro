@@ -213,8 +213,8 @@ sus propias construcciones, no todas las factorizaciones de un operador externo.
 | Directo + ecuaciones ordinarias, dominios/escalas o MCP | Admitida. |
 | Directo + política terminal, incluida asignación MCP explícita | Admitida; se incluye la regla de la cadena terminal. |
 | Krylov + ecuaciones ordinarias y transformaciones de dominio/escala | Admitida. |
-| Krylov + cotas MCP o `mcp=True` | Rechazo explícito. |
-| Krylov + `terminal_policy` | Rechazo explícito. |
+| Krylov + cotas MCP o `mcp=True` | Admitida; Newton–Krylov semisuave con precondicionamiento por filas activas. |
+| Krylov + `terminal_policy` | Admitida; la regla de la cadena terminal entra en el producto JVP y el bloque precondicionador de la fecha `T`. |
 | Directo + cualquier `krylov_options` distinto de `None` | Rechazo explícito. |
 | `terminal_jacobian` sin `terminal_policy` | Rechazo explícito. |
 
@@ -553,8 +553,12 @@ también seleccionan MCP nativo. Sin asignaciones/etiquetas explícitas, la
 interfaz Python anterior conserva su heurística de cargas para fila/signo;
 especificar la asignación aclara las restricciones económicas de signo.
 Se utiliza el solucionador semisuave nativo, sin afirmar equivalencia con
-todos los algoritmos u opciones de complementariedad de Dynare. MCP sigue
-requiriendo el método directo.
+todos los algoritmos u opciones de complementariedad de Dynare. Tanto
+`linear_solver="direct"` como `linear_solver="krylov"` admiten cotas y etiquetas
+MCP; Krylov actualiza su proyección por filas activas y el precondicionador
+cuando cambia el conjunto activo, y registra `physical_mcp_feasibility`,
+`physical_complementarity_residual` y `physical_residual_norm` tanto en
+`MCPResult` como en `TransitionResult`.
 
 ## Políticas terminales y último bloque del jacobiano
 
@@ -568,9 +572,11 @@ bloque diagonal pasa a ser
 \]
 
 Proporcione `terminal_jacobian(last_state)` como matriz cuadrada o permita que
-el solucionador directo diferencie el mapa con diferencias centrales. Con
+el solucionador diferencie el mapa con diferencias centrales. Con
 dominios/escalas, `solve_transition` recibe estas funciones en coordenadas
-físicas y compone su regla de la cadena con la transformación.
+físicas y compone su regla de la cadena con la transformación (`physical_scale`
+y `normalized_horizon_tolerance` también proporcionan aceptación de horizonte
+invariante ante cambios de unidades cuando las variables tienen escalas dispares).
 
 En el ejemplo lineal, una cola estable `x_t=r^t*x_0` cumple
 `0.25*r**2-r+0.4=0`. Su raíz menor da una cola exacta para este modelo lineal
@@ -592,8 +598,9 @@ assert np.max(np.abs(terminal_audit.maps["path_equations"])) < 1e-9
 ```
 
 Un mapa terminal lineal local en un modelo no lineal es una aproximación cuya
-adecuación todavía requiere una comprobación de horizonte o económica. Krylov
-rechaza políticas terminales. Las auditorías ordinarias conservadas vuelven a
+adecuación todavía requiere una comprobación de horizonte o económica. Tanto
+`"direct"` como `"krylov"` admiten políticas terminales y conservan los mismos
+metadatos para repetir la auditoría. Las auditorías ordinarias conservadas vuelven a
 evaluar la política y mantienen la referencia fija; además comparan su
 entrada/salida terminal original para detectar cambios de estado de la función.
 Mantenga las funciones sin cambios después de resolver. Esa repetición no

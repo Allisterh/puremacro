@@ -19,6 +19,8 @@ print(report.to_json())
 puremacro-dynare inspect study.mod --ordered
 puremacro-dynare inspect study.mod --ordered --format json
 puremacro-dynare inspect study.mod --entry-point load_mod --output report.txt
+puremacro-dynare execute study.mod --outdir out/
+puremacro-dynare study.mod --ordered --outdir out/
 ```
 
 The CLI writes only to stdout unless `--output` is supplied. Exit codes are
@@ -91,15 +93,16 @@ this provenance. For plain text, `execute_mod_commands(ordered=True)` can also
 check an already loaded model, but loading has already performed its solve.
 
 The stochastic subset supports repeated `stoch_simul`, `calib_smoother` and
-`shock_decomposition` at a fixed calibration. The extension introduced in 5.7.0
-also replays deterministic boundary blocks, shock declarations and repeated
-perfect-foresight setup/solver commands, including mixed deterministic and
-stochastic programs. Use `read_mod(source).execute_mod_commands()` to start
+`shock_decomposition` at a fixed or mid-script updated calibration. The extension
+introduced in 5.7.0 also replays deterministic boundary blocks, shock declarations,
+interleaved parameter reassignments, and repeated perfect-foresight setup/solver
+commands, including mixed deterministic and stochastic programs. Use
+`read_mod(source).execute_mod_commands()` (or `puremacro-dynare execute study.mod`) to start
 without an implicit steady-state or perturbation solve; see the
 [nonlinear model guide](dsge_nonlinear.md) for the supported options and snapshots.
-Interleaved parameter assignments, policy commands and HANK commands remain
-unsupported in ordered execution. Known incompatibilities, supplied data schema
-and requested samples are checked before the first numerical command.
+Policy commands and HANK commands remain unsupported in ordered execution. Known
+incompatibilities, supplied data schema and requested samples are checked before
+the first numerical command.
 
 | Command | Supported explicit options | Effective behavior |
 |---|---|---|

@@ -362,8 +362,8 @@ conservaría el valor terminal literal 8.
 |---|---|
 | `initval` | Inicia un nuevo experimento inicial/terminal; asigna cero a valores endógenos y exógenos omitidos; borra asignaciones históricas y terminales |
 | `steady` antes de `endval` | Sustituye valores endógenos iniciales por el equilibrio estático con los niveles exógenos iniciales activos |
-| `histval` | Proporciona la frontera endógena histórica y sustituye allí valores iniciales; admite valores sin índice o de fecha cero |
-| `endval` | Actualiza valores terminales; las omisiones heredan el contexto terminal previo o los valores iniciales |
+| `histval` | Proporciona la frontera endógena histórica (`x`, `x(0)` o `x(-k)` asignado a rezagos auxiliares) y sustituye allí valores iniciales |
+| `endval` | Actualiza valores terminales (`x`, `x(0)` o `x(+k)` asignado a adelantos auxiliares); las omisiones heredan el contexto terminal previo o los valores iniciales |
 | `steady` después de `endval` | Sustituye valores endógenos terminales por el equilibrio con los niveles exógenos terminales |
 | `shocks` | Acumula asignaciones por fecha y declaraciones de covarianza; redeclarar una fecha sustituye solo esa fecha |
 | `shocks(overwrite)` | Borra choques por fecha y covarianzas previas antes de leer el nuevo bloque |
@@ -372,11 +372,11 @@ conservaría el valor terminal literal 8.
 | `simul` | Prepara y resuelve el experimento actual en un comando |
 
 El ejecutor comienza con valores iniciales cero. En este subconjunto, un
-`endval` aislado no fija la frontera histórica: use `initval` o un `steady`
-inicial explícito. `initval` no borra las declaraciones de choques; use
-`shocks(overwrite)` cuando el nuevo experimento deba descartarlas. El
-subconjunto rechaza `histval` junto con `endval` dentro de un mismo experimento
-inicial.
+`endval` aislado no fija la frontera histórica: use `initval`, `histval` o un
+`steady` inicial explícito. `initval` no borra las declaraciones de choques; use
+`shocks(overwrite)` cuando el nuevo experimento deba descartarlas. `histval` y
+`endval` pueden combinarse dentro de un mismo experimento ordenado (`histval`
+fija `y_init` mientras que `endval` fija `y_end`).
 
 Un setup contiene `y_init` en la fecha 0 y `y_end` en T+1. La trayectoria inicial
 de Newton repite el vector endógeno terminal en las fechas 1 a T. La trayectoria
@@ -425,11 +425,11 @@ mismo setup reutiliza la última trayectoria convergida.
 |---|---|
 | Newton apilado disperso directo | `stack_solve_algo=0` o `linear_solver='direct'` |
 | Newton–Krylov | `linear_solver='krylov'`; omita `stack_solve_algo` explícito |
-| Etiquetas de complementariedad | `mcp` nativo con método directo; cotas simples de variable/parámetros |
+| Etiquetas de complementariedad | `mcp` nativo con `'direct'` o `'krylov'`; cotas simples de variable/parámetros |
 | Conjunto completo de algoritmos Dynare | Se rechaza `stack_solve_algo` distinto de 0; no se afirma equivalencia numérica |
 | `tolx`, `lmmcp`, familias de opciones de solver/homotopía | Fuera del subconjunto ordenado; use controles nativos Python admitidos |
-| Cambios de parámetros entre experimentos | Cree especificaciones distintas con `params=`; se rechazan reasignaciones repetidas |
-| Calendarios históricos | Solo asignaciones sin índice/de fecha cero; proporcione un estado ampliado por Python |
+| Cambios de parámetros entre experimentos | Las reasignaciones entre comandos actualizan la calibración activa, o cree especificaciones distintas con `params=` |
+| Calendarios históricos | Asignaciones sin índice, `x(0)` y `x(-k)` conectadas a rezagos declarados o auxiliares |
 | `varexo_det`, tendencias, regímenes y estimación | Pueden analizarse o registrarse, pero esta ruta ordenada no los ejecuta |
 | Comandos de errores de expectativas, noticias posteriores y calendario | No implementados en esta ruta |
 | Scripts MATLAB/Octave y ejecución de funciones externas | No se ejecutan; traslade la lógica del estudio a Python |
@@ -440,7 +440,11 @@ ecuación, lado izquierdo menos lado derecho. En una cota inferior, el residuo
 asociado debe tener el signo no negativo de la condición de complementariedad.
 La etiqueta no infiere ni corrige la desigualdad económica. Se rechazan cotas
 repetidas para una variable, expresiones de cota dinámicas y sintaxis no
-admitida. MCP nativo no es un alias de `lmmcp` y no puede combinarse con Krylov.
+admitida. MCP nativo no es un alias de `lmmcp`, y admite tanto `'direct'` como
+`'krylov'` cuando existen etiquetas `[mcp=...]` en `model;`. También puede
+inspeccionar o ejecutar programas `.mod` ordenados desde la línea de comandos
+con `puremacro-dynare inspect estudio.mod --ordered` y
+`puremacro-dynare execute estudio.mod [--outdir DIR] [--data CSV]`.
 
 La especificación compilada utiliza el analizador existente y el
 preprocesamiento acotado de macros admitido. No es un intérprete general de

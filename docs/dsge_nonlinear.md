@@ -357,8 +357,8 @@ produces terminal `x=2`, because `steady` solves `x=0.5*x+1`. Omitting that
 |---|---|
 | `initval` | Starts a new initial/terminal experiment; omitted endogenous and exogenous values become zero; clears historical and terminal assignments |
 | `steady` before `endval` | Replaces initial endogenous values with their static equilibrium at the current initial exogenous levels |
-| `histval` | Supplies the historical endogenous boundary, overriding initial values there; supported dates are unindexed or zero |
-| `endval` | Updates the terminal values; omissions inherit the existing terminal context or initial values |
+| `histval` | Supplies the historical endogenous boundary (`x`, `x(0)`, or `x(-k)` mapped onto auxiliary lags), overriding initial values there |
+| `endval` | Updates the terminal values (`x`, `x(0)`, or `x(+k)` mapped onto auxiliary leads); omissions inherit the existing terminal context or initial values |
 | `steady` after `endval` | Replaces terminal endogenous values with the equilibrium at terminal exogenous levels |
 | `shocks` | Accumulates dated assignments and covariance declarations; a redeclared date replaces only that date |
 | `shocks(overwrite)` | Clears previous dated shocks and covariance declarations before reading the new block |
@@ -367,10 +367,11 @@ produces terminal `x=2`, because `steady` solves `x=0.5*x+1`. Omitting that
 | `simul` | Prepares and solves the current experiment in one command |
 
 The runner begins with zero initial values. An `endval` by itself does not set
-the historical boundary in this subset: use an explicit `initval` or initial
+the historical boundary in this subset: use an explicit `initval`, `histval`, or initial
 `steady`. `initval` does not clear shock declarations; use `shocks(overwrite)`
-when starting an experiment that should discard them. The subset rejects
-`histval` and `endval` together within one initial-value experiment.
+when starting an experiment that should discard them. `histval` and `endval`
+can be combined within one ordered experiment (`histval` sets `y_init` while
+`endval` sets `y_end`).
 
 A setup contains `y_init` at date 0 and `y_end` at T+1. Its initial Newton path
 repeats the terminal endogenous vector at dates 1 through T. Its exogenous path
@@ -418,11 +419,11 @@ setup reuses the last successful path.
 |---|---|
 | Sparse direct stacked Newton | `stack_solve_algo=0` or `linear_solver='direct'` |
 | Newton–Krylov | `linear_solver='krylov'`; omit explicit `stack_solve_algo` |
-| Complementarity tags | Native `mcp` with direct backend; simple variable/parameter bound expressions |
+| Complementarity tags | Native `mcp` with `'direct'` or `'krylov'`; simple variable/parameter bound expressions |
 | Full Dynare algorithm IDs | Values other than `stack_solve_algo=0` are rejected; no numerical-equivalence claim |
 | `tolx`, `lmmcp`, solver/homotopy option families | Outside the ordered subset; use supported native Python controls |
-| Parameter changes between experiments | Create separate specifications with `params=`; repeated/top-level reassignment is rejected |
-| Historical date calendars | Only unindexed/date-zero boundary assignments; provide an augmented state through Python |
+| Parameter changes between experiments | Top-level reassignments between commands update the active calibration, or create separate specifications with `params=` |
+| Historical date calendars | Unindexed, `x(0)`, and `x(-k)` lag boundary assignments mapped to declared/auxiliary lags |
 | `varexo_det`, trend/regime/estimation declarations | May be parsed or reported, but are not executed by this ordered route |
 | Expectation-error, learned-shock and calendar commands | Not implemented by this ordered route |
 | MATLAB/Octave scripts and external helper execution | Not executed; move the study logic to Python |
@@ -433,7 +434,10 @@ orientation. At a lower bound the associated residual must have the
 nonnegative sign required by the complementarity condition. The tag does not
 infer or correct your economic inequality. Repeated bounds for one variable,
 dynamic-bound expressions and unsupported tag syntax are rejected. Native
-MCP is not a `lmmcp` alias, and it cannot be combined with Krylov.
+MCP is not a `lmmcp` alias, and supports both `'direct'` and `'krylov'` when
+`[mcp=...]` tags are present in `model;`. You can also inspect or run ordered
+`.mod` programs from the command line via `puremacro-dynare inspect study.mod --ordered`
+and `puremacro-dynare execute study.mod [--outdir DIR] [--data CSV]`.
 
 The compiled specification uses the existing parser and supported bounded
 macro preprocessing. It is not a general MATLAB interpreter. Boundary
