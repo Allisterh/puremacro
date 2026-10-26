@@ -1,0 +1,26 @@
+{
+  "author": "Cristina Arellano",
+  "publication_doi": "10.1257/aer.98.3.690",
+  "archive_doi": "10.3886/E113248V1",
+  "archive_version": "V1 (2019-10-12)",
+  "retrieved": "2026-10-26",
+  "source": "https://www.openicpsr.org/openicpsr/project/113248/version/V1/view",
+  "retrieval": "Public Preview this file endpoint, getBinary; original bytes retained.",
+  "licenses": {
+    "code": "BSD-3-Clause",
+    "data": "CC-BY-4.0"
+  },
+  "copyright": "2008 American Economic Association",
+  "files_sha256": {
+    "main.f90": "06832b8e78ab8060645e7512c162377facc513cce2de67aa5a38f178e7b51474",
+    "global.f90": "3f481a9b1e082dd74ac617c898ca09130ee76f0164fa5e8d66c5b23095c6c6b8",
+    "parameters.f90": "8c7ce52a9feb92ec202a5b5d6b85a0af9ac1cbe9089e38a882c7f7ac20852ace",
+    "process.f90": "ebead0f9b38f253c2633730215819820b916b992aa3729e75383cc0828f1f5a2",
+    "YMAT.dat": "c65790051f971c5ee75cf88915af1dc6b7580f735fc3edc3f4a24bc8da46d0d7",
+    "PIMAT.dat": "6054416443710379eb6dd62a378b90ac2bc04b581f42dc0e5f42a175757202ff",
+    "policies_simulation.m": "5c6b963341f3191d6368711213ecf1733537e82d8219f8dd13688df91b20302e",
+    "markovchain.m": "14d885db2fbf6bc9fa5a24a6d31fb6a0519b421b8cb4a48ec252e5f2d1f08a75",
+    "readme.txt": "f3362ec4f2665b6595cf481fdd97bf3ca4cddfd3959707b68c5e7128d119948c",
+    "LICENSE.txt": "59b513f340ebde6987de0cafc6066a0aa57b423a63ec8eea3ff16e7e5a33c5fc"
+  }
+}

@@ -43,7 +43,7 @@ la validez económica del modelo.
 
 | Comparación | Resultado en las mallas probadas | Pendiente |
 |---|---|---|
-| Ecuaciones Arellano de deuda corta y default determinista | Valores coinciden dentro de 4e-11; también precios, decisiones de default y políticas de deuda | Calibración publicada, momentos, convergencia y extensión de deuda larga |
+| Ecuaciones Arellano de deuda corta y default determinista | Ecuaciones coinciden; además, Fortran archivado dentro de 5,3e-11 y momentos MATLAB dentro de 1,1e-14 | Diferencias de momentos publicados, convergencia, convenciones públicas y deuda larga |
 | Bloque de hogares de un activo | Políticas y consumo coinciden con los autores SSJ dentro de 5e-11; jacobianos de rendimientos dentro de 4e-4 | Convergencia económica de mallas, equilibrio publicado y transiciones no lineales |
 
 Las referencias, hashes y procedencia están en
@@ -51,15 +51,20 @@ Las referencias, hashes y procedencia están en
 `tools/reference_validation/`. SSJ externo no es dependencia de ejecución.
 Coincidir en una malla común no demuestra precisión de discretización.
 
-## Siguiente: un estudio soberano completo
+## Estudio soberano: base completada, convergencia pendiente
 
-1. Igualar una calibración original de Arellano y su proceso de ingreso.
-   Publicar objetivos y resultados de deuda/producto, frecuencia de default,
-   diferenciales, volatilidad del consumo y ciclicidad comercial. Explicitar
-   condicionamiento de simulación y anualización; incluir intervalos muestrales.
-2. Refinar mallas e incrementar la simulación. Revisar residuos de Bellman,
-   precios, estabilidad de políticas y masa en los extremos. Conservar las
-   correlaciones simuladas originales, incluso signos inesperados.
+La [comparación con código y momentos originales](arellano_replication.md)
+incluye 16 simulaciones independientes por caso, mallas anidadas de deuda y
+21/41/81 estados de ingreso. El refinamiento cambia diferenciales y defaults
+más que la incertidumbre Monte Carlo. Un residuo pequeño de Bellman todavía
+no basta para interpretar efectos de política.
+
+1. Explicitar momento de reingreso, normalización del costo de default y medición
+   en la API. El archivo y la API actual usan convenciones diferentes; el estudio
+   presenta ambas sin equipararlas implícitamente.
+2. Resolver sensibilidad a las mallas con un criterio documentado. Separar
+   incertidumbre muestral de error de discretización, conservar momentos
+   originales y recalibrar solamente después de estabilizar el diseño numérico.
 3. Estudiar volatilidad, persistencia del ingreso y probabilidad de reingreso
    en el modelo validado de deuda corta. Reportar bienestar e incertidumbre
    numérica antes de agregar vencimientos y reestructuración no contrastados.

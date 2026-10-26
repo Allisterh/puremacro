@@ -35,6 +35,11 @@ version is a development candidate, not a published distribution.
 - Independent matched-grid references cover short-term deterministic-default
   equations and one-asset household policies, distributions and Jacobians.
   These checks do not certify complete published calibrations or policy moments.
+- Added an offline Arellano (2008) validation study using actual archived Fortran
+  and MATLAB/Octave references, published-moment comparisons, independent-seed
+  simulation intervals and debt/income grid refinements. The bilingual guide
+  records unresolved grid sensitivity and distinct exclusion/measurement
+  conventions; no published-moments replication or new policy result is claimed.
 - Fixed Python 3.11/NumPy 2.4 type-checking, retired notebook imports and isolated
   offline LLM-cache replay. Corrected bilingual guides and notebook explanations,
   including bridge identity checks and separately computed policy scenarios.

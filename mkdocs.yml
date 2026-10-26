@@ -52,6 +52,7 @@ nav:
       - Quickstart: quickstart.md
       - Research workflows: research_workflows.md
       - Research reliability and next milestones: research_reliability.md
+      - Arellano original-code replication: arellano_replication.md
       - Reproducible studies and scenarios: studies.md
       - Runnable workflow templates: study_workflows.md
       - Auditing solved results: result_audits.md
@@ -161,6 +162,7 @@ nav:
       - Inicio rápido: es/quickstart.md
       - Flujos de investigación: es/research_workflows.md
       - Fiabilidad de investigación y próximos hitos: es/research_reliability.md
+      - Replicación del código original de Arellano: es/arellano_replication.md
       - Estudios y escenarios reproducibles: es/studies.md
       - Plantillas ejecutables: es/study_workflows.md
       - Auditoría de resultados resueltos: es/result_audits.md

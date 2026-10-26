@@ -27,6 +27,21 @@ production solver helpers. Manifests record scope and hashes. See
 `tests/fixtures/research_reliability/README.md` for tolerances and limitations.
 Neither comparison claims to reproduce the full moments of a published paper.
 
+## Arellano original code, published targets and grid convergence
+
+```sh
+python -m pytest tests/test_arellano_2008_study.py -q
+MPLBACKEND=Agg python -m tools.reference_validation.run_arellano_study --output /tmp/arellano-study
+```
+
+This offline study uses an actual original-Fortran export and an Octave check
+of the author's MATLAB moment definitions. It tests nested debt grids, income
+grids, exclusion timing and simulation uncertainty. Published-moment gaps and
+material grid sensitivity remain visible. See
+[`tests/fixtures/arellano_2008/README.md`](../../tests/fixtures/arellano_2008/README.md)
+for provenance and external-reference regeneration, and the
+[comparison guide](../../docs/arellano_replication.md) for results.
+
 ## Dynare 7.0 / MATLAB
 
 Five source models in `tests/fixtures/dynare_live/` cover quadratic forward

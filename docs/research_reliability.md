@@ -43,7 +43,7 @@ the specific scope described in each notebook, not blanket economic validation.
 
 | Comparison | Result on the tested grids | What remains open |
 |---|---|---|
-| Arellano short-term deterministic equations | Independent Bellman implementation matches values within 4e-11; prices, default choices and debt policies also match | Original published calibration, empirical moments, grid convergence and long-term extension |
+| Arellano short-term deterministic equations | Matched-grid equations pass; the archived Fortran is also reproduced within 5.3e-11 and its MATLAB moments within 1.1e-14 | Published-moment discrepancies, grid convergence, public timing/measurement contract and long-term extension |
 | One-asset household block | SSJ authors' code matches policies and consumption within 5e-11; return Jacobians within 4e-4 | Finer-grid economic convergence, full published equilibrium and nonlinear transition references |
 
 Both references are frozen with hashes and provenance in
@@ -51,15 +51,20 @@ Both references are frozen with hashes and provenance in
 `tools/reference_validation/`; the external SSJ package is not a runtime
 dependency. Matched-grid agreement does not prove discretization accuracy.
 
-## Next: one complete sovereign research study
+## Sovereign study: baseline completed, convergence unresolved
 
-1. Match an original Arellano calibration and its income process. Publish a
-   target-versus-result table covering debt/output, default frequency, spreads,
-   consumption volatility and trade-balance cyclicality. State simulation
-   conditioning and annualization explicitly; include sampling intervals.
-2. Refine debt and income grids and increase simulation length. Check Bellman
-   residuals, the bond-pricing equation, policy stability and boundary mass.
-   Keep raw simulated correlations, including unexpected signs.
+The [original-code and published-moment comparison](arellano_replication.md)
+now includes 16 independent simulations per case, nested debt grids and
+21/41/81 income states. Refinement moves mean spreads and default frequencies
+more than simulation uncertainty. A small Bellman residual therefore does not
+yet justify policy interpretation.
+
+1. Make exclusion timing, default-cost normalization and moment measurement
+   explicit in the public solver. The archive and current API implement
+   different conventions; the study reports both without silently equating them.
+2. Resolve debt/income grid sensitivity under a documented convergence
+   criterion. Keep sampling uncertainty separate from discretization error and
+   retain all raw moments. Recalibrate only after the numerical design is stable.
 3. Study how income volatility, persistence and market-reentry probability
    change sustainable debt and default exposure in the validated short-term
    model. Report welfare and numerical uncertainty before adding maturity or

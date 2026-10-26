@@ -6,3 +6,7 @@
 # every one of those checks fail there. Some raw sources are stored with CRLF
 # on purpose, so no normalization is applied in either direction.
 * -text
+
+# Preserve authenticated author-code bytes, including their original whitespace.
+tests/fixtures/arellano_2008/original/* -whitespace
+tests/fixtures/arellano_2008/portability.patch -whitespace
