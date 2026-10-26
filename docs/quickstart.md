@@ -284,7 +284,7 @@ show_colab_offload_dialog("sw07_offload.ipynb")
 
 ## 9. Forward Automatic Differentiation & Unified Model Protocol
 
-Compute machine-precision analytical score gradients and simulate state-space models via the universal `DifferentiableModel` protocol:
+Evaluate native Kalman sensitivity scores on explicit data and simulate state-space models via the `DifferentiableModel` protocol:
 
 ```python
 import numpy as np
@@ -300,9 +300,10 @@ ssm = StateSpaceModel(
 )
 model_diff = wrap_differentiable_model(ssm)
 
-# 2. Evaluate joint log-likelihood and analytical score gradient via forward AD
+# 2. Evaluate the native likelihood and Kalman sensitivity score on explicit data
 params = np.array([0.75, 0.20, 0.05])
-loglik, score = model_diff.loglik_and_grad(params=params)
+data = model_diff.simulate(periods=100, seed=42)
+loglik, score = model_diff.loglik_and_grad(params=params, data=data)
 print(f"Log-likelihood: {loglik:.4f}")
 print("Analytical score gradient:", score)
 
@@ -341,9 +342,9 @@ print(res_smc.to_latex())
 
 ---
 
-## 11. Global Nonlinear HANK Transition & 2nd-Order Aggregate Risk
+## 11. Reduced Nonlinear HANK and Aggregate-Risk Demonstrations
 
-Solve incomplete-markets general equilibrium transitions with occasionally binding borrowing constraints and compute precautionary risk premia:
+Exercise a reduced DAG with prescribed MPCs and constraint fractions, and a separate aggregate-risk algebra example. These examples do not solve household policies or a distribution; see [the HANK scope guide](hank_ssj_and_aggregate_risk.md):
 
 ```python
 import numpy as np
@@ -401,11 +402,13 @@ res_sov = solve_sovereign_default(
 print("Sovereign solve converged:", res_sov.converged)
 print(f"Mean spread: {res_sov.spread_mean * 10000:.1f} bps")
 
-# 2. Evaluate debt restructuring counterfactual (20% haircut + maturity extension)
+# 2. Evaluate a haircut at an explicit state; keep the short-term maturity
 res_restr = evaluate_debt_restructuring(
     res_sov,
     haircut=0.20,
-    maturity_extension=0.50,
+    maturity_extension=0.0,
+    b_distress=0.20,
+    y_distress=1.0,
     horizon=20,
     seed=42,
 )

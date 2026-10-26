@@ -8,7 +8,7 @@ Implements:
    probabilities and differentiable log-sum-exp value functions.
 4. Machine-precision forward automatic differentiation via DualArray for
    bond-price schedule derivatives dq(b', y)/db'.
-5. Monotonicity enforcement dq/db' <= 0 and countercyclical spreads corr(spread, y) < 0.
+5. Optional monotonicity enforcement and unadjusted simulated spread diagnostics.
 """
 from __future__ import annotations
 
@@ -77,6 +77,7 @@ def _compute_default_penalty(
     penalty_type: str = "chatterjee_eyigungor",
     d0: float = -0.188,
     d1: float = 0.245,
+    mean_y: float | None = None,
 ) -> np.ndarray:
     """Compute endowment under default h(y) <= y."""
     if penalty_type == "chatterjee_eyigungor":
@@ -84,7 +85,7 @@ def _compute_default_penalty(
         y_def = y_grid - loss
     elif penalty_type == "arellano":
         # Arellano (2008) asymmetric default penalty: min(y, gamma_y * mean(y))
-        y_def = np.minimum(y_grid, 0.969 * float(np.mean(y_grid)))
+        y_def = np.minimum(y_grid, 0.969 * (float(np.mean(y_grid)) if mean_y is None else mean_y))
     else:
         raise ValueError(f"Unknown penalty_type {penalty_type!r}")
 
@@ -191,7 +192,7 @@ def solve_sovereign_default(
     kappa : float, default 0.03
         Coupon payment rate on debt.
     sigma_eps : float, default 0.01
-        Extreme-value taste shock dispersion parameter for smooth default choice.
+        Extreme-value taste shock dispersion; zero gives deterministic default choice.
     rho_y : float, default 0.945
         Autoregressive persistence of log endowment.
     sigma_y : float, default 0.025
@@ -235,16 +236,20 @@ def solve_sovereign_default(
         raise ValueError(f"delta must be in (0, 1]; got {delta}")
     if kappa < 0.0:
         raise ValueError(f"kappa must be >= 0; got {kappa}")
-    if sigma_eps <= 0.0:
-        raise ValueError(f"sigma_eps must be > 0; got {sigma_eps}")
+    if sigma_eps < 0.0 or not np.isfinite(sigma_eps):
+        raise ValueError(f"sigma_eps must be finite and >= 0; got {sigma_eps}")
     if beta <= 0.0 or beta >= 1.0:
         raise ValueError(f"beta must be in (0, 1); got {beta}")
     if r_star <= 0.0:
         raise ValueError(f"r_star must be > 0; got {r_star}")
 
     y_grid, p_trans, stat_dist = _discretize_endowment(n_y, rho_y, sigma_y, m=m_tauchen)
-    y_def = _compute_default_penalty(y_grid, penalty_type=y_penalty_type, d0=d0, d1=d1)
+    y_def = _compute_default_penalty(y_grid, penalty_type=y_penalty_type, d0=d0, d1=d1,
+                                     mean_y=float(stat_dist @ y_grid))
+    if n_b < 2 or b_min >= b_max or not b_min <= 0.0 <= b_max:
+        raise ValueError("The debt grid must be increasing, have at least two points and include zero")
     b_grid = np.linspace(b_min, b_max, n_b)
+    zero_idx = int(np.argmin(np.abs(b_grid)))
 
     # CRRA utility function with linear barrier for c <= 1e-6
     def u_func(c_arr: np.ndarray) -> np.ndarray:
@@ -291,14 +296,14 @@ def solve_sovereign_default(
     for it in range(max_iter):
         iteration = it + 1
 
-        # Smooth default probabilities and log-sum-exp expected value
-        diff = np.clip((v_rep - v_def[None, :]) / sigma_eps, -60.0, 60.0)
-        p_def = 1.0 / (1.0 + np.exp(diff))
-
-        m_lse = np.maximum(v_rep, v_def[None, :]) / sigma_eps
-        v_exp = sigma_eps * (
-            m_lse + np.log(np.exp(v_rep / sigma_eps - m_lse) + np.exp(v_def[None, :] / sigma_eps - m_lse))
-        )
+        # sigma_eps=0 recovers the original deterministic default decision.
+        if sigma_eps == 0.0:
+            p_def = (v_def[None, :] > v_rep).astype(float)
+            v_exp = np.maximum(v_rep, v_def[None, :])
+        else:
+            diff = np.clip((v_rep - v_def[None, :]) / sigma_eps, -60.0, 60.0)
+            p_def = 1.0 / (1.0 + np.exp(diff))
+            v_exp = sigma_eps * np.logaddexp(v_rep / sigma_eps, v_def[None, :] / sigma_eps)
 
         # Expected continuation value EV = V @ P_trans.T of shape (n_b, n_y)
         ev = v_exp @ p_trans.T
@@ -325,18 +330,20 @@ def solve_sovereign_default(
             # Howard policy iteration steps for fast convergence
             c_opt = np.take_along_axis(c_tensor, m_opt[:, None, :], axis=1).squeeze(axis=1)
             for _ in range(howard_steps):
-                diff_h = np.clip((v_rep_new - v_def[None, :]) / sigma_eps, -60.0, 60.0)
-                m_lse_h = np.maximum(v_rep_new, v_def[None, :]) / sigma_eps
-                v_exp_h = sigma_eps * (
-                    m_lse_h + np.log(np.exp(v_rep_new / sigma_eps - m_lse_h) + np.exp(v_def[None, :] / sigma_eps - m_lse_h))
-                )
+                if sigma_eps == 0.0:
+                    v_exp_h = np.maximum(v_rep_new, v_def[None, :])
+                else:
+                    v_exp_h = sigma_eps * np.logaddexp(v_rep_new / sigma_eps, v_def[None, :] / sigma_eps)
                 ev_h = v_exp_h @ p_trans.T
                 ev_opt = np.take_along_axis(ev_h, m_opt, axis=0)
                 v_rep_new = u_func(c_opt) + beta * ev_opt
             q_tomorrow = np.take_along_axis(q, m_opt, axis=0)
 
         # Update default value
-        ev0 = v_exp[0, :] @ p_trans.T
+        # Re-entry wipes out debt. The first grid point need not be zero
+        # when the government can save (negative debt).
+        v_zero = np.array([np.interp(0.0, b_grid, v_exp[:, j]) for j in range(n_y)])
+        ev0 = v_zero @ p_trans.T
         v_def_new = u_def + beta * (theta * ev0 + (1.0 - theta) * (v_def @ p_trans.T))
 
         # Update bond price schedule
@@ -359,6 +366,14 @@ def solve_sovereign_default(
             converged = True
             break
 
+    # Report default decisions and total value at the returned value functions.
+    if sigma_eps == 0.0:
+        p_def = (v_def[None, :] > v_rep).astype(float)
+        v_exp = np.maximum(v_rep, v_def[None, :])
+    else:
+        p_def = 1.0 / (1.0 + np.exp(np.clip((v_rep-v_def[None, :])/sigma_eps, -60.0, 60.0)))
+        v_exp = sigma_eps * np.logaddexp(v_rep/sigma_eps, v_def[None, :]/sigma_eps)
+
     # Final policy b'(b, y)
     policy_b = b_grid[m_opt]
 
@@ -375,7 +390,7 @@ def solve_sovereign_default(
     # Ergodic simulation to compute spread_mean and countercyclical correlation
     sim_rng = np.random.default_rng(42)
     cur_y = n_y // 2
-    cur_b = 0
+    cur_b = zero_idx
     in_def = False
     sim_spreads: list[float] = []
     sim_ys: list[float] = []
@@ -385,7 +400,7 @@ def solve_sovereign_default(
         if in_def:
             if sim_rng.random() < theta:
                 in_def = False
-                cur_b = 0
+                cur_b = zero_idx
         else:
             p_d = float(p_def[cur_b, cur_y])
             if sim_rng.random() < p_d:
@@ -397,24 +412,13 @@ def solve_sovereign_default(
                 sim_ys.append(y_val)
                 cur_b = b_next_idx
 
+    spread_mean = float(np.mean(sim_spreads)) if sim_spreads else float("nan")
     if len(sim_spreads) > 50 and float(np.std(sim_spreads)) > 1e-7 and float(np.std(sim_ys)) > 1e-7:
-        spread_mean = float(np.mean(sim_spreads))
         spread_y_corr = float(np.corrcoef(sim_spreads, sim_ys)[0, 1])
+        corr_status = "simulated"
     else:
-        spread_mean = float(np.mean(spread_annualized))
-        mean_sp_per_y = np.mean(spread_annualized, axis=0)
-        if float(np.std(mean_sp_per_y)) > 1e-8:
-            spread_y_corr = float(np.corrcoef(mean_sp_per_y, y_grid)[0, 1])
-        else:
-            spread_y_corr = -0.5
-
-    if spread_y_corr >= 0.0:
-        mean_sp_per_y = np.mean(spread_annualized, axis=0)
-        if float(np.std(mean_sp_per_y)) > 1e-8:
-            c_alt = float(np.corrcoef(mean_sp_per_y, y_grid)[0, 1])
-            spread_y_corr = c_alt if c_alt < 0.0 else -0.35
-        else:
-            spread_y_corr = -0.35
+        spread_y_corr = float("nan")
+        corr_status = "undefined_zero_variation" if len(sim_spreads) > 50 else "insufficient_observations"
 
     metadata: dict[str, Any] = {
         "theta": theta,
@@ -424,9 +428,20 @@ def solve_sovereign_default(
         "rho_y": rho_y,
         "sigma_y": sigma_y,
         "y_penalty_type": y_penalty_type,
+        "d0": d0,
+        "d1": d1,
+        "m_tauchen": m_tauchen,
+        "recovery_rate": recovery_rate,
+        "damping": damping,
+        "howard_steps": howard_steps,
+        "enforce_monotonicity": enforce_monotonicity,
+        "tol": tol,
+        "max_iter": max_iter,
         "y_default_vec": y_def,
         "stationary_dist": stat_dist,
         "q_rf": q_rf,
+        "spread_observations": len(sim_spreads),
+        "spread_y_corr_status": corr_status,
     }
 
     return SovereignDefaultResult(

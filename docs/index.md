@@ -22,7 +22,8 @@ python -m pip install puremacro
 | **Simulate policy** | Declare a household model with [dynamic programming](dp.md), study [monetary transmission](monetary_transmission.md), or build a [trade counterfactual](trade_accounting.md). |
 | **Learn or teach** | Choose a [notebook learning path](notebooks.md) or use the [bilingual course and interactive labs](https://github.com/jalonso1979/puremacro/tree/main/curso). Use the pinned course edition below. |
 
-**Published version 6.0.0.** Install the [verified PyPI release](https://pypi.org/project/puremacro/6.0.0/); see the [release and validation record](https://github.com/jalonso1979/puremacro/releases/tag/v6.0.0).
+**Status checked 2026-10-26:** this development checkout targets **6.0.1**. Publication of the preceding v6.0.0 tag failed. The latest distribution available on [PyPI](https://pypi.org/project/puremacro/) is **5.7.1**. Reliability corrections are in development; a source tag does not establish publication.
+See the [recommended tests and next milestones](research_reliability.md).
 These examples describe the 6.0.0 API; see the [changelog](https://github.com/jalonso1979/puremacro/blob/main/CHANGELOG.md)
 for additions and fixes. Match your installed version to the documentation.
 
@@ -117,7 +118,7 @@ flowchart TD
    - **HANK Sequence-Space Bridge**: Declare `hetagent_block` directly inside standard Dynare `.mod` files.
    - **Targeted Fiscal Transfers**: Dynamic consumption IRFs and cumulative fiscal multipliers across wealth deciles.
    - **Continuous-Time HJB**: Achdou et al. (2022) **implicit** upwind finite-difference M-matrix schemes, the adjoint Kolmogorov forward equation for the stationary density, and continuous-time Aiyagari general equilibrium.
-   - **Nonlinear HANK Transitions & 2nd-Order Aggregate Risk**: Composable `BlockDAG` general equilibrium sequence-space Jacobians, nonlinear transitions with Good Broyden updates, and Reiter–Winberry aggregate risk perturbation with precautionary interest rate discounts ([Guide](hank_ssj_and_aggregate_risk.md)).
+   - **Nonlinear HANK Transitions & 2nd-Order Aggregate Risk**: Composable `BlockDAG` general equilibrium sequence-space Jacobians, nonlinear transitions with Good Broyden updates, and a reduced aggregate-risk algebra demonstration with prescribed moments ([Guide](hank_ssj_and_aggregate_risk.md)).
 
 3. **Econometric Engines & Local Projections**:
    - **Unified `LPResult`**: Standardized Local Projections (`lp_hac`, `lp_iv`, `lp_state_dep`, `panel_lp`) with Newey-West HAC, fixed-$b$, and Driscoll-Kraay standard errors.
@@ -163,7 +164,7 @@ flowchart TD
 
 10. **Forward AD Engine & Unified Differentiable Model Protocol**:
     - **Forward Automatic Differentiation**: Exact first- and second-order derivatives via `DualArray` and `HyperDualArray` through NumPy ufuncs, implicit linear solves, and Sylvester systems without external frameworks ([Guide](autodiff_and_protocol.md)).
-    - **Unified `DifferentiableModel` Protocol**: A universal programmatic interface spanning DSGE, HANK DAGs, DFM nowcasting, SVARs, and trade networks with standardized methods for impulse responses, simulation, counterfactuals, and analytical scores ([Guide](autodiff_and_protocol.md)).
+    - **Unified `DifferentiableModel` Protocol**: An interface with native DSGE and conditional DAG scores, explicit demonstrations, and errors for unsupported native operations ([Guide](autodiff_and_protocol.md)).
 
 ---
 

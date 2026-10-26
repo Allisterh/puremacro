@@ -23,7 +23,8 @@ python -m pip install puremacro
 | **Simulate policy** | Declare a household model with [dynamic programming](docs/dp.md), study [monetary transmission](docs/monetary_transmission.md), or build a [trade counterfactual](docs/trade_accounting.md). |
 | **Learn or teach** | Choose a [notebook learning path](docs/notebooks.md) or use the [bilingual course and interactive labs](curso/README.md). Use the pinned course edition below. |
 
-**Published version 6.0.0.** Install the [verified PyPI release](https://pypi.org/project/puremacro/6.0.0/); see the [release and validation record](https://github.com/jalonso1979/puremacro/releases/tag/v6.0.0).
+**Status checked 2026-10-26:** this development checkout targets **6.0.1**. Publication of the preceding v6.0.0 tag failed. The latest distribution available on [PyPI](https://pypi.org/project/puremacro/) is **5.7.1**. Reliability corrections are in development; a source tag does not establish publication.
+See the [recommended tests and next milestones](docs/research_reliability.md).
 These pages target 6.0.0; see the [changelog](CHANGELOG.md) for additions and fixes. Match your installed version to the documentation.
 
 New DSGE workflows share [nonlinear model equations](docs/dsge_nonlinear.md)
@@ -1060,8 +1061,8 @@ If you are transitioning from Stata, MATLAB/Dynare, or statsmodels:
 End-to-end replications of canonical papers and pedagogical showcases live under `notebooks/`
 and `puremacro/examples/`:
 - **Reproducible studies, nonlinear DSGE workflows, and frontier macroeconomics**: frozen-data monetary VAR, household transfer and production-network tariff workflows with portable study archives and retained diagnostics (`69`), ordered `.mod` commands, Sylvester conditioning, separable Chebyshev policies and constrained Newton–Krylov transitions (`70`), and the complete frontier suite uniting forward AD, sequence-space HANK, pruned higher-order OccBin, mixed-frequency nowcasting, continuous-time HJB, network/spatial general equilibrium, and self-auditing `PolicyStudio` counterfactual grids (`71`).
-- **Flagship v6.0.0 frontier suite**: Unified Differentiable Model Protocol with forward AD score gradients, vectorized tempered SMC engine, global nonlinear sequence-space HANK with aggregate risk, quantitative sovereign default with collateral sudden stops, functional distributional local projections with exact adding-up, and integrated dynamic spatial climate-macro IAM (`72`).
-- **Pedagogical v6.0.0 tutorial showcases**: Quantitative sovereign default, long-term debt maturity, collateral-constrained sudden stops and debt restructuring counterfactuals (`73`); functional and quantile distributional local projections with exact adding-up, HANK structural IRF bridges, Adaptive Tempered SMC, and nonlinear sequence-space transitions (`74`); Baqaee–Farhi 2nd-order CES supply-chain bottlenecks, dynamic spatial migration hat-algebra, integrated multi-region climate IAM, and self-auditing PolicyStudio interactive reporting (`75`).
+- **Flagship v6.0.0 frontier suite**: Unified Differentiable Model Protocol with documented native score methods, vectorized tempered SMC engine, reduced nonlinear HANK and aggregate-risk demonstrations, quantitative sovereign default with collateral sudden stops, functional distributional local projections with exact adding-up, and integrated dynamic spatial climate-macro IAM (`72`).
+- **Pedagogical v6.0.0 tutorial showcases**: Quantitative sovereign default, long-term debt maturity, collateral-constrained sudden stops and debt restructuring counterfactuals (`73`); functional and quantile distributional local projections with exact adding-up, bridge identity checks, Adaptive Tempered SMC, and nonlinear sequence-space transitions (`74`); Baqaee–Farhi 2nd-order CES supply-chain bottlenecks, dynamic spatial migration hat-algebra, integrated multi-region climate IAM, and self-auditing PolicyStudio interactive reporting (`75`).
 - **Replications of published results**: Clarida–Galí–Gertler (1999) optimal discretion, simple-rule and timeless commitment checked formula by formula, with the unconditional-versus-conditional loss caveat (`66`), Huggett (1993) and Aiyagari (1994) tables re-solved, with numerical-error bounds, an independent solver and the Markov chain's effect (`67`), and third-order perturbation checked tensor by tensor against closed forms and live Dynare 7.0 (`68`).
 - **Regional nowcasting, causal ML and trade policy**: synthetic Latin American nowcasting with vintage news attribution (`59`), interactive Double ML IRM and DML-IV (`60`), trade and HANK policy simulators (`61`), flexible trade CGE building blocks (`62`), Hicksian tariff games with audited equilibrium recovery (`63`), spectral bounds and Keller continuation (`64`), and GVC cost cascades with Hicksian EV/CV attribution (`65`).
 - **Causal ML, continuous-time HJB & regional real time**: implicit HJB with the adjoint KFE and Aiyagari GE (`56`), multi-constraint OccBin coupled with DML (`57`), and Latin American real-time macro vintages (`58`).
@@ -1162,9 +1163,9 @@ command that rebuilds the file, ships as `puremacro/trade/_datafiles/SOURCES.md`
 
 ## Status
 
-Published version **6.0.0** includes `puremacro.trade` and its MRIO modules, restored in
+The **6.0.0 source tree** includes `puremacro.trade` and its MRIO modules, restored in
 5.2.0, plus the additions and fixes listed in the [changelog](CHANGELOG.md).
-Install the [6.0.0 distribution from PyPI](https://pypi.org/project/puremacro/6.0.0/).
+For published distributions, check [PyPI](https://pypi.org/project/puremacro/).
 Release 4.8.1 is the last one with the research
 studies removed in 5.x (`pip install "puremacro<5"`). The [stability tiers](ARCHITECTURE.md#stability-tiers)
 identify stable, experimental and best-effort surfaces. Structural calculations

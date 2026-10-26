@@ -3,6 +3,30 @@
 These tools compare actual external inputs with puremacro. Ordinary tests use
 small frozen fixtures and do not require MATLAB or network access.
 
+## One-asset households and deterministic sovereign default
+
+Run the frozen independent checks without additional dependencies:
+
+```sh
+python -m pytest tests/test_research_reliability_references.py -q
+```
+
+Regenerate and compare references in a separate validation environment:
+
+```sh
+python -m pip install 'sequence-jacobian @ git+https://github.com/shade-econ/sequence-jacobian.git@eb4ac4c3157357a4cacbea4b5a7a281f5b48cab9'
+python tools/reference_validation/validate_hank_reference.py --output /tmp/hank-reference
+python tools/reference_validation/validate_arellano_reference.py --output /tmp/arellano-reference
+```
+
+Both commands return nonzero when their comparison tolerances fail. The SSJ
+reference checks household policies, distribution, consumption and Jacobians
+with matched grids, tax assumptions and timing. The sovereign reference uses
+separately implemented Bellman equations, with assets negative for debt and no
+production solver helpers. Manifests record scope and hashes. See
+`tests/fixtures/research_reliability/README.md` for tolerances and limitations.
+Neither comparison claims to reproduce the full moments of a published paper.
+
 ## Dynare 7.0 / MATLAB
 
 Five source models in `tests/fixtures/dynare_live/` cover quadratic forward

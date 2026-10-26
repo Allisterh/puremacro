@@ -22,7 +22,8 @@ python -m pip install puremacro
 | **Simular políticas** | Declare un modelo de hogares con [programación dinámica](dp.md), estudie la [transmisión monetaria](monetary_transmission.md) o construya un [contrafactual comercial](trade_accounting.md). |
 | **Aprender o enseñar** | Elija una [ruta de cuadernos](notebooks.md) o use el [curso bilingüe y sus laboratorios interactivos](https://github.com/jalonso1979/puremacro/tree/main/curso). Use la edición fija del curso indicada abajo. |
 
-**Versión publicada 6.0.0.** Instale la [versión verificada de PyPI](https://pypi.org/project/puremacro/6.0.0/); consulte el [registro de publicación y validación](https://github.com/jalonso1979/puremacro/releases/tag/v6.0.0).
+**Estado comprobado el 2026-10-26:** esta rama de desarrollo corresponde a **6.0.1**. La publicación de la etiqueta anterior v6.0.0 falló. La última distribución disponible en [PyPI](https://pypi.org/project/puremacro/) es **5.7.1**. Las correcciones de fiabilidad están en desarrollo; una etiqueta no acredita una publicación.
+Consulte las [pruebas recomendadas y próximos hitos](research_reliability.md).
 Estos ejemplos describen la API de 6.0.0; consulte el
 [historial de cambios](https://github.com/jalonso1979/puremacro/blob/main/CHANGELOG.md) y use la documentación correspondiente
 a su versión instalada.
@@ -120,7 +121,7 @@ flowchart TD
    - **Puente HANK en Espacio de Secuencias**: Declaración directa del bloque `hetagent_block` en archivos `.mod` estándar de Dynare.
    - **Transferencias Fiscales Focalizadas**: Respuestas dinámicas de consumo y multiplicadores acumulados por deciles de riqueza.
    - **HJB en Tiempo Continuo**: Esquemas **implícitos** de M-matriz upwind en diferencias finitas de Achdou et al. (2022), la ecuación de Kolmogorov hacia adelante adjunta para la densidad estacionaria y el equilibrio general de Aiyagari en tiempo continuo.
-   - **Transiciones No Lineales en HANK y Riesgo Agregado de 2.° Orden**: Jacobianos en espacio de secuencias de equilibrio general composables con `BlockDAG`, transiciones no lineales con actualizaciones Good Broyden y perturbación de riesgo agregado de Reiter–Winberry con descuentos por motivo precaucionario ([Guía](hank_ssj_and_aggregate_risk.md)).
+   - **Transiciones No Lineales en HANK y Riesgo Agregado de 2.° Orden**: Jacobianos en espacio de secuencias de equilibrio general composables con `BlockDAG`, transiciones no lineales con actualizaciones Good Broyden y una demostración algebraica reducida de riesgo agregado con momentos prescritos ([Guía](hank_ssj_and_aggregate_risk.md)).
 
 3. **Motores Econométricos y Proyecciones Locales**:
    - **`LPResult` Unificado**: Proyecciones locales estandarizadas (`lp_hac`, `lp_iv`, `lp_state_dep`, `panel_lp`) con errores estándar Newey-West HAC, fixed-$b$ y Driscoll-Kraay.
@@ -166,7 +167,7 @@ flowchart TD
 
 10. **Motor de Diferenciación Automática Directa y Protocolo Unificado de Modelos Diferenciables**:
     - **Diferenciación Automática Directa**: Derivadas exactas de primer y segundo orden mediante `DualArray` y `HyperDualArray` a través de ufuncs de NumPy, resolución de sistemas lineales implícitos y ecuaciones de Sylvester sin dependencias de frameworks externos ([Guía](autodiff_and_protocol.md)).
-    - **Protocolo Unificado `DifferentiableModel`**: Interfaz programática universal que abarca DSGE, DAGs de HANK, nowcasting con DFM, SVARs y redes comerciales con métodos estandarizados para respuestas a impulsos, simulación, contrafactuales y scores analíticos ([Guía](autodiff_and_protocol.md)).
+    - **Protocolo Unificado `DifferentiableModel`**: Interfaz con gradientes DSGE nativos y DAG condicionales, demostraciones explícitas y errores para operaciones no implementadas ([Guía](autodiff_and_protocol.md)).
 
 ---
 

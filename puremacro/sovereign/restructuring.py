@@ -240,12 +240,20 @@ def evaluate_debt_restructuring(
         rho_y=float(result.metadata.get("rho_y", 0.945)),
         sigma_y=float(result.metadata.get("sigma_y", 0.025)),
         theta=float(result.metadata.get("theta", 0.282)),
+        d0=float(result.metadata.get("d0", -0.188)),
+        d1=float(result.metadata.get("d1", 0.245)),
+        y_penalty_type=str(result.metadata.get("y_penalty_type", "chatterjee_eyigungor")),
+        m_tauchen=float(result.metadata.get("m_tauchen", 3.0)),
+        recovery_rate=float(result.metadata.get("recovery_rate", 0.0)),
+        damping=float(result.metadata.get("damping", 0.4)),
+        howard_steps=int(result.metadata.get("howard_steps", 15)),
+        enforce_monotonicity=bool(result.metadata.get("enforce_monotonicity", True)),
         n_b=n_b,
         b_max=float(result.b_grid[-1]),
         b_min=float(result.b_grid[0]),
         n_y=n_y,
-        tol=1e-6,
-        max_iter=500,
+        tol=float(result.metadata.get("tol", 1e-7)),
+        max_iter=max(500, int(result.metadata.get("max_iter", 2000))),
     )
 
     ib_new = int(np.argmin(np.abs(res_restructured.b_grid - b_new)))
@@ -253,7 +261,7 @@ def evaluate_debt_restructuring(
     post_def_prob = float(res_restructured.default_prob[ib_new, iy_distress])
 
     spread_reduction_bps = (counterfactual_spread - base_spread) * 10000.0
-    mean_y = float(np.mean(result.y_grid))
+    mean_y = float(np.dot(result.metadata.get("stationary_dist", np.full(n_y, 1/n_y)), result.y_grid))
     debt_relief_pct = (b_distress - b_new) / mean_y * 100.0
 
     # Post-restructuring recovery simulation starting from (b_new, y_distress)
@@ -271,14 +279,14 @@ def evaluate_debt_restructuring(
         if in_def:
             if rng.random() < theta:
                 in_def = False
-                b_idx = 0
+                b_idx = int(np.argmin(abs(res_restructured.b_grid)))
             else:
                 path_records.append({
                     "period": t,
                     "debt": 0.0,
                     "debt_gdp_pct": 0.0,
-                    "output": y_val * 0.969,
-                    "consumption": y_val * 0.969,
+                    "output": float(res_restructured.metadata["y_default_vec"][y_idx]),
+                    "consumption": float(res_restructured.metadata["y_default_vec"][y_idx]),
                     "spread_bps": float(np.nan),
                     "default_prob": 1.0,
                 })
@@ -291,8 +299,8 @@ def evaluate_debt_restructuring(
                 "period": t,
                 "debt": float(res_restructured.b_grid[b_idx]),
                 "debt_gdp_pct": float(res_restructured.b_grid[b_idx]) / y_val * 100.0,
-                "output": y_val * 0.969,
-                "consumption": y_val * 0.969,
+                "output": float(res_restructured.metadata["y_default_vec"][y_idx]),
+                "consumption": float(res_restructured.metadata["y_default_vec"][y_idx]),
                 "spread_bps": float(np.nan),
                 "default_prob": p_d,
             })

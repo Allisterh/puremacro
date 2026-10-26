@@ -5,7 +5,43 @@ This file records user-visible changes per release. Internal refactors that don'
 This changelog describes versioned source changes. Check
 [PyPI](https://pypi.org/project/puremacro/) for published distributions.
 Versions 5.3.0, 5.4.0 and 5.4.1 were tagged but not published to PyPI; their
-additions are included in 5.4.2. See the [release procedure](RELEASING.md).
+additions are included in 5.4.2. The v6.0.0 publication also failed; as checked
+on 2026-10-26, PyPI still serves 5.7.1. See the [release procedure](RELEASING.md).
+
+## 6.0.1 (unreleased)
+
+Reliability corrections after the failed v6.0.0 publication. This source
+version is a development candidate, not a published distribution.
+
+- Model adapters now evaluate the supplied first-order DSGE or BlockDAG
+  likelihood. Scores use native Kalman sensitivities or central differences of
+  native Whittle likelihoods; they are not universally end-to-end DualArray AD.
+  Observed data and parameter names are checked. Unsupported native operations
+  fail explicitly instead of returning synthetic substitutes. `model=None`
+  demonstrations emit warnings.
+- The default nonlinear HANK DAG and aggregate-risk calculations are explicitly
+  reduced demonstrations with prescribed response formulas and moments. Unknown
+  nonlinear models and unsupported aggregate-risk model/steady-state arguments
+  are rejected. The legacy `asymmetry_ratio` is an unclipped nonlinear/linear
+  peak ratio, not an independently solved opposite-shock comparison.
+- Sovereign default now supports `sigma_eps=0`, uses stationary mean income for
+  the Arellano penalty, reenters at zero debt even on grids allowing saving, and
+  returns default decisions consistent with the final values. Spread correlations
+  are reported without sign changes; undefined correlations are `NaN` with status
+  metadata. No grid-average statistics substitute for missing simulation data.
+- Sovereign restructuring preserves the original income discretization,
+  default-cost calibration, recovery assumptions and solver settings. Recovery
+  paths use the model's actual default output and return to zero debt.
+- Independent matched-grid references cover short-term deterministic-default
+  equations and one-asset household policies, distributions and Jacobians.
+  These checks do not certify complete published calibrations or policy moments.
+- Fixed Python 3.11/NumPy 2.4 type-checking, retired notebook imports and isolated
+  offline LLM-cache replay. Corrected bilingual guides and notebook explanations,
+  including bridge identity checks and separately computed policy scenarios.
+  Notebook 73 distinguishes grid and simulated statistics, uses the long-term
+  risk-free price and labels maturity extension as a fractional duration change.
+  Collateral amplification diagnostics and term-structure residual components
+  retain explicitly documented experimental limitations.
 
 ## 6.0.0 (2026-10-25)
 

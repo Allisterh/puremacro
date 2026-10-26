@@ -298,7 +298,7 @@ class TestTier1FeatureCoverage:
         """Wraps LinearModel and checks DifferentiableModel impulse_response method."""
         proto = _require_protocol()
         dsge = _build_tractable_nk_dsge()
-        wrapped = proto.wrap_differentiable_model(dsge)
+        wrapped = proto.wrap_differentiable_model(dsge, param_names=["beta", "sigma", "kappa"])
 
         assert isinstance(wrapped, proto.DifferentiableModel)
         irf_df = wrapped.impulse_response("e_r", horizon=15, size=1.0)
@@ -312,7 +312,7 @@ class TestTier1FeatureCoverage:
         """Checks simulate method reproduces deterministic path given seed."""
         proto = _require_protocol()
         dsge = _build_tractable_nk_dsge()
-        wrapped = proto.wrap_differentiable_model(dsge)
+        wrapped = proto.wrap_differentiable_model(dsge, param_names=["beta", "sigma", "kappa"])
 
         sim1 = wrapped.simulate(periods=50, seed=123)
         sim2 = wrapped.simulate(periods=50, seed=123)
@@ -324,7 +324,7 @@ class TestTier1FeatureCoverage:
         """Checks loglik_and_grad produces exact DualArray analytical score gradients."""
         proto = _require_protocol()
         dsge = _build_tractable_nk_dsge()
-        wrapped = proto.wrap_differentiable_model(dsge)
+        wrapped = proto.wrap_differentiable_model(dsge, param_names=["beta", "sigma", "kappa"])
 
         # Generate synthetic data
         sim_data = wrapped.simulate(periods=60, seed=42)[["y", "pi"]].values
@@ -352,7 +352,7 @@ class TestTier1FeatureCoverage:
         """Checks counterfactual policy simulation via wrapped DifferentiableModel."""
         proto = _require_protocol()
         dsge = _build_tractable_nk_dsge()
-        wrapped = proto.wrap_differentiable_model(dsge)
+        wrapped = proto.wrap_differentiable_model(dsge, param_names=["beta", "sigma", "kappa"])
 
         scenario = {"param_override": {"phi_pi": 2.5}, "shock_sequence": {"e_r": np.ones(10)}}
         res = wrapped.counterfactual(scenario)
@@ -366,7 +366,7 @@ class TestTier1FeatureCoverage:
         """Checks to_interactive_html produces zero-CDN standalone SVG/HTML5."""
         proto = _require_protocol()
         dsge = _build_tractable_nk_dsge()
-        wrapped = proto.wrap_differentiable_model(dsge)
+        wrapped = proto.wrap_differentiable_model(dsge, param_names=["beta", "sigma", "kappa"])
 
         html = wrapped.to_interactive_html(title="DSGE Policy Explorer")
         assert isinstance(html, str)
@@ -664,7 +664,8 @@ class TestTier1FeatureCoverage:
         hn = _require_hank_nonlinear()
         res_neg = hn.solve_hank_nonlinear_transition(model=None, shocks={"eps_m": 0.05}, horizon=25)
         assert hasattr(res_neg, "asymmetry_ratio")
-        assert res_neg.asymmetry_ratio >= 1.0
+        expected_amplification = np.max(abs(res_neg.paths["Y"]-1))/np.max(abs(res_neg.linear_paths["Y"]-1))
+        assert res_neg.asymmetry_ratio == pytest.approx(expected_amplification)
 
     def test_t1_hank_nonlinear_transition_binding_fraction_diagnostics(self):
         """Verifies binding_fractions vector records mass of constrained agents."""
@@ -1223,7 +1224,7 @@ class TestTier2BoundaryCornerCases:
         """Verifies zero-size shock returns identically zero impulse response."""
         proto = _require_protocol()
         dsge = _build_tractable_nk_dsge()
-        wrapped = proto.wrap_differentiable_model(dsge)
+        wrapped = proto.wrap_differentiable_model(dsge, param_names=["beta", "sigma", "kappa"])
         irf_df = wrapped.impulse_response("e_r", horizon=10, size=0.0)
         np.testing.assert_allclose(irf_df.values, 0.0, atol=1e-12)
 
@@ -1231,7 +1232,7 @@ class TestTier2BoundaryCornerCases:
         """Verifies economy remains at deterministic steady state when shocks are zero."""
         proto = _require_protocol()
         dsge = _build_tractable_nk_dsge()
-        wrapped = proto.wrap_differentiable_model(dsge)
+        wrapped = proto.wrap_differentiable_model(dsge, param_names=["beta", "sigma", "kappa"])
         zero_shocks = np.zeros((40, 2))
         sim = wrapped.simulate(periods=40, shocks=zero_shocks)
         np.testing.assert_allclose(sim.values, 0.0, atol=1e-12)
@@ -1240,7 +1241,7 @@ class TestTier2BoundaryCornerCases:
         """Verifies likelihood evaluation operates seamlessly on single-observable time series."""
         proto = _require_protocol()
         dsge = _build_tractable_nk_dsge()
-        wrapped = proto.wrap_differentiable_model(dsge)
+        wrapped = proto.wrap_differentiable_model(dsge, param_names=["beta", "sigma", "kappa"])
         sim = wrapped.simulate(periods=40, seed=1)[["y"]].values
         param_vec = np.array([0.99, 1.0, 0.12])
         ll, grad = wrapped.loglik_and_grad(param_vec, sim, observables=["y"])
@@ -1453,7 +1454,7 @@ class TestTier3CrossFeatureCombinations:
         proto = _require_protocol()
         smc = _require_smc()
         dsge = _build_tractable_nk_dsge()
-        wrapped = proto.wrap_differentiable_model(dsge)
+        wrapped = proto.wrap_differentiable_model(dsge, param_names=["beta", "sigma", "kappa"])
 
         # Generate synthetic observed series
         data_df = wrapped.simulate(periods=30, seed=123)[["y", "pi"]]
@@ -1553,11 +1554,10 @@ class TestTier3CrossFeatureCombinations:
             carbon_intensity=np.array([0.5, 0.5]),
             damage_coefficients=np.array([0.01, 0.02]),
         )
-        wrapped = proto.wrap_differentiable_model(model)
-        assert isinstance(wrapped, proto.DifferentiableModel)
-        irf = wrapped.impulse_response("carbon_tax", horizon=10, size=50.0)
-        assert isinstance(irf, pd.DataFrame)
-        assert len(irf) == 11
+        # There is no native differentiable IAM likelihood yet. Never silently
+        # substitute a scalar autoregression for this model.
+        with pytest.raises(TypeError, match="SpatialClimateIAM"):
+            proto.wrap_differentiable_model(model)
 
     def test_t3_interaction_distributional_lp_on_nonlinear_hank_synthetic_microdata(self):
         """Generates synthetic micro panel from nonlinear HANK and estimates distributional LP."""
@@ -1607,9 +1607,9 @@ class TestTier3CrossFeatureCombinations:
         proto = _require_protocol()
         sov = _require_sovereign()
         res_sov = sov.solve_sovereign_default(beta=0.95, gamma=2.0, r_star=0.01, n_b=20, n_y=7, max_iter=150)
-        wrapped = proto.wrap_differentiable_model(res_sov)
-
-        cf_out = wrapped.counterfactual({"haircut": 0.30, "maturity_extension": 0.20})
+        with pytest.raises(TypeError, match="SovereignDefaultResult"):
+            proto.wrap_differentiable_model(res_sov)
+        cf_out = sov.evaluate_debt_restructuring(res_sov, haircut=0.30, maturity_extension=0.20)
         assert cf_out is not None
 
 
@@ -1751,7 +1751,7 @@ class TestTier4RealWorldMacroScenarios:
         proto = _require_protocol()
         smc = _require_smc()
         dsge = _build_tractable_nk_dsge()
-        wrapped = proto.wrap_differentiable_model(dsge)
+        wrapped = proto.wrap_differentiable_model(dsge, param_names=["beta", "sigma", "kappa"])
 
         sim_obs = wrapped.simulate(periods=35, seed=101)[["y", "pi"]].values
 

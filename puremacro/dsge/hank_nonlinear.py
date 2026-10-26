@@ -1,4 +1,4 @@
-"""Global Nonlinear HANK with Aggregate Risk (puremacro.dsge.hank_nonlinear).
+"""Nonlinear DAG transitions and reduced HANK algebra demonstrations.
 
 Implements:
 1. `solve_hank_nonlinear_transition`: Nonlinear Sequence-Space Transition Solver
@@ -6,9 +6,9 @@ Implements:
    rank-1 inverse updates, Armijo line search, Jacobian reuse along large MIT shocks,
    and borrowing-constraint binding diagnostics Phi_t (Boppart, Krusell & Mitman 2018;
    Auclert, Bardoczy, Rognlie & Straub 2021).
-2. `solve_hank_aggregate_risk_order2`: 2nd-Order Aggregate Risk HANK solver via
-   cross-sectional moment/histogram distribution reduction (Reiter 2009; Winberry 2018)
-   coupled with `puremacro.dsge._gradients.sylvester_order2_tangent` to compute
+2. `solve_hank_aggregate_risk_order2`: reduced second-order demonstration with
+   prescribed moments and policy matrices, not a solved household distribution,
+   using `puremacro.dsge._gradients.sylvester_order2_tangent` to compute
    second-order state curvature g_xx and volatility correction (g_sigmasigma, h_sigmasigma),
    reporting precautionary shifts in wealth, interest rates, and output.
 3. `NonlinearHANKTransitionResult` and `HANKAggregateRiskResult`: rich result containers
@@ -70,11 +70,12 @@ class NonlinearHANKTransitionResult:
     jacobian_evaluations : int
         Number of full Jacobian evaluations / resets performed.
     binding_fractions : np.ndarray
-        Time series sequence of the cross-sectional mass Phi_t of households
-        at the borrowing constraint (length T).
+        Supplied DAG's Phi_t output (length T); a prescribed response formula
+        in the default reduced model, not a solved household statistic.
     asymmetry_ratio : float
-        Amplification ratio of contractionary vs expansionary response:
-        ||Delta Y_neg||_inf / ||Delta Y_pos||_inf (exceeds 1.05 under borrowing constraints).
+        Legacy name for peak nonlinear deviation / peak linear deviation.
+        Not clipped at one; NaN when the linear response is zero. This does
+        not compare independently solved contractionary and expansionary paths.
     shock_var : str
         Name of the perturbed shock variable.
     shock_size : float
@@ -132,6 +133,7 @@ class NonlinearHANKTransitionResult:
         ss_phi = float(self.binding_fractions[0]) if len(self.binding_fractions) > 0 else 0.0
 
         rows = [
+            ("Validation Scope", self.metadata.get("validation_scope", "supplied_dag")),
             ("Convergence Status", "Converged" if self.converged else "Failed"),
             ("Final Residual Norm ||H||_inf", f"{self.residual_norm:.3e}"),
             ("Iterations Executed", str(self.iterations)),
@@ -144,7 +146,7 @@ class NonlinearHANKTransitionResult:
             (f"Peak Deviation {y_col} (Linear SSJ)", f"{peak_lin:.6f}"),
             ("Borrowing Binding Mass Phi (SS)", f"{ss_phi:.4f}"),
             ("Borrowing Binding Mass Phi (Peak)", f"{peak_phi:.4f}"),
-            ("Asymmetric MPC Amplification Ratio", f"{self.asymmetry_ratio:.4f}"),
+            ("Peak Nonlinear / Linear Ratio", f"{self.asymmetry_ratio:.4f}"),
         ]
         return pd.DataFrame(
             {"Value": [r[1] for r in rows]},
@@ -289,6 +291,7 @@ class HANKAggregateRiskResult:
     def summary(self) -> pd.DataFrame:
         """Return diagnostic summary table of aggregate risk perturbation."""
         rows = [
+            ("Validation Scope", "Reduced demonstration; prescribed moments and coefficients"),
             ("Precautionary Wealth Shift (Delta A)", f"{self.precautionary_shift_wealth:+.6e}"),
             ("Precautionary Rate Discount (Delta r)", f"{self.precautionary_shift_rate:+.6e}"),
             ("Precautionary Output Shift (Delta Y)", f"{self.precautionary_shift_output:+.6e}"),
@@ -380,10 +383,11 @@ def build_canonical_hank_dag(
     phi_ss: float = 0.22,
     chi_phi: float = 2.2,
 ) -> tuple[BlockDAG, dict[str, float], dict[str, float]]:
-    """Build a canonical heterogeneous-agent New Keynesian BlockDAG.
+    """Build the reduced demonstration DAG with prescribed household responses.
 
-    Incorporates borrowing constraint binding diagnostics Phi_t and
-    state-dependent Keynesian multiplier amplification.
+    MPCs and constraint fractions are response formulas, not statistics of a
+    solved household policy or distribution. Use the one-asset model in
+    puremacro.models.hank_sequence_space for an EGM household block.
     """
     params = {
         "beta": beta,
@@ -532,9 +536,9 @@ def solve_hank_nonlinear_transition(
 
     Parameters
     ----------
-    model : BlockDAG, HANKModel, or None
-        Model instance. If None, builds the canonical nonlinear HANK DAG with
-        borrowing constraint diagnostics.
+    model : BlockDAG or None
+        Supplied equations, or the reduced demonstration when None. The default
+        uses prescribed MPC and constraint-fraction formulas, not household EGM.
     shocks : Mapping or Sequence, optional
         Exogenous shock sequence or dictionary mapping shock names to sequences.
     steady_state : Mapping, optional
@@ -575,6 +579,7 @@ def solve_hank_nonlinear_transition(
 
     # Instantiate canonical HANK DAG if model is None
     if model is None:
+        warnings.warn("Reduced nonlinear HANK demonstration with prescribed MPC and constraint fractions; not a solved household distribution", UserWarning, stacklevel=2)
         dag, default_ss, default_params = build_canonical_hank_dag(**kwargs)
         ss = dict(default_ss)
         p = dict(default_params)
@@ -587,10 +592,7 @@ def solve_hank_nonlinear_transition(
         ss = dict(raw_ss or {})
         p = dict(params or {})
     else:
-        # Wrapped or external HANK model
-        dag, default_ss, default_params = build_canonical_hank_dag(**kwargs)
-        ss = dict(raw_ss or default_ss)
-        p = dict(params or default_params)
+        raise TypeError("model must be a BlockDAG or None for the reduced demonstration")
 
     # Process exogenous shock paths
     shock_dict: dict[str, np.ndarray] = {}
@@ -744,29 +746,14 @@ def solve_hank_nonlinear_transition(
     # 3. Post-solution diagnostics: binding fraction Phi and asymmetry ratio
     binding_fractions = cur_paths.get("Phi", np.zeros(sim_T, dtype=np.float64))
 
-    # Evaluate mirror shock to calculate exact asymmetric amplification ratio
-    asymmetry_ratio = 1.0
+    # Legacy field name: this measures nonlinear/linear peak amplification.
+    # It is not a ratio of two independently solved opposite-shock paths.
     y_var = "Y" if "Y" in cur_paths else dag.unknowns[0]
     y_ss_val = float(ss.get(y_var, 0.0))
     dY_sol = np.max(np.abs(cur_paths[y_var] - y_ss_val))
 
-    try:
-        mirror_shocks = {k: -v for k, v in shock_dict.items()}
-        # Evaluate mirror without deep recursion
-        lin_mirror = dag.impulse_responses(ss, p, mirror_shocks, T=sim_T, levels=True)
-        u_mir = np.concatenate([lin_mirror.paths[u].to_numpy() for u in dag.unknowns])
-        _, cur_mir = _eval_dag(u_mir)
-        dY_mir = np.max(np.abs(cur_mir[y_var] - y_ss_val))
-        if dY_mir > 1e-12:
-            # If current shock is contractionary (shock_impact < 0 or dY < 0), ratio = dY_curr / dY_mir
-            if shock_impact < 0 or (np.sum(cur_paths[y_var] - y_ss_val) < 0):
-                asymmetry_ratio = float(dY_sol / dY_mir)
-            else:
-                asymmetry_ratio = float(dY_mir / dY_sol)
-        else:
-            asymmetry_ratio = 1.0
-    except Exception:
-        asymmetry_ratio = 1.0
+    dY_linear = np.max(np.abs(linear_df[y_var].to_numpy() - y_ss_val))
+    asymmetry_ratio = float(dY_sol/dY_linear) if dY_linear > 1e-12 else float("nan")
 
     df_out = pd.DataFrame(cur_paths, index=pd.RangeIndex(0, sim_T, name="t"))
 
@@ -781,10 +768,12 @@ def solve_hank_nonlinear_transition(
         broyden_updates=broyden_updates,
         jacobian_evaluations=jac_evals,
         binding_fractions=np.asarray(binding_fractions, dtype=np.float64),
-        asymmetry_ratio=max(1.0, asymmetry_ratio),
+        asymmetry_ratio=asymmetry_ratio,
         shock_var=effective_shock_var,
         shock_size=shock_impact,
-        metadata={"cond_H_U": cond_H_U, "steady_state": ss, "params": p},
+        metadata={"cond_H_U": cond_H_U, "steady_state": ss, "params": p,
+                  "validation_scope": "reduced_demonstration" if model is None else "supplied_dag",
+                  "asymmetry_ratio_definition": "peak_nonlinear_over_peak_linear"},
     )
 
 
@@ -801,10 +790,13 @@ def solve_hank_aggregate_risk_order2(
     steady_state: Mapping[str, float] | None = None,
     params: Mapping[str, float] | None = None,
 ) -> HANKAggregateRiskResult:
-    r"""Solve 2nd-order aggregate risk HANK model via cross-sectional state reduction.
+    r"""Evaluate the built-in reduced aggregate-risk demonstration.
 
-    Couples Reiter (2009) / Winberry (2018) distribution parameterization with
-    `puremacro.dsge._gradients.sylvester_order2_tangent` to compute second-order
+    This example uses prescribed distribution moments and policy coefficients;
+    it is not a general Reiter/Winberry solution of a supplied household model.
+    A supplied ``model`` or ``steady_state`` is rejected rather than ignored.
+
+    Uses prescribed moments and `sylvester_order2_tangent` to compute second-order
     curvature g_xx and volatility corrections (g_sigmasigma, h_sigmasigma).
 
     Reports precautionary aggregate risk shifts:
@@ -815,7 +807,7 @@ def solve_hank_aggregate_risk_order2(
     Parameters
     ----------
     model : Any, optional
-        HANK model or DAG. When None, uses the canonical HANK incomplete-markets specification.
+        Only None is supported; selects the reduced demonstration.
     sigma_agg : float, default 0.01
         Aggregate shock standard deviation \sigma_{\text{agg}}.
     rho_agg : float, default 0.85
@@ -823,7 +815,7 @@ def solve_hank_aggregate_risk_order2(
     n_distribution_moments : int, default 4
         Number of cross-sectional moments / bins retained in the reduced state space.
     steady_state : Mapping, optional
-        Steady-state variable values.
+        Unsupported; supplied values are rejected.
     params : Mapping, optional
         Structural parameters.
 
@@ -833,6 +825,11 @@ def solve_hank_aggregate_risk_order2(
         Rich structured container with curvature tensors, volatility corrections,
         precautionary shifts, and exact quadratic scaling verification.
     """
+    if model is not None:
+        raise NotImplementedError("Aggregate-risk solution for a supplied model is not implemented; model=None selects the reduced demonstration")
+    if steady_state is not None:
+        raise NotImplementedError("A supplied steady_state is unsupported by the reduced demonstration; calibrate its explicit params instead")
+    warnings.warn("Reduced aggregate-risk demonstration with prescribed moments and coefficients; not a solved household distribution", UserWarning, stacklevel=2)
     p = {
         "beta": 0.98,
         "gamma": 2.0,
@@ -993,5 +990,6 @@ def solve_hank_aggregate_risk_order2(
         state_names=state_names,
         control_names=control_names,
         distribution_moments=dist_moments,
-        metadata={"prudence_weight": prudence_weight, "rho_agg": rho_agg, "params": p},
+        metadata={"prudence_weight": prudence_weight, "rho_agg": rho_agg, "params": p,
+                  "validation_scope": "reduced_demonstration", "household_distribution_solved": False},
     )

@@ -20,7 +20,7 @@ from a focused example to a broader application.
 | How do I build an uncertainty index? | 11 → 13 → 30 → 37 | Corpus provenance, normalization and validation of the measure |
 | Why does household heterogeneity matter? | 01 → 03 → 05 → 31 → 44 → 74 | Budget constraints, distributions, distributional LP and equilibrium feedback |
 | How do I solve and estimate structural models? | 21 → 41 → 42 → 43 → 74 | Equilibrium residuals, identification, Tempered SMC and sampling diagnostics |
-| Which numerical method fits my model? | 22 → 51 → 52 → 53 → 56 → 70 → 71 → 72 | Approximation error, grid sensitivity, global nonlinear SSJ and convergence |
+| Which numerical method fits my model? | 22 → 51 → 52 → 53 → 56 → 70 → 71 → 72 | Approximation error, grid sensitivity, reduced nonlinear examples and convergence |
 | How do tariffs propagate through production? | 55 → 61 → 62 → 63 → 65; then 64 → 75 | Calibration provenance, accounting, welfare definition, CES supply-chain bottlenecks and solver limits |
 | How do I model sovereign debt crises and default risk? | 36 → 50 → 73 | Endogenous default incentives, debt maturity, collateral sudden stops and debt restructuring |
 | How do supply chains, climate policy and spatial migration interact? | 32 → 55 → 65 → 71 → 75 | 2nd-order network curvature, carbon border adjustments, dynamic spatial hat-algebra and PolicyStudio audits |
@@ -146,25 +146,12 @@ they do not establish its accuracy or generality.
   Caliendo–Parro–Rossi-Hansberg dynamic spatial migration hat-algebra, and
   self-auditing `PolicyStudio` counterfactual grids with zero-server interactive
   HTML5/SVG export.
-- **72 — flagship v6.0.0 workflows:** demonstrates the unified `DifferentiableModel`
-  protocol with exact forward AD gradients, vectorized adaptive tempered SMC
-  (`smc_sample`), state-dependent nonlinear HANK transitions (`solve_hank_nonlinear_transition`)
-  and 2nd-order aggregate risk perturbation (`solve_hank_aggregate_risk_order2`),
-  quantitative sovereign default (Arellano, Chatterjee–Eyigungor) with Mendoza collateral
-  sudden stops and haircut restructuring, functional and quantile distributional local
-  projections with exact adding-up ($\max_h |\sum_b \hat{\beta}_{b,h}| < 10^{-12}$),
-  and multi-region spatial climate IAM with CBAM leakage analysis.
-- **73 — sovereign debt crises and restructuring:** checks that the endogenous bond
-  price schedule satisfies theoretical bounds $q(b', y) \in [0, (1+r)^{-1}]$ and
-  monotonicity $\partial q/\partial b' \le 0$; evaluates Mendoza collateral-constraint
-  fire-sale amplification ($\mu_t > 0$ during sudden stops); and audits sovereign spread
-  term-structure compression under haircut vs maturity-extension restructuring.
-- **74 — inequality, distributional LP and HANK:** verifies exact empirical cross-sectional
-  adding-up constraints across deciles and quantile bins ($\sum_b \Delta s_{b,h} = 0$ to
-  $< 10^{-12}$); diagnoses SMC tempering acceptance and effective sample size ($ESS \ge 0.5N$);
-  aligns empirical decile impulse responses with structural `HetBlock` / `BlockDAG` HANK
-  responses via `bridge_hank_distributional_irf`; and contrasts linear SSJ with nonlinear
-  borrowing-constraint binding mass ($\Phi_t$) under large contractionary shocks.
+- **72 — v6 component workflows:** native DSGE likelihood and score checks, a Gaussian SMC reference, reduced HANK and aggregate-risk demonstrations, sovereign calculations, synthetic distributional LPs and separate climate scenarios. See each section for its validation limits.
+- **73 — sovereign debt and restructuring:** checks short-term price bounds and
+  iteration residuals, distinguishes grid averages from simulated statistics,
+  and explores long-term prices, experimental collateral diagnostics, spread
+  accounting and signed restructuring effects. It is not a published replication.
+- **74 — distributional LPs and reduced transitions:** synthetic-panel adding-up checks, a bridge identity check using the same matrix twice, Gaussian SMC diagnostics and prescribed nonlinear DAG responses. It does not estimate HANK or validate independently solved household deciles.
 - **75 — green transition networks and spatial IAM:** verifies exact global population
   conservation ($\sum_r L_{r,t} = \bar{L}$ to $< 10^{-12}$) and atmospheric carbon mass
   balance; documents 2nd-order macroeconomic Hessian amplification in CES supply chains under

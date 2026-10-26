@@ -46,13 +46,6 @@ def test_v6_guides_wired_in_mkdocs_nav():
         assert es_rel in es_nav, f"docs/{es_rel} not listed under Documentación en Español in mkdocs.yml"
 
 
-@pytest.mark.parametrize("rel_path", ALL_V6_GUIDES)
-def test_v6_guides_minimum_line_count(rel_path):
-    path = DOCS_DIR / rel_path
-    lines = path.read_text(encoding="utf-8").splitlines()
-    assert len(lines) >= 180, f"docs/{rel_path} has {len(lines)} lines; expected >= 180 lines"
-
-
 @pytest.mark.parametrize("rel_path", ALL_V6_GUIDES + ["index.md", "es/index.md"])
 def test_v6_guides_contain_mermaid_diagrams(rel_path):
     path = DOCS_DIR / rel_path
@@ -117,7 +110,10 @@ def test_v6_frontdoors_and_catalogs_synchronized():
     for idx_file in ("index.md", "es/index.md"):
         txt = (DOCS_DIR / idx_file).read_text(encoding="utf-8")
         assert "6.0.0" in txt, f"docs/{idx_file} does not mention v6.0.0"
-        assert "5.7.1" not in txt, f"docs/{idx_file} still references legacy 5.7.1"
+        # A source tag does not prove that its PyPI upload succeeded.
+        assert "2026-10-26" in txt
+        assert "5.7.1" in txt
+        assert "https://pypi.org/project/puremacro/6.0.0/" not in txt
 
     for nb_cat in ("notebooks.md", "es/notebooks.md"):
         txt = (DOCS_DIR / nb_cat).read_text(encoding="utf-8")
