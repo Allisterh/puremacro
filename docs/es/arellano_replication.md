@@ -76,10 +76,27 @@ de deuda con repago alcanza los extremos. Aun así, los momentos cambian:
 | 797 × 21 | 6,347 | 3,320 | 2,740 | 5,348 |
 | 797 × 41 | 6,010 | 4,043 | 3,558 | 4,442 |
 | 797 × 81 | 5,491 | 3,504 | 3,080 | 3,477 |
+| 797 × 161 | 5,246 | 3,370 | 2,957 | 3,230 |
+| 797 × 321 | 5,144 | 3,321 | 2,942 | 3,098 |
 
-Los cambios entre 41 y 81 estados superan la incertidumbre Monte Carlo.
-Acercarse a un objetivo aislado no demuestra convergencia conjunta; la
-volatilidad del diferencial es especialmente sensible.
+Las filas de 161 y 321 estados provienen de
+`run_arellano_study --income-states 41 81 161 321`, con las mismas semillas,
+ventanas, calibración y reingreso archivados. Residuos pequeños y ausencia de
+masa en los extremos no establecen convergencia económica. De 81 a 321 estados
+la desviación del diferencial sigue cayendo, la deuda/producto baja y la
+correlación entre balanza comercial y diferencial se estabiliza cerca de 0,77
+frente al 0,43 publicado. La volatilidad publicada del diferencial, 6,36 puntos
+porcentuales, es por tanto la que produce la malla archivada de 200 × 21 con
+esta calibración; en mallas finas el mismo modelo genera cerca de la mitad. Es
+el patrón documentado por Hatchondo, Martinez y Sapriza (2010): la técnica de
+espacio de estados discreto con mallas equiespaciadas necesita muchos puntos
+para evitar movimientos espurios de la tasa de interés. Acercarse a un objetivo
+aislado no demuestra convergencia conjunta, y aquí no se reajusta ningún
+parámetro.
+
+Hatchondo, J. C., L. Martinez y H. Sapriza (2010), "Quantitative properties of
+sovereign default models: solution methods matter", *Review of Economic
+Dynamics* 13(4), 919–933, [doi:10.1016/j.red.2010.03.001](https://doi.org/10.1016/j.red.2010.03.001).
 
 ## Convenciones del modelo y de medición
 

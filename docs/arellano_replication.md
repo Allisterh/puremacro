@@ -80,11 +80,27 @@ choice hits either debt-grid boundary. Despite those checks, moments move:
 | 797 × 21 | 6.347 | 3.320 | 2.740 | 5.348 |
 | 797 × 41 | 6.010 | 4.043 | 3.558 | 4.442 |
 | 797 × 81 | 5.491 | 3.504 | 3.080 | 3.477 |
+| 797 × 161 | 5.246 | 3.370 | 2.957 | 3.230 |
+| 797 × 321 | 5.144 | 3.321 | 2.942 | 3.098 |
 
-Small equation residuals and absence of boundary mass do not establish economic
-grid convergence. The 41-to-81-state movements exceed Monte Carlo uncertainty;
-spread volatility is particularly sensitive. Being closer to one published
-target on a finer grid is not evidence that all targets have converged.
+The 161- and 321-state rows come from
+`run_arellano_study --income-states 41 81 161 321`, with the same seeds, windows
+and archived calibration and timing. Small equation residuals and absence of
+boundary mass do not establish economic grid convergence. From 81 to 321 income
+states the spread standard deviation still falls, debt/output drifts down and
+the trade-balance–spread correlation settles near 0.77 against the published
+0.43. The published spread volatility of 6.36 percentage points is therefore
+what the archived 200 × 21 grid produces at this calibration; on fine grids the
+same model generates about half of it. This is the pattern documented by
+Hatchondo, Martinez and Sapriza (2010): the discrete state space technique with
+evenly spaced grids needs a large number of points to avoid spurious
+interest-rate movements. Being closer to one published target on a finer grid
+is not evidence that all targets have converged, and no parameter is refitted
+here.
+
+Hatchondo, J. C., L. Martinez and H. Sapriza (2010), "Quantitative properties
+of sovereign default models: solution methods matter", *Review of Economic
+Dynamics* 13(4), 919–933, [doi:10.1016/j.red.2010.03.001](https://doi.org/10.1016/j.red.2010.03.001).
 
 ## Specification and measurement differences
 

@@ -191,3 +191,16 @@ def test_public_calibration_monotone_search_matches_dense_search():
     np.testing.assert_allclose(fast.value, dense.value, atol=1e-11, rtol=0)
     np.testing.assert_allclose(fast.price, dense.price, atol=1e-11, rtol=0)
     assert fast.diagnostics["exhaustive_bellman_residual"] < 2e-11
+
+
+def test_study_income_refinements_are_optional_odd_and_above_the_archived_grid():
+    from tools.reference_validation import run_arellano_study as study
+
+    names = [name for name, _ in study.specifications(None)]
+    assert names == ["original_200_21", "refined_399_21", "refined_797_21", "refined_797_41",
+                     "refined_797_81", "canonical_200_21", "public_321_21"]
+    finer = [name for name, _ in study.specifications(None, [41, 81, 161, 321])]
+    assert finer[3:7] == ["refined_797_41", "refined_797_81", "refined_797_161", "refined_797_321"]
+    for bad in ([42], [21], [1]):
+        with pytest.raises(ValueError, match="odd"):
+            study.specifications(None, bad)
