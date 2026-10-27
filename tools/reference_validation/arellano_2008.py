@@ -93,35 +93,68 @@ def load_original(path: Path = FIXTURE / "reference.npz") -> Solution:
                         a["i_s_star"].astype(int)-1, a["def"].astype(bool), "archive")
 
 
-def solve(refinement: int = 0, n_y: int = 21, timing: str = "archive") -> Solution:
+def solve(refinement: int = 0, n_y: int = 21, timing: str = "archive",
+          calibration: str = "archive") -> Solution:
     """Independent NumPy solver; verify Bellman and pricing residuals on return.
 
     Howard evaluations accelerate each fixed-price problem. Price iteration and
     default comparisons follow the archived code, including its extra period
     excluded on entry and its rounded (not renormalized) transition matrix.
+    ``calibration='public'`` instead uses independently constructed inputs for
+    PureMacro's deterministic short-term baseline: beta=.95282, r=.017,
+    stationary mean income 10, cap 9.69 and 401/801/... uniform asset nodes
+    on [-3.3, 1.5]. Use canonical timing to compare with the public solver.
     """
     if timing not in ("archive", "canonical"):
         raise ValueError("timing must be archive or canonical")
+    if calibration not in ("archive", "public"):
+        raise ValueError("calibration must be archive or public")
+    if refinement < 0:
+        raise ValueError("refinement must be nonnegative")
     started = time.monotonic()
-    assets = author_grid(refinement)
-    income, p = income_process(n_y)
-    yd = np.minimum(income, 10*CAP)
+    if calibration == "archive":
+        assets = author_grid(refinement)
+        income, p = income_process(n_y)
+        beta, theta, gross_r = BETA, THETA, GROSS_R
+        yd = np.minimum(income, 10*CAP)
+    else:
+        if n_y < 3 or n_y % 2 != 1:
+            raise ValueError("public income grid must have an odd number of at least three nodes")
+        beta, theta, gross_r = .95282, .282, 1.017
+        debt = np.linspace(-.15, .33, 400*2**refinement+1)
+        debt[np.argmin(abs(debt))] = 0.
+        assets = -10*debt[::-1]
+        extent = 3*.025/np.sqrt(1-.945**2)
+        z = np.linspace(-extent, extent, n_y)
+        edges = np.r_[-np.inf, (z[:-1]+z[1:])/2, np.inf]
+        p = np.diff(ndtr((edges[None, :]-.945*z[:, None])/.025), axis=1)
+        stationary = np.full(n_y, 1/n_y)
+        for _ in range(10000):
+            new = stationary @ p
+            if np.max(abs(new-stationary)) < 1e-15:
+                stationary = new/new.sum()
+                break
+            stationary = new
+        else:
+            raise RuntimeError("Income stationary distribution did not converge")
+        income = 10*np.exp(z)/(stationary @ np.exp(z))
+        yd = np.minimum(income, 9.69)
     ud = -1/yd
     n_b = len(assets)
     zero = int(np.flatnonzero(assets == 0)[0])
-    inverse = np.linalg.inv(np.eye(n_y)-BETA*(1-THETA)*p)
-    v = np.broadcast_to(np.linalg.solve(np.eye(n_y)-BETA*p, ud), (n_b, n_y)).copy()
-    price = np.full_like(v, 1/GROSS_R)
+    inverse = np.linalg.inv(np.eye(n_y)-beta*(1-theta)*p)
+    v = np.broadcast_to(np.linalg.solve(np.eye(n_y)-beta*p, ud), (n_b, n_y)).copy()
+    price = np.full_like(v, 1/gross_r)
     rows, cols = np.arange(n_b), np.arange(n_y)
 
     def combine(repay):
-        excluded = inverse @ (ud+BETA*THETA*(p @ repay[zero]))
-        vd = ud+BETA*(p @ excluded) if timing == "archive" else excluded
+        excluded = inverse @ (ud+beta*theta*(p @ repay[zero]))
+        vd = ud+beta*(p @ excluded) if timing == "archive" else excluded
         default = (assets[:, None] < 0) & (repay < vd)
         return np.where(default, vd, repay), default
 
     def improve(value, utilities):
-        ev = BETA*(value @ p.T)
+        ev = beta*(value @ p.T)
         repay = np.empty_like(value)
         policy = np.empty(value.shape, dtype=int)
         for j in range(n_y):
@@ -149,11 +182,11 @@ def solve(refinement: int = 0, n_y: int = 21, timing: str = "archive") -> Soluti
                 break
             selected = np.column_stack([utilities[j][rows, policy[:, j]] for j in range(n_y)])
             for _ in range(20):
-                ev = BETA*(v @ p.T)
+                ev = beta*(v @ p.T)
                 v, _ = combine(selected+ev[policy, cols])
         else:
             raise RuntimeError(f"Value iteration did not converge: {error}")
-        target = (1-default.astype(float) @ p.T)/GROSS_R
+        target = (1-default.astype(float) @ p.T)/gross_r
         price_error = float(np.max(abs(target-price)))
         if price_error < 1e-8:
             break
@@ -165,6 +198,7 @@ def solve(refinement: int = 0, n_y: int = 21, timing: str = "archive") -> Soluti
     if residual > 2e-11 or not np.array_equal(default, checked_default):
         raise RuntimeError(f"Final Bellman check failed: {residual}")
     return Solution(assets, income, p, yd, v, price, checked_policy, checked_default, timing,
+                    theta=theta, gross_r=gross_r,
                     diagnostics=dict(outer_iterations=outer, policy_improvements=inner_total,
                                      bellman_residual=residual, price_residual=price_error,
                                      elapsed_seconds=time.monotonic()-started))

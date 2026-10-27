@@ -42,6 +42,18 @@ material grid sensitivity remain visible. See
 for provenance and external-reference regeneration, and the
 [comparison guide](../../docs/arellano_replication.md) for results.
 
+For the public solver's own canonical timing and normalized-income calibration:
+
+```sh
+MPLBACKEND=Agg python -m tools.reference_validation.check_arellano_grids --output /tmp/arellano-grids
+```
+
+This holds calibration/support fixed and compares paired-seed moments across
+asset and income refinements. It returns nonzero if either final refinement
+exceeds the documented numerical tolerances after accounting for simulation
+uncertainty. Hash-verified solution caches permit longer simulations without
+resolving the model. Published moments are not convergence targets.
+
 ## Dynare 7.0 / MATLAB
 
 Five source models in `tests/fixtures/dynare_live/` cover quadratic forward

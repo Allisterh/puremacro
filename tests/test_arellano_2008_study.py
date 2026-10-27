@@ -30,6 +30,24 @@ def test_study_solver_matches_actual_author_fortran():
     assert result.diagnostics["price_residual"] < 1e-8
 
 
+def test_public_calibration_study_matches_the_public_solver():
+    from puremacro.sovereign import solve_sovereign_default
+
+    reference = solve(n_y=9, timing="canonical", calibration="public")
+    result = solve_sovereign_default(beta=.95282, r_star=.017, theta=.282,
+                                     n_b=401, n_y=9, b_min=-.15, b_max=.33,
+                                     sigma_eps=0, y_penalty_type="arellano",
+                                     howard_steps=0, enforce_monotonicity=False,
+                                     tol=1e-10, max_iter=10000)
+    assert result.converged
+    np.testing.assert_allclose(reference.assets, -10*result.b_grid[::-1], atol=1e-14)
+    np.testing.assert_allclose(reference.income, 10*result.y_grid, atol=1e-12)
+    np.testing.assert_allclose(reference.price, result.q_bond[::-1], atol=1e-8, rtol=0)
+    np.testing.assert_allclose(reference.value, .1*(result.v_star[::-1]-1/(1-.95282)), atol=1e-8, rtol=0)
+    np.testing.assert_array_equal(reference.default, result.default_prob[::-1] > .5)
+    np.testing.assert_allclose(reference.assets[reference.policy], -10*result.policy_b_prime[::-1], atol=1e-12)
+
+
 def test_grid_refinements_hold_support_and_exact_zero():
     original = load_original()
     np.testing.assert_array_equal(author_grid(), original.assets)
@@ -101,3 +119,26 @@ def test_uncertainty_requires_independent_replications_and_enough_episodes():
     path = simulate(load_original(), seed=2, periods=100, burn=10)
     with pytest.raises(ValueError, match="eligible windows"):
         summarize_path(path)
+
+
+def test_grid_gate_distinguishes_drift_from_simulation_uncertainty():
+    from tools.reference_validation.check_arellano_grids import TOLERANCES, paired_comparison
+
+    def runs(debts):
+        return dict(runs=[dict(seed=i, moments={name: debt if name == "debt_pct" else 0.
+                                              for name in TOLERANCES}) for i, debt in enumerate(debts)])
+
+    baseline = runs([0., 0., 0., 0.])
+    assert paired_comparison(baseline, runs([.05]*4))["passed"]
+    drift = paired_comparison(baseline, runs([.15]*4))
+    assert drift["moments"]["debt_pct"]["status"] == "grid_shift_exceeds_tolerance"
+    imprecise = paired_comparison(baseline, runs([-.2, -.2, .2, .2]))
+    assert not imprecise["passed"]
+    assert imprecise["moments"]["debt_pct"]["status"] == "sampling_precision_insufficient"
+    # Pair by seed, not by list position: otherwise an identical experiment
+    # reordered on disk spuriously acquires sampling uncertainty.
+    reference = runs([-.2, -.2, .2, .2])
+    reordered = dict(runs=list(reversed(reference["runs"])))
+    assert paired_comparison(reference, reordered)["passed"]
+    with pytest.raises(ValueError, match="same distinct seeds"):
+        paired_comparison(baseline, dict(runs=reordered["runs"][:-1]))

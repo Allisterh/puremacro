@@ -13,6 +13,16 @@ on 2026-10-26, PyPI still serves 5.7.1. See the [release procedure](RELEASING.md
 Reliability corrections after the failed v6.0.0 publication. This source
 version is a development candidate, not a published distribution.
 
+- Fixed sovereign simulation timing: a successful reentry draw permits the
+  current period's repayment/default decision, matching the Bellman equation.
+  Public simulated paths now start and reenter at zero debt on saving grids.
+  Solver-generated grids preserve both bounds and the requested size while
+  including an exact zero node; mixed saving/borrowing grids need at least
+  three points. Reentry probabilities must be finite and within [0, 1].
+  Simulation metadata states timing, seed, sample and annualization conventions.
+- Added independent public-calibration parity and paired-seed economic grid
+  convergence checks, separating discretization shifts from simulation error.
+
 - Model adapters now evaluate the supplied first-order DSGE or BlockDAG
   likelihood. Scores use native Kalman sensitivities or central differences of
   native Whittle likelihoods; they are not universally end-to-end DualArray AD.

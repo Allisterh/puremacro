@@ -216,7 +216,9 @@ class SovereignDefaultResult:
         -------
         pd.DataFrame
             Simulated paths for endowment, debt, consumption, bond prices,
-            spreads, and default indicators.
+            spreads, and default indicators. The path starts at the zero-debt
+            node (nearest node if the grid omits zero). Reentry returns to that
+            node before the current period's default/repayment decision.
         """
         n_periods = 1000
         if periods is not None:
@@ -232,7 +234,8 @@ class SovereignDefaultResult:
         y_def_vec = self.metadata.get("y_default_vec", 0.969 * self.y_grid)
 
         y_idx = n_y // 2
-        b_idx = 0
+        zero_idx = int(np.argmin(np.abs(self.b_grid)))
+        b_idx = zero_idx
         in_default = False
 
         records = []
@@ -244,7 +247,7 @@ class SovereignDefaultResult:
             if in_default:
                 if rng.random() < theta:
                     in_default = False
-                    b_idx = 0
+                    b_idx = zero_idx
                 else:
                     c_val = float(y_def_vec[y_idx]) if hasattr(y_def_vec, "__getitem__") else float(y_val * 0.969)
                     records.append({

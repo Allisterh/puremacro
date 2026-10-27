@@ -34,6 +34,13 @@ positiva usa log-sum-exp y probabilidades logísticas. El costo de Arellano es
 $h(y)=\min(y,0.969\bar y)$ con ingreso medio estacionario $\bar y$. El reingreso
 elimina la deuda, incluso cuando la malla permite ahorro.
 
+Tras un impago en $t$, el primer sorteo de reingreso ocurre en $t+1$. Si tiene
+éxito, permite reembolsar o volver a incumplir **en ese trimestre**, con deuda
+heredada cero. Los diagnósticos del solucionador y `result.simulate()` usan esta
+convención y comienzan con deuda cero. Las mallas generadas incluyen un nodo
+cero exacto: cuando permiten ahorro y deuda, reemplazan el nodo interior más
+cercano, conservando extremos y número de puntos. Estas mallas exigen `n_b >= 3`.
+
 | Parámetro | Significado | Caso de referencia |
 |---|---|---|
 | `sigma_eps` | Dispersión de preferencias de impago | `0.0`, determinista |
@@ -62,6 +69,18 @@ Residuos independientes, mallas más finas y simulaciones largas son comprobacio
 separadas. La correlación diferencial–ingreso conserva su valor simulado; si
 faltan observaciones o variación, devuelve `NaN` con metadatos de estado. Una
 correlación de promedios no ponderados de malla es otra estadística.
+
+Los diagnósticos integrados usan 1.500 trimestres, semilla 42, ningún descarte
+inicial y solo períodos de reembolso. `result.simulate(T=1500, seed=42)` reproduce
+el número de observaciones, diferencial medio y correlación diferencial–ingreso.
+El ingreso tiene media estacionaria uno. El diferencial es
+`4 * max(0, quarterly_yield - r_star)`; la comparación con el artículo compone
+rendimientos y selecciona ventanas anteriores al impago. Los metadatos
+`simulation_*`, `spread_sample`, `spread_annualization` e `income_normalization`
+registran estas convenciones. Para trabajo cuantitativo, use simulaciones más
+largas y las [comprobaciones de malla](arellano_replication.md).
+La columna `default` incluye entrada y continuación de la exclusión; su media
+no es una frecuencia de nuevos impagos. El estudio cuenta las entradas aparte.
 
 ## Experimentos de reestructuración
 

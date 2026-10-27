@@ -107,15 +107,43 @@ default frequency uses the archived repayment-period denominator; the JSON
 also reports the hazard with default-entry periods included in exposure. All
 counts use the same post-burn sample. The public solver's short built-in
 simulation diagnostics use different measurement conventions and are not used
-here. Its built-in exclusion loop also keeps an extra excluded period compared
-with its canonical Bellman equation; that inconsistency remains to be corrected.
-The shared study simulator follows each case's Bellman timing.
+here. The earlier built-in exclusion loop kept an extra excluded period relative
+to its canonical Bellman equation. That bug is now corrected; successful
+reentry permits a decision in the same quarter. Both public simulation
+interfaces reset debt to the zero node and agree with the same seed. The shared
+study simulator continues to follow each case's Bellman timing.
 
 ## Next decision
 
-First correct the built-in simulation's exclusion timing and make default-cost
-normalization and moment measurement an explicit public solver contract. Then resolve the grid
+The public timing and measurement contract is now documented in the
+[sovereign guide](sovereign_default.md). Resolve the grid
 sensitivity with a documented convergence criterion, before recalibrating or
 interpreting policy effects. Reentry, income volatility and persistence are
 the next controlled experiments once those checks pass. Maturity and
 restructuring extensions follow their own external validation.
+
+## Check the public calibration's grids
+
+```sh
+MPLBACKEND=Agg python -m tools.reference_validation.check_arellano_grids --output /tmp/arellano-grids
+```
+
+This uses independently solved public-model equations, checked against
+`solve_sovereign_default` on a matched 401 × 9 grid. Calibration, support,
+canonical timing and measurement remain fixed. Default runs compare 401/801
+asset nodes and 321/641 income states, with 16 paired seeds per case.
+
+Every percentage moment must change by at most 0.10 percentage points, and
+every correlation by at most 0.02. The bound includes the absolute paired mean
+change **plus** its 95% Student-t half-width. Both the final debt-grid refinement
+and the final income-grid refinement must pass, with at least 797 debt points
+and 321 income states on the finest grid. These are numerical tolerances;
+published targets do not determine acceptance. A nonzero exit status means
+convergence has not been established, distinguishing a large grid shift from
+insufficient simulation precision. A passed baseline does not validate new
+parameter values, policy effects or the long-term extension.
+
+The report records every seed, source hash, residual, moment and comparison.
+Verified solution caches can be reused with `--periods 500000 --windows 1000`
+to reduce sampling uncertainty while keeping the seeds fixed. Earlier archived
+results above remain historical evidence for a distinct calibration/timing.

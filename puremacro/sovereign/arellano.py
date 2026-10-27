@@ -187,9 +187,9 @@ def solve_sovereign_default(
         CRRA relative risk aversion parameter u(c) = (c^(1-gamma) - 1)/(1-gamma).
     r_star : float, default 0.01
         Quarterly world risk-free interest rate.
-    delta : float, default 0.05
+    delta : float, default 1.0
         Decay/maturing fraction of debt per period (average maturity = 1/delta).
-    kappa : float, default 0.03
+    kappa : float, default 0.0
         Coupon payment rate on debt.
     sigma_eps : float, default 0.01
         Extreme-value taste shock dispersion; zero gives deterministic default choice.
@@ -198,16 +198,20 @@ def solve_sovereign_default(
     sigma_y : float, default 0.025
         Innovation standard deviation of endowment shock.
     theta : float, default 0.282
-        Probability of regaining international capital market access after default.
+        Probability in [0, 1] of regaining market access in each period after
+        default. Reentry occurs before that period's default/repayment choice,
+        with debt reset to zero, as in the default Bellman equation.
     d0, d1 : float
         Parameters for Chatterjee-Eyigungor quadratic default output penalty.
-    n_b : int, default 50
-        Number of grid points for sovereign debt.
-    b_max : float, default 0.60
+    n_b : int, default 40
+        Number of grid points for sovereign debt. If saving and borrowing are
+        both allowed, at least three nodes are required; the nearest interior
+        node is set to zero while preserving both bounds and the node count.
+    b_max : float, default 0.40
         Upper bound on sovereign debt grid.
     b_min : float, default 0.0
         Lower bound on sovereign debt grid.
-    n_y : int, default 21
+    n_y : int, default 15
         Number of grid points for endowment process.
     m_tauchen : float, default 3.0
         Number of standard deviations for Tauchen discretization.
@@ -242,13 +246,21 @@ def solve_sovereign_default(
         raise ValueError(f"beta must be in (0, 1); got {beta}")
     if r_star <= 0.0:
         raise ValueError(f"r_star must be > 0; got {r_star}")
+    if not np.isfinite(theta) or not 0.0 <= theta <= 1.0:
+        raise ValueError(f"theta must be finite and in [0, 1]; got {theta}")
 
     y_grid, p_trans, stat_dist = _discretize_endowment(n_y, rho_y, sigma_y, m=m_tauchen)
     y_def = _compute_default_penalty(y_grid, penalty_type=y_penalty_type, d0=d0, d1=d1,
                                      mean_y=float(stat_dist @ y_grid))
     if n_b < 2 or b_min >= b_max or not b_min <= 0.0 <= b_max:
         raise ValueError("The debt grid must be increasing, have at least two points and include zero")
+    if b_min < 0.0 < b_max and n_b < 3:
+        raise ValueError("n_b must be >= 3 to represent zero debt and both saving/borrowing bounds")
     b_grid = np.linspace(b_min, b_max, n_b)
+    if b_min < 0.0 < b_max:
+        # Reentry must be the same state in Bellman iteration and simulation.
+        # Preserve endpoints and shape instead of snapping to a nonzero debt.
+        b_grid[1 + int(np.argmin(np.abs(b_grid[1:-1])))] = 0.0
     zero_idx = int(np.argmin(np.abs(b_grid)))
 
     # CRRA utility function with linear barrier for c <= 1e-6
@@ -401,7 +413,9 @@ def solve_sovereign_default(
             if sim_rng.random() < theta:
                 in_def = False
                 cur_b = zero_idx
-        else:
+        # A successful reentry draw gives access now, rather than consuming
+        # another excluded period: V_D = u_D + beta E[theta V(0) + (1-theta)V_D].
+        if not in_def:
             p_d = float(p_def[cur_b, cur_y])
             if sim_rng.random() < p_d:
                 in_def = True
@@ -442,6 +456,14 @@ def solve_sovereign_default(
         "q_rf": q_rf,
         "spread_observations": len(sim_spreads),
         "spread_y_corr_status": corr_status,
+        "simulation_reentry_timing": "before_current_decision",
+        "simulation_reset_debt": float(b_grid[zero_idx]),
+        "simulation_periods": 1500,
+        "simulation_seed": 42,
+        "simulation_burn_in": 0,
+        "spread_sample": "repayment_periods",
+        "spread_annualization": "4 * max(0, quarterly_yield - r_star)",
+        "income_normalization": "stationary_mean_one",
     }
 
     return SovereignDefaultResult(

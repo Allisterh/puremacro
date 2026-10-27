@@ -101,16 +101,41 @@ por ventana y correlaciones sin ajustes. La frecuencia comparable al archivo
 usa períodos de repago como denominador; el JSON también presenta el riesgo
 con períodos de entrada al default incluidos en la exposición. Numerador y
 denominador usan la misma muestra posterior al descarte. No se usan los
-diagnósticos simulados breves de la API pública. Su bucle de exclusión conserva
-un período adicional respecto a su ecuación canónica de Bellman; esa
-inconsistencia sigue pendiente de corrección. El simulador común del estudio
-respeta la ecuación de Bellman de cada caso.
+diagnósticos simulados breves de la API pública. Su antiguo bucle conservaba
+un período adicional respecto a la ecuación canónica de Bellman. Ese error ya
+está corregido: el reingreso permite decidir en el mismo trimestre. Las dos
+interfaces públicas restablecen deuda cero y coinciden con la misma semilla.
+El simulador común del estudio respeta la ecuación de Bellman de cada caso.
 
 ## Próxima decisión
 
-Primero corregir el momento de reingreso en el simulador integrado y explicitar
-en la API la normalización del costo de default y las convenciones de medición.
-Después resolver la sensibilidad
+Las convenciones públicas están documentadas en la [guía soberana](sovereign_default.md).
+Ahora resolver la sensibilidad
 de malla con criterios documentados antes de recalibrar o interpretar efectos
 de política. Los siguientes experimentos son reingreso, volatilidad y persistencia
 del ingreso; vencimientos y reestructuración requieren validación adicional.
+
+## Comprobar las mallas de la calibración pública
+
+```sh
+MPLBACKEND=Agg python -m tools.reference_validation.check_arellano_grids --output /tmp/arellano-grids
+```
+
+Se resuelven ecuaciones independientes, contrastadas con la API pública en una
+malla común de 401 × 9. Calibración, extremos, momento de reingreso y medición
+permanecen fijos. La ejecución predeterminada compara 401/801 activos y 321/641
+estados de ingreso, con 16 semillas emparejadas por caso.
+
+El cambio de cada momento porcentual debe ser como máximo 0,10 puntos
+porcentuales; el de cada correlación, 0,02. Se suma el cambio medio absoluto a
+la semiamplitud del intervalo Student-t de 95% de las diferencias emparejadas.
+Deben aprobar tanto el refinamiento final de deuda como el de ingreso, con al
+menos 797 activos y 321 estados de ingreso en la malla fina. Son tolerancias
+numéricas, no ajustes a objetivos publicados. Un código de salida distinto de
+cero distingue cambios grandes de precisión Monte Carlo insuficiente. Aprobar
+la base no valida nuevos parámetros, políticas ni deuda a largo plazo.
+
+El informe registra semillas, hashes, residuos y comparaciones. Las soluciones
+verificadas se reutilizan con `--periods 500000 --windows 1000` para aumentar
+precisión manteniendo semillas. Los resultados archivados anteriores conservan
+su significado histórico para otra calibración y convención de reingreso.

@@ -43,7 +43,7 @@ the specific scope described in each notebook, not blanket economic validation.
 
 | Comparison | Result on the tested grids | What remains open |
 |---|---|---|
-| Arellano short-term deterministic equations | Matched-grid equations pass; the archived Fortran is also reproduced within 5.3e-11 and its MATLAB moments within 1.1e-14 | Published-moment discrepancies, grid convergence, public timing/measurement contract and long-term extension |
+| Arellano short-term deterministic equations | Matched-grid equations pass; archived Fortran and MATLAB moments reproduce; public simulation timing and zero-debt reentry are corrected | Published-moment discrepancies, quantified grid convergence and long-term extension |
 | One-asset household block | SSJ authors' code matches policies and consumption within 5e-11; return Jacobians within 4e-4 | Finer-grid economic convergence, full published equilibrium and nonlinear transition references |
 
 Both references are frozen with hashes and provenance in
@@ -59,9 +59,9 @@ now includes 16 independent simulations per case, nested debt grids and
 more than simulation uncertainty. A small Bellman residual therefore does not
 yet justify policy interpretation.
 
-1. Make exclusion timing, default-cost normalization and moment measurement
-   explicit in the public solver. The archive and current API implement
-   different conventions; the study reports both without silently equating them.
+1. Public reentry timing, zero-debt initialization and measurement are now
+   documented and tested. Keep the archive and public-calibration results
+   distinct; they use different economic conventions.
 2. Resolve debt/income grid sensitivity under a documented convergence
    criterion. Keep sampling uncertainty separate from discretization error and
    retain all raw moments. Recalibrate only after the numerical design is stable.

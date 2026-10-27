@@ -43,7 +43,7 @@ la validez económica del modelo.
 
 | Comparación | Resultado en las mallas probadas | Pendiente |
 |---|---|---|
-| Ecuaciones Arellano de deuda corta y default determinista | Ecuaciones coinciden; además, Fortran archivado dentro de 5,3e-11 y momentos MATLAB dentro de 1,1e-14 | Diferencias de momentos publicados, convergencia, convenciones públicas y deuda larga |
+| Ecuaciones Arellano de deuda corta y default determinista | Ecuaciones y archivos Fortran/MATLAB contrastados; reingreso e inicio con deuda cero corregidos | Diferencias de momentos publicados, convergencia cuantificada y deuda larga |
 | Bloque de hogares de un activo | Políticas y consumo coinciden con los autores SSJ dentro de 5e-11; jacobianos de rendimientos dentro de 4e-4 | Convergencia económica de mallas, equilibrio publicado y transiciones no lineales |
 
 Las referencias, hashes y procedencia están en
@@ -59,9 +59,9 @@ incluye 16 simulaciones independientes por caso, mallas anidadas de deuda y
 más que la incertidumbre Monte Carlo. Un residuo pequeño de Bellman todavía
 no basta para interpretar efectos de política.
 
-1. Explicitar momento de reingreso, normalización del costo de default y medición
-   en la API. El archivo y la API actual usan convenciones diferentes; el estudio
-   presenta ambas sin equipararlas implícitamente.
+1. Reingreso, inicio con deuda cero y medición públicos están documentados y
+   probados. Mantener separados el archivo y la calibración pública porque
+   usan convenciones económicas diferentes.
 2. Resolver sensibilidad a las mallas con un criterio documentado. Separar
    incertidumbre muestral de error de discretización, conservar momentos
    originales y recalibrar solamente después de estabilizar el diseño numérico.

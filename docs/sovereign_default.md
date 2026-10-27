@@ -34,6 +34,13 @@ uses log-sum-exp and logistic choice probabilities. The Arellano cost is
 $h(y)=\min(y,0.969\bar y)$ with stationary mean income $\bar y$. Reentry wipes out
 debt, including when the grid allows saving.
 
+After default in quarter $t$, the first reentry draw occurs in $t+1$. A success
+permits repayment or default **in that quarter**, at zero inherited debt. Both
+the solver's diagnostic simulation and `result.simulate()` use this timing and
+start at zero debt. Solver-generated grids include an exact zero node; on a
+grid spanning saving and borrowing the closest interior node is replaced by
+zero, preserving its endpoints and node count. Such grids require `n_b >= 3`.
+
 | Parameter | Meaning | Reference case |
 |---|---|---|
 | `sigma_eps` | Default taste-shock dispersion | `0.0`, deterministic |
@@ -62,6 +69,17 @@ equation residuals, finer grids and longer simulations are separate checks.
 The spread–income correlation is a raw simulation statistic; insufficient
 observations or variation produce `NaN` with status metadata. An unweighted
 income/debt-grid correlation is a different statistic.
+
+The built-in diagnostics use 1,500 quarters, seed 42, no burn-in and repayment
+periods only. `result.simulate(T=1500, seed=42)` reproduces their observation
+count, mean spread and spread–income correlation. Income has stationary mean
+one. Spreads use `4 * max(0, quarterly_yield - r_star)`; the paper comparison
+instead compounds quarterly returns and uses predefault windows. The
+`simulation_*`, `spread_sample`, `spread_annualization` and
+`income_normalization` metadata record these choices. Use longer simulations
+and the [explicit grid checks](arellano_replication.md) for quantitative work.
+The path's `default` flag includes entry and continuing exclusion; its mean is
+not a default-entry frequency. The validation study counts entries separately.
 
 ## Restructuring experiments
 
