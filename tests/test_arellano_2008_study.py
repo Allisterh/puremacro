@@ -166,3 +166,28 @@ def test_grid_gate_distinguishes_drift_from_simulation_uncertainty():
     assert paired_comparison(reference, reordered)["passed"]
     with pytest.raises(ValueError, match="same distinct seeds"):
         paired_comparison(baseline, dict(runs=reordered["runs"][:-1]))
+
+
+def test_grid_check_solves_public_cases_with_the_certified_monotone_search(monkeypatch):
+    from tools.reference_validation import check_arellano_grids as grids
+
+    calls = []
+
+    def recorder(**kwargs):
+        calls.append(kwargs)
+        return "solution"
+
+    monkeypatch.setattr(grids.reference, "solve", recorder)
+    assert grids.solve_case(2, 321) == "solution"
+    assert calls == [dict(refinement=2, n_y=321, timing="canonical",
+                          calibration="public", policy_search="monotone")]
+
+
+def test_public_calibration_monotone_search_matches_dense_search():
+    dense = solve(n_y=9, timing="canonical", calibration="public")
+    fast = solve(n_y=9, timing="canonical", calibration="public", policy_search="monotone")
+    np.testing.assert_array_equal(fast.policy, dense.policy)
+    np.testing.assert_array_equal(fast.default, dense.default)
+    np.testing.assert_allclose(fast.value, dense.value, atol=1e-11, rtol=0)
+    np.testing.assert_allclose(fast.price, dense.price, atol=1e-11, rtol=0)
+    assert fast.diagnostics["exhaustive_bellman_residual"] < 2e-11

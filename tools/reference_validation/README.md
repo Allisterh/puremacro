@@ -54,6 +54,13 @@ exceeds the documented numerical tolerances after accounting for simulation
 uncertainty. Hash-verified solution caches permit longer simulations without
 resolving the model. Published moments are not convergence targets.
 
+The public cases use `solve(..., policy_search="monotone")`: for u(c) = -1/c the
+optimal debt choice is monotone in assets once actions are sorted by cash
+proceeds, so a divide-and-conquer search replaces the n_assets^2 scan and
+1,601- or 3,201-node grids (`--refinements 2 3`) become affordable. Every
+accelerated solve is then re-checked by an independent exhaustive Bellman
+evaluation; a disagreement above 1e-11 fails the solve.
+
 ## Dynare 7.0 / MATLAB
 
 Five source models in `tests/fixtures/dynare_live/` cover quadratic forward
