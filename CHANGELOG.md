@@ -22,6 +22,12 @@ version is a development candidate, not a published distribution.
   Simulation metadata states timing, seed, sample and annualization conventions.
 - Added independent public-calibration parity and paired-seed economic grid
   convergence checks, separating discretization shifts from simulation error.
+- Release gate: a default-on Gate 8 runs mypy under the Python 3.11 floor
+  interpreter, natively and as `--platform win32`; `--no-tests --mypy-floor`
+  adds it to the fast run. The v5.4.0 and v6.0.0 tags passed every local gate
+  and failed only the 3.11 CI legs on typing. The release procedure now pushes
+  `main` and waits for green CI before the tag. The headless fan-chart test
+  closes stray figures before asserting that none leak.
 
 - Model adapters now evaluate the supplied first-order DSGE or BlockDAG
   likelihood. Scores use native Kalman sensitivities or central differences of

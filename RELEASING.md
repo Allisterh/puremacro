@@ -36,7 +36,7 @@ If you ever see two PyPI workflows again, one of them is wrong.
 
 ## 2. The gate
 
-`tools/release_check.py` is the pre-tag check. Five gates run by default, two are opt-in:
+`tools/release_check.py` is the pre-tag check. Six gates run by default, two are opt-in:
 
 | gate | what it proves | notes |
 |---|---|---|
@@ -45,6 +45,7 @@ If you ever see two PyPI workflows again, one of them is wrong.
 | 3 public API snapshot | regenerated API == `tests/fixtures/public_api_snapshot.json` | the fixture is the count (404 modules with `__all__`, 285 result classes at 3.4.0); the gate prints every symbol that moved |
 | 4 version sync | `pyproject.toml` == `puremacro/__init__.py` == `CHANGELOG.md` == `CITATION.cff` == the wheel pin in `playground/jupyter_lite_config.json` | all five |
 | 7 min-Python syntax | every `.py` under `puremacro/`, `tools/` and `tests/` parses on the `requires-python` floor (3.11) | `ast.parse(feature_version=(3, 11))` plus a PEP 701 f-string scan (quote reuse, backslashes and comments inside `{...}`), and a real `compile()` under `python3.11` when one is on PATH. Gates 1–6 run under whatever interpreter invokes the script, so a 3.11-only SyntaxError passed all of them while every 3.11 CI leg died at collection. `notebooks/` is not scanned: jupytext sources may carry bare `%magics`. Seconds |
+| 8 floor mypy | `mypy puremacro --ignore-missing-imports` under a Python 3.11 interpreter with its own resolved dependencies, once natively and once with `--platform win32` | Default-on in the full gate; `--no-tests --mypy-floor` adds it to the fast run (a few minutes). The interpreter is found through `$PUREMACRO_FLOOR_PYTHON`, the running interpreter, `.venv311/` in the repo, or `python3.11` on PATH, and the gate fails with setup instructions when none exists. `v5.4.0` and `v6.0.0` both passed every local gate and then failed only the three Python 3.11 CI legs on typing (NumPy 2.4 stubs; one `np.sqrt(max(0.0, quad))` overload in 6.0.0), two hours after the tag was public. Gates 1 to 7 run under one interpreter and cannot see that |
 | 5 examples gallery | `--examples` | reads `docs/examples_gallery.json`. A FAIL entry listed in `tests/known_example_failures.json` whose recorded reason starts with the entry's `reason_prefix` is reported as a known, documented FAIL and does not fail the gate; any other FAIL, including a listed example whose reason drifted, still fails it, and a listed example that now passes is reported for removal. The one entry is the RR2010 example, whose published t-statistic rounding miss is documented in `docs/research_benchmarks.md`; the example still exits nonzero and the gallery still records it as FAIL |
 | 6 Pyodide smoke | `--pyodide` | builds the wheel and boots a real Pyodide kernel |
 
@@ -117,10 +118,11 @@ Everything here is local and reversible until step 7.
    `playground/jupyter_lite_config.json` (`./wheels/puremacro-X.Y.Z-py3-none-any.whl`).
    A pre-release is written `X.Y.ZaN`, `X.Y.ZbN` or `X.Y.ZrcN` in all five, and the
    gate's version check accepts those forms.
-4. **Run the gate:** `python tools/release_check.py`. All five must pass. If anything
-   under `puremacro/` changed, also run the oldest-interpreter and `--platform win32`
-   mypy checks from §4 ("The local gate runs on one Python and one platform"); the
-   gate does not run them.
+4. **Run the gate:** `python tools/release_check.py`. All six must pass. Gate 8 runs
+   mypy under a Python 3.11 environment with the package installed (one-time setup in
+   §4, "The local gate runs on one Python and one platform"); while iterating,
+   `python tools/release_check.py --no-tests --mypy-floor` gives the fast gates plus
+   Gate 8 in minutes.
 5. **Sanity-build and inspect the artifact**, because this is the last point at which a
    mistake is free. Build from a clean export, not from the live tree: setuptools seeds
    the sdist from a stale, gitignored `puremacro.egg-info/SOURCES.txt` when one is
@@ -148,9 +150,14 @@ Everything here is local and reversible until step 7.
    git log --oneline -1                      # is this really the commit?
    git tag -a vX.Y.Z -m "puremacro X.Y.Z ..."
    ```
-7. **Push — this is the irreversible step.**
+7. **Push — this is the irreversible step.** Push `main` first, wait for its CI run to
+   finish green, and only then push the tag. The `v6.0.0` commit and tag went up in one
+   push: GitHub cancelled the superseded `main` run after 93 seconds, so the tag's own
+   `release.yml` run was the first full matrix to execute, and it failed. A tag is
+   public the moment it is pushed, whether or not it ever publishes.
    ```bash
    git push origin HEAD:main
+   gh run watch                              # wait for CI on main to pass
    git push origin refs/tags/vX.Y.Z          # ← fires release.yml: full CI, then PyPI
    ```
 8. **Watch it land.** Publishing waits for the full CI matrix and opt-in tests
@@ -236,9 +243,19 @@ python3.11 -m venv /tmp/py311 && /tmp/py311/bin/pip install -e ".[dev]"
 /tmp/py311/bin/python -m mypy puremacro --ignore-missing-imports
 /tmp/py311/bin/python -m mypy puremacro --ignore-missing-imports --platform win32
 ```
+Gate 8 runs exactly these two mypy commands and is default-on in the full gate, so the
+recipe above is now the one-time environment setup rather than a step to remember. The
+gate looks for `$PUREMACRO_FLOOR_PYTHON`, then the running interpreter, then a repo-local
+`.venv311/` (ignored by its own `.gitignore`), then `python3.11` on PATH:
+```bash
+uv python install 3.11 && uv venv .venv311 --python 3.11
+uv pip install --python .venv311/bin/python -e ".[dev,notebooks]"
+python tools/release_check.py --no-tests --mypy-floor
+```
 `uv python install 3.11` provides the interpreter when none is installed, and `uv venv` /
-`uv pip install --python ...` are drop-in equivalents. For text files that CI touches on
-Windows, pass `encoding="utf-8"` explicitly; `PYTHONIOENCODING` covers only stdio.
+`uv pip install --python ...` are drop-in equivalents of `venv` and `pip`. For text files
+that CI touches on Windows, pass `encoding="utf-8"` explicitly; `PYTHONIOENCODING` covers
+only stdio.
 
 ## 5. What only you can do
 
