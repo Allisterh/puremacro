@@ -48,6 +48,30 @@ def test_public_calibration_study_matches_the_public_solver():
     np.testing.assert_allclose(reference.assets[reference.policy], -10*result.policy_b_prime[::-1], atol=1e-12)
 
 
+@pytest.mark.parametrize("duplicates", [False, True])
+def test_monotone_search_matches_exhaustive_cash_choice(duplicates):
+    from tools.reference_validation._arellano_monge import maximize
+
+    rng = np.random.default_rng(2026)
+    assets = np.linspace(-.3, .2, 63)
+    income = np.linspace(1., 2., 7)
+    cash = rng.uniform(-.2, .3, (63, 7))
+    continuation = rng.normal(scale=.2, size=(63, 7))
+    if duplicates:
+        cash[:] = 0.
+        continuation[:] = 0.
+    value, policy = maximize(assets, income, cash, continuation, np.argsort(-cash, axis=0, kind="stable"))
+    objective = -1/(income[None, None, :]+assets[:, None, None]+cash[None, :, :])+continuation[None, :, :]
+    np.testing.assert_allclose(value, objective.max(axis=1), atol=1e-15, rtol=0)
+    np.testing.assert_array_equal(policy, 62-np.argmax(objective[:, ::-1], axis=1))
+
+
+def test_accelerated_equilibrium_matches_author_fortran_and_exhaustive_check():
+    reference = solve(policy_search="monotone")
+    assert compare_original(reference, load_original())["passed"]
+    assert reference.diagnostics["exhaustive_bellman_residual"] < 2e-11
+
+
 def test_grid_refinements_hold_support_and_exact_zero():
     original = load_original()
     np.testing.assert_array_equal(author_grid(), original.assets)
