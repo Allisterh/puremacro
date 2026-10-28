@@ -6,8 +6,8 @@ Implements:
    coupon debt model (delta in (0, 1], kappa >= 0).
 3. Extreme-value (Gumbel) taste shocks sigma_eps > 0 for smooth logistic default
    probabilities and differentiable log-sum-exp value functions.
-4. Machine-precision forward automatic differentiation via DualArray for
-   bond-price schedule derivatives dq(b', y)/db'.
+4. Bond-price schedule derivatives dq(b', y)/db' from a monotone PCHIP
+   interpolant (exact node tangents, vectorized).
 5. Optional monotonicity enforcement and unadjusted simulated spread diagnostics.
 """
 from __future__ import annotations
@@ -17,7 +17,6 @@ from typing import Any, Mapping
 import numpy as np
 from scipy.stats import norm
 
-from puremacro._autodiff import DualArray
 from puremacro.sovereign._results import SovereignDefaultResult
 
 __all__ = [
@@ -94,57 +93,24 @@ def _compute_default_penalty(
 
 
 def _compute_dq_db_dualarray(q: np.ndarray, b_grid: np.ndarray) -> np.ndarray:
-    """Evaluate forward automatic differentiation dq(b', y)/db' via DualArray.
+    """Evaluate the derivative dq(b', y)/db' of a monotone PCHIP interpolant.
 
-    Uses monotonic cubic Hermite (PCHIP) spline evaluated with DualArray
-    to ensure machine-precision tangents dq/db <= 0.
+    Uses Fritsch-Carlson harmonic-mean tangents, so derivatives satisfy
+    dq/db <= 0. At each grid node the cubic Hermite derivative equals the
+    node's tangent, which is computed for all nodes at once.
     """
-    n_b, n_y = q.shape
-    dq_db = np.zeros_like(q)
-    h = np.diff(b_grid)
-
-    for j in range(n_y):
-        q_col = q[:, j]
-        delta = np.diff(q_col) / h
-        d = np.zeros(n_b, dtype=np.float64)
-
-        # Fritsch-Carlson / harmonic PCHIP interior tangents
-        for k in range(1, n_b - 1):
-            if delta[k - 1] * delta[k] > 0.0:
-                d[k] = 2.0 / (1.0 / delta[k - 1] + 1.0 / delta[k])
-            else:
-                d[k] = 0.0
-
-        d[0] = delta[0] if len(delta) > 0 and delta[0] <= 0.0 else 0.0
-        d[-1] = delta[-1] if len(delta) > 0 and delta[-1] <= 0.0 else 0.0
-
-        # Evaluate through DualArray for interior intervals
-        for k in range(n_b - 1):
-            bk = b_grid[k]
-            hk = h[k]
-            b_pt = DualArray(bk, np.array([1.0]))
-            t = (b_pt - bk) / hk
-            h00 = 2.0 * t ** 3 - 3.0 * t ** 2 + 1.0
-            h10 = t ** 3 - 2.0 * t ** 2 + t
-            h01 = -2.0 * t ** 3 + 3.0 * t ** 2
-            h11 = t ** 3 - t ** 2
-            q_eval = h00 * q_col[k] + h10 * (hk * d[k]) + h01 * q_col[k + 1] + h11 * (hk * d[k + 1])
-            dq_db[k, j] = q_eval.der[0]
-
-        # Last grid point evaluated in the final interval
-        k_last = n_b - 2
-        bk = b_grid[k_last]
-        hk = h[k_last]
-        b_pt = DualArray(b_grid[-1], np.array([1.0]))
-        t = (b_pt - bk) / hk
-        h00 = 2.0 * t ** 3 - 3.0 * t ** 2 + 1.0
-        h10 = t ** 3 - 2.0 * t ** 2 + t
-        h01 = -2.0 * t ** 3 + 3.0 * t ** 2
-        h11 = t ** 3 - t ** 2
-        q_eval = h00 * q_col[k_last] + h10 * (hk * d[k_last]) + h01 * q_col[-1] + h11 * (hk * d[-1])
-        dq_db[-1, j] = q_eval.der[0]
-
-    return np.minimum(dq_db, 0.0)
+    if q.shape[0] < 2:
+        return np.zeros_like(q)
+    delta = np.diff(q, axis=0) / np.diff(b_grid)[:, None]
+    d = np.zeros_like(q)
+    left, right = delta[:-1], delta[1:]
+    same_sign = left * right > 0.0
+    with np.errstate(divide="ignore", invalid="ignore"):
+        harmonic = 2.0 / (1.0 / left + 1.0 / right)
+    d[1:-1] = np.where(same_sign, harmonic, 0.0)
+    d[0] = np.where(delta[0] <= 0.0, delta[0], 0.0)
+    d[-1] = np.where(delta[-1] <= 0.0, delta[-1], 0.0)
+    return np.minimum(d, 0.0)
 
 
 def solve_sovereign_default(
@@ -234,7 +200,7 @@ def solve_sovereign_default(
     -------
     SovereignDefaultResult
         Solved value functions, policy function, bond price schedule,
-        sovereign spreads, and DualArray derivatives dq/db'.
+        sovereign spreads, and PCHIP derivatives dq/db'.
     """
     if delta <= 0.0 or delta > 1.0:
         raise ValueError(f"delta must be in (0, 1]; got {delta}")
@@ -389,7 +355,7 @@ def solve_sovereign_default(
     # Final policy b'(b, y)
     policy_b = b_grid[m_opt]
 
-    # Evaluate forward DualArray derivative dq/db'(b', y)
+    # Exact PCHIP node derivatives dq/db'(b', y)
     dq_db = _compute_dq_db_dualarray(q, b_grid)
 
     # Sovereign spread over risk-free rate
