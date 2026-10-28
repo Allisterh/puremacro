@@ -1,7 +1,10 @@
 # Arellano: código original y sensibilidad a las mallas
 
-**Se reproduce el algoritmo archivado; aún no se establece la convergencia de
-los momentos económicos.** La comparación conserva las convenciones de cada
+**Se reproduce el algoritmo archivado. Para la calibración pública de
+PureMacro, la convergencia de mallas queda establecida con 6.401 nodos de deuda
+y 641 estados de ingreso bajo tolerancias prerregistradas. Los momentos
+publicados no convergen con la malla: en mallas finas el mismo modelo produce
+cerca de la mitad de la volatilidad publicada del diferencial.** La comparación conserva las convenciones de cada
 modelo y no recalibra parámetros para acercarse a los objetivos publicados.
 
 ## Ejecutar localmente
@@ -62,7 +65,7 @@ sorteos originales y el script archivado examina candidatos a default 2:300,
 mientras el artículo describe 100 ventanas. No se afirma una reproducción
 exacta de la tabla publicada.
 
-## La convergencia económica sigue pendiente
+## La calibración archivada no converge con la malla
 
 Las mallas de deuda son anidadas, con extremos fijos y cero exacto; las mallas
 de ingreso mantienen sus extremos logarítmicos. Los residuos independientes de
@@ -90,7 +93,10 @@ porcentuales, es por tanto la que produce la malla archivada de 200 × 21 con
 esta calibración; en mallas finas el mismo modelo genera cerca de la mitad. Es
 el patrón documentado por Hatchondo, Martinez y Sapriza (2010): la técnica de
 espacio de estados discreto con mallas equiespaciadas necesita muchos puntos
-para evitar movimientos espurios de la tasa de interés. Acercarse a un objetivo
+para evitar movimientos espurios de la tasa de interés. La escalera de la
+calibración pública, más abajo, muestra que los nodos de deuda importan igual:
+de 801 a 6.401 nodos la volatilidad del diferencial cae otros 0,44 puntos
+porcentuales. Acercarse a un objetivo
 aislado no demuestra convergencia conjunta, y aquí no se reajusta ningún
 parámetro.
 
@@ -124,14 +130,6 @@ está corregido: el reingreso permite decidir en el mismo trimestre. Las dos
 interfaces públicas restablecen deuda cero y coinciden con la misma semilla.
 El simulador común del estudio respeta la ecuación de Bellman de cada caso.
 
-## Próxima decisión
-
-Las convenciones públicas están documentadas en la [guía soberana](sovereign_default.md).
-Ahora resolver la sensibilidad
-de malla con criterios documentados antes de recalibrar o interpretar efectos
-de política. Los siguientes experimentos son reingreso, volatilidad y persistencia
-del ingreso; vencimientos y reestructuración requieren validación adicional.
-
 ## Comprobar las mallas de la calibración pública
 
 ```sh
@@ -141,7 +139,9 @@ MPLBACKEND=Agg python -m tools.reference_validation.check_arellano_grids --outpu
 Se resuelven ecuaciones independientes, contrastadas con la API pública en una
 malla común de 401 × 9. Calibración, extremos, momento de reingreso y medición
 permanecen fijos. La ejecución predeterminada compara 401/801 activos y 321/641
-estados de ingreso, con 16 semillas emparejadas por caso.
+estados de ingreso, con 16 semillas emparejadas por caso. Esa escalera corta no
+aprueba; la sección siguiente presenta la que sí. Las convenciones públicas de
+reingreso y medición están documentadas en la [guía soberana](sovereign_default.md).
 
 El cambio de cada momento porcentual debe ser como máximo 0,10 puntos
 porcentuales; el de cada correlación, 0,02. Se suma el cambio medio absoluto a
@@ -156,3 +156,78 @@ El informe registra semillas, hashes, residuos y comparaciones. Las soluciones
 verificadas se reutilizan con `--periods 500000 --windows 1000` para aumentar
 precisión manteniendo semillas. Los resultados archivados anteriores conservan
 su significado histórico para otra calibración y convención de reingreso.
+
+## Calibración pública: convergencia de mallas establecida
+
+```sh
+MPLBACKEND=Agg python -m tools.reference_validation.check_arellano_grids --output /tmp/arellano-grids \
+  --refinements 1 2 3 4 --income-states 321 641
+MPLBACKEND=Agg python -m tools.reference_validation.check_arellano_grids --output /tmp/arellano-grids \
+  --refinements 1 2 3 4 --income-states 321 641 --periods 500000 --windows 1000
+```
+
+La primera orden resuelve mallas de deuda de 801, 1.601, 3.201 y 6.401 nodos con
+321 y 641 estados de ingreso usando la búsqueda monótona certificada. Las ocho
+soluciones tardaron cerca de dos horas en la máquina probada, la mayor 35
+minutos. La segunda orden reutiliza las soluciones verificadas por hash y solo
+vuelve a simular.
+
+Con el diseño estándar aprobaron 23 de las 24 comparaciones finales. La
+correlación entre balanza comercial y diferencial cambió 0,017 de 3.201 a 6.401
+nodos, dentro de su tolerancia de 0,02, pero su cota fue 0,0204, de modo que la
+precisión muestral no permitía clasificarla. La regla prerregistrada aplica
+entonces las mismas semillas con 500.000 trimestres y 1.000 ventanas por
+semilla. Con ese diseño aprueban todas las comparaciones:
+
+| Nodos de deuda × estados de ingreso | Deuda/producto (%) | Diferencial medio (%) | Default anual (%) | DE diferencial (pp) | Correlación balanza comercial, diferencial |
+|---|---:|---:|---:|---:|---:|
+| 801 × 321 | 4,042 | 3,479 | 3,105 | 3,274 | 0,701 |
+| 1.601 × 321 | 4,044 | 3,461 | 3,086 | 3,034 | 0,753 |
+| 3.201 × 321 | 4,043 | 3,425 | 3,048 | 2,895 | 0,787 |
+| 6.401 × 321 | 4,052 | 3,414 | 3,037 | 2,844 | 0,809 |
+| 801 × 641 | 3,984 | 3,453 | 3,084 | 3,215 | 0,704 |
+| 1.601 × 641 | 3,993 | 3,423 | 3,064 | 2,959 | 0,760 |
+| 3.201 × 641 | 4,002 | 3,378 | 3,012 | 2,813 | 0,798 |
+| 6.401 × 641 | 4,003 | 3,362 | 2,997 | 2,774 | 0,813 |
+
+En el refinamiento final de deuda, de 3.201 a 6.401 nodos con 641 estados, las
+mayores cotas son 0,043 pp para la volatilidad del diferencial, frente a 0,10,
+y 0,017 para la correlación entre balanza comercial y diferencial, frente a
+0,02. En el refinamiento final de ingreso, de 321 a 641 estados con 6.401 nodos,
+la mayor es 0,076 pp para la volatilidad del diferencial. Cada solución tiene
+residuo de Bellman inferior a 2e-12 y residuo de precios inferior a 9e-9. La
+comprobación exhaustiva de las políticas aceleradas alcanza el mismo residuo de
+Bellman. El registro congelado,
+`tests/fixtures/arellano_2008/public_grid_convergence.json`, conserva cada
+semilla, momento, hash, residuo y comparación. Una prueba recalcula ambas
+comparaciones a partir de él y verifica esta tabla.
+
+**Lo que el criterio no acota.** Limita el último cambio, no la distancia al
+límite. La volatilidad del diferencial y la correlación entre balanza comercial
+y diferencial se han movido en una sola dirección en cada refinamiento. En la
+escalera de 641 estados sus cambios sucesivos se reducen por factores de 0,26 a
+0,57 y de 0,41 a 0,68 por duplicación. La extrapolación geométrica con esos
+factores sitúa el límite de la volatilidad 0,01 a 0,05 pp por debajo de 2,774,
+dentro de su tolerancia, y el de la correlación 0,01 a 0,03 por encima de 0,813,
+posiblemente fuera de ella. Reporte esa correlación con dos decimales. La
+extrapolación es un diagnóstico, no parte del criterio registrado.
+
+## Próxima decisión
+
+La calibración pública ya tiene un diseño numérico fijo: 6.401 nodos de deuda,
+641 estados de ingreso y el diseño de precisión para los momentos simulados.
+Las cifras convergidas provienen del solucionador independiente de referencia,
+que coincide ecuación por ecuación con `solve_sovereign_default` en una malla de
+401 × 9. El solucionador público no alcanza esa malla: su búsqueda densa de
+políticas construye arreglos de nodos de deuda × nodos de deuda × estados de
+ingreso, cerca de 210 GB cada uno con 6.401 × 641. El siguiente paso de la
+biblioteca es incorporar la búsqueda monótona certificada al solucionador
+público para deuda de corto plazo, con la misma comprobación exhaustiva, para
+que los usuarios reproduzcan directamente los momentos convergidos.
+
+Después, los experimentos de reingreso, volatilidad y persistencia del ingreso
+pueden realizarse sobre el diseño convergido. Mantenga separadas la calibración
+archivada y la pública; la convergencia de la archivada no está establecida más
+allá de 797 puntos de deuda. Vencimientos y reestructuración requieren su propia
+validación externa. Cualquier recalibración sería un resultado nuevo, no parte
+de esta validación.

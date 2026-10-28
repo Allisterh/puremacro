@@ -8,10 +8,13 @@ import pytest
 from scipy.special import ndtr
 
 from tools.reference_validation.arellano_2008 import (
-    FIXTURE, GROSS_R, Solution, annual_spread, author_grid, compare_original,
+    FIXTURE, GROSS_R, ROOT, Solution, annual_spread, author_grid, compare_original,
     eligible_windows, income_process, load_original, monte_carlo, simulate, solve,
     summarize_path, verified_inputs,
 )
+
+GRID_RECORD = FIXTURE / "public_grid_convergence.json"
+GUIDE_COLUMNS = ("debt_pct", "spread_mean_pct", "annual_default_pct", "spread_std_pp", "corr_tb_spread")
 
 
 def test_archived_sources_and_external_export_integrity():
@@ -204,3 +207,51 @@ def test_study_income_refinements_are_optional_odd_and_above_the_archived_grid()
     for bad in ([42], [21], [1]):
         with pytest.raises(ValueError, match="odd"):
             study.specifications(None, bad)
+
+
+def test_frozen_public_grid_record_passes_and_recomputes_from_its_seeds():
+    from tools.reference_validation.check_arellano_grids import TOLERANCES, paired_comparison
+
+    record = json.loads(GRID_RECORD.read_text())
+    assert record["status"] == "passed" and record["passed"] is True
+    assert record["tolerances"] == TOLERANCES
+    assert record["calibration"]["timing"] == "canonical"
+    assert record["calibration"]["policy_search"] == "monotone"
+    finest = record["cases"]["public_6401_641"]
+    assert (finest["n_assets"], finest["n_income"]) == (6401, 641)
+    for case in record["cases"].values():
+        design, diagnostics = case["design"], case["diagnostics"]
+        assert design["seeds"] == list(range(1979, 1995))
+        assert (design["periods"], design["burn"], design["windows"]) == (500000, 1000, 1000)
+        assert diagnostics["policy_search"] == "monotone"
+        assert diagnostics["bellman_residual"] < 2e-12
+        assert diagnostics["exhaustive_bellman_residual"] < 2e-11
+        assert diagnostics["price_residual"] < 1e-8
+    comparisons = record["comparisons"]
+    assert set(comparisons) == {"final_asset_refinement", "final_income_refinement"}
+    assert (comparisons["final_asset_refinement"]["coarse"], comparisons["final_asset_refinement"]["fine"]) \
+        == ("public_3201_641", "public_6401_641")
+    assert (comparisons["final_income_refinement"]["coarse"], comparisons["final_income_refinement"]["fine"]) \
+        == ("public_6401_321", "public_6401_641")
+    # Recompute from the per-seed moments: the verdict must not rest on the stored summary.
+    for comparison in comparisons.values():
+        recomputed = paired_comparison(record["cases"][comparison["coarse"]]["simulation"],
+                                       record["cases"][comparison["fine"]]["simulation"])
+        assert recomputed["passed"]
+        for name, value in recomputed["moments"].items():
+            assert value["status"] == comparison["moments"][name]["status"] == "passed"
+            assert value["absolute_change_bound"] == pytest.approx(
+                comparison["moments"][name]["absolute_change_bound"], abs=1e-12)
+
+
+@pytest.mark.parametrize("guide,thousands,decimal", [("docs/arellano_replication.md", ",", "."),
+                                                     ("docs/es/arellano_replication.md", ".", ",")])
+def test_guides_tabulate_the_frozen_public_grid_record(guide, thousands, decimal):
+    record = json.loads(GRID_RECORD.read_text())
+    text = (ROOT / guide).read_text(encoding="utf-8")
+    for case in record["cases"].values():
+        moments = case["simulation"]["moments"]
+        nodes = f'{case["n_assets"]:,}'.replace(",", thousands)
+        row = f'| {nodes} × {case["n_income"]} | ' + " | ".join(
+            f'{moments[k]["mean"]:.3f}'.replace(".", decimal) for k in GUIDE_COLUMNS) + " |"
+        assert row in text, row

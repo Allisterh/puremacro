@@ -104,6 +104,18 @@ an acceptance test for matching a single published simulation draw. Fixed
 default-frequency estimate; more replications/windows are needed to refine
 business-cycle moment estimates.
 
+## Public-calibration grid convergence record
+
+`public_grid_convergence.json` is the passing `check_arellano_grids` report for
+PureMacro's public calibration, recorded on 2026-10-27. It covers debt grids of
+801 to 6,401 nodes and 321 and 641 income states, solved with the certified
+monotone search, under the pre-registered precision design: 16 seeds, 500,000
+quarters, a 1,000-quarter burn and 1,000 windows. It keeps the protocol,
+tolerances, source and array hashes, versions, every seed's moments and both
+final comparisons. Tests recompute the comparisons from the per-seed moments
+and check the guide's table. It records a numerical property of this
+calibration only; it is not a published-moment replication.
+
 ## Reproduce the comparison
 
 ```sh

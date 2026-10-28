@@ -61,6 +61,13 @@ proceeds, so a divide-and-conquer search replaces the n_assets^2 scan and
 accelerated solve is then re-checked by an independent exhaustive Bellman
 evaluation; a disagreement above 1e-11 fails the solve.
 
+The converged public ladder is `--refinements 1 2 3 4 --income-states 321 641`,
+then the same command with `--periods 500000 --windows 1000`, which reuses the
+hash-verified solutions. The solves take about two hours on the tested
+workstation. The passing record is frozen in
+`tests/fixtures/arellano_2008/public_grid_convergence.json`; see the
+[comparison guide](../../docs/arellano_replication.md) for the result.
+
 ## Dynare 7.0 / MATLAB
 
 Five source models in `tests/fixtures/dynare_live/` cover quadratic forward

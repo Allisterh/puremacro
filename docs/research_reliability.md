@@ -43,7 +43,7 @@ the specific scope described in each notebook, not blanket economic validation.
 
 | Comparison | Result on the tested grids | What remains open |
 |---|---|---|
-| Arellano short-term deterministic equations | Matched-grid equations pass; archived Fortran and MATLAB moments reproduce; public simulation timing and zero-debt reentry are corrected | Published-moment discrepancies, quantified grid convergence and long-term extension |
+| Arellano short-term deterministic equations | Matched-grid equations pass; archived Fortran and MATLAB moments reproduce; public simulation timing and zero-debt reentry are corrected; public-calibration grids converge at 6,401 × 641 | Published-moment discrepancies, converged moments from the public solver itself, and long-term extension |
 | One-asset household block | SSJ authors' code matches policies and consumption within 5e-11; return Jacobians within 4e-4 | Finer-grid economic convergence, full published equilibrium and nonlinear transition references |
 
 Both references are frozen with hashes and provenance in
@@ -51,20 +51,25 @@ Both references are frozen with hashes and provenance in
 `tools/reference_validation/`; the external SSJ package is not a runtime
 dependency. Matched-grid agreement does not prove discretization accuracy.
 
-## Sovereign study: baseline completed, convergence unresolved
+## Sovereign study: baseline completed, public grids converged
 
 The [original-code and published-moment comparison](arellano_replication.md)
-now includes 16 independent simulations per case, nested debt grids and
-21/41/81 income states. Refinement moves mean spreads and default frequencies
-more than simulation uncertainty. A small Bellman residual therefore does not
-yet justify policy interpretation.
+now includes 16 independent simulations per case, nested debt grids and 21 to
+321 income states. At the archived calibration, refinement moves the moments
+far more than simulation uncertainty, and spread volatility halves. For the
+public calibration, a pre-registered paired-seed criterion establishes grid
+convergence at 6,401 debt nodes and 641 income states. A small Bellman residual
+alone would not have justified that conclusion.
 
 1. Public reentry timing, zero-debt initialization and measurement are now
    documented and tested. Keep the archive and public-calibration results
    distinct; they use different economic conventions.
-2. Resolve debt/income grid sensitivity under a documented convergence
-   criterion. Keep sampling uncertainty separate from discretization error and
-   retain all raw moments. Recalibrate only after the numerical design is stable.
+2. Done for the public calibration: grids converge at 6,401 × 641 under the
+   registered criterion, with sampling uncertainty kept separate from
+   discretization error and every raw moment retained. Next, bring the
+   certified monotone policy search into `solve_sovereign_default` so that the
+   public solver reproduces those moments; its dense search cannot reach that
+   grid.
 3. Study how income volatility, persistence and market-reentry probability
    change sustainable debt and default exposure in the validated short-term
    model. Report welfare and numerical uncertainty before adding maturity or

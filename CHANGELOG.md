@@ -22,6 +22,16 @@ version is a development candidate, not a published distribution.
   Simulation metadata states timing, seed, sample and annualization conventions.
 - Added independent public-calibration parity and paired-seed economic grid
   convergence checks, separating discretization shifts from simulation error.
+- Arellano grid convergence: the independent reference solver gains a monotone
+  policy search certified by an exhaustive Bellman check, which makes debt grids
+  of 6,401 nodes affordable. For the public calibration, grid convergence is now
+  established at 6,401 × 641 under the pre-registered paired-seed tolerances,
+  after the registered precision escalation. The passing record is frozen and
+  machine-checked against the bilingual guide. At the archived calibration the
+  published spread volatility halves on fine grids, the pattern documented by
+  Hatchondo, Martinez and Sapriza (2010). `run_arellano_study --income-states`
+  reproduces the 161- and 321-state rows. Notebook 73 states that grid
+  resolution is part of the result.
 - Release gate: a default-on Gate 8 runs mypy under the Python 3.11 floor
   interpreter, natively and as `--platform win32`; `--no-tests --mypy-floor`
   adds it to the fast run. The v5.4.0 and v6.0.0 tags passed every local gate
