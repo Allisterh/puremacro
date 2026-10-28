@@ -129,3 +129,57 @@ def test_min_candidate_consumption_is_exact(seed):
 
     b_grid, y_grid, q, ev = _inputs(seed, 30, 6)
     assert min_candidate_consumption(b_grid, y_grid, q) == _dense(b_grid, y_grid, q, ev, 0.95, np.log)[2]
+
+
+GRIDS = {"saving": dict(b_min=-0.3, b_max=0.3, n_b=41), "no_saving": dict(b_min=0.0, b_max=0.4, n_b=40)}
+
+
+@pytest.mark.parametrize("grid", sorted(GRIDS))
+@pytest.mark.parametrize("sigma_eps", [0.0, 0.01])
+@pytest.mark.parametrize("gamma", [1.0, 2.0, 5.0])
+def test_monotone_equals_dense(gamma, sigma_eps, grid):
+    from puremacro.sovereign import solve_sovereign_default
+
+    kwargs = dict(gamma=gamma, sigma_eps=sigma_eps, n_y=7, y_penalty_type="arellano", **GRIDS[grid])
+    dense = solve_sovereign_default(**kwargs)
+    fast = solve_sovereign_default(policy_search="monotone", **kwargs)
+    assert np.array_equal(fast.policy_b, dense.policy_b)
+    assert (fast.iterations, fast.converged) == (dense.iterations, dense.converged)
+    for name in ("v_repay", "v_default", "bond_price", "default_prob"):
+        assert np.allclose(getattr(fast, name), getattr(dense, name), atol=1e-12, rtol=0), name
+
+
+def test_monotone_metadata_reports_certification():
+    from puremacro.sovereign import solve_sovereign_default
+
+    kwargs = dict(n_y=7, y_penalty_type="arellano", **GRIDS["saving"])
+    fast = solve_sovereign_default(policy_search="monotone", **kwargs)
+    assert fast.metadata["policy_search"] == "monotone"
+    assert fast.metadata["monotone_certification_gap"] <= 1e-11
+    assert np.isfinite(fast.metadata["exhaustive_bellman_residual"])
+    assert fast.metadata["exhaustive_bellman_residual"] <= 10 * fast.metadata["tol"]
+    dense = solve_sovereign_default(**kwargs)
+    assert dense.metadata["policy_search"] == "dense"
+    assert dense.metadata["monotone_certification_gap"] is None
+    assert dense.metadata["exhaustive_bellman_residual"] is None
+
+
+def test_monotone_rejects_long_term_debt():
+    from puremacro.sovereign import solve_sovereign_default
+
+    with pytest.raises(ValueError, match="short-term"):
+        solve_sovereign_default(delta=0.2, n_b=20, n_y=5, policy_search="monotone")
+
+
+def test_unknown_policy_search():
+    from puremacro.sovereign import solve_sovereign_default
+
+    with pytest.raises(ValueError, match="policy_search"):
+        solve_sovereign_default(n_b=20, n_y=5, policy_search="fast")
+
+
+def test_monotone_rejects_barrier_region():
+    from puremacro.sovereign import solve_sovereign_default
+
+    with pytest.raises(ValueError, match='policy_search="dense"'):
+        solve_sovereign_default(b_min=0.0, b_max=2.0, n_b=20, n_y=5, policy_search="monotone")

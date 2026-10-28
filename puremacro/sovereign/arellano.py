@@ -17,6 +17,7 @@ from typing import Any, Mapping
 import numpy as np
 from scipy.stats import norm
 
+from puremacro.sovereign._monotone import exhaustive_maximize, maximize, min_candidate_consumption
 from puremacro.sovereign._results import SovereignDefaultResult
 
 __all__ = [
@@ -138,6 +139,7 @@ def solve_sovereign_default(
     howard_steps: int = 15,
     enforce_monotonicity: bool = True,
     y_penalty_type: str = "chatterjee_eyigungor",
+    policy_search: str = "dense",
 ) -> SovereignDefaultResult:
     """Solve quantitative sovereign default model with endogenous maturity and taste shocks.
 
@@ -195,6 +197,15 @@ def solve_sovereign_default(
         If True, enforce dq/db' <= 0 at each iteration.
     y_penalty_type : str, default "chatterjee_eyigungor"
         Default output cost function: "chatterjee_eyigungor" or "arellano".
+    policy_search : {"dense", "monotone"}, default "dense"
+        Debt-choice search. "dense" evaluates every candidate at once and
+        needs arrays of n_b * n_b * n_y entries. "monotone" (short-term debt
+        only, delta = 1 and kappa = 0) exploits concave utility to search
+        in O(n_b log n_b) per income state, returns the same policies, and
+        is certified after convergence by a blocked exhaustive search: a
+        repayment-value gap above 1e-11 raises RuntimeError. It raises
+        ValueError if any candidate consumption reaches the 1e-6 utility
+        barrier, where utility is not concave; use "dense" there.
 
     Returns
     -------
@@ -214,6 +225,11 @@ def solve_sovereign_default(
         raise ValueError(f"r_star must be > 0; got {r_star}")
     if not np.isfinite(theta) or not 0.0 <= theta <= 1.0:
         raise ValueError(f"theta must be finite and in [0, 1]; got {theta}")
+    if policy_search not in ("dense", "monotone"):
+        raise ValueError(f'policy_search must be "dense" or "monotone"; got {policy_search!r}')
+    monotone = policy_search == "monotone"
+    if monotone and (delta != 1.0 or kappa != 0.0):
+        raise ValueError('policy_search="monotone" supports short-term debt only (delta=1, kappa=0)')
 
     y_grid, p_trans, stat_dist = _discretize_endowment(n_y, rho_y, sigma_y, m=m_tauchen)
     y_def = _compute_default_penalty(y_grid, penalty_type=y_penalty_type, d0=d0, d1=d1,
@@ -286,14 +302,21 @@ def solve_sovereign_default(
         # Expected continuation value EV = V @ P_trans.T of shape (n_b, n_y)
         ev = v_exp @ p_trans.T
 
-        # Full tensor consumption c: shape (n_b, n_b, n_y)
-        # c(i, m, j) = y_j - service * b_i + q(m, j) * [b_m - retention * b_i]
-        q_next = q[None, :, :]
-        c_tensor = y_cur - service_coeff * b_cur + q_next * (b_next - retention_coeff * b_cur)
+        if monotone:
+            if min_candidate_consumption(b_grid, y_grid, q) <= 1e-6:
+                raise ValueError('Candidate consumption reaches the 1e-6 utility barrier, where '
+                                 'utility is not concave; use policy_search="dense"')
+            v_rep_new, m_opt = maximize(b_grid, y_grid, q, ev, beta, u_func)
+            c_opt = (y_grid[None, :] - 1.0 * b_grid[:, None]) + np.take_along_axis(q, m_opt, axis=0) * b_grid[m_opt]
+        else:
+            # Full tensor consumption c: shape (n_b, n_b, n_y)
+            # c(i, m, j) = y_j - service * b_i + q(m, j) * [b_m - retention * b_i]
+            q_next = q[None, :, :]
+            c_tensor = y_cur - service_coeff * b_cur + q_next * (b_next - retention_coeff * b_cur)
 
-        # Bellman objective
-        w_tensor = u_func(c_tensor) + beta * ev[None, :, :]
-        m_opt = np.argmax(w_tensor, axis=1)
+            # Bellman objective
+            w_tensor = u_func(c_tensor) + beta * ev[None, :, :]
+            m_opt = np.argmax(w_tensor, axis=1)
 
         if delta < 0.999:
             # Long-term debt: smooth choice eliminates grid chattering and secures residual < 1e-7
@@ -304,9 +327,10 @@ def solve_sovereign_default(
             q_tomorrow = np.sum(prob_b * q[None, :, :], axis=1)
         else:
             # Short-term debt (Arellano 2008): delta = 1.0, retention = 0.0
-            v_rep_new = np.take_along_axis(w_tensor, m_opt[:, None, :], axis=1).squeeze(axis=1)
+            if not monotone:
+                v_rep_new = np.take_along_axis(w_tensor, m_opt[:, None, :], axis=1).squeeze(axis=1)
+                c_opt = np.take_along_axis(c_tensor, m_opt[:, None, :], axis=1).squeeze(axis=1)
             # Howard policy iteration steps for fast convergence
-            c_opt = np.take_along_axis(c_tensor, m_opt[:, None, :], axis=1).squeeze(axis=1)
             for _ in range(howard_steps):
                 if sigma_eps == 0.0:
                     v_exp_h = np.maximum(v_rep_new, v_def[None, :])
@@ -351,6 +375,17 @@ def solve_sovereign_default(
     else:
         p_def = 1.0 / (1.0 + np.exp(np.clip((v_rep-v_def[None, :])/sigma_eps, -60.0, 60.0)))
         v_exp = sigma_eps * np.logaddexp(v_rep/sigma_eps, v_def[None, :]/sigma_eps)
+
+    certification_gap = exhaustive_residual = None
+    if monotone:
+        # Certify the accelerator against every candidate at the returned prices.
+        ev_final = v_exp @ p_trans.T
+        accelerated, _ = maximize(b_grid, y_grid, q, ev_final, beta, u_func)
+        exhaustive, _ = exhaustive_maximize(b_grid, y_grid, q, ev_final, beta, u_func)
+        certification_gap = float(np.max(np.abs(accelerated - exhaustive)))
+        if certification_gap > 1e-11:
+            raise RuntimeError(f"Monotone policy search failed exhaustive certification: gap {certification_gap:.3e}")
+        exhaustive_residual = float(np.max(np.abs(exhaustive - v_rep)))
 
     # Final policy b'(b, y)
     policy_b = b_grid[m_opt]
@@ -408,6 +443,9 @@ def solve_sovereign_default(
         "rho_y": rho_y,
         "sigma_y": sigma_y,
         "y_penalty_type": y_penalty_type,
+        "policy_search": policy_search,
+        "monotone_certification_gap": certification_gap,
+        "exhaustive_bellman_residual": exhaustive_residual,
         "d0": d0,
         "d1": d1,
         "m_tauchen": m_tauchen,
