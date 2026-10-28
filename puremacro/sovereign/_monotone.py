@@ -8,8 +8,10 @@ nondecreasing in wealth (Topkis). Divide and conquer over rows then needs
 O(n_b log n_b) evaluations per income state instead of n_b**2.
 
 Objectives are formed in the same floating-point order as the dense tensor
-search in :func:`solve_sovereign_default`, and ties go to the lowest debt
-index, so both searches return identical arrays. The accelerated result is
+search in :func:`solve_sovereign_default`, so both return identical values.
+Among equal-proceeds ties the lowest debt index wins, as in the dense search;
+an exact value tie between candidates with different proceeds resolves to the
+higher-proceeds one, which can differ from the dense policy (same value). The accelerated result is
 certified separately by :func:`exhaustive_maximize`.
 """
 from __future__ import annotations

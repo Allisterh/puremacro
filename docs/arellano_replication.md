@@ -232,7 +232,8 @@ converged = solve_sovereign_default(
 The dense search would need arrays of debt nodes × debt nodes × income states,
 about 210 GB each at this grid. `policy_search="monotone"` searches the
 short-term debt choice in O(n_b log n_b) per income state and returns the same
-arrays as the dense search. After convergence a blocked exhaustive search over
+values as the dense search, and the same policies except at exact value ties
+between choices with different bond proceeds. After convergence a blocked exhaustive search over
 every candidate certifies it; a repayment-value gap above 1e-11 raises an
 error. On the tested workstation this solve took 28 minutes, 138 iterations
 and 2.4 GB of memory, with a certification gap of zero. Its prices match the

@@ -48,7 +48,7 @@ cercano, conservando extremos y número de puntos. Estas mallas exigen `n_b >= 3
 | `y_penalty_type` | Especificación de producto en impago | `"arellano"` |
 | `theta` | Probabilidad de reingreso | `0.282` |
 | `enforce_monotonicity` | Proyección monótona de precios | `False` en la comparación independiente |
-| `policy_search` | `"dense"`, o `"monotone"` para mallas grandes de deuda corta (certificada; mismos arreglos) | `"dense"` |
+| `policy_search` | `"dense"`, o `"monotone"` para mallas grandes de deuda corta (certificada; mismos valores) | `"dense"` |
 
 ```python
 import numpy as np

@@ -201,11 +201,13 @@ def solve_sovereign_default(
         Debt-choice search. "dense" evaluates every candidate at once and
         needs arrays of n_b * n_b * n_y entries. "monotone" (short-term debt
         only, delta = 1 and kappa = 0) exploits concave utility to search
-        in O(n_b log n_b) per income state, returns the same policies, and
-        is certified after convergence by a blocked exhaustive search: a
-        repayment-value gap above 1e-11 raises RuntimeError. It raises
-        ValueError if any candidate consumption reaches the 1e-6 utility
-        barrier, where utility is not concave; use "dense" there.
+        in O(n_b log n_b) per income state (gamma >= 0). It returns the same
+        values as "dense" and the same policies except at exact value ties
+        between choices with different bond proceeds. After convergence a
+        blocked exhaustive search at the returned prices and values
+        certifies it: a repayment-value gap above 1e-11 raises RuntimeError.
+        It raises ValueError if any candidate consumption reaches the 1e-6
+        utility barrier, where utility is not concave; use "dense" there.
 
     Returns
     -------
@@ -230,6 +232,8 @@ def solve_sovereign_default(
     monotone = policy_search == "monotone"
     if monotone and (delta != 1.0 or kappa != 0.0):
         raise ValueError('policy_search="monotone" supports short-term debt only (delta=1, kappa=0)')
+    if monotone and gamma < 0.0:
+        raise ValueError(f'policy_search="monotone" requires concave utility, gamma >= 0; got {gamma}')
 
     y_grid, p_trans, stat_dist = _discretize_endowment(n_y, rho_y, sigma_y, m=m_tauchen)
     y_def = _compute_default_penalty(y_grid, penalty_type=y_penalty_type, d0=d0, d1=d1,

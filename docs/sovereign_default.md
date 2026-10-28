@@ -48,7 +48,7 @@ zero, preserving its endpoints and node count. Such grids require `n_b >= 3`.
 | `y_penalty_type` | Default-output specification | `"arellano"` |
 | `theta` | Market-reentry probability | `0.282` |
 | `enforce_monotonicity` | Project bond prices to a monotone schedule | `False` for the independent comparison |
-| `policy_search` | `"dense"`, or `"monotone"` for large short-term grids (certified; same arrays) | `"dense"` |
+| `policy_search` | `"dense"`, or `"monotone"` for large short-term grids (certified; same values) | `"dense"` |
 
 ```python
 import numpy as np

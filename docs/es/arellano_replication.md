@@ -228,7 +228,9 @@ converged = solve_sovereign_default(
 La búsqueda densa necesitaría arreglos de nodos de deuda × nodos de deuda ×
 estados de ingreso, cerca de 210 GB cada uno con esta malla.
 `policy_search="monotone"` busca la deuda de corto plazo en O(n_b log n_b) por
-estado de ingreso y devuelve los mismos arreglos que la búsqueda densa. Tras la
+estado de ingreso y devuelve los mismos valores que la búsqueda densa, y las
+mismas políticas salvo empates exactos de valor entre opciones con distinto
+ingreso por bonos. Tras la
 convergencia, una búsqueda exhaustiva por bloques sobre todos los candidatos la
 certifica; una diferencia de valor de reembolso superior a 1e-11 produce un
 error. En la máquina probada esta solución tardó 28 minutos, 138 iteraciones y

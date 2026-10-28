@@ -34,12 +34,14 @@ version is a development candidate, not a published distribution.
   resolution is part of the result.
 - `solve_sovereign_default(policy_search="monotone")`: for short-term debt, a
   monotone policy search replaces the dense n_b × n_b × n_y tensors (about
-  210 GB each at 6,401 × 641), returns the same arrays as the dense search, and
-  is certified after convergence by a blocked exhaustive search (a gap above
+  210 GB each at 6,401 × 641), returns the same values as the dense search (and
+  the same policies except at exact value ties between choices with different
+  bond proceeds), and is certified after convergence by a blocked exhaustive search (a gap above
   1e-11 raises). The converged 6,401 × 641 public design now solves in 28
   minutes and 2.4 GB, matching the independent reference solution. The default
-  remains `"dense"`. Price-schedule derivatives `dq_db` are now computed in one
-  vectorized step instead of a per-node loop (same values).
+  remains `"dense"`; convex utility (gamma < 0) is rejected. Price-schedule
+  derivatives `dq_db` are now computed in one vectorized step instead of a
+  per-node loop; values agree with the loop up to rounding (about 1e-15).
 - Release gate: a default-on Gate 8 runs mypy under the Python 3.11 floor
   interpreter, natively and as `--platform win32`; `--no-tests --mypy-floor`
   adds it to the fast run. The v5.4.0 and v6.0.0 tags passed every local gate

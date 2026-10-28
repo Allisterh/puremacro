@@ -183,3 +183,10 @@ def test_monotone_rejects_barrier_region():
 
     with pytest.raises(ValueError, match='policy_search="dense"'):
         solve_sovereign_default(b_min=0.0, b_max=2.0, n_b=20, n_y=5, policy_search="monotone")
+
+
+def test_monotone_rejects_convex_utility_before_solving():
+    from puremacro.sovereign import solve_sovereign_default
+
+    with pytest.raises(ValueError, match="gamma"):
+        solve_sovereign_default(gamma=-1.0, n_b=20, n_y=5, max_iter=1, policy_search="monotone")
