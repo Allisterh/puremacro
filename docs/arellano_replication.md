@@ -216,20 +216,42 @@ limit of the correlation 0.01 to 0.03 above 0.813, possibly outside it. Quote
 that correlation to two decimals. The extrapolation is a diagnostic, not part
 of the registered criterion.
 
+## Solve the converged design with the public solver
+
+```python
+from puremacro.sovereign import solve_sovereign_default
+
+converged = solve_sovereign_default(
+    beta=0.95282, r_star=0.017, theta=0.282, rho_y=0.945, sigma_y=0.025,
+    b_min=-0.15, b_max=0.33, n_b=6401, n_y=641, sigma_eps=0.0,
+    y_penalty_type="arellano", enforce_monotonicity=False,
+    tol=1e-10, max_iter=10000, policy_search="monotone",
+)
+```
+
+The dense search would need arrays of debt nodes × debt nodes × income states,
+about 210 GB each at this grid. `policy_search="monotone"` searches the
+short-term debt choice in O(n_b log n_b) per income state and returns the same
+arrays as the dense search. After convergence a blocked exhaustive search over
+every candidate certifies it; a repayment-value gap above 1e-11 raises an
+error. On the tested workstation this solve took 28 minutes, 138 iterations
+and 2.4 GB of memory, with a certification gap of zero. Its prices match the
+reference solver's 6,401 × 641 solution within 5.4e-9, with identical policies
+and default sets; a test repeats the comparison at 401 × 21, and at 1,601 × 21
+under `pytest -m slow`.
+
+The moments in the table above come from the study's simulator: 16 paired
+seeds, 500,000 quarters and predefault windows. They carry over to this
+solution because its arrays match the reference arrays. `converged.simulate()`
+returns a raw path with different measurement conventions, so its statistics
+are not the same numbers.
+
 ## Next decision
 
 The public calibration now has a fixed numerical design: 6,401 debt nodes, 641
-income states and the precision design for simulated moments. The converged
-figures come from the independent reference solver, which matches
-`solve_sovereign_default` equation for equation on a 401 × 9 grid. The public
-solver cannot reach that grid: its dense policy search builds arrays of debt
-nodes × debt nodes × income states, about 210 GB each at 6,401 × 641. The next
-library step is to bring the certified monotone search into the public solver
-for short-term debt, with the same exhaustive check, so that users can
-reproduce converged moments directly.
-
-After that, the reentry, income-volatility and persistence experiments can run
-on the converged design. Keep the archived and public calibrations separate;
+income states and the precision design for simulated moments. The reentry,
+income-volatility and persistence experiments can run on the converged design,
+now from the public solver. Keep the archived and public calibrations separate;
 the archived calibration's own convergence is not established beyond 797 debt
 points. Maturity and restructuring extensions follow their own external
 validation. Any recalibration would be a new result, not part of this

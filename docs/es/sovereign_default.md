@@ -48,6 +48,7 @@ cercano, conservando extremos y número de puntos. Estas mallas exigen `n_b >= 3
 | `y_penalty_type` | Especificación de producto en impago | `"arellano"` |
 | `theta` | Probabilidad de reingreso | `0.282` |
 | `enforce_monotonicity` | Proyección monótona de precios | `False` en la comparación independiente |
+| `policy_search` | `"dense"`, o `"monotone"` para mallas grandes de deuda corta (certificada; mismos arreglos) | `"dense"` |
 
 ```python
 import numpy as np
@@ -78,7 +79,8 @@ El ingreso tiene media estacionaria uno. El diferencial es
 rendimientos y selecciona ventanas anteriores al impago. Los metadatos
 `simulation_*`, `spread_sample`, `spread_annualization` e `income_normalization`
 registran estas convenciones. Para trabajo cuantitativo, use simulaciones más
-largas y las [comprobaciones de malla](arellano_replication.md).
+largas y las [comprobaciones de malla](arellano_replication.md); esa guía da la
+llamada con `policy_search="monotone"` para la malla convergida.
 La columna `default` incluye entrada y continuación de la exclusión; su media
 no es una frecuencia de nuevos impagos. El estudio cuenta las entradas aparte.
 

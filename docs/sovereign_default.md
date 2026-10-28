@@ -48,6 +48,7 @@ zero, preserving its endpoints and node count. Such grids require `n_b >= 3`.
 | `y_penalty_type` | Default-output specification | `"arellano"` |
 | `theta` | Market-reentry probability | `0.282` |
 | `enforce_monotonicity` | Project bond prices to a monotone schedule | `False` for the independent comparison |
+| `policy_search` | `"dense"`, or `"monotone"` for large short-term grids (certified; same arrays) | `"dense"` |
 
 ```python
 import numpy as np
@@ -77,7 +78,8 @@ one. Spreads use `4 * max(0, quarterly_yield - r_star)`; the paper comparison
 instead compounds quarterly returns and uses predefault windows. The
 `simulation_*`, `spread_sample`, `spread_annualization` and
 `income_normalization` metadata record these choices. Use longer simulations
-and the [explicit grid checks](arellano_replication.md) for quantitative work.
+and the [explicit grid checks](arellano_replication.md) for quantitative work;
+that guide gives the `policy_search="monotone"` call for the converged grid.
 The path's `default` flag includes entry and continuing exclusion; its mean is
 not a default-entry frequency. The validation study counts entries separately.
 
