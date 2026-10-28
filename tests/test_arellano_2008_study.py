@@ -263,7 +263,7 @@ def _public_monotone(n_b: int, n_y: int):
 
     return solve_sovereign_default(beta=.95282, r_star=.017, theta=.282, rho_y=.945, sigma_y=.025,
                                    b_min=-.15, b_max=.33, n_b=n_b, n_y=n_y, sigma_eps=0,
-                                   y_penalty_type="arellano", howard_steps=0, enforce_monotonicity=False,
+                                   y_penalty_type="arellano", enforce_monotonicity=False,
                                    tol=1e-10, max_iter=10000, policy_search="monotone")
 
 
