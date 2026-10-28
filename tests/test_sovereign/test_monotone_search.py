@@ -52,3 +52,80 @@ def test_dq_db_vectorized_matches_loop(seed, shape, kind):
         q[-n_b // 4:] = 0.0
     assert np.allclose(_compute_dq_db_dualarray(q, b_grid), _reference_dq_db(q, b_grid),
                        atol=1e-12, rtol=0)
+
+
+def _crra(gamma):
+    if gamma == 1.0:
+        return np.log
+    return lambda c: (c ** (1.0 - gamma) - 1.0) / (1.0 - gamma)
+
+
+def _inputs(seed, n_b, n_y, saving=True):
+    rng = np.random.default_rng(seed)
+    b_grid = np.linspace(-0.3 if saving else 0.0, 0.4, n_b)
+    y_grid = np.sort(rng.uniform(0.8, 1.2, n_y))
+    q = np.sort(rng.uniform(0.0, 1 / 1.01, (n_b, n_y)), axis=0)[::-1].copy()
+    ev = rng.normal(-30.0, 2.0, (n_b, n_y))
+    return b_grid, y_grid, q, ev
+
+
+def _dense(b_grid, y_grid, q, ev, beta, u):
+    c = (y_grid[None, None, :] - 1.0 * b_grid[:, None, None]) + q[None, :, :] * b_grid[None, :, None]
+    w = u(c) + beta * ev[None, :, :]
+    return w.max(axis=1), w.argmax(axis=1), c.min()
+
+
+@pytest.mark.parametrize("seed", range(10))
+@pytest.mark.parametrize("n_b,n_y", [(2, 2), (3, 5), (17, 2), (64, 5)])
+@pytest.mark.parametrize("gamma", [2.0, 5.0])
+@pytest.mark.parametrize("saving", [True, False])
+def test_maximize_matches_brute_force(seed, n_b, n_y, gamma, saving):
+    from puremacro.sovereign._monotone import maximize
+
+    args = (*_inputs(seed, n_b, n_y, saving), 0.95, _crra(gamma))
+    value, policy = maximize(*args)
+    dense_value, dense_policy, _ = _dense(*args)
+    assert np.array_equal(value, dense_value)
+    assert np.array_equal(policy, dense_policy)
+
+
+def test_ties_choose_lowest_debt_index():
+    from puremacro.sovereign._monotone import maximize
+
+    b_grid, y_grid, q, ev = _inputs(3, 41, 5)
+    q[25:, :] = 0.0          # fully defaulting region: no proceeds ...
+    ev[25:, :] = ev[25, :]   # ... and identical continuation (V = V_D)
+    ev[:25, :] -= 50.0       # make the tied region optimal for every row
+    args = (b_grid, y_grid, q, ev, 0.95, _crra(2.0))
+    value, policy = maximize(*args)
+    dense_value, dense_policy, _ = _dense(*args)
+    assert np.array_equal(policy, dense_policy)
+    assert np.all(policy == 25)
+    assert np.array_equal(value, dense_value)
+
+
+def test_minimal_grid():
+    from puremacro.sovereign._monotone import maximize
+
+    args = (*_inputs(0, 2, 2), 0.95, _crra(2.0))
+    value, policy = maximize(*args)
+    dense_value, dense_policy, _ = _dense(*args)
+    assert np.array_equal(value, dense_value) and np.array_equal(policy, dense_policy)
+
+
+@pytest.mark.parametrize("block_rows", [1, 7, 128])
+def test_exhaustive_matches_dense(block_rows):
+    from puremacro.sovereign._monotone import exhaustive_maximize
+
+    args = (*_inputs(5, 50, 4), 0.95, _crra(2.0))
+    value, policy = exhaustive_maximize(*args, block_rows=block_rows)
+    dense_value, dense_policy, _ = _dense(*args)
+    assert np.array_equal(value, dense_value) and np.array_equal(policy, dense_policy)
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_min_candidate_consumption_is_exact(seed):
+    from puremacro.sovereign._monotone import min_candidate_consumption
+
+    b_grid, y_grid, q, ev = _inputs(seed, 30, 6)
+    assert min_candidate_consumption(b_grid, y_grid, q) == _dense(b_grid, y_grid, q, ev, 0.95, np.log)[2]
