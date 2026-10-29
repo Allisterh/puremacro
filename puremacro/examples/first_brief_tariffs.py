@@ -24,16 +24,23 @@ retaliation: China does not respond in this experiment.
 """
 from __future__ import annotations
 
+import argparse
+import hashlib
+import json
 import math
+import platform
+import textwrap
 import time
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
 
+import puremacro
+from puremacro.reports import df_to_latex, df_to_markdown
 from puremacro.trade import (
     TariffScenario,
     calibrate_trade_model,
@@ -51,7 +58,8 @@ __all__ = [
     "SOLVER", "SYNTHETIC_LABEL", "SYNTHETIC_LABEL_ES", "DEFAULT_EXPERIMENT_SIGMA",
     "BriefSolution", "load_bundled", "validate_scenario", "solve_brief",
     "national_record", "parse_experiment", "national_basket", "supported_sectors",
-    "synthetic_groups", "read_groups_csv", "household_incidence",
+    "synthetic_groups", "read_groups_csv", "household_incidence", "headline_record",
+    "page_block", "summary_text", "write_outputs", "run_brief", "main",
 ]
 
 #: Solver settings of every state (baseline, counterfactual, experiment).
@@ -308,6 +316,7 @@ def household_incidence(sol: BriefSolution, groups: pd.DataFrame) -> pd.DataFram
     proportion to baseline spending (reproduces the national EV) or equally
     per household.
     """
+    started = time.perf_counter()
     importer = sol.settings["importer"]
     sectors = list(sol.icio.sector_codes)
     index = list(sol.calib.country_codes).index(importer)
@@ -341,6 +350,7 @@ def household_incidence(sol: BriefSolution, groups: pd.DataFrame) -> pd.DataFram
     }, index=groups.index.copy())
     out.index.name = "group"
     out.attrs = {
+        "elapsed_seconds": time.perf_counter() - started,
         "aggregate_ev_pct_proportional": float(results["proportional"].aggregate["ev_pct"]),
         "aggregate_ev_pct_equal": float(results["equal"].aggregate["ev_pct"]),
         "label": groups.attrs.get("label", "user-supplied groups"),
@@ -348,3 +358,383 @@ def household_incidence(sol: BriefSolution, groups: pd.DataFrame) -> pd.DataFram
         "source": groups.attrs.get("source", ""),
     }
     return out
+
+
+# --- record, outputs and CLI ------------------------------------------------
+
+DEFAULT_OUTPUT = Path("output") / "first_brief_tariffs"
+EXPERIMENT_DESCRIPTION = "intermediate sourcing substitution elasticity (0 = Leontief)"
+
+_TEXT = {
+    "en": {
+        "component": "Component", "musd": "million USD", "pct": "% of baseline consumption",
+        "rows": ("Purchaser prices", "Factor income", "Fiscal transfers", "Equivalent variation"),
+        "headline_note": ("Positive values are gains. A positive EV here is a unilateral terms-of-trade "
+                          "gain with no retaliation: {exporter} does not respond."),
+        "groups_caption": "Household groups: {label}.",
+        "group": "Group", "prop": "EV, proportional rebate (% of spending)",
+        "equal": "EV, equal rebate (% of spending)", "all": "All groups (spending-weighted)",
+        "groups_note": ("Proportional: the change in transfers (tariff revenue) is rebated in proportion "
+                        "to baseline spending, which adds up to the national EV; equal: the same amount "
+                        "per household."),
+        "user_label": "user-supplied groups",
+        "no_experiment": "No experiment was run (use --experiment sigma=2).",
+        "exp_rows": ("Purchaser prices (million USD)", "Factor income (million USD)",
+                     "Fiscal transfers (million USD)", "Equivalent variation (million USD)",
+                     "Equivalent variation (% of baseline consumption)"),
+        "measure": "Measure", "headline_col": "sigma = 0 (headline)", "exp_col": "sigma = {value:g}",
+        "exp_note": ("sigma is the substitution elasticity between origins of intermediate inputs "
+                     "(0 = Leontief, fixed sourcing); final-use origin baskets stay fixed."),
+        "title": "First policy brief: {tariff:g}% tariff by {importer} on {what} from {exporter}",
+        "all_goods": "all goods", "sector_goods": "sector {sector} goods",
+        "table": "Table: {citation}; {unit}, {year}.",
+        "panel_national": "National EV split ({importer})", "panel_groups": "Group EV",
+        "axis_pct_cons": "% of baseline consumption", "axis_pct_spend": "% of group spending",
+        "legend_prop": "proportional rebate", "legend_equal": "equal rebate",
+        "written": "Outputs written to {path}",
+    },
+    "es": {
+        "component": "Componente", "musd": "millones de USD", "pct": "% del consumo base",
+        "rows": ("Precios de comprador", "Ingreso de los factores", "Transferencias fiscales",
+                 "Variación equivalente"),
+        "headline_note": ("Los valores positivos son ganancias. Una VE positiva aquí es una ganancia "
+                          "unilateral de términos de intercambio, sin represalias: {exporter} no responde."),
+        "groups_caption": "Grupos de hogares: {label}.",
+        "group": "Grupo", "prop": "VE, reembolso proporcional (% del gasto)",
+        "equal": "VE, reembolso igualitario (% del gasto)", "all": "Todos los grupos (ponderado por gasto)",
+        "groups_note": ("Proporcional: el cambio en las transferencias (ingreso arancelario) se reembolsa en "
+                        "proporción al gasto base, lo que suma la VE nacional; igualitario: el mismo monto "
+                        "por hogar."),
+        "user_label": "grupos proporcionados por el usuario",
+        "no_experiment": "No se ejecutó ningún experimento (use --experiment sigma=2).",
+        "exp_rows": ("Precios de comprador (millones de USD)", "Ingreso de los factores (millones de USD)",
+                     "Transferencias fiscales (millones de USD)", "Variación equivalente (millones de USD)",
+                     "Variación equivalente (% del consumo base)"),
+        "measure": "Medida", "headline_col": "sigma = 0 (principal)", "exp_col": "sigma = {value:g}",
+        "exp_note": ("sigma es la elasticidad de sustitución entre orígenes de los insumos intermedios "
+                     "(0 = Leontief, abastecimiento fijo); las canastas de origen del uso final no cambian."),
+        "title": "Primer informe de política: arancel de {tariff:g}% de {importer} a {what} de {exporter}",
+        "all_goods": "todos los bienes", "sector_goods": "los bienes del sector {sector}",
+        "table": "Tabla: {citation}; {unit}, {year}.",
+        "panel_national": "Descomposición de la VE nacional ({importer})", "panel_groups": "VE por grupo",
+        "axis_pct_cons": "% del consumo base", "axis_pct_spend": "% del gasto del grupo",
+        "legend_prop": "reembolso proporcional", "legend_equal": "reembolso igualitario",
+        "written": "Resultados escritos en {path}",
+    },
+}
+
+
+def _lang(lang: str) -> dict[str, Any]:
+    if lang not in _TEXT:
+        raise ValueError(f"lang {lang!r} must be 'en' or 'es'")
+    return _TEXT[lang]
+
+
+def _fmt_musd(value: float, lang: str) -> str:
+    text = f"{value:,.0f}"
+    return text.replace(",", " ") if lang == "es" else text
+
+
+def _fmt_pct(value: float, lang: str) -> str:
+    text = f"{value:.4f}"
+    return text.replace(".", ",") if lang == "es" else text
+
+
+def _label(households: dict[str, Any], lang: str) -> str:
+    if households["is_synthetic"]:
+        return SYNTHETIC_LABEL_ES if lang == "es" else SYNTHETIC_LABEL
+    return _lang(lang)["user_label"]
+
+
+def _jsonable(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(k): _jsonable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(v) for v in value]
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    return value
+
+
+def headline_record(sol: BriefSolution, households: pd.DataFrame,
+                    experiment: BriefSolution | None = None) -> dict[str, Any]:
+    """The reproducible record behind every table: no timings, no versions."""
+    meta = sol.icio.metadata
+    record = {
+        "schema": 1,
+        "scenario": {k: sol.settings[k] for k in ("importer", "exporter", "sector", "tariff")},
+        "solver": {**SOLVER, "sigma": float(sol.settings["sigma"])},
+        "table": {"citation": meta["citation"], "unit": meta["unit"], "year": meta["year"]},
+        "national": national_record(sol),
+        "households": {
+            "label": households.attrs["label"],
+            "is_synthetic": bool(households.attrs["is_synthetic"]),
+            "rows": [{"group": str(g), "ev_pct_proportional": float(row["ev_pct_proportional"]),
+                      "ev_pct_equal": float(row["ev_pct_equal"])} for g, row in households.iterrows()],
+            "aggregate_ev_pct_proportional": float(households.attrs["aggregate_ev_pct_proportional"]),
+            "aggregate_ev_pct_equal": float(households.attrs["aggregate_ev_pct_equal"]),
+        },
+        "experiment": None,
+    }
+    if experiment is not None:
+        record["experiment"] = {"name": "sigma", "value": float(experiment.settings["sigma"]),
+                                "description": EXPERIMENT_DESCRIPTION,
+                                "national": national_record(experiment)}
+    return _jsonable(record)
+
+
+def _national_frame(national: dict[str, float], lang: str) -> pd.DataFrame:
+    t = _lang(lang)
+    keys = ("price_effect_musd", "factor_income_effect_musd", "fiscal_transfer_effect_musd", "ev_musd")
+    base = national["consumption_base_musd"]
+    frame = pd.DataFrame({t["musd"]: [national[k] for k in keys],
+                          t["pct"]: [100.0 * national[k] / base for k in keys]},
+                         index=pd.Index(t["rows"], name=t["component"]))
+    return frame
+
+
+def _households_frame(households: dict[str, Any], lang: str) -> pd.DataFrame:
+    t = _lang(lang)
+    rows = [(r["group"], r["ev_pct_proportional"], r["ev_pct_equal"]) for r in households["rows"]]
+    rows.append((t["all"], households["aggregate_ev_pct_proportional"],
+                 households["aggregate_ev_pct_equal"]))
+    frame = pd.DataFrame(rows, columns=[t["group"], t["prop"], t["equal"]]).set_index(t["group"])
+    return frame
+
+
+def _experiment_frame(record: dict[str, Any], lang: str) -> pd.DataFrame:
+    t = _lang(lang)
+    exp = record["experiment"]
+    keys = ("price_effect_musd", "factor_income_effect_musd", "fiscal_transfer_effect_musd",
+            "ev_musd", "ev_pct_consumption")
+    return pd.DataFrame({t["headline_col"]: [record["national"][k] for k in keys],
+                         t["exp_col"].format(value=exp["value"]): [exp["national"][k] for k in keys]},
+                        index=pd.Index(t["exp_rows"], name=t["measure"]))
+
+
+def _markdown_table(header: Sequence[str], rows: Sequence[Sequence[str]]) -> str:
+    lines = ["| " + " | ".join(header) + " |",
+             "|" + "|".join([":---"] + ["---:"] * (len(header) - 1)) + "|"]
+    lines += ["| " + " | ".join(r) + " |" for r in rows]
+    return "\n".join(lines)
+
+
+def page_block(record: dict[str, Any], block: Literal["headline", "households", "experiment"],
+               lang: Literal["en", "es"]) -> str:
+    """A markdown table plus a one-sentence note, as the docs pages show it."""
+    t = _lang(lang)
+    if block == "headline":
+        frame = _national_frame(record["national"], lang)
+        rows = [(name, _fmt_musd(row.iloc[0], lang), _fmt_pct(row.iloc[1], lang))
+                for name, row in frame.iterrows()]
+        rows[-1] = tuple(f"**{cell}**" for cell in rows[-1])
+        note = t["headline_note"].format(exporter=record["scenario"]["exporter"])
+        return _markdown_table([t["component"], t["musd"], t["pct"]], rows) + "\n\n" + note
+    if block == "households":
+        hh = record["households"]
+        frame = _households_frame(hh, lang)
+        rows = [(name, _fmt_pct(row.iloc[0], lang), _fmt_pct(row.iloc[1], lang))
+                for name, row in frame.iterrows()]
+        caption = t["groups_caption"].format(label=_label(hh, lang))
+        return (caption + "\n\n" + _markdown_table([t["group"], t["prop"], t["equal"]], rows)
+                + "\n\n" + t["groups_note"])
+    if block == "experiment":
+        if record["experiment"] is None:
+            return t["no_experiment"]
+        frame = _experiment_frame(record, lang)
+        fmt = [_fmt_musd] * 4 + [_fmt_pct]
+        rows = [(name, f(row.iloc[0], lang), f(row.iloc[1], lang))
+                for f, (name, row) in zip(fmt, frame.iterrows())]
+        return _markdown_table([t["measure"], *frame.columns], rows) + "\n\n" + t["exp_note"]
+    raise ValueError(f"block {block!r} must be 'headline', 'households' or 'experiment'")
+
+
+def _title(record: dict[str, Any], lang: str) -> str:
+    t = _lang(lang)
+    sc = record["scenario"]
+    what = t["all_goods"] if sc["sector"] == "all" else t["sector_goods"].format(sector=sc["sector"])
+    return t["title"].format(tariff=100 * sc["tariff"], importer=sc["importer"], what=what,
+                             exporter=sc["exporter"])
+
+
+def summary_text(record: dict[str, Any], lang: str = "en") -> str:
+    """The plain-text summary ``main`` prints."""
+    t = _lang(lang)
+    table = record["table"]
+    parts = [_title(record, lang),
+             t["table"].format(citation=table["citation"], unit=table["unit"], year=table["year"]),
+             page_block(record, "headline", lang),
+             page_block(record, "households", lang)]
+    if record["experiment"] is not None:
+        parts.append(page_block(record, "experiment", lang))
+    return "\n\n".join(parts) + "\n"
+
+
+def _figure(record: dict[str, Any], lang: str, path: Path) -> None:
+    from matplotlib.figure import Figure
+
+    t = _lang(lang)
+    fig = Figure(figsize=(10, 4.2), dpi=100)
+    left, right = fig.subplots(1, 2, gridspec_kw={"width_ratios": [1.1, 1.0]})
+    national = _national_frame(record["national"], lang).iloc[:, 1]
+    colors = ["#4C72B0", "#DD8452", "#55A868", "0.2"]
+    left.barh(list(national.index)[::-1], national.to_numpy()[::-1], color=colors[::-1])
+    left.axvline(0, color="0.1", linewidth=0.7)
+    left.set_xlabel(t["axis_pct_cons"])
+    left.set_title(t["panel_national"].format(importer=record["scenario"]["importer"]), fontsize=10)
+    hh = record["households"]
+    groups = [r["group"] for r in hh["rows"]]
+    y = np.arange(len(groups))
+    right.barh(y - 0.2, [r["ev_pct_proportional"] for r in hh["rows"]], height=0.38,
+               color="#4C72B0", label=t["legend_prop"])
+    right.barh(y + 0.2, [r["ev_pct_equal"] for r in hh["rows"]], height=0.38,
+               color="#C44E52", label=t["legend_equal"])
+    right.set_yticks(y, groups)
+    right.invert_yaxis()
+    right.axvline(0, color="0.1", linewidth=0.7)
+    right.set_xlabel(t["axis_pct_spend"])
+    right.set_title(f"{t['panel_groups']}\n" + textwrap.fill(_label(hh, lang), 48), fontsize=9)
+    right.legend(fontsize=8, loc="best")
+    fig.suptitle(_title(record, lang), fontsize=11)
+    fig.tight_layout()
+    fig.savefig(path, metadata={"Software": None})
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def _convergence(state: Any) -> dict[str, Any]:
+    meta = state.metadata
+    return {"converged": bool(state.converged), "solver_termination": meta.get("solver_termination"),
+            "account_residuals": meta.get("account_residuals")}
+
+
+def write_outputs(sol: BriefSolution, households: pd.DataFrame, output: str | Path, *,
+                  lang: str = "en", experiment: BriefSolution | None = None) -> dict[str, Any]:
+    """Write tables (md/csv/tex), the figure, ``headline.json`` and ``manifest.json``."""
+    t = _lang(lang)
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=True)
+    record = headline_record(sol, households, experiment)
+    hh = record["households"]
+    label = _label(hh, lang)
+    citation_line = t["table"].format(**record["table"])
+    files: list[str] = []
+
+    def write(name: str, text: str) -> None:
+        (output / name).write_text(text if text.endswith("\n") else text + "\n", encoding="utf-8")
+        files.append(name)
+
+    national = _national_frame(record["national"], lang)
+    write("national.md", f"# {_title(record, lang)}\n\n{page_block(record, 'headline', lang)}\n\n{citation_line}")
+    write("national.csv", national.to_csv())
+    write("national.tex", f"% {citation_line}\n" + df_to_latex(national, digits=4))
+
+    detail = households.copy()
+    detail.insert(0, "label", label)
+    write("households.md", page_block(record, "households", lang))
+    write("households.csv", detail.to_csv())
+    write("households.tex", f"% {t['groups_caption'].format(label=label)}\n"
+                            + df_to_latex(_households_frame(hh, lang), digits=4))
+    if experiment is not None:
+        exp = _experiment_frame(record, lang)
+        write("experiment.md", page_block(record, "experiment", lang))
+        write("experiment.csv", exp.to_csv())
+        write("experiment.tex", f"% {t['exp_note']}\n" + df_to_latex(exp, digits=4))
+    _figure(record, lang, output / "first_brief.png")
+    files.append("first_brief.png")
+    write("headline.json", json.dumps(record, indent=2, ensure_ascii=False))
+
+    meta = sol.icio.metadata
+    table_path = Path(meta["file_path"])
+    timings = {**sol.timings, "households": float(households.attrs.get("elapsed_seconds", 0.0))}
+    convergence = {"baseline": _convergence(sol.base), "counterfactual": _convergence(sol.counterfactual)}
+    if experiment is not None:
+        timings["experiment"] = float(sum(experiment.timings.values()))
+        convergence["experiment_baseline"] = _convergence(experiment.base)
+        convergence["experiment_counterfactual"] = _convergence(experiment.counterfactual)
+    manifest = _jsonable({
+        "package_version": puremacro.__version__,
+        "python": platform.python_version(),
+        "numpy": np.__version__,
+        "pandas": pd.__version__,
+        "table": {"file": table_path.name, "citation": meta["citation"], "unit": meta["unit"],
+                  "year": meta["year"], "source_md5": meta.get("source_md5"),
+                  "sha256": _sha256(table_path)},
+        "scenario": record["scenario"],
+        "solver": record["solver"],
+        "convergence": convergence,
+        "timings": timings,
+        "experiment": None if experiment is None else {
+            "name": "sigma", "value": float(experiment.settings["sigma"]),
+            "description": EXPERIMENT_DESCRIPTION, "solver": {**SOLVER, "sigma": float(experiment.settings["sigma"])}},
+        "groups": {"source": households.attrs.get("source", ""), "label": households.attrs["label"],
+                   "is_synthetic": bool(households.attrs["is_synthetic"])},
+        "lang": lang,
+        "artifacts": {name: {"sha256": _sha256(output / name), "bytes": (output / name).stat().st_size}
+                      for name in files},
+    })
+    (output / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+                                          encoding="utf-8")
+    return manifest
+
+
+def run_brief(output: str | Path, *, importer: str = "USA", exporter: str = "CHN", sector: str = "all",
+              tariff: float = 0.10, experiment: str | None = None, groups: str | Path | None = None,
+              lang: str = "en") -> dict[str, Any]:
+    """Solve everything, then write the outputs; nothing is written unless every state converged."""
+    _lang(lang)
+    sigma = None if experiment is None else parse_experiment(experiment)
+    bundled = load_bundled()
+    icio = bundled[0]
+    validate_scenario(icio, importer, exporter, sector, tariff)
+    frame = (synthetic_groups(icio, importer) if groups is None else
+             read_groups_csv(groups, icio.sector_codes, supported_sectors(icio, importer)))
+    sol = solve_brief(importer, exporter, sector, tariff, bundled=bundled)
+    households = household_incidence(sol, frame)
+    alt = (None if sigma is None else
+           solve_brief(importer, exporter, sector, tariff, sigma=sigma, bundled=bundled))
+    manifest = write_outputs(sol, households, output, lang=lang, experiment=alt)
+    return {"record": headline_record(sol, households, alt), "solution": sol,
+            "households": households, "experiment": alt, "manifest": manifest}
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="python -m puremacro.examples.first_brief_tariffs",
+        description="Your first policy brief: a tariff experiment on the bundled OECD ICIO 2019 table.")
+    parser.add_argument("--importer", default="USA", help="country levying the tariff (default USA)")
+    parser.add_argument("--exporter", default="CHN", help="country whose goods are tariffed (default CHN)")
+    parser.add_argument("--sector", default="all", help="'all' or one ISIC section code A..T (default all)")
+    parser.add_argument("--tariff", type=float, default=0.10, help="ad valorem rate, 0.10 = 10%% (default)")
+    parser.add_argument("--experiment", default="none",
+                        help="'none' (default) or 'sigma=<value>', e.g. sigma=2")
+    parser.add_argument("--groups", type=Path, default=None,
+                        help="CSV of household groups (group, population_weight, annual_spending, A..T)")
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT,
+                        help=f"output directory (default {DEFAULT_OUTPUT})")
+    parser.add_argument("--lang", choices=("en", "es"), default="en", help="language of the outputs")
+    args = parser.parse_args(argv)
+    try:
+        sigma = parse_experiment(args.experiment)
+        icio = load_icio_data(return_structured=True)
+        validate_scenario(icio, args.importer, args.exporter, args.sector, args.tariff)
+        if args.groups is not None:
+            if not args.groups.is_file():
+                raise ValueError(f"groups file {str(args.groups)!r} does not exist")
+            read_groups_csv(args.groups, icio.sector_codes, supported_sectors(icio, args.importer))
+    except ValueError as exc:
+        parser.error(str(exc))
+    study = run_brief(args.output, importer=args.importer, exporter=args.exporter, sector=args.sector,
+                      tariff=args.tariff, experiment=None if sigma is None else args.experiment,
+                      groups=args.groups, lang=args.lang)
+    print(summary_text(study["record"], args.lang))
+    print(_lang(args.lang)["written"].format(path=args.output))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,13 +1,19 @@
 """The first policy brief: a 10% US tariff on Chinese goods, national and household welfare."""
 from __future__ import annotations
 
+import hashlib
+import json
 import math
+import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
 import pytest
+from _timing import budget
 
+import puremacro
 from puremacro.examples import first_brief_tariffs as fb
 
 
@@ -198,3 +204,97 @@ def test_read_groups_csv_rejects(case, pattern, tmp_path):
     pd.DataFrame(rows).to_csv(path, index=False)
     with pytest.raises(ValueError, match=pattern):
         fb.read_groups_csv(path, sectors, supported)
+
+
+# --- Task 3: record, outputs and CLI -----------------------------------------
+
+NO_RETALIATION = {"en": "unilateral terms-of-trade gain with no retaliation",
+                  "es": "ganancia unilateral de términos de intercambio, sin represalias"}
+CITATION = "OECD (2023), OECD Inter-Country Input-Output Tables, http://oe.cd/icio"
+BASE_FILES = {"national.md", "national.csv", "national.tex", "households.md", "households.csv",
+              "households.tex", "first_brief.png", "headline.json", "manifest.json"}
+
+
+@pytest.fixture(scope="module")
+def households(solved):
+    return fb.household_incidence(solved, fb.synthetic_groups(solved.icio, "USA"))
+
+
+def test_outputs_written(solved, households, tmp_path):
+    fb.write_outputs(solved, households, tmp_path)
+    assert {p.name for p in tmp_path.iterdir()} == BASE_FILES
+    written = json.loads((tmp_path / "headline.json").read_text(encoding="utf-8"))
+    assert written == fb.headline_record(solved, households)
+
+
+@pytest.mark.parametrize("lang", ["en", "es"])
+def test_synthetic_label_everywhere(solved, households, tmp_path, lang):
+    fb.write_outputs(solved, households, tmp_path, lang=lang)
+    for name in ("households.md", "households.csv", "households.tex", "headline.json", "manifest.json"):
+        assert "SYNTHETIC" in (tmp_path / name).read_text(encoding="utf-8"), name
+    summary = fb.summary_text(fb.headline_record(solved, households), lang)
+    assert "SYNTHETIC" in summary
+    assert NO_RETALIATION[lang] in (tmp_path / "national.md").read_text(encoding="utf-8")
+    assert NO_RETALIATION[lang] in summary
+
+
+def test_manifest_provenance(solved, households, tmp_path):
+    manifest = fb.write_outputs(solved, households, tmp_path)
+    assert manifest == json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["table"]["citation"] == CITATION
+    npz = Path(solved.icio.metadata["file_path"])
+    assert manifest["table"]["sha256"] == hashlib.sha256(npz.read_bytes()).hexdigest()
+    assert manifest["table"]["file"] == npz.name
+    assert manifest["solver"] == {**fb.SOLVER, "sigma": 0.0}
+    assert manifest["convergence"]["baseline"]["converged"] is True
+    assert manifest["convergence"]["counterfactual"]["converged"] is True
+    assert {"load", "calibration", "baseline", "counterfactual", "welfare", "households"} <= set(manifest["timings"])
+    assert manifest["package_version"] == puremacro.__version__
+    assert manifest["experiment"] is None
+    for name in BASE_FILES - {"manifest.json"}:
+        data = (tmp_path / name).read_bytes()
+        assert manifest["artifacts"][name] == {"sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}
+
+
+def test_page_block_formats(solved, households):
+    record = fb.headline_record(solved, households)
+    nat = record["national"]
+    en = fb.page_block(record, "headline", "en")
+    assert "Purchaser prices" in en and f"{nat['ev_musd']:,.0f}" in en
+    es = fb.page_block(record, "headline", "es")
+    assert "Precios de comprador" in es
+    assert f"{nat['ev_pct_consumption']:.4f}".replace(".", ",") in es
+    assert f"{nat['ev_musd']:,.0f}".replace(",", " ") in es
+    assert fb.SYNTHETIC_LABEL in fb.page_block(record, "households", "en")
+    assert fb.SYNTHETIC_LABEL_ES in fb.page_block(record, "households", "es")
+
+
+@pytest.mark.parametrize(("argv", "offending"), [
+    (["--exporter", "USA"], "USA"),
+    (["--importer", "XXX"], "XXX"),
+    (["--sector", "Z"], "Z"),
+    (["--tariff", "-0.1"], "-0.1"),
+    (["--experiment", "theta=4"], "theta=4"),
+    (["--lang", "fr"], "fr"),
+])
+def test_cli_rejects_bad_scenario(argv, offending, tmp_path, capsys, monkeypatch):
+    def no_solve(*a, **k):
+        raise AssertionError("main solved before validating its arguments")
+    monkeypatch.setattr(fb, "solve_brief", no_solve)
+    t0 = time.perf_counter()
+    with pytest.raises(SystemExit) as exc:
+        fb.main([*argv, "--output", str(tmp_path / "out")])
+    elapsed = time.perf_counter() - t0
+    assert exc.value.code == 2
+    assert offending in capsys.readouterr().err
+    assert elapsed < budget(5), f"CLI validation took {elapsed:.1f} s > {budget(5):.1f} s"
+    assert not (tmp_path / "out").exists()
+
+
+def test_no_outputs_on_failure(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        fb, "run_scenario",
+        lambda *a, **k: SimpleNamespace(converged=False, metadata={"solver_termination": "max_iter"}))
+    with pytest.raises(RuntimeError, match="counterfactual did not converge"):
+        fb.run_brief(tmp_path / "out")
+    assert not (tmp_path / "out" / "headline.json").exists()
