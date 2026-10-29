@@ -262,6 +262,11 @@ _s("fernald.tfp", "frbsf", "fernald:fetch",
    "Fernald utilisation-adjusted TFP", freq="Q")
 _s("kenfrench.industry30", "kenfrench", "kenfrench_industry:fetch",
    "Ken French 30-industry value-weighted returns", freq="M")
+_s("kenfrench.factors", "kenfrench", "kenfrench_factors:fetch",
+   "Fama-French factors and 25 size/B-M portfolios", freq="M",
+   redistributable=False,
+   terms_url="https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html",
+   note="Copyright Fama and French; no redistribution licence.")
 _s("yahoo.realized_vol", "yahoo", "yahoo:fetch_realized_vol",
    "Realised volatility from daily stock-index returns", kind="panel",
    redistributable=False, note="Yahoo Finance terms restrict redistribution.")
