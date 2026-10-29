@@ -139,6 +139,11 @@ Verdict: **passed**. Every moment's paired change plus its 95% half-width fits i
 tolerance in both final refinements; the largest is the spread standard deviation
 in the income refinement, 0.070 pp against 0.10. Every solve converged with a
 certification gap of 0 and no repayment period chose the top debt node.
+Passing is not the same as no remaining drift: at 6,401 debt nodes the spread
+standard deviation still falls from 321 to 641 income states (2.784 → 2.716 pp),
+and the ladder has no 1,281-state rung to show where it settles. Treat its
+third digit with the same caution as the [Arellano guide](arellano_replication.md)
+applies to income-grid refinements.
 At this illustrative calibration the government holds little debt: about 0.83% of
 quarterly output, roughly 0.2% of annual output.
 

@@ -144,6 +144,11 @@ momento más su semiamplitud al 95 % cabe en su tolerancia; el mayor es la desvi
 típica del diferencial en el refinamiento de ingreso, 0,070 pp frente a 0,10.
 Todas las resoluciones convergieron con diferencia de certificación 0 y ningún
 período de reembolso eligió el nodo superior de deuda.
+Superar la prueba no significa que no quede deriva: con 6.401 nodos de deuda la
+desviación típica del diferencial aún baja de 321 a 641 estados de ingreso
+(2,784 → 2,716 pp), y la escalera no tiene un peldaño de 1.281 estados que muestre
+dónde se estabiliza. Su tercer dígito merece la misma cautela que la
+[guía de Arellano](arellano_replication.md) aplica a los refinamientos de ingreso.
 Con esta calibración ilustrativa el gobierno mantiene poca deuda: cerca del 0,83 %
 del producto trimestral, en torno al 0,2 % del producto anual.
 

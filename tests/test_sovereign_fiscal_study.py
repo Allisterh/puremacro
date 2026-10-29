@@ -106,3 +106,8 @@ def test_fiscal_guides_tabulate_the_frozen_record(guide, thousands, decimal):
     verdict = {"passed": ("passed", "superada"), "convergence_not_established": (
         "convergence not established", "convergencia no establecida")}[record["status"]]
     assert verdict[0 if decimal == "." else 1] in text
+    # The guide reports the remaining income-grid drift of the spread SD at the finest debt grid.
+    sd = [record["cases"][name]["simulation"]["moments"]["spread_std_pp"]["mean"]
+          for name in ("fiscal_6401_321", "fiscal_6401_641")]
+    drift = " → ".join(f"{v:.3f}".replace(".", decimal) for v in sd)
+    assert drift in text, drift
