@@ -14,8 +14,8 @@ from .returns import (
     excess_returns,
     to_returns,
 )
-from .risk import risk_summary
-from ._results import RiskSummaryResult
+from .risk import expected_shortfall, risk_summary, value_at_risk, var_backtest
+from ._results import RiskSummaryResult, VaRBacktestResult
 
 __all__ = [
     "to_returns",
@@ -25,4 +25,8 @@ __all__ = [
     "annualize_volatility",
     "risk_summary",
     "RiskSummaryResult",
+    "value_at_risk",
+    "expected_shortfall",
+    "var_backtest",
+    "VaRBacktestResult",
 ]

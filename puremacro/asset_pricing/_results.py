@@ -102,3 +102,46 @@ class RiskSummaryResult(_ReportMixin):
         ax.set_ylabel("annualized Sharpe ratio")
         ax.set_title("Sharpe ratios (95% HAC intervals)")
         return _finish(fig, ax, given, show)
+
+
+@dataclass(frozen=True)
+class VaRBacktestResult(_ReportMixin):
+    """Result of :func:`puremacro.asset_pricing.var_backtest`.
+
+    ``lr_uc`` / ``p_uc``: Kupiec (1995) unconditional coverage, ``chi2(1)``;
+    ``lr_ind`` / ``p_ind``: Christoffersen (1998) first-order independence,
+    ``chi2(1)``; ``lr_cc = lr_uc + lr_ind`` / ``p_cc``: conditional
+    coverage, ``chi2(2)``. No ``plot`` (scalar diagnostics).
+    """
+
+    n_obs: int
+    alpha: float
+    n_violations: int
+    violation_rate: float
+    lr_uc: float
+    p_uc: float
+    lr_ind: float
+    p_ind: float
+    lr_cc: float
+    p_cc: float
+
+    def to_dataframe(self) -> pd.DataFrame:
+        """Two-column ``statistic`` / ``value`` table."""
+        rows = [("n_obs", self.n_obs), ("alpha", self.alpha),
+                ("n_violations", self.n_violations),
+                ("violation_rate", self.violation_rate),
+                ("lr_uc", self.lr_uc), ("p_uc", self.p_uc),
+                ("lr_ind", self.lr_ind), ("p_ind", self.p_ind),
+                ("lr_cc", self.lr_cc), ("p_cc", self.p_cc)]
+        return pd.DataFrame({"statistic": [r[0] for r in rows],
+                             "value": [float(r[1]) for r in rows]})
+
+    def summary(self) -> str:
+        return "\n".join([
+            f"VaR backtest (T = {self.n_obs}, alpha = {self.alpha:g})",
+            f"  violations: {self.n_violations} (rate {self.violation_rate:.4f}, "
+            f"expected {self.alpha:.4f})",
+            f"  Kupiec unconditional coverage   LR = {self.lr_uc:8.4f}  p = {self.p_uc:.4f}",
+            f"  Christoffersen independence     LR = {self.lr_ind:8.4f}  p = {self.p_ind:.4f}",
+            f"  Christoffersen cond. coverage   LR = {self.lr_cc:8.4f}  p = {self.p_cc:.4f}",
+        ])
