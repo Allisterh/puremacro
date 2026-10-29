@@ -346,3 +346,24 @@ def test_experiment_reproduces_frozen(frozen):
     sol = fb.solve_brief(sigma=frozen["experiment"]["value"])
     _assert_leaves_match(fb.national_record(sol), frozen["experiment"]["national"], "experiment.national")
 
+
+# --- Task 5: docs pages show the frozen record ----------------------------------
+
+ROOT = Path(__file__).resolve().parents[1]
+PAGE = {"en": ROOT / "docs" / "first_brief_tariffs.md", "es": ROOT / "docs" / "es" / "first_brief_tariffs.md"}
+
+
+@pytest.mark.parametrize("lang", ["en", "es"])
+def test_pages_show_frozen_record(frozen, lang):
+    text = PAGE[lang].read_text(encoding="utf-8")
+    for block in ("headline", "households", "experiment"):
+        start, end = f"<!-- first-brief:{block} -->", f"<!-- /first-brief:{block} -->"
+        assert text.count(start) == 1 and text.count(end) == 1, block
+        shown = text.split(start, 1)[1].split(end, 1)[0].strip()
+        assert shown == fb.page_block(frozen, block, lang), f"{lang} {block} block is stale"
+    image = f"assets/first_brief_tariffs/first_brief_{lang}.png"
+    assert (image if lang == "en" else f"../{image}") in text
+    assert (ROOT / "docs" / image).is_file()
+    assert CITATION in text
+    assert "SYNTHETIC" in text
+    assert "15 min" not in text

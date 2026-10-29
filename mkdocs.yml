@@ -50,6 +50,7 @@ nav:
   - English Documentation:
       - Overview: index.md
       - Quickstart: quickstart.md
+      - Your first policy brief: first_brief_tariffs.md
       - Research workflows: research_workflows.md
       - Research reliability and next milestones: research_reliability.md
       - Arellano original-code replication: arellano_replication.md
@@ -160,6 +161,7 @@ nav:
   - Documentación en Español:
       - Inicio: es/index.md
       - Inicio rápido: es/quickstart.md
+      - Su primer informe de política: es/first_brief_tariffs.md
       - Flujos de investigación: es/research_workflows.md
       - Fiabilidad de investigación y próximos hitos: es/research_reliability.md
       - Replicación del código original de Arellano: es/arellano_replication.md

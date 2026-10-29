@@ -31,6 +31,8 @@ matplotlib.use("Agg")
 REPO = Path(__file__).resolve().parents[1]
 
 PAGES = [
+    "docs/first_brief_tariffs.md",
+    "docs/es/first_brief_tariffs.md",
     "docs/dsge_nonlinear.md",
     "docs/es/dsge_nonlinear.md",
     "docs/dsge_transitions.md",
