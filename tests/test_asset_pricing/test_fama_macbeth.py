@@ -149,3 +149,32 @@ def test_zscored_macro_factor_accepted():
     bad.iloc[5, 0] = np.nan
     with pytest.raises(ValueError, match="ip_shock"):
         fama_macbeth(R, bad)
+
+
+@pytest.mark.parametrize("intercept", [False, True])
+def test_shanken_equals_cochrane_12_19_exactly(intercept):
+    # Cochrane (2005, eq. 12.19), transcribed independently:
+    # cov(lambda) = [(1 + c) A Sigma A' + Sigma_f*] / T, A = (Z'Z)^-1 Z',
+    # c = lambda_f' Sigma_f^-1 lambda_f, Sigma_f* zero on the intercept row/column.
+    R, F = _dgp(seed=6, T=480, N=12, K=2)
+    r, f = R.to_numpy(), F.to_numpy()
+    T, N = r.shape
+    X = np.column_stack([np.ones(T), f])
+    coef = np.linalg.lstsq(X, r, rcond=None)[0]
+    resid = r - X @ coef
+    beta = coef[1:].T
+    Sigma = resid.T @ resid / T
+    fd = f - f.mean(axis=0)
+    Sigma_f = fd.T @ fd / T
+    Z = np.column_stack([np.ones(N), beta]) if intercept else beta
+    A = np.linalg.inv(Z.T @ Z) @ Z.T
+    lam = A @ r.mean(axis=0)
+    lam_f = lam[1:] if intercept else lam
+    c = lam_f @ np.linalg.inv(Sigma_f) @ lam_f
+    Sf_star = np.zeros((Z.shape[1], Z.shape[1]))
+    Sf_star[-2:, -2:] = Sigma_f
+    V = ((1 + c) * A @ Sigma @ A.T + Sf_star) / T
+    res = fama_macbeth(R, F, intercept=intercept)
+    np.testing.assert_allclose(res.coefs, lam, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(res.cov, V, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(res.se_shanken, np.sqrt(np.diag(V)), rtol=0, atol=1e-12)
