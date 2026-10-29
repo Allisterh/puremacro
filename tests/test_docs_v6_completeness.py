@@ -110,9 +110,9 @@ def test_v6_frontdoors_and_catalogs_synchronized():
     for idx_file in ("index.md", "es/index.md"):
         txt = (DOCS_DIR / idx_file).read_text(encoding="utf-8")
         assert "6.0.0" in txt, f"docs/{idx_file} does not mention v6.0.0"
-        # A source tag does not prove that its PyPI upload succeeded.
-        assert "2026-10-26" in txt
-        assert "5.7.1" in txt
+        # The front door names the version PyPI actually serves, with the date checked.
+        assert "2026-10-29" in txt
+        assert "https://pypi.org/project/puremacro/6.0.1/" in txt
         assert "https://pypi.org/project/puremacro/6.0.0/" not in txt
 
     for nb_cat in ("notebooks.md", "es/notebooks.md"):
