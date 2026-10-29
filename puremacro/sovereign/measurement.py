@@ -3,6 +3,8 @@
 :func:`ergodic_moments` measures long simulated paths with exactly the timing
 of :meth:`SovereignDefaultResult.simulate`, draw for draw, but without building
 a DataFrame per quarter, so 16 paths of 500,000 quarters take seconds.
+:func:`value_of_market_access` is the consumption-equivalent welfare value of
+access to debt markets at zero debt.
 """
 from __future__ import annotations
 
@@ -12,11 +14,12 @@ from typing import Iterable
 
 import numpy as np
 import pandas as pd
+from scipy.optimize import brentq
 from scipy.stats import t as student_t
 
 from puremacro.sovereign._results import SovereignDefaultResult
 
-__all__ = ["MOMENTS", "ergodic_moments"]
+__all__ = ["MOMENTS", "ergodic_moments", "value_of_market_access"]
 
 MOMENTS: tuple[str, ...] = ("debt_output_pct", "spread_mean_pct", "default_annual_pct", "spread_sd_pp")
 
@@ -190,3 +193,58 @@ def ergodic_moments(
     table = pd.DataFrame.from_dict(rows, orient="index", columns=columns)
     table.index.name = "moment"
     return table
+
+
+def _crra(c: np.ndarray, gamma: float) -> np.ndarray:
+    """The solver's CRRA utility, with its log branch when ``|gamma - 1| < 1e-4``."""
+    if abs(gamma - 1.0) < 1e-4:
+        return np.log(c)
+    return (c ** (1.0 - gamma) - 1.0) / (1.0 - gamma)
+
+
+def value_of_market_access(result: SovereignDefaultResult) -> float:
+    """Consumption-equivalent value of market access at zero debt, in percent.
+
+    Returns lambda (in %) such that permanent financial autarky with consumption
+    ``(1 + lambda) y`` in every quarter and no default cost has the same
+    ergodic expected value as an economy with market access and zero debt:
+
+        E_pi[u((1 + lambda) y)] / (1 - beta) = E_pi[V(0, y)]
+
+    where ``pi`` is the stationary income distribution, ``V(0, y)`` is
+    ``result.v_expected`` at the zero-debt node (the value with access,
+    including the default option) and ``u`` is the solver's CRRA utility.
+    Because ``pi`` is stationary, ``E_pi[V_A] = pi (I - beta P)^-1 u = pi u / (1 - beta)``.
+
+    Raises
+    ------
+    ValueError
+        If ``beta``, ``gamma`` or ``stationary_dist`` is missing from
+        ``result.metadata``, ``gamma < 0``, the debt grid has no exact zero
+        node, or no lambda > -1 solves the equation.
+    """
+    for key in ("beta", "gamma", "stationary_dist"):
+        if key not in result.metadata:
+            raise ValueError(f"value_of_market_access needs metadata[{key!r}]")
+    beta = float(result.metadata["beta"])
+    gamma = float(result.metadata["gamma"])
+    if gamma < 0.0:
+        raise ValueError(f"value_of_market_access is defined for CRRA utility with gamma >= 0; got gamma={gamma}")
+    zero = np.flatnonzero(np.asarray(result.b_grid) == 0.0)
+    if zero.size == 0:
+        raise ValueError("value_of_market_access needs a debt grid with an exact zero node")
+    pi = np.asarray(result.metadata["stationary_dist"], dtype=float)
+    y = np.asarray(result.y_grid, dtype=float)
+    target = float(pi @ np.asarray(result.v_expected, dtype=float)[int(zero[0])])
+
+    def gap(lam: float) -> float:
+        return float(pi @ _crra((1.0 + lam) * y, gamma)) / (1.0 - beta) - target
+
+    lo, hi = -1.0 + 1e-12, 1.0
+    if gap(lo) > 0.0:
+        raise ValueError("no consumption equivalent above -100% matches the value of market access")
+    while gap(hi) < 0.0:
+        hi *= 2.0
+        if hi > 1e6:
+            raise ValueError("no finite consumption equivalent matches the value of market access")
+    return 100.0 * float(brentq(gap, lo, hi, xtol=1e-14))

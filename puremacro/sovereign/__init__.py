@@ -15,6 +15,7 @@ from puremacro.sovereign._results import (
     SuddenStopResult,
 )
 from puremacro.sovereign.arellano import solve_sovereign_default
+from puremacro.sovereign.measurement import ergodic_moments, value_of_market_access
 from puremacro.sovereign.mendoza import solve_sudden_stop
 from puremacro.sovereign.restructuring import (
     decompose_spread_term_structure,
@@ -29,4 +30,6 @@ __all__ = [
     "solve_sudden_stop",
     "decompose_spread_term_structure",
     "evaluate_debt_restructuring",
+    "ergodic_moments",
+    "value_of_market_access",
 ]

@@ -1,6 +1,7 @@
 """Public ergodic measurement and welfare for the Arellano sovereign model."""
 from __future__ import annotations
 
+import dataclasses
 import time
 
 import numpy as np
@@ -9,7 +10,7 @@ from scipy.stats import t as student_t
 
 from _timing import budget
 from puremacro.sovereign import solve_sovereign_default
-from puremacro.sovereign.measurement import MOMENTS, _simulate_arrays, ergodic_moments
+from puremacro.sovereign.measurement import MOMENTS, _simulate_arrays, ergodic_moments, value_of_market_access
 
 # The public calibration of tests/test_arellano_2008_study.py::_public_monotone.
 PUBLIC = dict(beta=.95282, r_star=.017, theta=.282, rho_y=.945, sigma_y=.025,
@@ -112,3 +113,50 @@ def test_default_design_hang_guard(public_small):
     elapsed = time.perf_counter() - start
     assert table.shape == (4, 4 + 16)
     assert elapsed <= budget(120), f"{elapsed:.1f} s > budget {budget(120):.0f} s"
+
+
+def _crra(c, gamma):
+    return np.log(c) if abs(gamma - 1) < 1e-4 else (c ** (1 - gamma) - 1) / (1 - gamma)
+
+
+@pytest.mark.parametrize("gamma", [1., 2., 5.])
+@pytest.mark.parametrize("l0", [0., .02])
+def test_closed_form_recovers_lambda(public_small, gamma, l0):
+    r = public_small
+    beta = r.metadata["beta"]
+    zero = int(np.flatnonzero(r.b_grid == 0.0)[0])
+    v = r.v_expected.copy()
+    v[zero] = _crra((1 + l0) * r.y_grid, gamma) / (1 - beta)
+    case = dataclasses.replace(r, v_expected=v, v_star=v, metadata={**r.metadata, "gamma": gamma})
+    assert value_of_market_access(case) == pytest.approx(100 * l0, abs=1e-9)
+
+
+def test_stationary_identity(public_small):
+    r = public_small
+    beta, pi, P = r.metadata["beta"], r.metadata["stationary_dist"], r.p_trans
+    u = _crra(r.y_grid, r.metadata["gamma"])
+    exact = pi @ np.linalg.solve(np.eye(len(pi)) - beta * P, u)
+    assert exact == pytest.approx(pi @ u / (1 - beta), abs=1e-10)
+
+
+def test_no_borrowing_means_no_value():
+    r = solve_sovereign_default(**{**PUBLIC, "b_min": 0., "b_max": 1e-6}, n_b=3, n_y=41)
+    assert abs(value_of_market_access(r)) < 1e-4
+
+
+def test_value_falls_with_reentry_probability():
+    values = [value_of_market_access(solve_sovereign_default(**{**PUBLIC, "theta": theta}, n_b=201, n_y=41))
+              for theta in (.15, .282, .50)]
+    assert values[0] > values[1] > values[2] > 0, values
+
+
+def test_welfare_validation(public_small):
+    r = public_small
+    with pytest.raises(ValueError, match="gamma"):
+        value_of_market_access(dataclasses.replace(r, metadata={**r.metadata, "gamma": -1.}))
+    metadata = dict(r.metadata)
+    del metadata["stationary_dist"]
+    with pytest.raises(ValueError, match="stationary_dist"):
+        value_of_market_access(dataclasses.replace(r, metadata=metadata))
+    with pytest.raises(ValueError, match="zero"):
+        value_of_market_access(dataclasses.replace(r, b_grid=r.b_grid + 1e-3))
