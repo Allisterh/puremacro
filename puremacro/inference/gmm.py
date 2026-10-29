@@ -242,8 +242,9 @@ def gmm(
                         "the long-run moment covariance S(theta)")
 
     iterations = 0
+    W: np.ndarray = W_first
     if mode in ("identity", "array"):
-        W = np.eye(q) if mode == "identity" else W_user
+        W = np.eye(q) if mode == "identity" else np.asarray(W_user, dtype=float)
         theta, converged = _minimize(W, theta0)
     else:
         theta, converged = _minimize(W_first, theta0)
