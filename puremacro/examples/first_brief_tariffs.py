@@ -94,9 +94,16 @@ class BriefSolution:
     timings: dict[str, float] = field(default_factory=dict)
 
 
+def _load_table() -> ICIOData:
+    table = load_icio_data(return_structured=True)
+    if not isinstance(table, ICIOData):  # return_structured=True always gives ICIOData
+        raise TypeError("load_icio_data(return_structured=True) did not return ICIOData")
+    return table
+
+
 def load_bundled() -> tuple[ICIOData, Any]:
     """The bundled OECD ICIO 2019 table and its calibration."""
-    icio = load_icio_data(return_structured=True)
+    icio = _load_table()
     calib = calibrate_trade_model(icio.matrix, country_codes=icio.country_codes,
                                   sector_codes=icio.sector_codes)
     return icio, calib
@@ -154,7 +161,7 @@ def solve_brief(importer: str = "USA", exporter: str = "CHN", sector: str = "all
     timings: dict[str, float] = {}
     t0 = time.perf_counter()
     if bundled is None:
-        icio = load_icio_data(return_structured=True)
+        icio = _load_table()
         timings["load"] = time.perf_counter() - t0
         t0 = time.perf_counter()
         calib = calibrate_trade_model(icio.matrix, country_codes=icio.country_codes,
@@ -523,13 +530,14 @@ def _markdown_table(header: Sequence[str], rows: Sequence[Sequence[str]]) -> str
 
 
 def page_block(record: dict[str, Any], block: Literal["headline", "households", "experiment"],
-               lang: Literal["en", "es"]) -> str:
+               lang: str) -> str:
     """A markdown table plus a one-sentence note, as the docs pages show it."""
     t = _lang(lang)
     if block == "headline":
         frame = _national_frame(record["national"], lang)
-        rows = [(name, _fmt_musd(row.iloc[0], lang), _fmt_pct(row.iloc[1], lang))
-                for name, row in frame.iterrows()]
+        rows: list[tuple[str, ...]] = [
+            (str(name), _fmt_musd(row.iloc[0], lang), _fmt_pct(row.iloc[1], lang))
+            for name, row in frame.iterrows()]
         rows[-1] = tuple(f"**{cell}**" for cell in rows[-1])
         note = t["headline_note"].format(exporter=record["scenario"]["exporter"])
         return _markdown_table([t["component"], t["musd"], t["pct"]], rows) + "\n\n" + note
@@ -698,7 +706,7 @@ def run_brief(output: str | Path, *, importer: str = "USA", exporter: str = "CHN
     _lang(lang)
     sigma = None if experiment is None else parse_experiment(experiment)
     t0 = time.perf_counter()
-    icio = load_icio_data(return_structured=True)
+    icio = _load_table()
     t_load = time.perf_counter() - t0
     t0 = time.perf_counter()
     calib = calibrate_trade_model(icio.matrix, country_codes=icio.country_codes,
@@ -736,7 +744,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         sigma = parse_experiment(args.experiment)
-        icio = load_icio_data(return_structured=True)
+        icio = _load_table()
         validate_scenario(icio, args.importer, args.exporter, args.sector, args.tariff)
         if args.groups is not None:
             if not args.groups.is_file():
