@@ -16,8 +16,11 @@ from .returns import (
 )
 from .risk import expected_shortfall, risk_summary, value_at_risk, var_backtest
 from .factor_tests import fama_macbeth, time_series_test
+from .sdf import hj_distance, sdf_gmm
 from ._results import (
     FamaMacBethResult,
+    HJDistanceResult,
+    SDFResult,
     RiskSummaryResult,
     TimeSeriesTestResult,
     VaRBacktestResult,
@@ -39,4 +42,8 @@ __all__ = [
     "TimeSeriesTestResult",
     "fama_macbeth",
     "FamaMacBethResult",
+    "sdf_gmm",
+    "SDFResult",
+    "hj_distance",
+    "HJDistanceResult",
 ]

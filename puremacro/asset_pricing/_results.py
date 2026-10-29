@@ -291,3 +291,114 @@ class FamaMacBethResult(_ReportMixin):
         ax.set_ylabel("realized mean excess return")
         ax.set_title(f"Fama-MacBeth (cross-sectional R2 = {self.cs_r2:.2f})")
         return _finish(fig, ax, given, show)
+
+
+def _pricing_error_plot(self, ax: Any, show: bool, title: str):
+    fig, ax, given = _new_ax(ax)
+    pe = np.asarray(self.pricing_errors, dtype=float)
+    pos = np.arange(pe.size)
+    ax.bar(pos, pe, color="0.5")
+    ax.axhline(0.0, color="0.1", lw=0.7)
+    ax.set_xticks(pos)
+    ax.set_xticklabels(list(self.asset_names), rotation=90 if pe.size > 8 else 0)
+    ax.set_ylabel("pricing error")
+    ax.set_title(title)
+    return _finish(fig, ax, given, show)
+
+
+def _j_line(j_stat: float, j_df: int, j_pvalue: float) -> str:
+    if j_df == 0:
+        return "  J = 0 (just identified)"
+    if not np.isfinite(j_stat):
+        return "  J not reported (first-stage identity weighting)"
+    return f"  Hansen J chi2({j_df}) = {j_stat:.4f}   p = {j_pvalue:.4f}"
+
+
+@dataclass(frozen=True)
+class SDFResult(_ReportMixin):
+    """Result of :func:`puremacro.asset_pricing.sdf_gmm`.
+
+    ``coefs`` / ``se`` / ``cov`` are the SDF loadings ``b`` (the ``mu`` block,
+    when demeaned, is in ``mu`` and ``gmm``). ``lambdas`` are the implied
+    risk premia, ``lambda_se`` their delta-method se with ``Sigma_f`` fixed.
+    """
+
+    coefs: np.ndarray
+    se: np.ndarray
+    cov: np.ndarray
+    names: tuple[str, ...]
+    n_obs: int
+    converged: bool
+    mu: np.ndarray | None
+    lambdas: np.ndarray
+    lambda_se: np.ndarray
+    j_stat: float
+    j_df: int
+    j_pvalue: float
+    pricing_errors: np.ndarray
+    asset_names: tuple[str, ...]
+    stage: str
+    demeaned: bool
+    gmm: Any
+
+    def to_dataframe(self) -> pd.DataFrame:
+        """One row per factor: b, se, z, p, implied lambda and its se."""
+        df = _coef_frame(self.names, self.coefs, self.se)
+        df["lambda"] = self.lambdas
+        df["lambda_se"] = self.lambda_se
+        return df
+
+    def summary(self) -> str:
+        form = "1 - b'(f - mu)" if self.demeaned else "1 - b'f"
+        lines = [f"Linear SDF GMM, m = {form} ({self.stage}; T = {self.n_obs}, "
+                 f"N = {len(self.asset_names)})",
+                 f"  {'factor':<10}{'b':>11}{'se':>10}{'lambda':>11}{'se':>10}"]
+        for j, n in enumerate(self.names):
+            lines.append(f"  {n:<10}{self.coefs[j]:>11.4f}{self.se[j]:>10.4f}"
+                         f"{self.lambdas[j]:>11.5f}{self.lambda_se[j]:>10.5f}")
+        lines.append(_j_line(self.j_stat, self.j_df, self.j_pvalue))
+        return "\n".join(lines)
+
+    def plot(self, ax: Any = None, show: bool = False):
+        """Pricing errors (pricing-moment means) by asset."""
+        return _pricing_error_plot(self, ax, show, "SDF pricing errors")
+
+
+@dataclass(frozen=True)
+class HJDistanceResult(_ReportMixin):
+    """Result of :func:`puremacro.asset_pricing.hj_distance`."""
+
+    distance: float
+    coefs: np.ndarray
+    se: np.ndarray
+    cov: np.ndarray
+    names: tuple[str, ...]
+    n_obs: int
+    converged: bool
+    pvalue: float
+    weights: np.ndarray
+    n_sim: int
+    seed: int
+    pricing_errors: np.ndarray
+    asset_names: tuple[str, ...]
+    hac_lags: int
+
+    def to_dataframe(self) -> pd.DataFrame:
+        """One row per factor: b, se (fixed-W sandwich), z, p."""
+        return _coef_frame(self.names, self.coefs, self.se)
+
+    def summary(self) -> str:
+        lines = [f"Hansen-Jagannathan distance, m = 1 - b'f (T = {self.n_obs}, "
+                 f"N = {len(self.asset_names)})",
+                 f"  HJ distance = {self.distance:.5f}   T*HJ^2 = "
+                 f"{self.n_obs * self.distance ** 2:.4f}",
+                 f"  Jagannathan-Wang p = {self.pvalue:.4f} ({self.n_sim} draws, seed "
+                 f"{self.seed}; {self.weights.size} weights, Bartlett lags = {self.hac_lags})"]
+        for j, n in enumerate(self.names):
+            lines.append(f"  b[{n}] = {self.coefs[j]:.4f} (se {self.se[j]:.4f})")
+        lines.append("  The distance depends on the SDF normalization with excess returns.")
+        return "\n".join(lines)
+
+    def plot(self, ax: Any = None, show: bool = False):
+        """Pricing errors ``R_bar - D b`` by asset."""
+        return _pricing_error_plot(self, ax, show, "HJ pricing errors")
