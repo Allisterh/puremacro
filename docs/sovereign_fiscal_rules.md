@@ -124,8 +124,23 @@ correlation, applied to the paired mean change plus its 95% Student-t
 half-width for the final debt refinement (3,201 → 6,401 at 641 income states)
 and the final income refinement (321 → 641 at 6,401 debt nodes).
 
-The ladder record has not been frozen yet; until it is, grid convergence of
-this calibration is **not established**.
+Mean over the sixteen seeds. Debt/output in percent of quarterly output; spending/output in percent; spreads in percent per year.
+
+| Grid (debt × income) | Debt/output (%) | Mean spread (%) | Annual default (%) | Spread SD (pp) | Spending/output (%) | corr(pb/y, log y) |
+|---|---:|---:|---:|---:|---:|---:|
+| 1,601 × 321 | 0.838 | 3.129 | 3.010 | 2.865 | 19.983 | -0.138 |
+| 3,201 × 321 | 0.839 | 3.143 | 3.031 | 2.808 | 19.983 | -0.138 |
+| 6,401 × 321 | 0.839 | 3.146 | 3.030 | 2.784 | 19.983 | -0.138 |
+| 1,601 × 641 | 0.829 | 3.097 | 2.977 | 2.797 | 19.983 | -0.138 |
+| 3,201 × 641 | 0.830 | 3.100 | 2.985 | 2.735 | 19.983 | -0.138 |
+| 6,401 × 641 | 0.831 | 3.102 | 2.987 | 2.716 | 19.983 | -0.138 |
+
+Verdict: **passed**. Every moment's paired change plus its 95% half-width fits its
+tolerance in both final refinements; the largest is the spread standard deviation
+in the income refinement, 0.070 pp against 0.10. Every solve converged with a
+certification gap of 0 and no repayment period chose the top debt node.
+At this illustrative calibration the government holds little debt: about 0.83% of
+quarterly output, roughly 0.2% of annual output.
 
 ```sh
 MPLBACKEND=Agg python -m tools.reference_validation.check_fiscal_grids --output /tmp/fiscal-grids

@@ -128,8 +128,24 @@ medio emparejado más su semiamplitud t de Student al 95 % para el último
 refinamiento de deuda (3.201 → 6.401 con 641 estados de ingreso) y el último
 refinamiento de ingreso (321 → 641 con 6.401 nodos de deuda).
 
-El registro de la escalera aún no se ha congelado; hasta entonces, la
-convergencia en la malla de esta calibración **no está establecida**.
+Media de las dieciséis semillas. Deuda/producto en porcentaje del producto trimestral; gasto/producto en porcentaje; diferenciales en porcentaje anual.
+
+| Malla (deuda × ingreso) | Deuda/producto (%) | Diferencial medio (%) | Impago anual (%) | DE del diferencial (pp) | Gasto/producto (%) | corr(pb/y, log y) |
+|---|---:|---:|---:|---:|---:|---:|
+| 1.601 × 321 | 0,838 | 3,129 | 3,010 | 2,865 | 19,983 | -0,138 |
+| 3.201 × 321 | 0,839 | 3,143 | 3,031 | 2,808 | 19,983 | -0,138 |
+| 6.401 × 321 | 0,839 | 3,146 | 3,030 | 2,784 | 19,983 | -0,138 |
+| 1.601 × 641 | 0,829 | 3,097 | 2,977 | 2,797 | 19,983 | -0,138 |
+| 3.201 × 641 | 0,830 | 3,100 | 2,985 | 2,735 | 19,983 | -0,138 |
+| 6.401 × 641 | 0,831 | 3,102 | 2,987 | 2,716 | 19,983 | -0,138 |
+
+Veredicto: **superada**. En ambos refinamientos finales, el cambio emparejado de cada
+momento más su semiamplitud al 95 % cabe en su tolerancia; el mayor es la desviación
+típica del diferencial en el refinamiento de ingreso, 0,070 pp frente a 0,10.
+Todas las resoluciones convergieron con diferencia de certificación 0 y ningún
+período de reembolso eligió el nodo superior de deuda.
+Con esta calibración ilustrativa el gobierno mantiene poca deuda: cerca del 0,83 %
+del producto trimestral, en torno al 0,2 % del producto anual.
 
 ```sh
 MPLBACKEND=Agg python -m tools.reference_validation.check_fiscal_grids --output /tmp/fiscal-grids
