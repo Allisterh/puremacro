@@ -238,3 +238,15 @@ def test_measurement_bullet_explains_the_default_convention(record, lang, words)
         assert word in text, word
     baseline = record["scenarios"]["baseline"]["cases"]["6401x641"]["simulation"]["summary"]
     assert f"{baseline['default_annual_pct']['mean']:.3f}" == "2.989"
+
+
+@pytest.mark.parametrize("lang,phrase", [
+    ("en", "The levels for θ = 0.5 and ρ_y = 0.97 (marked † in the table) are not grid-converged"),
+    ("es", "Los niveles para θ = 0,5 y ρ_y = 0,97 (marcados con † en la tabla) no están convergidos en la malla"),
+])
+def test_answer_flags_unconverged_levels(record, lang, phrase):
+    failing = [n for n, s in record["scenarios"].items() if not s["grid_change"]["passed"]]
+    assert failing == ["theta=0.5", "rho_y=0.97"]
+    page = PAGES[lang].read_text(encoding="utf-8")
+    answer = page.split(brief.render_answer(record, lang), 1)[1].split("\n## ", 1)[0]
+    assert phrase in " ".join(answer.split())
