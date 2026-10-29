@@ -123,3 +123,29 @@ def test_report_quintet_and_plot():
     assert isinstance(res.plot(), matplotlib.figure.Figure)
     _, ax = plt.subplots()
     assert res.plot(ax=ax) is ax
+
+
+def test_zscored_macro_factor_accepted():
+    # Non-traded factors (e.g. standardized macro innovations) are not returns:
+    # only finiteness is checked, not the percent-scale heuristic.
+    from puremacro.asset_pricing import hj_distance, sdf_gmm, time_series_test
+
+    rng = np.random.default_rng(30)
+    T, N = 400, 8
+    idx = pd.date_range("1980-01-01", periods=T, freq="MS")
+    z = pd.DataFrame({"ip_shock": rng.standard_normal(T)}, index=idx)   # median |z| ~ 0.67
+    beta = rng.uniform(0.5, 1.5, N)
+    R = pd.DataFrame(0.004 * beta + 0.01 * np.outer(z["ip_shock"], beta)
+                     + 0.02 * rng.standard_normal((T, N)), index=idx,
+                     columns=[f"p{i}" for i in range(N)])
+    assert np.isfinite(fama_macbeth(R, z).coefs).all()
+    assert np.isnan(time_series_test(R, z, traded=False).grs_stat)
+    assert np.isfinite(sdf_gmm(R, z).coefs).all()
+    assert np.isfinite(hj_distance(R, z, n_sim=1_000).distance)
+    # traded factors in time_series_test keep the scale check
+    with pytest.raises(ValueError, match="percent"):
+        time_series_test(R, z, traded=True)
+    bad = z.copy()
+    bad.iloc[5, 0] = np.nan
+    with pytest.raises(ValueError, match="ip_shock"):
+        fama_macbeth(R, bad)

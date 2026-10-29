@@ -232,7 +232,8 @@ estándar y J coinciden con `IV2SLS`/`IVGMM` de linearmodels y con
   valores con `|r| > 1`. Los rendimientos aislados superiores al 100% (el
   archivo de las 25 carteras Size-B/M en 1932, acciones individuales,
   criptoactivos) se aceptan. Las series volátiles que la activen pueden
-  pasarse con `check_scale=False`.
+  pasarse con `check_scale=False`. Los factores solo se comprueban por
+  finitud, salvo los factores negociables en `time_series_test(traded=True)`.
 - **Convenciones de GMM.** La covarianza sándwich no lleva corrección de
   muestra pequeña. J es `NaN` con ponderación identidad o de usuario, y
   exactamente cero cuando el modelo está exactamente identificado.

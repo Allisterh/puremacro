@@ -219,6 +219,8 @@ linearmodels `IV2SLS`/`IVGMM` and `inference.hansen_j` to 1e-8.
   `|r| > 0.2` or more than 5% of values with `|r| > 1`. Isolated returns
   above 100% (the 25 Size-B/M file in 1932, single stocks, crypto) pass.
   Volatile series that trip it can be passed with `check_scale=False`.
+  Factors are checked for finiteness only, except traded factors in
+  `time_series_test(traded=True)`.
 - **GMM conventions.** The sandwich covariance has no small-sample
   correction. J is `NaN` for identity or user weighting, and exactly zero
   when the model is just identified.

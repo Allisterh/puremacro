@@ -60,6 +60,8 @@ def time_series_test(
 
     ``se`` are the square roots of the diagonal of ``V`` (equal to statsmodels'
     OLS HAC standard errors). Rows of DataFrame inputs are paired by date.
+    Factors are scale-checked like returns only when ``traded=True``;
+    non-traded factors need only be finite.
     ``T <= N + K`` or a singular residual covariance raise ``ValueError``.
     """
     from scipy import stats
@@ -67,7 +69,12 @@ def time_series_test(
     from ..inference.gmm import _long_run_cov, _resolve_lags
 
     Rdf = _validate_returns(excess_returns, "excess_returns", check_scale)
-    Fdf = _validate_returns(factors, "factors", check_scale)
+    # Traded factors are excess returns and get the scale check; non-traded
+    # (macro) factors are only required to be finite.
+    if traded:
+        Fdf = _validate_returns(factors, "factors", check_scale)
+    else:
+        Fdf = _validate_finite(factors, "factors", prefix="f")
     Rdf, Fdf = _align(Rdf, Fdf, names=("excess_returns", "factors"))
     R = Rdf.to_numpy(dtype=float)
     F = Fdf.to_numpy(dtype=float)
@@ -174,7 +181,7 @@ def fama_macbeth(
     Rdf = _validate_returns(excess_returns, "excess_returns", check_scale)
     Sigma = Sigma_f = None
     if factors is not None:
-        Fdf = _validate_returns(factors, "factors")
+        Fdf = _validate_finite(factors, "factors", prefix="f")  # factors need not be returns
         if not isinstance(factors, (pd.Series, pd.DataFrame)):
             Fdf.columns = [f"f{k}" for k in range(Fdf.shape[1])]
         Rdf, Fdf = _align(Rdf, Fdf, names=("excess_returns", "factors"))

@@ -18,7 +18,7 @@ from typing import Any
 import numpy as np
 
 from ._results import HJDistanceResult, SDFResult
-from ._validate import _align, _validate_returns
+from ._validate import _align, _validate_finite, _validate_returns
 
 __all__ = ["sdf_gmm", "hj_distance"]
 
@@ -27,7 +27,7 @@ _STAGES = {"first": "identity", "two_step": "two_step", "iterated": "iterated"}
 
 def _inputs(excess_returns: Any, factors: Any, check_scale: bool = True):
     Rdf = _validate_returns(excess_returns, "excess_returns", check_scale)
-    Fdf = _validate_returns(factors, "factors")
+    Fdf = _validate_finite(factors, "factors", prefix="f")  # factors need not be returns
     if not hasattr(factors, "columns") and not hasattr(factors, "name"):
         Fdf.columns = [f"f{k}" for k in range(Fdf.shape[1])]
     Rdf, Fdf = _align(Rdf, Fdf, names=("excess_returns", "factors"))
