@@ -5,8 +5,9 @@ This file records user-visible changes per release. Internal refactors that don'
 This changelog describes versioned source changes. Check
 [PyPI](https://pypi.org/project/puremacro/) for published distributions.
 Versions 5.3.0, 5.4.0 and 5.4.1 were tagged but not published to PyPI; their
-additions are included in 5.4.2. The v6.0.0 publication also failed; as checked
-on 2026-10-26, PyPI still serves 5.7.1. See the [release procedure](RELEASING.md).
+additions are included in 5.4.2. Versions 5.8.0, 5.9.0 and 6.0.0 were tagged
+but not published; their additions are included in 6.0.1, published on
+2026-10-29. See the [release procedure](RELEASING.md).
 
 ## 6.1.0 (unreleased)
 
