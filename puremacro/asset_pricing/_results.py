@@ -145,3 +145,82 @@ class VaRBacktestResult(_ReportMixin):
             f"  Christoffersen independence     LR = {self.lr_ind:8.4f}  p = {self.p_ind:.4f}",
             f"  Christoffersen cond. coverage   LR = {self.lr_cc:8.4f}  p = {self.p_cc:.4f}",
         ])
+
+
+@dataclass(frozen=True)
+class TimeSeriesTestResult(_ReportMixin):
+    """Result of :func:`puremacro.asset_pricing.time_series_test`.
+
+    ``coefs`` / ``se`` are ``(N, K+1)`` arrays ``[alpha, betas]`` per asset;
+    ``cov`` is the ``(N(K+1), N(K+1))`` asset-major HAC covariance.
+    ``grs_*`` are ``NaN`` when ``traded=False``.
+    """
+
+    coefs: np.ndarray
+    se: np.ndarray
+    cov: np.ndarray
+    names: tuple[str, ...]
+    factor_names: tuple[str, ...]
+    n_obs: int
+    converged: bool
+    grs_stat: float
+    grs_pvalue: float
+    grs_df: tuple[int, int]
+    wald_stat: float
+    wald_pvalue: float
+    wald_df: int
+    r2: np.ndarray
+    hac_lags: int
+    traded: bool
+
+    @property
+    def alphas(self) -> np.ndarray:
+        return self.coefs[:, 0]
+
+    @property
+    def betas(self) -> np.ndarray:
+        return self.coefs[:, 1:]
+
+    def to_dataframe(self) -> pd.DataFrame:
+        """One row per asset: alpha, its se and t, betas, R^2."""
+        df = pd.DataFrame({"asset": list(self.names), "alpha": self.alphas,
+                           "alpha_se": self.se[:, 0]})
+        with np.errstate(divide="ignore", invalid="ignore"):
+            df["alpha_t"] = self.alphas / self.se[:, 0]
+        for k, f in enumerate(self.factor_names):
+            df[f"beta_{f}"] = self.betas[:, k]
+        df["r2"] = self.r2
+        return df
+
+    def summary(self) -> str:
+        n, d = self.grs_df
+        lines = [
+            f"Time-series factor test (T = {self.n_obs}, N = {len(self.names)}, "
+            f"K = {len(self.factor_names)}: {', '.join(self.factor_names)})",
+            f"  {'asset':<14}{'alpha':>11}{'(se)':>11}{'t':>8}{'R2':>7}",
+        ]
+        for j, a in enumerate(self.names):
+            t = self.alphas[j] / self.se[j, 0] if self.se[j, 0] > 0 else np.nan
+            lines.append(f"  {a:<14}{self.alphas[j]:>11.5f}{self.se[j, 0]:>11.5f}"
+                         f"{t:>8.2f}{self.r2[j]:>7.3f}")
+        if self.traded:
+            lines.append(f"  GRS F({n}, {d}) = {self.grs_stat:.4f}   p = {self.grs_pvalue:.4f}"
+                         "   (iid normal errors)")
+        else:
+            lines.append("  GRS not reported: it needs traded excess-return factors")
+        lines.append(f"  HAC Wald chi2({self.wald_df}) = {self.wald_stat:.4f}   "
+                     f"p = {self.wald_pvalue:.4f}   (Bartlett lags = {self.hac_lags})")
+        return "\n".join(lines)
+
+    def plot(self, ax: Any = None, show: bool = False):
+        """Alphas with +/- 1.96 HAC se bars."""
+        fig, ax, given = _new_ax(ax)
+        pos = np.arange(len(self.names))
+        ax.errorbar(pos, self.alphas, yerr=1.96 * self.se[:, 0], fmt="o",
+                    color="0.1", ecolor="0.5", capsize=3)
+        ax.axhline(0.0, color="0.4", lw=0.7)
+        ax.set_xticks(pos)
+        ax.set_xticklabels(list(self.names), rotation=90 if len(pos) > 8 else 0)
+        ax.set_ylabel("alpha (per period)")
+        ax.set_title("Time-series alphas (95% HAC intervals)")
+        return _finish(fig, ax, given, show)

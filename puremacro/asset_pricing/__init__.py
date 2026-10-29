@@ -15,7 +15,8 @@ from .returns import (
     to_returns,
 )
 from .risk import expected_shortfall, risk_summary, value_at_risk, var_backtest
-from ._results import RiskSummaryResult, VaRBacktestResult
+from .factor_tests import time_series_test
+from ._results import RiskSummaryResult, TimeSeriesTestResult, VaRBacktestResult
 
 __all__ = [
     "to_returns",
@@ -29,4 +30,6 @@ __all__ = [
     "expected_shortfall",
     "var_backtest",
     "VaRBacktestResult",
+    "time_series_test",
+    "TimeSeriesTestResult",
 ]
