@@ -43,8 +43,11 @@ measurement took under 8 s. Peak resident memory was 3.4 GB. The run resumes
 from `sweep.partial.json` after an interruption, reusing only cases whose source
 hashes and design match.
 
-After the freeze, one type annotation was added to
-`puremacro/examples/first_brief_sovereign.py` (`entry: dict[str, Any]` in
-`build_record`, for mypy). It changes no behaviour, so the record was not
-re-run; its `source_sha256` entry for the example is that of commit `1752c83`,
-and the other four source hashes still match.
+After the freeze, `puremacro/examples/first_brief_sovereign.py` changed
+without touching how scenarios are solved or measured (`solve_scenario`,
+`measure_case`, `paired_change`): one type annotation for mypy (`60a04ce0`),
+then wording of the answer, table and figure labels and CLI text in the final
+review. The record was not re-run; its `source_sha256` entry for the example is
+that of commit `1752c83`. `tests/test_sovereign_brief_record.py` checks that the
+four library hashes equal the current files and that both the recorded and the
+current example hash are in a reviewed allow-list.

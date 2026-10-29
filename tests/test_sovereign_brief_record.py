@@ -163,3 +163,43 @@ def test_timings_are_quoted_consistently(record, capsys):
         loads = sep.join(f"{v:.0f}" for v in load)
         assert loads in page, loads
     assert "1.9 h" in " ".join(__doc__.split())
+
+
+_LIBRARY_SOURCES = ("puremacro/sovereign/arellano.py", "puremacro/sovereign/_monotone.py",
+                    "puremacro/sovereign/_results.py", "puremacro/sovereign/measurement.py")
+_EXAMPLE = "puremacro/examples/first_brief_sovereign.py"
+# The example's bytes changed after the freeze (record hash 4823e9ef…, commit
+# 1752c83) without touching solve_scenario, measure_case or paired_change:
+# 60a04ce0 added one type annotation, then the final-review fixes (caad961d,
+# 38682a89, 072e549f) changed only answer/table/figure wording and CLI text.
+# Any further edit must be reviewed the same way and its hash added here.
+_EXAMPLE_HASHES = {
+    "4823e9efa4b98fd3f1cd309baf1d5f79ebe201b9c918e3f15f0a17b297fd5858",  # frozen (1752c83)
+    "59b96c52dcba6bf43184209d47af3901742f975acaef788117344435718a8ec2",  # current (072e549f)
+}
+
+
+def _provenance_problems(recorded: dict, current: dict) -> list[str]:
+    problems = [f"{path}: record {recorded.get(path)} != current {current[path]}"
+                for path in _LIBRARY_SOURCES if recorded.get(path) != current[path]]
+    if recorded.get(_EXAMPLE) not in _EXAMPLE_HASHES:
+        problems.append(f"{_EXAMPLE}: record hash {recorded.get(_EXAMPLE)} not in the allow-list")
+    if current[_EXAMPLE] not in _EXAMPLE_HASHES:
+        problems.append(f"{_EXAMPLE}: current hash {current[_EXAMPLE]} not in the allow-list")
+    if set(recorded) != set(_LIBRARY_SOURCES) | {_EXAMPLE}:
+        problems.append(f"unexpected source keys {sorted(recorded)}")
+    return problems
+
+
+def test_record_sources_match_the_current_files(record):
+    assert _provenance_problems(record["source_sha256"], brief.source_hashes()) == []
+
+
+@pytest.mark.parametrize("path", [*_LIBRARY_SOURCES, _EXAMPLE])
+def test_provenance_check_catches_a_changed_source(record, path):
+    perturbed = dict(record["source_sha256"])
+    perturbed[path] = "0" * 64
+    assert _provenance_problems(perturbed, brief.source_hashes())
+    current = brief.source_hashes()
+    current[path] = "f" * 64
+    assert _provenance_problems(record["source_sha256"], current)
