@@ -224,3 +224,70 @@ class TimeSeriesTestResult(_ReportMixin):
         ax.set_ylabel("alpha (per period)")
         ax.set_title("Time-series alphas (95% HAC intervals)")
         return _finish(fig, ax, given, show)
+
+
+@dataclass(frozen=True)
+class FamaMacBethResult(_ReportMixin):
+    """Result of :func:`puremacro.asset_pricing.fama_macbeth`.
+
+    ``coefs`` are the risk premia (``"const"`` first when ``intercept``);
+    ``se`` / ``cov`` follow ``se_type`` (``"shanken"`` or ``"fama-macbeth"``).
+    """
+
+    coefs: np.ndarray
+    se: np.ndarray
+    cov: np.ndarray
+    names: tuple[str, ...]
+    n_obs: int
+    converged: bool
+    se_fm: np.ndarray
+    se_shanken: np.ndarray
+    se_nw: np.ndarray
+    lambda_series: np.ndarray
+    cs_r2: float
+    pricing_errors: np.ndarray
+    mean_returns: np.ndarray
+    betas: np.ndarray
+    asset_names: tuple[str, ...]
+    hac_lags: int
+    intercept: bool
+    se_type: str
+
+    @property
+    def lambdas(self) -> np.ndarray:
+        return self.coefs
+
+    def to_dataframe(self) -> pd.DataFrame:
+        """One row per premium: coef, se (``se_type``), the three se, t."""
+        df = _coef_frame(self.names, self.coefs, self.se)
+        df["se_fm"] = self.se_fm
+        df["se_shanken"] = self.se_shanken
+        df["se_nw"] = self.se_nw
+        return df
+
+    def summary(self) -> str:
+        lines = [
+            f"Fama-MacBeth (T = {self.n_obs}, N = {len(self.asset_names)}; "
+            f"se = {self.se_type}; NW lags = {self.hac_lags})",
+            f"  {'name':<10}{'lambda':>11}{'se FM':>10}{'se Shanken':>12}{'se NW':>10}",
+        ]
+        for j, n in enumerate(self.names):
+            lines.append(f"  {n:<10}{self.coefs[j]:>11.5f}{self.se_fm[j]:>10.5f}"
+                         f"{self.se_shanken[j]:>12.5f}{self.se_nw[j]:>10.5f}")
+        lines.append(f"  cross-sectional R2 = {self.cs_r2:.4f}")
+        if np.all(np.isnan(self.se_shanken)):
+            lines.append("  Shanken se unavailable: betas were given, no first-pass residuals")
+        return "\n".join(lines)
+
+    def plot(self, ax: Any = None, show: bool = False):
+        """Realized against fitted mean excess returns, with a 45-degree line."""
+        fig, ax, given = _new_ax(ax)
+        fitted = self.mean_returns - self.pricing_errors
+        ax.scatter(fitted, self.mean_returns, color="0.2", s=14)
+        lo = float(min(fitted.min(), self.mean_returns.min()))
+        hi = float(max(fitted.max(), self.mean_returns.max()))
+        ax.plot([lo, hi], [lo, hi], color="0.5", lw=0.8, ls="--")
+        ax.set_xlabel("fitted mean excess return")
+        ax.set_ylabel("realized mean excess return")
+        ax.set_title(f"Fama-MacBeth (cross-sectional R2 = {self.cs_r2:.2f})")
+        return _finish(fig, ax, given, show)
