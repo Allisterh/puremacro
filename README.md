@@ -24,7 +24,7 @@ python -m pip install puremacro
 | **Write a policy brief** | Run a [tariff experiment on public data](docs/first_brief_tariffs.md) and read national and household welfare effects. |
 | **Learn or teach** | Choose a [notebook learning path](docs/notebooks.md) or use the [bilingual course and interactive labs](curso/README.md). Use the pinned course edition below. |
 
-**Status checked 2026-10-26:** this development checkout targets **6.0.1**. Publication of the preceding v6.0.0 tag failed. The latest distribution available on [PyPI](https://pypi.org/project/puremacro/) is **5.7.1**. Reliability corrections are in development; a source tag does not establish publication.
+**Status checked 2026-10-29:** **6.0.1** is published on [PyPI](https://pypi.org/project/puremacro/6.0.1/), and `pip install puremacro` installs it. It is the first published version since 5.7.1: the 5.8.0, 5.9.0 and 6.0.0 tags were never published (v6.0.0 failed CI). This `main` branch may contain unreleased work toward 6.1.0; a source tag alone does not establish publication.
 See the [recommended tests and next milestones](docs/research_reliability.md).
 These pages target 6.0.0; see the [changelog](CHANGELOG.md) for additions and fixes. Match your installed version to the documentation.
 
