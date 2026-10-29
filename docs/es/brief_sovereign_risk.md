@@ -14,15 +14,17 @@ mueve un solo parámetro respecto de ella.
 ¿Cómo cambian tres rasgos de una economía deudora su riesgo soberano? Los
 rasgos son la probabilidad de recuperar el acceso al mercado tras un impago
 (θ), la volatilidad del ingreso (σ_y) y la persistencia del ingreso (ρ_y). Los
-resultados son la deuda sostenible (deuda/producto), el diferencial medio, la
-frecuencia de impago, la volatilidad de los diferenciales y el valor del
+resultados son la deuda media (la deuda elegida en los trimestres de pago como
+porcentaje del ingreso trimestral medio, es decir, aproximadamente la cuarta
+parte de una razón deuda/PIB anual), el diferencial medio, la frecuencia de
+impago, la volatilidad de los diferenciales y el valor del
 acceso al mercado: la ganancia permanente de consumo, en porcentaje, que
 dejaría a una economía en autarquía financiera y sin coste de impago tan bien
 como una que puede endeudarse partiendo de deuda cero.
 
 ## Respuesta
 
-En este modelo ilustrativo, partiendo de la calibración pública y moviendo un parámetro cada vez de su valor bajo a su valor alto: una mayor probabilidad de reingreso (θ 0,15 → 0,5) baja la deuda/producto de 6,808 % a 2,374 %; sube el diferencial medio de 1,860 % a 5,127 %; sube la frecuencia de impago de 1,807 % anual a 4,879 % anual; y baja el valor del acceso al mercado de 0,094 % del consumo a 0,023 % del consumo. Una mayor volatilidad del ingreso (σ_y 0,02 → 0,03) baja la deuda/producto de 4,048 % a 3,529 %; sube el diferencial medio de 3,053 % a 3,110 %; sube la frecuencia de impago de 2,933 % anual a 2,989 % anual; y baja el valor del acceso al mercado de 0,053 % del consumo a 0,035 % del consumo. Una mayor persistencia del ingreso (ρ_y 0,9 → 0,97) sube la deuda/producto de 2,521 % a 5,996 %; sube el diferencial medio de 2,398 % a 3,434 %; sube la frecuencia de impago de 2,323 % anual a 3,311 % anual; y sube el valor del acceso al mercado de 0,036 % del consumo a 0,066 % del consumo. Cada número es una media sobre 16 trayectorias simuladas de 500.000 trimestres; la tabla da su intervalo del 95 % y su cambio de malla.
+En este modelo ilustrativo, partiendo de la calibración pública y moviendo un parámetro cada vez de su valor bajo a su valor alto: una mayor probabilidad de reingreso (θ 0,15 → 0,5) baja la deuda media de 6,808 % del ingreso trimestral medio a 2,374 % del ingreso trimestral medio; sube el diferencial medio de 1,860 % a 5,127 %; sube la frecuencia de impago de 1,807 % anual a 4,879 % anual; y baja el valor del acceso al mercado de 0,094 % del consumo a 0,023 % del consumo. Una mayor volatilidad del ingreso (σ_y 0,02 → 0,03) baja la deuda media de 4,048 % del ingreso trimestral medio a 3,529 % del ingreso trimestral medio; sube el diferencial medio de 3,053 % a 3,110 %; sube la frecuencia de impago de 2,933 % anual a 2,989 % anual; y baja el valor del acceso al mercado de 0,053 % del consumo a 0,035 % del consumo. Una mayor persistencia del ingreso (ρ_y 0,9 → 0,97) sube la deuda media de 2,521 % del ingreso trimestral medio a 5,996 % del ingreso trimestral medio; sube el diferencial medio de 2,398 % a 3,434 %; sube la frecuencia de impago de 2,323 % anual a 3,311 % anual; y sube el valor del acceso al mercado de 0,036 % del consumo a 0,066 % del consumo. Cada número es una media sobre 16 trayectorias simuladas de 500.000 trimestres; la tabla da su intervalo del 95 % y su cambio de malla.
 
 Lea los efectos de la volatilidad del ingreso sobre el diferencial medio y la
 frecuencia de impago (unos +0,06 cada uno) como pequeños: son del mismo orden que
@@ -43,7 +45,7 @@ al mercado, de modo que su Δ se informa sin veredicto. Una † marca un
 escenario en el que el cambio de al menos un momento, más su semiamplitud del
 95 %, no cabe en la tolerancia; esas filas se informan, no se descartan.
 
-| Escenario | Deuda/producto (%) | Diferencial medio (%) | Impago (% anual) | DE del diferencial (pp) | Valor del acceso al mercado (%) |
+| Escenario | Deuda (% del ingreso trimestral medio) | Diferencial medio (%) | Impago (% anual) | DE del diferencial (pp) | Valor del acceso al mercado (%) |
 |---|---:|---:|---:|---:|---:|
 | **Base** | 3,821 ± 0,025 (Δ +0,006) | 3,114 ± 0,005 (Δ -0,022) | 2,989 ± 0,029 (Δ -0,027) | 2,549 ± 0,005 (Δ -0,034) | 0,043 (Δ +0,000) |
 | θ = 0,15 | 6,808 ± 0,037 (Δ +0,006) | 1,860 ± 0,003 (Δ -0,001) | 1,807 ± 0,020 (Δ +0,005) | 1,829 ± 0,003 (Δ -0,001) | 0,094 (Δ +0,000) |
@@ -57,7 +59,7 @@ escenario en el que el cambio de al menos un momento, más su semiamplitud del
 
 Estado del cambio de malla de las filas marcadas con †: θ = 0,5 (Diferencial medio (%): el desplazamiento de malla supera la tolerancia; Impago (% anual): el desplazamiento de malla supera la tolerancia; DE del diferencial (pp): el desplazamiento de malla supera la tolerancia); ρ_y = 0,97 (DE del diferencial (pp): el desplazamiento de malla supera la tolerancia).
 
-![Cinco paneles: deuda/producto, diferencial medio, frecuencia de impago, DE del diferencial y valor del acceso al mercado para el valor bajo, base y alto de cada parámetro, con intervalos del 95 %](../assets/brief_sovereign_risk.es.svg)
+![Cinco paneles: deuda media, diferencial medio, frecuencia de impago, DE del diferencial y valor del acceso al mercado para el valor bajo, base y alto de cada parámetro, con intervalos del 95 %](../assets/brief_sovereign_risk.es.svg)
 
 Los marcadores huecos son la base común; los bigotes son intervalos del 95 %
 entre trayectorias, casi todos más estrechos que los marcadores (el valor del

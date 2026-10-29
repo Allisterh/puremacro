@@ -13,15 +13,16 @@ and each scenario moves one parameter away from it.
 How do three features of a borrowing economy change its sovereign risk? The
 features are the probability of regaining market access after a default
 (θ), the volatility of income (σ_y) and the persistence of income (ρ_y). The
-outcomes are sustainable debt (debt/output), the mean spread, the frequency of
-default, the volatility of spreads, and the value of market access: the
+outcomes are average debt (the debt chosen in repayment quarters as a
+percentage of mean quarterly income, so roughly one quarter of a
+debt-to-annual-GDP ratio), the mean spread, the frequency of default, the volatility of spreads, and the value of market access: the
 permanent consumption gain, in percent, that would make an economy in
 financial autarky with no default cost as well off as one that can borrow
 starting from zero debt.
 
 ## Answer
 
-In this illustrative model, starting from the public calibration and moving one parameter at a time from its low to its high value: a higher reentry probability (θ 0.15 → 0.5) lowers debt/output from 6.808% to 2.374%; raises the mean spread from 1.860% to 5.127%; raises default frequency from 1.807% a year to 4.879% a year; and lowers the value of market access from 0.094% of consumption to 0.023% of consumption. A higher income volatility (σ_y 0.02 → 0.03) lowers debt/output from 4.048% to 3.529%; raises the mean spread from 3.053% to 3.110%; raises default frequency from 2.933% a year to 2.989% a year; and lowers the value of market access from 0.053% of consumption to 0.035% of consumption. A higher income persistence (ρ_y 0.9 → 0.97) raises debt/output from 2.521% to 5.996%; raises the mean spread from 2.398% to 3.434%; raises default frequency from 2.323% a year to 3.311% a year; and raises the value of market access from 0.036% of consumption to 0.066% of consumption. Each number is a mean over 16 simulated paths of 500,000 quarters; the table gives its 95% interval and its grid change.
+In this illustrative model, starting from the public calibration and moving one parameter at a time from its low to its high value: a higher reentry probability (θ 0.15 → 0.5) lowers average debt from 6.808% of mean quarterly income to 2.374% of mean quarterly income; raises the mean spread from 1.860% to 5.127%; raises default frequency from 1.807% a year to 4.879% a year; and lowers the value of market access from 0.094% of consumption to 0.023% of consumption. A higher income volatility (σ_y 0.02 → 0.03) lowers average debt from 4.048% of mean quarterly income to 3.529% of mean quarterly income; raises the mean spread from 3.053% to 3.110%; raises default frequency from 2.933% a year to 2.989% a year; and lowers the value of market access from 0.053% of consumption to 0.035% of consumption. A higher income persistence (ρ_y 0.9 → 0.97) raises average debt from 2.521% of mean quarterly income to 5.996% of mean quarterly income; raises the mean spread from 2.398% to 3.434%; raises default frequency from 2.323% a year to 3.311% a year; and raises the value of market access from 0.036% of consumption to 0.066% of consumption. Each number is a mean over 16 simulated paths of 500,000 quarters; the table gives its 95% interval and its grid change.
 
 Read the effects of income volatility on the mean spread and on default frequency
 (about +0.06 each) as small: they are of the same order as the grid changes
@@ -41,7 +42,7 @@ pass or fail. A † marks a scenario where at least one moment's change, plus
 its 95% half-width, does not fit inside the tolerance; such rows are reported,
 not dropped.
 
-| Scenario | Debt/output (%) | Mean spread (%) | Default (% per year) | Spread SD (pp) | Value of market access (%) |
+| Scenario | Debt (% of mean quarterly income) | Mean spread (%) | Default (% per year) | Spread SD (pp) | Value of market access (%) |
 |---|---:|---:|---:|---:|---:|
 | **Baseline** | 3.821 ± 0.025 (Δ +0.006) | 3.114 ± 0.005 (Δ -0.022) | 2.989 ± 0.029 (Δ -0.027) | 2.549 ± 0.005 (Δ -0.034) | 0.043 (Δ +0.000) |
 | θ = 0.15 | 6.808 ± 0.037 (Δ +0.006) | 1.860 ± 0.003 (Δ -0.001) | 1.807 ± 0.020 (Δ +0.005) | 1.829 ± 0.003 (Δ -0.001) | 0.094 (Δ +0.000) |
@@ -55,7 +56,7 @@ not dropped.
 
 Grid-change status of the rows marked †: θ = 0.5 (Mean spread (%): grid shift exceeds tolerance; Default (% per year): grid shift exceeds tolerance; Spread SD (pp): grid shift exceeds tolerance); ρ_y = 0.97 (Spread SD (pp): grid shift exceeds tolerance).
 
-![Five panels: debt/output, mean spread, default frequency, spread SD and value of market access for the low, baseline and high value of each parameter, with 95% intervals](assets/brief_sovereign_risk.en.svg)
+![Five panels: average debt, mean spread, default frequency, spread SD and value of market access for the low, baseline and high value of each parameter, with 95% intervals](assets/brief_sovereign_risk.en.svg)
 
 Hollow markers are the shared baseline; whiskers are 95% intervals across
 paths, most of them narrower than the markers (the value of market access is a

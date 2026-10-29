@@ -3,14 +3,14 @@
 EN: An illustrative policy brief on PureMacro's public calibration of the
 short-term Arellano (2008) model. It varies one parameter at a time (the
 market-reentry probability, income volatility and income persistence) and
-reports sustainable debt, spreads, default exposure and the value of market
+reports average debt, spreads, default exposure and the value of market
 access, each with its 95% interval and its numerical grid change. It is not a
 claim about any country and fits no parameter to targets.
 
 ES: Un informe de política ilustrativo sobre la calibración pública de
 PureMacro del modelo de Arellano (2008) con deuda de corto plazo. Varía un
 parámetro cada vez (la probabilidad de reingreso al mercado, la volatilidad y
-la persistencia del ingreso) e informa la deuda sostenible, los diferenciales,
+la persistencia del ingreso) e informa la deuda media, los diferenciales,
 la exposición al impago y el valor del acceso al mercado, cada uno con su
 intervalo del 95% y su cambio numérico de malla. No es una afirmación sobre
 ningún país y no ajusta ningún parámetro a objetivos.
@@ -285,16 +285,16 @@ def build_record(grids: Sequence[tuple[int, int]], *, design: dict, partial: Pat
 
 _TEXT: dict[str, dict[str, Any]] = {
     "en": {
-        "columns": ["Scenario", "Debt/output (%)", "Mean spread (%)", "Default (% per year)",
+        "columns": ["Scenario", "Debt (% of mean quarterly income)", "Mean spread (%)", "Default (% per year)",
                     "Spread SD (pp)", "Value of market access (%)"],
         "baseline": "Baseline",
         "param": {"theta": "θ", "sigma_y": "σ_y", "rho_y": "ρ_y"},
         "param_long": {"theta": "reentry probability", "sigma_y": "income volatility",
                        "rho_y": "income persistence"},
-        "outcome": {"debt_output_pct": "debt/output", "spread_mean_pct": "the mean spread",
+        "outcome": {"debt_output_pct": "average debt", "spread_mean_pct": "the mean spread",
                     "default_annual_pct": "default frequency", "spread_sd_pp": "spread volatility",
                     "welfare_pct": "the value of market access"},
-        "unit": {"debt_output_pct": "%", "spread_mean_pct": "%", "default_annual_pct": "% a year",
+        "unit": {"debt_output_pct": "% of mean quarterly income", "spread_mean_pct": "%", "default_annual_pct": "% a year",
                  "spread_sd_pp": " pp", "welfare_pct": "% of consumption"},
         "up": "raises", "down": "lowers", "flat": "leaves unchanged",
         "from_to": "from {a} to {b}",
@@ -309,24 +309,24 @@ _TEXT: dict[str, dict[str, Any]] = {
                      "not dropped."),
         "coarse_caveat": ("Coarse grid (801 x 161): for orientation only; numbers differ from the "
                           "converged brief (6,401 x 641) in docs/brief_sovereign_risk.md."),
-        "panel": ["Debt/output (%)", "Mean spread (%)", "Default (% per year)", "Spread SD (pp)",
+        "panel": ["Debt (% of mean quarterly income)", "Mean spread (%)", "Default (% per year)", "Spread SD (pp)",
                   "Value of market access (%)"],
         "groups": ["Reentry θ", "Volatility σ_y", "Persistence ρ_y"],
         "suptitle": "Illustrative comparative statics, public Arellano calibration ({grid}); bars: 95% interval",
         "and": "and",
     },
     "es": {
-        "columns": ["Escenario", "Deuda/producto (%)", "Diferencial medio (%)", "Impago (% anual)",
+        "columns": ["Escenario", "Deuda (% del ingreso trimestral medio)", "Diferencial medio (%)", "Impago (% anual)",
                     "DE del diferencial (pp)", "Valor del acceso al mercado (%)"],
         "baseline": "Base",
         "param": {"theta": "θ", "sigma_y": "σ_y", "rho_y": "ρ_y"},
         "param_long": {"theta": "probabilidad de reingreso", "sigma_y": "volatilidad del ingreso",
                        "rho_y": "persistencia del ingreso"},
-        "outcome": {"debt_output_pct": "la deuda/producto", "spread_mean_pct": "el diferencial medio",
+        "outcome": {"debt_output_pct": "la deuda media", "spread_mean_pct": "el diferencial medio",
                     "default_annual_pct": "la frecuencia de impago",
                     "spread_sd_pp": "la volatilidad del diferencial",
                     "welfare_pct": "el valor del acceso al mercado"},
-        "unit": {"debt_output_pct": " %", "spread_mean_pct": " %", "default_annual_pct": " % anual",
+        "unit": {"debt_output_pct": " % del ingreso trimestral medio", "spread_mean_pct": " %", "default_annual_pct": " % anual",
                  "spread_sd_pp": " pp", "welfare_pct": " % del consumo"},
         "up": "sube", "down": "baja", "flat": "deja sin cambio",
         "from_to": "de {a} a {b}",
@@ -341,7 +341,7 @@ _TEXT: dict[str, dict[str, Any]] = {
                      "informa, no se descarta."),
         "coarse_caveat": ("Malla gruesa (801 x 161): solo para orientarse; las cifras difieren del "
                           "informe convergido (6.401 x 641) en docs/es/brief_sovereign_risk.md."),
-        "panel": ["Deuda/producto (%)", "Diferencial medio (%)", "Impago (% anual)",
+        "panel": ["Deuda (% del ingreso trimestral medio)", "Diferencial medio (%)", "Impago (% anual)",
                   "DE del diferencial (pp)", "Valor del acceso al mercado (%)"],
         "groups": ["Reingreso θ", "Volatilidad σ_y", "Persistencia ρ_y"],
         "suptitle": "Estática comparativa ilustrativa, calibración pública de Arellano ({grid}); barras: intervalo del 95 %",

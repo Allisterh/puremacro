@@ -319,3 +319,17 @@ def test_single_scenario_outputs_have_no_empty_answer(tmp_path, capsys):
     for text in (out, table):
         assert ": ." not in text and "high value:" not in text
     assert table.startswith("| Scenario |")
+
+
+@pytest.mark.parametrize("lang,column,banned", [
+    ("en", "Debt (% of mean quarterly income)", ("debt/output", "Debt/output", "sustainable")),
+    ("es", "Deuda (% del ingreso trimestral medio)", ("deuda/producto", "Deuda/producto", "sostenible")),
+])
+def test_debt_is_labelled_as_a_share_of_quarterly_income(tiny_record, lang, column, banned):
+    table = brief.render_table(tiny_record, lang)
+    answer = brief.render_answer(tiny_record, lang)
+    fig = brief.render_figure(tiny_record, lang)
+    assert column in table.splitlines()[0]
+    assert fig.axes[0].get_title(loc="left") == column
+    for word in banned:
+        assert word not in table and word not in answer

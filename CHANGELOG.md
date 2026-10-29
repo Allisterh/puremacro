@@ -15,7 +15,7 @@ on 2026-10-26, PyPI still serves 5.7.1. See the [release procedure](RELEASING.md
 - A bilingual sovereign-risk policy brief,
   [`docs/brief_sovereign_risk.md`](docs/brief_sovereign_risk.md) (Spanish:
   `docs/es/brief_sovereign_risk.md`). It shows how the market-reentry
-  probability, income volatility and income persistence move debt/output,
+  probability, income volatility and income persistence move average debt,
   spreads, default frequency and the value of market access in the validated
   short-term Arellano model. These are illustrative comparative statics of the
   public calibration, not a claim about any country. Every number is shown with
@@ -23,7 +23,8 @@ on 2026-10-26, PyPI still serves 5.7.1. See the [release procedure](RELEASING.md
   The numbers come from a frozen converged sweep,
   `tests/fixtures/sovereign_brief/sweep.json`.
 - `puremacro.sovereign.ergodic_moments(result, *, periods=500_000,
-  seeds=range(1979, 1995), burn=1_000)`: raw ergodic debt/output, mean spread,
+  seeds=range(1979, 1995), burn=1_000)`: raw ergodic debt (% of mean quarterly
+  income), mean spread,
   annual default-entry frequency and spread SD, per seed and with 95%
   t-intervals. It reproduces `SovereignDefaultResult.simulate` draw for draw
   and runs 16 x 500,000 quarters in seconds. Continuing exclusion is not counted
