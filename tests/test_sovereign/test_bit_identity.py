@@ -3,10 +3,17 @@
 The oracle is ``_legacy_arellano_6_0_1.py`` (with its own copy of
 ``_monotone``), copied from the merge-base before any refactor. Every array,
 scalar and metadata entry must match exactly, dense and monotone.
+
+The legacy copy builds the *live* ``SovereignDefaultResult``, so comparing
+``simulate()`` frames between the two solvers cannot catch a change to that
+method. ``test_simulate_matches_frozen_6_0_1_frame`` pins one frame generated
+from a clean c7002ecd (6.0.1) checkout instead.
 """
 from __future__ import annotations
 
 import dataclasses
+import json
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -16,6 +23,8 @@ import pytest
 from puremacro.sovereign import solve_sovereign_default
 
 from ._legacy_arellano_6_0_1 import solve_sovereign_default as legacy_solve
+
+FROZEN_FRAME = Path(__file__).resolve().parents[1] / "fixtures" / "sovereign_fiscal" / "simulate_6_0_1_defaults_300.json"
 
 # id -> (solver kwargs, policy searches)
 CALIBRATIONS: dict[str, tuple[dict[str, Any], tuple[str, ...]]] = {
@@ -90,3 +99,22 @@ def test_identity_helper_detects_one_ulp_change() -> None:
     metadata["q_rf"] = float(np.nextafter(metadata["q_rf"], 0.0))
     with pytest.raises(AssertionError):
         assert_results_identical(dataclasses.replace(result, metadata=metadata), result)
+
+
+def _frozen_frame() -> pd.DataFrame:
+    record = json.loads(FROZEN_FRAME.read_text())
+    frame = pd.DataFrame({name: record["data"][name] for name in record["columns"]})
+    return frame.astype(record["dtypes"])
+
+
+def test_simulate_matches_frozen_6_0_1_frame() -> None:
+    frame = solve_sovereign_default(**CALIBRATIONS["defaults"][0]).simulate(periods=300)
+    pd.testing.assert_frame_equal(frame, _frozen_frame(), check_exact=True)
+
+
+def test_frozen_frame_detects_a_one_row_change() -> None:
+    frame = solve_sovereign_default(**CALIBRATIONS["defaults"][0]).simulate(periods=300)
+    changed = _frozen_frame()
+    changed.loc[150, "consumption"] = np.nextafter(changed.loc[150, "consumption"], np.inf)
+    with pytest.raises(AssertionError):
+        pd.testing.assert_frame_equal(frame, changed, check_exact=True)
