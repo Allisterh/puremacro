@@ -8,6 +8,34 @@ Versions 5.3.0, 5.4.0 and 5.4.1 were tagged but not published to PyPI; their
 additions are included in 5.4.2. The v6.0.0 publication also failed; as checked
 on 2026-10-26, PyPI still serves 5.7.1. See the [release procedure](RELEASING.md).
 
+## 6.1.0 (unreleased)
+
+### Added
+
+- `puremacro.sovereign.solve_fiscal_sovereign_default`: a fiscal block on the
+  short-term Arellano solver. A fixed tax share `tau` funds public spending
+  `g = tau*y - b + q(b', y) b'`, valued as `psi * v(g)` next to private
+  consumption `(1 - tau) y`. `FiscalSovereignResult` adds spending,
+  primary-balance and debt-to-output policies, private consumption, and a
+  `simulate()` built on a vectorized path engine with common random numbers.
+  The certified monotone search is the default. With `tau=1` and private
+  consumption off the solver is bit-identical to `solve_sovereign_default`.
+  `tau` and `psi` have no defaults; `tau=0.2, psi=1` is an illustrative
+  calibration, not fitted to any target. Guide:
+  [fiscal block](docs/sovereign_fiscal_rules.md).
+- `tools/reference_validation/check_fiscal_grids.py`: a paired-seed grid
+  ladder for the illustrative fiscal calibration, frozen in
+  `tests/fixtures/sovereign_fiscal/fiscal_grid_convergence.json`.
+
+### Internal
+
+- `solve_sovereign_default` now calls a private Bellman core parameterized by
+  resources, a choice utility and an income-only flow. Results are
+  bit-identical to 6.0.1 (pinned against a verbatim copy of the 6.0.1 solver,
+  dense and monotone, short- and long-term debt).
+- `check_arellano_grids.paired_comparison` accepts a `tolerances` mapping;
+  its default is unchanged.
+
 ## 6.0.1 (2026-10-29)
 
 **Reliability release: corrected sovereign timing and model fidelity, a

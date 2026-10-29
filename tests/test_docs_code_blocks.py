@@ -116,6 +116,9 @@ PAGES = [
     # Local language models: the blocks that need no model (cache mode, report) run here.
     "docs/local_llm.md",
     "docs/es/local_llm.md",
+    # The sovereign fiscal block (English and Spanish, identical code).
+    "docs/sovereign_fiscal_rules.md",
+    "docs/es/sovereign_fiscal_rules.md",
 ]
 
 _FENCE = re.compile(r"```python\n(.*?)```", re.S)
