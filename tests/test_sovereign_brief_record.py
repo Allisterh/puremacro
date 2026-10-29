@@ -1,0 +1,95 @@
+"""The frozen converged sovereign-risk brief sweep and the pages generated from it.
+
+The record is produced once by the maintainer
+(``python -m puremacro.examples.first_brief_sovereign --freeze
+tests/fixtures/sovereign_brief/sweep.json``, about five hours); these tests
+read it and never re-run the sweep.
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import numpy as np
+import pytest
+from scipy.stats import t as student_t
+
+from puremacro.examples import first_brief_sovereign as brief
+from puremacro.sovereign.measurement import MOMENTS
+
+ROOT = Path(__file__).resolve().parents[1]
+RECORD_PATH = ROOT / "tests" / "fixtures" / "sovereign_brief" / "sweep.json"
+
+
+@pytest.fixture(scope="module")
+def record():
+    return json.loads(RECORD_PATH.read_text())
+
+
+def _cases(record):
+    for name, scenario in record["scenarios"].items():
+        for key, case in scenario["cases"].items():
+            yield name, key, case
+
+
+def test_record_design(record):
+    assert list(record["scenarios"]) == list(brief.SCENARIOS)
+    assert record["grids"] == [[6401, 641], [3201, 641]]
+    assert record["design"] == brief.DESIGN
+    assert record["tolerances"] == brief.TOLERANCES
+    assert record["baseline"] == brief.BASELINE
+    for name, scenario in record["scenarios"].items():
+        assert scenario["overrides"] == brief.SCENARIOS[name]
+        assert list(scenario["cases"]) == ["6401x641", "3201x641"]
+    assert sum(1 for _ in _cases(record)) == 14
+
+
+def test_record_solver_diagnostics(record):
+    for name, key, case in _cases(record):
+        solver = case["solver"]
+        assert solver["converged"], (name, key)
+        assert solver["monotone_certification_gap"] <= 1e-11, (name, key)
+        assert solver["residual"] < 1e-10, (name, key)
+        assert solver["exhaustive_bellman_residual"] < 2e-11, (name, key)
+
+
+def test_record_recomputes_from_per_seed(record):
+    for name, key, case in _cases(record):
+        sim = case["simulation"]
+        assert sim["seeds"] == brief.DESIGN["seeds"]
+        n = len(sim["seeds"])
+        t_crit = student_t.ppf(.975, n - 1)
+        for m in MOMENTS:
+            values = np.asarray(sim["per_seed"][m])
+            se = values.std(ddof=1) / np.sqrt(n)
+            summary = sim["summary"][m]
+            assert summary["mean"] == pytest.approx(values.mean(), abs=1e-12), (name, key, m)
+            assert summary["se"] == pytest.approx(se, abs=1e-12), (name, key, m)
+            assert summary["ci95"] == pytest.approx([values.mean() - t_crit * se, values.mean() + t_crit * se],
+                                                    abs=1e-12), (name, key, m)
+    for name, scenario in record["scenarios"].items():
+        expected = brief.paired_change(scenario["cases"]["3201x641"], scenario["cases"]["6401x641"])
+        assert scenario["grid_change"]["passed"] == expected["passed"], name
+        assert scenario["grid_change"]["welfare_change_pct"] == pytest.approx(expected["welfare_change_pct"], abs=1e-12)
+        for m in MOMENTS:
+            got, want = scenario["grid_change"]["moments"][m], expected["moments"][m]
+            assert got["status"] == want["status"], (name, m)
+            for field in ("change", "absolute_change_bound", "tolerance"):
+                assert got[field] == pytest.approx(want[field], abs=1e-12), (name, m, field)
+            assert got["ci95"] == pytest.approx(want["ci95"], abs=1e-12)
+
+
+def test_record_has_no_local_paths():
+    text = RECORD_PATH.read_text()
+    for forbidden in ("/Users/", "/home/", "/private/", "C:\\\\", "\\\\Users\\\\"):
+        assert forbidden not in text, forbidden
+
+
+def test_baseline_is_near_the_study_record(record):
+    # A sanity link to the reference study at the same grid, not equality: the
+    # study measures 74-quarter pre-default windows, this record raw ergodic
+    # moments with a linear default annualization.
+    summary = record["scenarios"]["baseline"]["cases"]["6401x641"]["simulation"]["summary"]
+    assert abs(summary["debt_output_pct"]["mean"] - 4.003) <= 1.5
+    assert abs(summary["default_annual_pct"]["mean"] - 2.997) <= 1.0
+
