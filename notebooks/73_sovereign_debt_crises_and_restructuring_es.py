@@ -363,3 +363,12 @@ assert 0.0 <= restruct_user.post_default_prob <= 1.0
 # mecanismos de deuda larga, colateral o reestructuración. Consulte
 # `docs/es/sovereign_default.md` y `docs/es/research_reliability.md` para conocer el
 # alcance verificado y el siguiente plan de replicación.
+#
+# La resolución de la malla forma parte de cualquier resultado de default
+# soberano, no es un detalle. En la malla archivada de la autora, 200 × 21, el
+# estudio independiente de Arellano (2008) se acerca a la volatilidad publicada
+# del diferencial; refinar la misma calibración y reingreso a 797 × 321 la reduce
+# a la mitad, como advirtieron Hatchondo, Martinez y Sapriza (2010) para mallas
+# discretas equiespaciadas. El veredicto de convergencia de la calibración
+# pública, con tolerancias prerregistradas, está en `docs/es/arellano_replication.md`.
+# Las mallas gruesas de este cuaderno son ilustrativas.

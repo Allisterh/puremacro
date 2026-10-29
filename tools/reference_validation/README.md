@@ -54,6 +54,20 @@ exceeds the documented numerical tolerances after accounting for simulation
 uncertainty. Hash-verified solution caches permit longer simulations without
 resolving the model. Published moments are not convergence targets.
 
+The public cases use `solve(..., policy_search="monotone")`: for u(c) = -1/c the
+optimal debt choice is monotone in assets once actions are sorted by cash
+proceeds, so a divide-and-conquer search replaces the n_assets^2 scan and
+1,601- or 3,201-node grids (`--refinements 2 3`) become affordable. Every
+accelerated solve is then re-checked by an independent exhaustive Bellman
+evaluation; a disagreement above 1e-11 fails the solve.
+
+The converged public ladder is `--refinements 1 2 3 4 --income-states 321 641`,
+then the same command with `--periods 500000 --windows 1000`, which reuses the
+hash-verified solutions. The solves take about two hours on the tested
+workstation. The passing record is frozen in
+`tests/fixtures/arellano_2008/public_grid_convergence.json`; see the
+[comparison guide](../../docs/arellano_replication.md) for the result.
+
 ## Dynare 7.0 / MATLAB
 
 Five source models in `tests/fixtures/dynare_live/` cover quadratic forward

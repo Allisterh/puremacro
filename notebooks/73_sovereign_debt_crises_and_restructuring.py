@@ -362,3 +362,11 @@ assert 0.0 <= restruct_user.post_default_prob <= 1.0
 # the deterministic short-term equations, not the full long-term, collateral or
 # restructuring policy mechanisms. See `docs/sovereign_default.md` and
 # `docs/research_reliability.md` for the tested scope and the next replication plan.
+#
+# Grid resolution is part of any sovereign-default result, not a detail. On the
+# author's archived 200 × 21 grid the independent Arellano (2008) study comes
+# close to the published spread volatility; refining the same calibration and
+# timing to 797 × 321 halves it, as Hatchondo, Martinez and Sapriza (2010) warned
+# for evenly spaced discrete grids. The public calibration's own grid-convergence
+# verdict, under pre-registered tolerances, is in `docs/arellano_replication.md`.
+# Treat the coarse grids used in this notebook as illustrations.

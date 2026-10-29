@@ -43,7 +43,7 @@ la validez económica del modelo.
 
 | Comparación | Resultado en las mallas probadas | Pendiente |
 |---|---|---|
-| Ecuaciones Arellano de deuda corta y default determinista | Ecuaciones y archivos Fortran/MATLAB contrastados; reingreso e inicio con deuda cero corregidos | Diferencias de momentos publicados, convergencia cuantificada y deuda larga |
+| Ecuaciones Arellano de deuda corta y default determinista | Ecuaciones y archivos Fortran/MATLAB contrastados; reingreso e inicio con deuda cero corregidos; mallas de la calibración pública convergidas con 6.401 × 641 | Diferencias de momentos publicados, momentos convergidos con el propio solucionador público y deuda larga |
 | Bloque de hogares de un activo | Políticas y consumo coinciden con los autores SSJ dentro de 5e-11; jacobianos de rendimientos dentro de 4e-4 | Convergencia económica de mallas, equilibrio publicado y transiciones no lineales |
 
 Las referencias, hashes y procedencia están en
@@ -51,20 +51,26 @@ Las referencias, hashes y procedencia están en
 `tools/reference_validation/`. SSJ externo no es dependencia de ejecución.
 Coincidir en una malla común no demuestra precisión de discretización.
 
-## Estudio soberano: base completada, convergencia pendiente
+## Estudio soberano: base completada, mallas públicas convergidas
 
 La [comparación con código y momentos originales](arellano_replication.md)
-incluye 16 simulaciones independientes por caso, mallas anidadas de deuda y
-21/41/81 estados de ingreso. El refinamiento cambia diferenciales y defaults
-más que la incertidumbre Monte Carlo. Un residuo pequeño de Bellman todavía
-no basta para interpretar efectos de política.
+incluye 16 simulaciones independientes por caso, mallas anidadas de deuda y de
+21 a 321 estados de ingreso. Con la calibración archivada el refinamiento
+cambia los momentos mucho más que la incertidumbre Monte Carlo, y la volatilidad
+del diferencial se reduce a la mitad. Para la calibración pública, un criterio
+prerregistrado con semillas emparejadas establece la convergencia de mallas con
+6.401 nodos de deuda y 641 estados de ingreso. Un residuo pequeño de Bellman no
+habría bastado para esa conclusión.
 
 1. Reingreso, inicio con deuda cero y medición públicos están documentados y
    probados. Mantener separados el archivo y la calibración pública porque
    usan convenciones económicas diferentes.
-2. Resolver sensibilidad a las mallas con un criterio documentado. Separar
-   incertidumbre muestral de error de discretización, conservar momentos
-   originales y recalibrar solamente después de estabilizar el diseño numérico.
+2. Hecho para la calibración pública: las mallas convergen con 6.401 × 641 bajo
+   el criterio registrado, separando incertidumbre muestral de error de
+   discretización y conservando todos los momentos. Después, incorporar la
+   búsqueda monótona certificada a `solve_sovereign_default` para que el
+   solucionador público reproduzca esos momentos; su búsqueda densa no alcanza
+   esa malla.
 3. Estudiar volatilidad, persistencia del ingreso y probabilidad de reingreso
    en el modelo validado de deuda corta. Reportar bienestar e incertidumbre
    numérica antes de agregar vencimientos y reestructuración no contrastados.

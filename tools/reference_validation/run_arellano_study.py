@@ -51,11 +51,38 @@ def native_case() -> Solution:
                                      simulation="Shared study simulator follows the Bellman timing; built-in 1500-period diagnostics are not used"))
 
 
+DEFAULT_INCOME_STATES = (41, 81)
+
+
+def income_refinements(income_states) -> list[int]:
+    """Income-state counts for the 797-node refined cases, beyond the archived 21."""
+    states = sorted(set(int(n) for n in income_states))
+    for n in states:
+        if n <= 21 or n % 2 == 0:
+            raise ValueError("income states must be odd and greater than the archived 21")
+    return states
+
+
+def specifications(original: Solution, income_states=DEFAULT_INCOME_STATES) -> list[tuple]:
+    """(case name, solver factory) pairs in study order."""
+    refined = [(f"refined_797_{n}", (lambda n=n: solve(refinement=2, n_y=n)))
+               for n in income_refinements(income_states)]
+    return [
+        ("original_200_21", lambda: original),
+        ("refined_399_21", lambda: solve(refinement=1)),
+        ("refined_797_21", lambda: solve(refinement=2)),
+        *refined,
+        ("canonical_200_21", lambda: solve(timing="canonical")),
+        ("public_321_21", native_case),
+    ]
+
+
 def plot(report: dict, output: Path) -> None:
     import matplotlib.pyplot as plt
 
-    names = ["original_200_21", "refined_399_21", "refined_797_21", "refined_797_41", "refined_797_81"]
-    labels = ["200 × 21\nFortran", "399 × 21", "797 × 21", "797 × 41", "797 × 81"]
+    names = ["original_200_21", "refined_399_21", "refined_797_21"]
+    names += [name for name in report["cases"] if name.startswith("refined_797_") and name not in names]
+    labels = ["200 × 21\nFortran", "399 × 21", "797 × 21"] + [f"797 × {name.rsplit('_', 1)[1]}" for name in names[3:]]
     fig, axes = plt.subplots(2, 2, figsize=(10, 7), layout="constrained")
     for ax, name, label in zip(axes.flat,
             ["spread_mean_pct", "annual_default_pct", "debt_pct", "output_std_pct"],
@@ -100,16 +127,7 @@ def run(args) -> dict:
                               targets="Arellano (2008), Table 4 model column; also in author's July 2007 public draft",
                               paper="https://doi.org/10.1257/aer.98.3.690",
                               archive="https://doi.org/10.3886/E113248V1"), cases={})
-    specifications = [
-        ("original_200_21", lambda: original),
-        ("refined_399_21", lambda: solve(refinement=1)),
-        ("refined_797_21", lambda: solve(refinement=2)),
-        ("refined_797_41", lambda: solve(refinement=2, n_y=41)),
-        ("refined_797_81", lambda: solve(refinement=2, n_y=81)),
-        ("canonical_200_21", lambda: solve(timing="canonical")),
-        ("public_321_21", native_case),
-    ]
-    for name, factory in specifications:
+    for name, factory in specifications(original, args.income_states):
         started = time.monotonic()
         solution = factory()
         print(name, "solved", solution.diagnostics, flush=True)
@@ -146,4 +164,7 @@ if __name__ == "__main__":
     parser.add_argument("--periods", type=int, default=100000)
     parser.add_argument("--burn", type=int, default=1000)
     parser.add_argument("--windows", type=int, default=100)
+    parser.add_argument("--income-states", type=int, nargs="+", default=list(DEFAULT_INCOME_STATES),
+                        help="odd income-state counts above 21 for the 797-node refined cases "
+                             "(default 41 81; 161 and 321 reproduce the finer rows in the guide)")
     run(parser.parse_args())

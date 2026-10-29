@@ -94,7 +94,7 @@ def load_original(path: Path = FIXTURE / "reference.npz") -> Solution:
 
 
 def solve(refinement: int = 0, n_y: int = 21, timing: str = "archive",
-          calibration: str = "archive") -> Solution:
+          calibration: str = "archive", policy_search: str = "dense") -> Solution:
     """Independent NumPy solver; verify Bellman and pricing residuals on return.
 
     Howard evaluations accelerate each fixed-price problem. Price iteration and
@@ -109,6 +109,8 @@ def solve(refinement: int = 0, n_y: int = 21, timing: str = "archive",
         raise ValueError("timing must be archive or canonical")
     if calibration not in ("archive", "public"):
         raise ValueError("calibration must be archive or public")
+    if policy_search not in ("dense", "monotone"):
+        raise ValueError("policy_search must be dense or monotone")
     if refinement < 0:
         raise ValueError("refinement must be nonnegative")
     started = time.monotonic()
@@ -155,24 +157,32 @@ def solve(refinement: int = 0, n_y: int = 21, timing: str = "archive",
 
     def improve(value, utilities):
         ev = beta*(value @ p.T)
-        repay = np.empty_like(value)
-        policy = np.empty(value.shape, dtype=int)
-        for j in range(n_y):
-            objective = utilities[j]+ev[:, j][None, :]
-            # The archived >= tie rule chooses the last maximizing index.
-            policy[:, j] = n_b-1-np.argmax(objective[:, ::-1], axis=1)
-            repay[:, j] = objective[rows, policy[:, j]]
+        if policy_search == "monotone":
+            from tools.reference_validation._arellano_monge import maximize
+
+            repay, policy = maximize(assets, income, cash, ev, order)
+        else:
+            repay = np.empty_like(value)
+            policy = np.empty(value.shape, dtype=int)
+            for j in range(n_y):
+                objective = utilities[j]+ev[:, j][None, :]
+                # The archived >= tie rule chooses the last maximizing index.
+                policy[:, j] = n_b-1-np.argmax(objective[:, ::-1], axis=1)
+                repay[:, j] = objective[rows, policy[:, j]]
         value_new, default = combine(repay)
         return value_new, default, policy
 
     inner_total = 0
     for outer in range(1, 501):
         utilities = []
-        for j in range(n_y):
-            consumption = income[j]+assets[:, None]-price[:, j]*assets
-            utility = np.full_like(consumption, -1e19)
-            np.divide(-1., consumption, out=utility, where=consumption > 0)
-            utilities.append(utility)
+        cash = -price*assets[:, None]
+        order = np.argsort(-cash, axis=0, kind="stable") if policy_search == "monotone" else None
+        if policy_search == "dense":
+            for j in range(n_y):
+                consumption = income[j]+assets[:, None]-price[:, j]*assets
+                utility = np.full_like(consumption, -1e19)
+                np.divide(-1., consumption, out=utility, where=consumption > 0)
+                utilities.append(utility)
         for inner in range(1000):
             new, default, policy = improve(v, utilities)
             error = float(np.max(abs(new-v)))
@@ -180,7 +190,9 @@ def solve(refinement: int = 0, n_y: int = 21, timing: str = "archive",
             inner_total += 1
             if error < 1e-11:
                 break
-            selected = np.column_stack([utilities[j][rows, policy[:, j]] for j in range(n_y)])
+            consumption = income[None, :]+assets[:, None]-price[policy, cols]*assets[policy]
+            selected = np.full_like(consumption, -1e19)
+            np.divide(-1., consumption, out=selected, where=consumption > 0)
             for _ in range(20):
                 ev = beta*(v @ p.T)
                 v, _ = combine(selected+ev[policy, cols])
@@ -197,10 +209,30 @@ def solve(refinement: int = 0, n_y: int = 21, timing: str = "archive",
     residual = float(np.max(abs(checked-v)))
     if residual > 2e-11 or not np.array_equal(default, checked_default):
         raise RuntimeError(f"Final Bellman check failed: {residual}")
+    exhaustive_residual = None
+    if policy_search == "monotone":
+        # Independent exhaustive Bellman check, blocked to avoid an n_b^2*n_y
+        # allocation. This certifies the accelerator, not merely its own update.
+        ev = beta*(v @ p.T)
+        exhaustive_repay = np.empty_like(v)
+        for j in range(n_y):
+            for first in range(0, n_b, 128):
+                last = min(first+128, n_b)
+                consumption = income[j]+assets[first:last, None]-price[:, j]*assets
+                objective = -1/consumption+ev[:, j]
+                exhaustive_repay[first:last, j] = objective.max(axis=1)
+                chosen_values = objective[np.arange(last-first), checked_policy[first:last, j]]
+                if np.max(abs(chosen_values-exhaustive_repay[first:last, j])) > 1e-11:
+                    raise RuntimeError("Accelerated policy failed exhaustive optimality check")
+        exhaustive, exhaustive_default = combine(exhaustive_repay)
+        exhaustive_residual = float(np.max(abs(exhaustive-v)))
+        if exhaustive_residual > 2e-11 or not np.array_equal(exhaustive_default, checked_default):
+            raise RuntimeError(f"Exhaustive Bellman check failed: {exhaustive_residual}")
     return Solution(assets, income, p, yd, v, price, checked_policy, checked_default, timing,
                     theta=theta, gross_r=gross_r,
                     diagnostics=dict(outer_iterations=outer, policy_improvements=inner_total,
                                      bellman_residual=residual, price_residual=price_error,
+                                     policy_search=policy_search, exhaustive_bellman_residual=exhaustive_residual,
                                      elapsed_seconds=time.monotonic()-started))
 
 

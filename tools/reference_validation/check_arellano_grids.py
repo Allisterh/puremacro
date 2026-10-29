@@ -24,6 +24,16 @@ from tools.reference_validation import arellano_2008 as reference
 # numerical tolerances, not target-fitting tolerances or parameter intervals.
 TOLERANCES = {name: .02 if name.startswith("corr_") else .10 for name in reference.MOMENTS}
 
+# The monotone search makes 1,601- and 3,201-node grids affordable; every solve
+# is still certified by the solver's independent exhaustive Bellman check.
+POLICY_SEARCH = "monotone"
+
+
+def solve_case(refinement: int, n_y: int) -> reference.Solution:
+    """Public calibration, canonical timing, certified monotone policy search."""
+    return reference.solve(refinement=refinement, n_y=n_y, timing="canonical",
+                           calibration="public", policy_search=POLICY_SEARCH)
+
 
 def paired_comparison(coarse: dict, fine: dict) -> dict:
     left = {run["seed"]: run["moments"] for run in coarse["runs"]}
@@ -61,7 +71,7 @@ def case(refinement: int, n_y: int, args, source_hash: str) -> dict:
                             timing="canonical", theta=.282, gross_r=1.017, diagnostics=manifest["diagnostics"])
     if solution is None:
         print("Solving", name, flush=True)
-        solution = reference.solve(refinement=refinement, n_y=n_y, timing="canonical", calibration="public")
+        solution = solve_case(refinement, n_y)
         np.savez_compressed(arrays_path, **{key: getattr(solution, key) for key in (
             "assets", "income", "transition", "default_income", "value", "price", "policy", "default")})
         manifest_path.write_text(json.dumps(dict(source_sha256=source_hash,
@@ -125,7 +135,8 @@ def run(args) -> dict:
                   source_sha256=source_hash, checker_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                   python=platform.python_version(), numpy=np.__version__,
                   calibration=dict(beta=.95282, gamma=2., theta=.282, r=.017, rho=.945, sigma=.025,
-                                   timing="canonical", mean_income=10., default_cap=9.69,
+                                   timing="canonical", policy_search=POLICY_SEARCH,
+                                   mean_income=10., default_cap=9.69,
                                    assets_min=-3.3, assets_max=1.5, income_support="three unconditional log standard deviations"),
                   tolerances=TOLERANCES, cases={}, comparisons={}, status="incomplete")
     # Written before solving, so the tolerance/design cannot be mistaken for a

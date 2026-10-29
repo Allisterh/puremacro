@@ -1,7 +1,10 @@
 # Arellano: original-code replication and grid sensitivity
 
-**The archived solver is reproduced; convergence of the economic moments is
-not established.** This benchmark compares the original Arellano code, an
+**The archived solver is reproduced. For PureMacro's public calibration, grid
+convergence is established at 6,401 debt nodes and 641 income states under
+pre-registered tolerances. The published moments themselves are not
+grid-converged: on fine grids the same model produces about half the published
+spread volatility.** This benchmark compares the original Arellano code, an
 independent implementation, and PureMacro's current public solver. It keeps
 their model conventions explicit and makes no new fit to the published targets.
 
@@ -66,7 +69,7 @@ original random draws are unavailable, and its stated 100-window experiment
 differs from the archived MATLAB script, which scans candidate defaults 2:300.
 An exact replay of the published table is therefore not claimed.
 
-## Grid convergence remains unresolved
+## The archived calibration is not grid-converged
 
 Debt grids are nested with fixed support and an exact zero. Income grids retain
 the same log-income endpoints. Every independently solved case has a Bellman
@@ -80,11 +83,29 @@ choice hits either debt-grid boundary. Despite those checks, moments move:
 | 797 × 21 | 6.347 | 3.320 | 2.740 | 5.348 |
 | 797 × 41 | 6.010 | 4.043 | 3.558 | 4.442 |
 | 797 × 81 | 5.491 | 3.504 | 3.080 | 3.477 |
+| 797 × 161 | 5.246 | 3.370 | 2.957 | 3.230 |
+| 797 × 321 | 5.144 | 3.321 | 2.942 | 3.098 |
 
-Small equation residuals and absence of boundary mass do not establish economic
-grid convergence. The 41-to-81-state movements exceed Monte Carlo uncertainty;
-spread volatility is particularly sensitive. Being closer to one published
-target on a finer grid is not evidence that all targets have converged.
+The 161- and 321-state rows come from
+`run_arellano_study --income-states 41 81 161 321`, with the same seeds, windows
+and archived calibration and timing. Small equation residuals and absence of
+boundary mass do not establish economic grid convergence. From 81 to 321 income
+states the spread standard deviation still falls, debt/output drifts down and
+the trade-balance–spread correlation settles near 0.77 against the published
+0.43. The published spread volatility of 6.36 percentage points is therefore
+what the archived 200 × 21 grid produces at this calibration; on fine grids the
+same model generates about half of it. This is the pattern documented by
+Hatchondo, Martinez and Sapriza (2010): the discrete state space technique with
+evenly spaced grids needs a large number of points to avoid spurious
+interest-rate movements. The public-calibration ladder below shows that debt
+nodes matter as much: from 801 to 6,401 nodes spread volatility falls by another
+0.44 percentage points. Being closer to one published target on a finer grid
+is not evidence that all targets have converged, and no parameter is refitted
+here.
+
+Hatchondo, J. C., L. Martinez and H. Sapriza (2010), "Quantitative properties
+of sovereign default models: solution methods matter", *Review of Economic
+Dynamics* 13(4), 919–933, [doi:10.1016/j.red.2010.03.001](https://doi.org/10.1016/j.red.2010.03.001).
 
 ## Specification and measurement differences
 
@@ -113,15 +134,6 @@ reentry permits a decision in the same quarter. Both public simulation
 interfaces reset debt to the zero node and agree with the same seed. The shared
 study simulator continues to follow each case's Bellman timing.
 
-## Next decision
-
-The public timing and measurement contract is now documented in the
-[sovereign guide](sovereign_default.md). Resolve the grid
-sensitivity with a documented convergence criterion, before recalibrating or
-interpreting policy effects. Reentry, income volatility and persistence are
-the next controlled experiments once those checks pass. Maturity and
-restructuring extensions follow their own external validation.
-
 ## Check the public calibration's grids
 
 ```sh
@@ -131,7 +143,10 @@ MPLBACKEND=Agg python -m tools.reference_validation.check_arellano_grids --outpu
 This uses independently solved public-model equations, checked against
 `solve_sovereign_default` on a matched 401 × 9 grid. Calibration, support,
 canonical timing and measurement remain fixed. Default runs compare 401/801
-asset nodes and 321/641 income states, with 16 paired seeds per case.
+asset nodes and 321/641 income states, with 16 paired seeds per case. That
+short ladder does not pass; the next section gives the one that does. The public
+timing and measurement contract is documented in the
+[sovereign guide](sovereign_default.md).
 
 Every percentage moment must change by at most 0.10 percentage points, and
 every correlation by at most 0.02. The bound includes the absolute paired mean
@@ -147,3 +162,75 @@ The report records every seed, source hash, residual, moment and comparison.
 Verified solution caches can be reused with `--periods 500000 --windows 1000`
 to reduce sampling uncertainty while keeping the seeds fixed. Earlier archived
 results above remain historical evidence for a distinct calibration/timing.
+
+## Public calibration: grid convergence established
+
+```sh
+MPLBACKEND=Agg python -m tools.reference_validation.check_arellano_grids --output /tmp/arellano-grids \
+  --refinements 1 2 3 4 --income-states 321 641
+MPLBACKEND=Agg python -m tools.reference_validation.check_arellano_grids --output /tmp/arellano-grids \
+  --refinements 1 2 3 4 --income-states 321 641 --periods 500000 --windows 1000
+```
+
+The first command solves debt grids of 801, 1,601, 3,201 and 6,401 nodes at 321
+and 641 income states with the certified monotone search. The eight solves took
+about two hours on the tested workstation, the largest 35 minutes. The second
+command reuses the hash-verified solutions and only re-simulates.
+
+Under the standard design, 23 of the 24 final comparisons passed. The
+trade-balance–spread correlation moved 0.017 from 3,201 to 6,401 debt nodes,
+inside its 0.02 tolerance, but its bound was 0.0204, so sampling precision could
+not classify it. The pre-registered rule then applies the same seeds with
+500,000 quarters and 1,000 windows per seed. Under that design every comparison
+passes:
+
+| Debt nodes × income states | Debt / output (%) | Mean spread (%) | Annual default (%) | Spread SD (pp) | Correlation: trade balance, spread |
+|---|---:|---:|---:|---:|---:|
+| 801 × 321 | 4.042 | 3.479 | 3.105 | 3.274 | 0.701 |
+| 1,601 × 321 | 4.044 | 3.461 | 3.086 | 3.034 | 0.753 |
+| 3,201 × 321 | 4.043 | 3.425 | 3.048 | 2.895 | 0.787 |
+| 6,401 × 321 | 4.052 | 3.414 | 3.037 | 2.844 | 0.809 |
+| 801 × 641 | 3.984 | 3.453 | 3.084 | 3.215 | 0.704 |
+| 1,601 × 641 | 3.993 | 3.423 | 3.064 | 2.959 | 0.760 |
+| 3,201 × 641 | 4.002 | 3.378 | 3.012 | 2.813 | 0.798 |
+| 6,401 × 641 | 4.003 | 3.362 | 2.997 | 2.774 | 0.813 |
+
+In the final debt refinement, 3,201 to 6,401 nodes at 641 states, the largest
+bounds are 0.043 pp for spread volatility, against 0.10, and 0.017 for the
+trade-balance–spread correlation, against 0.02. In the final income refinement,
+321 to 641 states at 6,401 nodes, the largest is 0.076 pp for spread volatility.
+Every solve has a Bellman residual below 2e-12 and a price residual below 9e-9.
+The exhaustive re-check of the accelerated policies reaches the same Bellman
+residual. The frozen record,
+`tests/fixtures/arellano_2008/public_grid_convergence.json`, keeps every seed,
+moment, hash, residual and comparison. A test recomputes both comparisons from
+it and checks this table.
+
+**What the criterion does not bound.** It limits the last change, not the
+distance to the limit. Spread volatility and the trade-balance–spread
+correlation have moved in one direction at every refinement. On the 641-state
+ladder their successive changes shrink by factors of 0.26 to 0.57 and 0.41 to
+0.68 per doubling. Geometric extrapolation with those factors places the limit
+of spread volatility 0.01 to 0.05 pp below 2.774, inside its tolerance, and the
+limit of the correlation 0.01 to 0.03 above 0.813, possibly outside it. Quote
+that correlation to two decimals. The extrapolation is a diagnostic, not part
+of the registered criterion.
+
+## Next decision
+
+The public calibration now has a fixed numerical design: 6,401 debt nodes, 641
+income states and the precision design for simulated moments. The converged
+figures come from the independent reference solver, which matches
+`solve_sovereign_default` equation for equation on a 401 × 9 grid. The public
+solver cannot reach that grid: its dense policy search builds arrays of debt
+nodes × debt nodes × income states, about 210 GB each at 6,401 × 641. The next
+library step is to bring the certified monotone search into the public solver
+for short-term debt, with the same exhaustive check, so that users can
+reproduce converged moments directly.
+
+After that, the reentry, income-volatility and persistence experiments can run
+on the converged design. Keep the archived and public calibrations separate;
+the archived calibration's own convergence is not established beyond 797 debt
+points. Maturity and restructuring extensions follow their own external
+validation. Any recalibration would be a new result, not part of this
+validation.
