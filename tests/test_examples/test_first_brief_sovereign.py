@@ -179,3 +179,106 @@ def test_freeze_resume_discards_stale_partial(tmp_path, monkeypatch):
     calls.clear()
     brief.build_record(grids, design=other_design, partial=partial, log=lambda *a: None)
     assert len(calls) == len(brief.SCENARIOS)
+
+
+# --- Task 4: renderers and CLI ------------------------------------------------
+
+def test_single_scenario_cli_writes_outputs(tmp_path):
+    code = brief.main(["--scenario", "theta=0.15", "--grid", "61x11", "--periods", "5000",
+                       "--n-seeds", "2", "--output", str(tmp_path), "--lang", "es"])
+    assert code == 0
+    for name in ("table.md", "table.csv", "figure.png", "manifest.json"):
+        assert (tmp_path / name).is_file(), name
+    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    assert manifest["seeds"] == [1979, 1980]
+    assert manifest["grids"] == [[61, 11]]
+    assert manifest["periods"] == 5000 and manifest["burn"] == 1000
+    assert manifest["measurement"] == "raw ergodic (ergodic_moments)"
+    case = manifest["cases"]["theta=0.15"]["61x11"]
+    assert {"monotone_certification_gap", "elapsed_s"} <= set(case)
+    table = (tmp_path / "table.md").read_text()
+    assert "Escenario" in table
+    assert any(ch.isdigit() and nxt == "," and after.isdigit()
+               for ch, nxt, after in zip(table, table[1:], table[2:]))
+    assert "Δ" not in table and "†" not in table
+
+
+def test_sweep_requires_coarse(capsys):
+    assert brief.main(["--sweep"]) == 2
+    assert "--freeze" in capsys.readouterr().err
+
+
+def test_no_arguments_prints_help(capsys, monkeypatch):
+    def refuse(*args, **kwargs):
+        raise AssertionError("no solve without arguments")
+
+    monkeypatch.setattr(brief, "solve_scenario", refuse)
+    assert brief.main([]) == 0
+    assert "--scenario" in capsys.readouterr().out
+
+
+def test_coarse_prints_caveat(capsys, tmp_path):
+    assert brief.main(["--scenario", "baseline", "--coarse", "--grid", "31x11", "--periods", "3000",
+                       "--n-seeds", "2", "--output", str(tmp_path)]) == 0
+    assert "Coarse grid (801 x 161): for orientation only" in capsys.readouterr().out
+    assert json.loads((tmp_path / "manifest.json").read_text())["coarse_grid_caveat"] is True
+
+
+@pytest.mark.parametrize("lang,label,footnote", [("en", "Scenario", "†"), ("es", "Escenario", "†")])
+def test_render_table_marks_failed_rows(tiny_record, lang, label, footnote):
+    record = copy.deepcopy(tiny_record)
+    for scenario in record["scenarios"].values():
+        scenario["grid_change"]["passed"] = True
+    record["scenarios"]["rho_y=0.97"]["grid_change"]["passed"] = False
+    table = brief.render_table(record, lang)
+    lines = table.splitlines()
+    assert lines[0].startswith(f"| {label} |")
+    rows = [line for line in lines if line.startswith("| ") and not line.startswith(f"| {label}")]
+    assert len(rows) == 7
+    marked = [row for row in rows if "†" in row.split("|")[1]]
+    assert len(marked) == 1 and "0.97" in marked[0].replace(",", ".")
+    assert rows[0].split("|")[1].strip().startswith("**")
+    assert any(line.startswith("†") for line in lines), "footnote"
+    assert "Δ" in table
+    if lang == "es":
+        assert "61.0" not in table  # no English decimal points in numbers
+    clean = copy.deepcopy(record)
+    clean["scenarios"]["rho_y=0.97"]["grid_change"]["passed"] = True
+    assert "†" not in brief.render_table(clean, lang)
+
+
+@pytest.mark.parametrize("lang", ["en", "es"])
+def test_render_answer_is_one_paragraph_with_table_means(tiny_record, lang):
+    text = brief.render_answer(tiny_record, lang)
+    assert "\n\n" not in text.strip()
+    debt = tiny_record["scenarios"]["theta=0.15"]["cases"]["61x11"]["simulation"]["summary"]["debt_output_pct"]["mean"]
+    number = f"{debt:.3f}" if lang == "en" else f"{debt:.3f}".replace(".", ",")
+    assert number in text
+    words = ("raises", "lowers") if lang == "en" else ("sube", "baja")
+    assert any(w in text for w in words)
+
+
+@pytest.mark.parametrize("lang", ["en", "es"])
+def test_render_figure_has_five_panels(tiny_record, lang):
+    fig = brief.render_figure(tiny_record, lang)
+    assert len(fig.axes) == 5
+
+
+@pytest.mark.slow
+def test_coarse_sweep_smoke(tmp_path, capsys):
+    import time
+
+    from _timing import budget
+
+    start = time.perf_counter()
+    assert brief.main(["--sweep", "--coarse", "--output", str(tmp_path)]) == 0
+    elapsed = time.perf_counter() - start
+    assert elapsed <= budget(1800), f"{elapsed:.0f} s > budget {budget(1800):.0f} s"
+    assert "Coarse grid (801 x 161)" in capsys.readouterr().out
+    rows = (tmp_path / "table.csv").read_text().strip().splitlines()
+    assert len(rows) == 1 + 7
+    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    assert manifest["grids"] == [[801, 161]] and manifest["coarse_grid_caveat"] is True
+    record = json.loads((tmp_path / "record.json").read_text())
+    welfare = [record["scenarios"][n]["cases"]["801x161"]["welfare_pct"] for n in ("theta=0.15", "baseline", "theta=0.5")]
+    assert welfare[0] > welfare[1] > welfare[2], welfare
