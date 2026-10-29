@@ -73,6 +73,12 @@ version is a development candidate, not a published distribution.
   risk-free price and labels maturity extension as a fractional duration change.
   Collateral amplification diagnostics and term-structure residual components
   retain explicitly documented experimental limitations.
+- Added `puremacro.inference.gmm`, a public generic GMM engine: user moment
+  functions, two-step, iterated, identity or user weighting, Bartlett HAC
+  long-run covariance (package default bandwidth), analytic or numerical
+  Jacobians, sandwich standard errors, Hansen J and Wald tests. Returns
+  `GMMFitResult`. Linear IV estimates, standard errors and J match
+  linearmodels `IV2SLS`/`IVGMM` and `inference.hansen_j` to 1e-8.
 
 ## 6.0.0 (2026-10-25)
 

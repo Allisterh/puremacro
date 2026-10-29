@@ -1656,6 +1656,7 @@
     "puremacro.inference": [
       "ARTestResult",
       "AdaptiveTemperingSchedule",
+      "GMMFitResult",
       "LewbelIVResult",
       "SIMEXResult",
       "SMCResult",
@@ -1669,6 +1670,7 @@
       "effective_sample_size",
       "enumerate_specs",
       "fdrcorrection",
+      "gmm",
       "hac_fixed_b",
       "hansen_j",
       "kleibergen_paap_f",
@@ -1707,6 +1709,9 @@
     ],
     "puremacro.inference.dk": [
       "driscoll_kraay"
+    ],
+    "puremacro.inference.gmm": [
+      "gmm"
     ],
     "puremacro.inference.hac_fixed_b": [
       "hac_fixed_b",
@@ -6330,6 +6335,22 @@
       "p_value",
       "residual_ss",
       "stat"
+    ],
+    "puremacro.inference._results.GMMFitResult": [
+      "coefs",
+      "converged",
+      "cov",
+      "hac_lags",
+      "iterations",
+      "j_df",
+      "j_pvalue",
+      "j_stat",
+      "moment_means",
+      "n_obs",
+      "names",
+      "se",
+      "weight_matrix",
+      "weighting"
     ],
     "puremacro.inference._results.LewbelIVResult": [
       "beta",
