@@ -137,10 +137,10 @@ def ccapm(
     from ..inference import gmm
 
     data = _prepare(gross_returns, consumption_growth, instruments, rf)
-    theta0 = np.asarray(theta0, dtype=float)
-    if theta0.shape != (2,):
+    th0 = np.asarray(theta0, dtype=float)
+    if th0.shape != (2,):
         raise ValueError("theta0 must be (beta, gamma)")
-    fit = gmm(_moments, theta0, data, weighting=weighting, hac_lags=hac_lags,
+    fit = gmm(_moments, th0, data, weighting=weighting, hac_lags=hac_lags,
               jacobian=_jacobian, names=("beta", "gamma"))
     beta, gamma = fit.coefs
     pe = (beta * data.g[:, None] ** (-gamma) * data.R - 1.0).mean(axis=0)

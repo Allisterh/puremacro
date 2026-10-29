@@ -214,7 +214,7 @@ def fama_macbeth(
     lags = _resolve_lags(hac_lags, T)
     cov_nw = _long_run_cov(d, lags) / T
     se_nw = np.sqrt(np.clip(np.diag(cov_nw), 0.0, None))
-    if Sigma is not None:
+    if Sigma is not None and Sigma_f is not None:
         lam_f = lam[1:] if intercept else lam
         c = float(lam_f @ np.linalg.solve(Sigma_f, lam_f))
         pad = np.zeros((p, p))

@@ -172,10 +172,10 @@ def _var_es_one(x: np.ndarray, alpha: float, method: str, horizon: int) -> tuple
     mean = float(x.mean())
     eps = x - mean
     sig = np.asarray(fit.sigma, dtype=float)
-    z = eps / sig
+    zres = eps / sig
     s_next = float(np.sqrt(fit.omega + fit.alpha * eps[-1] ** 2 + fit.beta * sig[-1] ** 2))
-    qz = float(np.quantile(z, alpha, method="linear"))
-    return -(mean + s_next * qz), -(mean + s_next * float(z[z <= qz].mean()))
+    qz = float(np.quantile(zres, alpha, method="linear"))
+    return -(mean + s_next * qz), -(mean + s_next * float(zres[zres <= qz].mean()))
 
 
 def _var_es(returns: Any, alpha: float, method: str, horizon: int, which: int):
