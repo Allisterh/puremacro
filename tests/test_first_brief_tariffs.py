@@ -251,6 +251,8 @@ def test_manifest_provenance(solved, households, tmp_path):
     assert {"load", "calibration", "baseline", "counterfactual", "welfare", "households"} <= set(manifest["timings"])
     assert manifest["package_version"] == puremacro.__version__
     assert manifest["experiment"] is None
+    load = manifest["load_average"]
+    assert load is None or (len(load) == 3 and all(x >= 0 for x in load))
     for name in BASE_FILES - {"manifest.json"}:
         data = (tmp_path / name).read_bytes()
         assert manifest["artifacts"][name] == {"sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}
@@ -298,3 +300,49 @@ def test_no_outputs_on_failure(monkeypatch, tmp_path):
     with pytest.raises(RuntimeError, match="counterfactual did not converge"):
         fb.run_brief(tmp_path / "out")
     assert not (tmp_path / "out" / "headline.json").exists()
+
+
+# --- Task 4: frozen headline -----------------------------------------------------
+
+FIXTURE = Path(__file__).parent / "fixtures" / "first_brief_tariffs" / "headline.json"
+
+
+@pytest.fixture(scope="module")
+def frozen():
+    return json.loads(FIXTURE.read_text(encoding="utf-8"))
+
+
+def _assert_leaves_match(actual, expected, where="record"):
+    if isinstance(expected, dict):
+        assert isinstance(actual, dict) and set(actual) == set(expected), where
+        for key in expected:
+            _assert_leaves_match(actual[key], expected[key], f"{where}.{key}")
+    elif isinstance(expected, list):
+        assert isinstance(actual, list) and len(actual) == len(expected), where
+        for i, (a, e) in enumerate(zip(actual, expected)):
+            _assert_leaves_match(a, e, f"{where}[{i}]")
+    elif isinstance(expected, bool) or not isinstance(expected, (int, float)):
+        assert actual == expected, where
+    else:
+        assert actual == pytest.approx(expected, rel=1e-6, abs=1e-9), where
+
+
+def test_default_run_reproduces_frozen_headline(frozen, tmp_path):
+    """The default CLI run reproduces the frozen record the docs pages show."""
+    t0 = time.perf_counter()
+    study = fb.run_brief(tmp_path)
+    elapsed = time.perf_counter() - t0
+    record = study["record"]
+    _assert_leaves_match(record["national"], frozen["national"], "national")
+    _assert_leaves_match(record["households"], frozen["households"], "households")
+    for key in ("schema", "scenario", "solver", "table"):
+        _assert_leaves_match(record[key], frozen[key], key)
+    assert record["experiment"] is None
+    assert study["manifest"]["timings"]["load"] > 0 and study["manifest"]["timings"]["calibration"] > 0
+    assert elapsed < budget(60), f"default run took {elapsed:.1f} s > {budget(60):.1f} s"
+
+
+def test_experiment_reproduces_frozen(frozen):
+    sol = fb.solve_brief(sigma=frozen["experiment"]["value"])
+    _assert_leaves_match(fb.national_record(sol), frozen["experiment"]["national"], "experiment.national")
+

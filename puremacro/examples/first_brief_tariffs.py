@@ -28,6 +28,7 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import platform
 import textwrap
 import time
@@ -606,6 +607,13 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def _load_average() -> list[float] | None:
+    try:
+        return [round(x, 2) for x in os.getloadavg()]
+    except (AttributeError, OSError):  # not available on Windows
+        return None
+
+
 def _convergence(state: Any) -> dict[str, Any]:
     meta = state.metadata
     return {"converged": bool(state.converged), "solver_termination": meta.get("solver_termination"),
@@ -674,6 +682,7 @@ def write_outputs(sol: BriefSolution, households: pd.DataFrame, output: str | Pa
         "groups": {"source": households.attrs.get("source", ""), "label": households.attrs["label"],
                    "is_synthetic": bool(households.attrs["is_synthetic"])},
         "lang": lang,
+        "load_average": _load_average(),
         "artifacts": {name: {"sha256": _sha256(output / name), "bytes": (output / name).stat().st_size}
                       for name in files},
     })
@@ -688,12 +697,19 @@ def run_brief(output: str | Path, *, importer: str = "USA", exporter: str = "CHN
     """Solve everything, then write the outputs; nothing is written unless every state converged."""
     _lang(lang)
     sigma = None if experiment is None else parse_experiment(experiment)
-    bundled = load_bundled()
-    icio = bundled[0]
+    t0 = time.perf_counter()
+    icio = load_icio_data(return_structured=True)
+    t_load = time.perf_counter() - t0
+    t0 = time.perf_counter()
+    calib = calibrate_trade_model(icio.matrix, country_codes=icio.country_codes,
+                                  sector_codes=icio.sector_codes)
+    t_calib = time.perf_counter() - t0
+    bundled = (icio, calib)
     validate_scenario(icio, importer, exporter, sector, tariff)
     frame = (synthetic_groups(icio, importer) if groups is None else
              read_groups_csv(groups, icio.sector_codes, supported_sectors(icio, importer)))
     sol = solve_brief(importer, exporter, sector, tariff, bundled=bundled)
+    sol.timings.update(load=t_load, calibration=t_calib)
     households = household_incidence(sol, frame)
     alt = (None if sigma is None else
            solve_brief(importer, exporter, sector, tariff, sigma=sigma, bundled=bundled))
