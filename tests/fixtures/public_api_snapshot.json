@@ -3049,13 +3049,22 @@
       "shapley_var"
     ],
     "puremacro.sovereign": [
+      "FiscalSovereignResult",
       "RestructuringResult",
       "SovereignDefaultResult",
       "SuddenStopResult",
       "decompose_spread_term_structure",
       "evaluate_debt_restructuring",
+      "solve_fiscal_sovereign_default",
       "solve_sovereign_default",
       "solve_sudden_stop"
+    ],
+    "puremacro.sovereign._fiscal_paths": [
+      "FiscalPaths",
+      "MOMENTS",
+      "draw_uniforms",
+      "ergodic_moments",
+      "simulate_paths"
     ],
     "puremacro.sovereign._monotone": [
       "exhaustive_maximize",
@@ -3063,12 +3072,16 @@
       "min_candidate_consumption"
     ],
     "puremacro.sovereign._results": [
+      "FiscalSovereignResult",
       "RestructuringResult",
       "SovereignDefaultResult",
       "SuddenStopResult"
     ],
     "puremacro.sovereign.arellano": [
       "solve_sovereign_default"
+    ],
+    "puremacro.sovereign.fiscal": [
+      "solve_fiscal_sovereign_default"
     ],
     "puremacro.sovereign.mendoza": [
       "solve_sudden_stop"
@@ -7447,6 +7460,46 @@
       "label",
       "loader",
       "name"
+    ],
+    "puremacro.sovereign._results.FiscalSovereignResult": [
+      "b_grid",
+      "bellman_residual",
+      "bond_price",
+      "converged",
+      "coupon_rate_kappa",
+      "debt_to_gdp",
+      "default_prob",
+      "dq_db",
+      "g_default",
+      "g_policy",
+      "gamma_c",
+      "gamma_g",
+      "iterations",
+      "maturity_param_delta",
+      "metadata",
+      "p_trans",
+      "policy_b",
+      "policy_b_prime",
+      "policy_index",
+      "primary_balance",
+      "private_consumption",
+      "private_consumption_default",
+      "private_consumption_repay",
+      "psi",
+      "q_bond",
+      "residual",
+      "spread",
+      "spread_mean",
+      "spread_y_corr",
+      "taste_shock_scale",
+      "tau",
+      "v_d",
+      "v_default",
+      "v_expected",
+      "v_r",
+      "v_repay",
+      "v_star",
+      "y_grid"
     ],
     "puremacro.sovereign._results.RestructuringResult": [
       "baseline_spread",
