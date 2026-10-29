@@ -203,3 +203,25 @@ def test_provenance_check_catches_a_changed_source(record, path):
     current = brief.source_hashes()
     current[path] = "f" * 64
     assert _provenance_problems(record["source_sha256"], current)
+
+
+def _paired(record, low: str, high: str, moment: str) -> tuple[float, float]:
+    a = np.asarray(record["scenarios"][low]["cases"]["6401x641"]["simulation"]["per_seed"][moment])
+    b = np.asarray(record["scenarios"][high]["cases"]["6401x641"]["simulation"]["per_seed"][moment])
+    d = b - a
+    return float(d.mean()), float(student_t.ppf(.975, len(d) - 1) * d.std(ddof=1) / np.sqrt(len(d)))
+
+
+@pytest.mark.parametrize("lang", ["en", "es"])
+def test_volatility_sentence_quotes_the_record(record, lang):
+    # All of the volatility effect on spread and default comes between
+    # sigma_y 0.02 and 0.025; from 0.025 to 0.03 neither rises.
+    page = " ".join(PAGES[lang].read_text(encoding="utf-8").split())
+    fmt = (lambda v, f=".3f": format(v, f)) if lang == "en" else (lambda v, f=".3f": format(v, f).replace(".", ","))
+    for moment in ("spread_mean_pct", "default_annual_pct"):
+        means = [record["scenarios"][n]["cases"]["6401x641"]["simulation"]["summary"][moment]["mean"]
+                 for n in ("sigma_y=0.02", "baseline", "sigma_y=0.03")]
+        assert " / ".join(fmt(v) for v in means) in page, moment
+        change, half = _paired(record, "baseline", "sigma_y=0.03", moment)
+        digits = ".4f" if moment == "spread_mean_pct" else ".3f"
+        assert f"{fmt(change, '+' + digits)} ± {fmt(half, digits)}" in page, (moment, change, half)

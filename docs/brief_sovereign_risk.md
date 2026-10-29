@@ -24,9 +24,7 @@ starting from zero debt.
 
 In this illustrative model, starting from the public calibration and moving one parameter at a time from its low to its high value: a higher reentry probability (θ 0.15 → 0.5) lowers average debt from 6.808% of mean quarterly income to 2.374% of mean quarterly income; raises the mean spread from 1.860% to 5.127%; raises default frequency from 1.807% a year to 4.879% a year; and lowers the value of market access from 0.094% of consumption to 0.023% of consumption. A higher income volatility (σ_y 0.02 → 0.03) lowers average debt from 4.048% of mean quarterly income to 3.529% of mean quarterly income; raises the mean spread from 3.053% to 3.110%; raises default frequency from 2.933% a year to 2.989% a year; and lowers the value of market access from 0.053% of consumption to 0.035% of consumption. A higher income persistence (ρ_y 0.9 → 0.97) raises average debt from 2.521% of mean quarterly income to 5.996% of mean quarterly income; raises the mean spread from 2.398% to 3.434%; raises default frequency from 2.323% a year to 3.311% a year; and raises the value of market access from 0.036% of consumption to 0.066% of consumption. Each number is a mean over 16 simulated paths of 500,000 quarters; the table gives its 95% interval and its grid change.
 
-Read the effects of income volatility on the mean spread and on default frequency
-(about +0.06 each) as small: they are of the same order as the grid changes
-reported in the table, so this calibration says little about their sign.
+The volatility effect is not monotone. At σ_y = 0.02 / 0.025 / 0.03 the mean spread is 3.053 / 3.114 / 3.110 % and default frequency 2.933 / 2.989 / 2.989 % a year: all of the rise comes between 0.02 and 0.025, and from 0.025 to 0.03 neither rises (paired baseline → σ_y = 0.03 change -0.0033 ± 0.0012 pp for the spread and -0.001 ± 0.011 pp for default, with 95% intervals). These effects are also of the order of the grid changes in the table, so this calibration says little about their sign.
 
 ## Results
 
