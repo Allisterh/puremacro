@@ -105,7 +105,12 @@ y difieren de las cifras convergidas de esta página.
   continuada), como tasa trimestral entre los trimestres con acceso al
   mercado, por 4. La guía de replicación mide en cambio ventanas de 74
   trimestres antes de los impagos con la convención de diferencial del
-  estudio, por lo que sus cifras difieren de estas.
+  estudio, y su frecuencia de impago es la de toda la muestra,
+  `1 - (1 - entradas / trimestres de pago)^4`: compuesta, con solo los
+  trimestres de pago en el denominador, mientras que este informe usa la lineal
+  `4 * entradas / (trimestres de pago + entradas)`. Ambas diferencias casi se
+  compensan en el impago (2,989 % aquí frente a 2,997 % en la guía para la
+  base), pero las demás cifras de la guía difieren de estas.
 - **Lo que el criterio de malla no acota.** La columna Δ acota el cambio entre
   dos mallas, no la distancia al límite de malla infinitamente fina; el
   registro de replicación muestra que la DE del diferencial sigue derivando de

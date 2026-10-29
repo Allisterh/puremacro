@@ -225,3 +225,16 @@ def test_volatility_sentence_quotes_the_record(record, lang):
         change, half = _paired(record, "baseline", "sigma_y=0.03", moment)
         digits = ".4f" if moment == "spread_mean_pct" else ".3f"
         assert f"{fmt(change, '+' + digits)} ± {fmt(half, digits)}" in page, (moment, change, half)
+
+
+@pytest.mark.parametrize("lang,words", [
+    ("en", ("1 - (1 - entries / repayment quarters)^4", "compounded", "2.989", "2.997")),
+    ("es", ("1 - (1 - entradas / trimestres de pago)^4", "compuesta", "2,989", "2,997")),
+])
+def test_measurement_bullet_explains_the_default_convention(record, lang, words):
+    limits = PAGES[lang].read_text(encoding="utf-8").split("\n## ")[-1]
+    text = " ".join(limits.split())
+    for word in words:
+        assert word in text, word
+    baseline = record["scenarios"]["baseline"]["cases"]["6401x641"]["simulation"]["summary"]
+    assert f"{baseline['default_annual_pct']['mean']:.3f}" == "2.989"

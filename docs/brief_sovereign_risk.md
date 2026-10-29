@@ -101,7 +101,12 @@ output.
   counts default entries only (not continuing exclusion), as a quarterly
   hazard among quarters with market access, times 4. The replication guide
   instead measures 74-quarter windows before defaults with the study's spread
-  convention, so its numbers differ from these.
+  convention, and its default frequency is the full-sample
+  `1 - (1 - entries / repayment quarters)^4`: compounded, with only repayment
+  quarters in the denominator, where this brief uses the linear
+  `4 * entries / (repayment quarters + entries)`. The two differences roughly
+  cancel for default (2.989 % here against 2.997 % in the guide at the baseline),
+  but the guide's other numbers differ from these.
 - **What the grid criterion does not bound.** The Δ column bounds the change
   between two grids, not the distance to the infinitely fine limit; the
   replication record shows spread SD still drifting monotonically as the grid
