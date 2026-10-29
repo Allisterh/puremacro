@@ -51,6 +51,61 @@
       "sqlite3",
       "ssl"
     ],
+    "puremacro.asset_pricing": [
+      "CCAPMResult",
+      "FamaMacBethResult",
+      "HJDistanceResult",
+      "RiskSummaryResult",
+      "SDFResult",
+      "TimeSeriesTestResult",
+      "VaRBacktestResult",
+      "annualize_return",
+      "annualize_volatility",
+      "ccapm",
+      "compound",
+      "excess_returns",
+      "expected_shortfall",
+      "fama_macbeth",
+      "fred_consumption_growth",
+      "fred_risk_free",
+      "hj_distance",
+      "risk_summary",
+      "sdf_gmm",
+      "time_series_test",
+      "to_returns",
+      "value_at_risk",
+      "var_backtest"
+    ],
+    "puremacro.asset_pricing._results": [],
+    "puremacro.asset_pricing._validate": [],
+    "puremacro.asset_pricing.ccapm": [
+      "ccapm"
+    ],
+    "puremacro.asset_pricing.factor_tests": [
+      "fama_macbeth",
+      "time_series_test"
+    ],
+    "puremacro.asset_pricing.macro_data": [
+      "fred_consumption_growth",
+      "fred_risk_free"
+    ],
+    "puremacro.asset_pricing.returns": [
+      "annualize_return",
+      "annualize_volatility",
+      "compound",
+      "excess_returns",
+      "to_returns"
+    ],
+    "puremacro.asset_pricing.risk": [
+      "expected_shortfall",
+      "risk_summary",
+      "value_at_risk",
+      "var_backtest"
+    ],
+    "puremacro.asset_pricing.sdf": [
+      "hj_distance",
+      "sdf_gmm"
+    ],
     "puremacro.bartik": [
       "ShiftShareIVResult",
       "build_base_year_shares",
@@ -1131,6 +1186,10 @@
     "puremacro.fetch.jolts": [
       "INDUSTRY_CODES",
       "fetch_jolts"
+    ],
+    "puremacro.fetch.kenfrench_factors": [
+      "DATASETS",
+      "fetch"
     ],
     "puremacro.fetch.labor_ilostat": [
       "fetch_ilostat_lfs_panel",
@@ -4487,6 +4546,120 @@
       "d12",
       "d2",
       "val"
+    ],
+    "puremacro.asset_pricing._results.CCAPMResult": [
+      "asset_names",
+      "coefs",
+      "converged",
+      "cov",
+      "gmm",
+      "j_df",
+      "j_pvalue",
+      "j_stat",
+      "n_obs",
+      "names",
+      "pricing_errors",
+      "se"
+    ],
+    "puremacro.asset_pricing._results.FamaMacBethResult": [
+      "asset_names",
+      "betas",
+      "coefs",
+      "converged",
+      "cov",
+      "cs_r2",
+      "hac_lags",
+      "intercept",
+      "lambda_series",
+      "mean_returns",
+      "n_obs",
+      "names",
+      "pricing_errors",
+      "se",
+      "se_fm",
+      "se_nw",
+      "se_shanken",
+      "se_type"
+    ],
+    "puremacro.asset_pricing._results.HJDistanceResult": [
+      "asset_names",
+      "coefs",
+      "converged",
+      "cov",
+      "distance",
+      "hac_lags",
+      "n_obs",
+      "n_sim",
+      "names",
+      "pricing_errors",
+      "pvalue",
+      "se",
+      "seed",
+      "weights"
+    ],
+    "puremacro.asset_pricing._results.RiskSummaryResult": [
+      "excess_kurtosis",
+      "hac_lags",
+      "max_drawdown",
+      "max_drawdown_duration",
+      "mean",
+      "n_obs",
+      "names",
+      "periods_per_year",
+      "sharpe",
+      "sharpe_se",
+      "skewness",
+      "sortino",
+      "volatility"
+    ],
+    "puremacro.asset_pricing._results.SDFResult": [
+      "asset_names",
+      "coefs",
+      "converged",
+      "cov",
+      "demeaned",
+      "gmm",
+      "j_df",
+      "j_pvalue",
+      "j_stat",
+      "lambda_se",
+      "lambdas",
+      "mu",
+      "n_obs",
+      "names",
+      "pricing_errors",
+      "se",
+      "stage"
+    ],
+    "puremacro.asset_pricing._results.TimeSeriesTestResult": [
+      "coefs",
+      "converged",
+      "cov",
+      "factor_names",
+      "grs_df",
+      "grs_pvalue",
+      "grs_stat",
+      "hac_lags",
+      "n_obs",
+      "names",
+      "r2",
+      "se",
+      "traded",
+      "wald_df",
+      "wald_pvalue",
+      "wald_stat"
+    ],
+    "puremacro.asset_pricing._results.VaRBacktestResult": [
+      "alpha",
+      "lr_cc",
+      "lr_ind",
+      "lr_uc",
+      "n_obs",
+      "n_violations",
+      "p_cc",
+      "p_ind",
+      "p_uc",
+      "violation_rate"
     ],
     "puremacro.bartik.akm.ShiftShareIVResult": [
       "akm_shocks",
