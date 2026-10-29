@@ -90,6 +90,10 @@ exhaustive search at the returned prices certifies it: a gap above `1e-11`
 raises `RuntimeError`. If some candidate spending reaches the `1e-6` utility
 barrier, the monotone search raises `ValueError`; use `policy_search="dense"`
 there.
+In dense mode such candidates are excluded by the barrier
+`psi * (-1e12 + 1e6 g)`, whose strength scales with `psi`; it held for `psi`
+from 1e-18 to 1 in a 61 × 7 grid with `b_max = 0.5`, but values of `psi`
+below 1e-12 (a barrier worth less than one util) are not covered by tests.
 
 ## Reduction to the Arellano solver
 

@@ -94,7 +94,14 @@ def solve_fiscal_sovereign_default(
         Tax share of the endowment, in (0, 1]. ``tau=1`` needs
         ``private_consumption=False`` (private consumption would be zero).
     psi : float
-        Weight on public-spending utility, finite and > 0.
+        Weight on public-spending utility, finite and > 0. Spending at or
+        below 1e-6 meets the utility barrier ``psi * (-1e12 + 1e6 g)``, so
+        in dense mode the barrier's strength scales with ``psi``. Checked
+        for psi from 1e-18 to 1 (dense, ``n_b=61, n_y=7, b_max=0.5``): no
+        repayment state chose such spending. Below ``psi = 1e-12`` the
+        barrier is worth less than one util and is not covered by tests.
+        The monotone search raises ValueError whenever a candidate reaches
+        the barrier, whatever ``psi``.
     gamma_c, gamma_g : float, default 2.0
         CRRA curvatures of private and public consumption (>= 0).
     beta, r_star, theta, rho_y, sigma_y, y_penalty_type, d0, d1, m_tauchen

@@ -93,6 +93,10 @@ búsqueda exhaustiva por bloques a los precios devueltos la certifica: una
 diferencia superior a `1e-11` produce `RuntimeError`. Si algún gasto candidato
 alcanza la barrera de utilidad `1e-6`, la búsqueda monótona produce
 `ValueError`; use allí `policy_search="dense"`.
+En modo denso esos candidatos quedan excluidos por la barrera
+`psi * (-1e12 + 1e6 g)`, cuya fuerza escala con `psi`; se cumplió para `psi`
+entre 1e-18 y 1 en una malla de 61 × 7 con `b_max = 0.5`, pero valores de `psi`
+inferiores a 1e-12 (una barrera de menos de un útil) no están cubiertos por las pruebas.
 
 ## Reducción al solucionador de Arellano
 

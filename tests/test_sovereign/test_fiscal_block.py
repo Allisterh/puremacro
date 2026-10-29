@@ -126,3 +126,11 @@ def test_rejects_unknown_policy_search() -> None:
 def test_monotone_barrier_points_to_dense() -> None:
     with pytest.raises(ValueError, match='policy_search="dense"'):
         solve_fiscal_sovereign_default(tau=0.2, psi=1.0, b_max=0.5, n_b=21, n_y=5)
+
+
+@pytest.mark.parametrize("psi", [1e-12, 1.0])
+def test_dense_barrier_holds_down_to_the_documented_psi(psi: float) -> None:
+    res = solve_fiscal_sovereign_default(tau=0.2, psi=psi, b_max=0.5, n_b=61, n_y=7, policy_search="dense")
+    repay = res.default_prob < 0.5
+    assert res.converged and repay.any()
+    assert np.min(res.g_policy[repay]) > 1e-6
