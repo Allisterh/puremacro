@@ -14,6 +14,8 @@ from .returns import (
     excess_returns,
     to_returns,
 )
+from .risk import risk_summary
+from ._results import RiskSummaryResult
 
 __all__ = [
     "to_returns",
@@ -21,4 +23,6 @@ __all__ = [
     "compound",
     "annualize_return",
     "annualize_volatility",
+    "risk_summary",
+    "RiskSummaryResult",
 ]

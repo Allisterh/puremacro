@@ -34,3 +34,71 @@ def _finish(fig: Any, ax: Any, given: bool, show: bool):
 
         plt.show()
     return ax if given else fig
+
+
+@dataclass(frozen=True)
+class RiskSummaryResult(_ReportMixin):
+    """Result of :func:`puremacro.asset_pricing.risk_summary`.
+
+    Every statistic is an ``(N,)`` array aligned with ``names``; ``mean``,
+    ``volatility``, ``sharpe``, ``sharpe_se`` and ``sortino`` are annualized
+    with ``periods_per_year``.
+    """
+
+    names: tuple[str, ...]
+    n_obs: int
+    periods_per_year: float
+    hac_lags: int
+    mean: np.ndarray
+    volatility: np.ndarray
+    sharpe: np.ndarray
+    sharpe_se: np.ndarray
+    sortino: np.ndarray
+    skewness: np.ndarray
+    excess_kurtosis: np.ndarray
+    max_drawdown: np.ndarray
+    max_drawdown_duration: np.ndarray
+
+    def to_dataframe(self) -> pd.DataFrame:
+        """One row per series."""
+        return pd.DataFrame({
+            "name": list(self.names),
+            "mean": self.mean,
+            "volatility": self.volatility,
+            "sharpe": self.sharpe,
+            "sharpe_se": self.sharpe_se,
+            "sortino": self.sortino,
+            "skewness": self.skewness,
+            "excess_kurtosis": self.excess_kurtosis,
+            "max_drawdown": self.max_drawdown,
+            "max_drawdown_duration": self.max_drawdown_duration,
+        })
+
+    def summary(self) -> str:
+        lines = [
+            f"Risk summary (T = {self.n_obs}, {self.periods_per_year:g} periods/year, "
+            f"Sharpe se: Lo (2002) HAC, Bartlett lags = {self.hac_lags})",
+            f"  {'name':<12}{'mean':>9}{'vol':>9}{'Sharpe':>9}{'(se)':>9}{'Sortino':>9}"
+            f"{'maxDD':>8}{'dur':>6}",
+        ]
+        for j, n in enumerate(self.names):
+            lines.append(
+                f"  {n:<12}{self.mean[j]:>9.4f}{self.volatility[j]:>9.4f}"
+                f"{self.sharpe[j]:>9.3f}{self.sharpe_se[j]:>9.3f}{self.sortino[j]:>9.3f}"
+                f"{self.max_drawdown[j]:>8.3f}{int(self.max_drawdown_duration[j]):>6d}")
+        lines.append("  Annualized by sqrt(periods/year); Lo's serial-correlation "
+                     "factor eta(q) is not applied.")
+        return "\n".join(lines)
+
+    def plot(self, ax: Any = None, show: bool = False):
+        """Annualized Sharpe ratios with +/- 1.96 se bars."""
+        fig, ax, given = _new_ax(ax)
+        pos = np.arange(len(self.names))
+        ax.bar(pos, self.sharpe, color="0.6", yerr=1.96 * self.sharpe_se,
+               ecolor="0.1", capsize=3)
+        ax.axhline(0.0, color="0.1", lw=0.7)
+        ax.set_xticks(pos)
+        ax.set_xticklabels(list(self.names))
+        ax.set_ylabel("annualized Sharpe ratio")
+        ax.set_title("Sharpe ratios (95% HAC intervals)")
+        return _finish(fig, ax, given, show)
