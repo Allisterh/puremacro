@@ -402,3 +402,50 @@ class HJDistanceResult(_ReportMixin):
     def plot(self, ax: Any = None, show: bool = False):
         """Pricing errors ``R_bar - D b`` by asset."""
         return _pricing_error_plot(self, ax, show, "HJ pricing errors")
+
+
+@dataclass(frozen=True)
+class CCAPMResult(_ReportMixin):
+    """Result of :func:`puremacro.asset_pricing.ccapm`.
+
+    ``coefs = (beta, gamma)``; ``pricing_errors`` are the unconditional Euler
+    errors ``mean(beta g^-gamma R_i - 1)`` per asset at the estimate;
+    ``gmm`` is the underlying :class:`puremacro.inference.GMMFitResult`.
+    """
+
+    coefs: np.ndarray
+    se: np.ndarray
+    cov: np.ndarray
+    names: tuple[str, ...]
+    n_obs: int
+    converged: bool
+    j_stat: float
+    j_df: int
+    j_pvalue: float
+    pricing_errors: np.ndarray
+    asset_names: tuple[str, ...]
+    gmm: Any
+
+    def to_dataframe(self) -> pd.DataFrame:
+        """``beta`` and ``gamma`` with se, z, p and 95% Wald intervals."""
+        df = _coef_frame(self.names, self.coefs, self.se)
+        df["ci_low"] = self.coefs - 1.959963984540054 * self.se
+        df["ci_high"] = self.coefs + 1.959963984540054 * self.se
+        return df
+
+    def summary(self) -> str:
+        df = self.to_dataframe()
+        lines = [f"Consumption CAPM, power utility (T = {self.n_obs}, assets: "
+                 f"{', '.join(self.asset_names)}; {self.gmm.weighting} GMM)",
+                 f"  {'':<6}{'estimate':>10}{'se':>10}   95% interval"]
+        for r in df.itertuples(index=False):
+            lines.append(f"  {r.name:<6}{r.coef:>10.4f}{r.se:>10.4f}   "
+                         f"[{r.ci_low:.4f}, {r.ci_high:.4f}]")
+        lines.append(_j_line(self.j_stat, self.j_df, self.j_pvalue))
+        lines.append("  gamma is weakly identified in consumption data: read the "
+                     "interval and the J test, not the point estimate alone.")
+        return "\n".join(lines)
+
+    def plot(self, ax: Any = None, show: bool = False):
+        """Unconditional Euler-equation errors by asset."""
+        return _pricing_error_plot(self, ax, show, "CCAPM pricing errors")

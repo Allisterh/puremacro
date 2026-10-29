@@ -17,7 +17,10 @@ from .returns import (
 from .risk import expected_shortfall, risk_summary, value_at_risk, var_backtest
 from .factor_tests import fama_macbeth, time_series_test
 from .sdf import hj_distance, sdf_gmm
+from .ccapm import ccapm
+from .macro_data import fred_consumption_growth, fred_risk_free
 from ._results import (
+    CCAPMResult,
     FamaMacBethResult,
     HJDistanceResult,
     SDFResult,
@@ -46,4 +49,8 @@ __all__ = [
     "SDFResult",
     "hj_distance",
     "HJDistanceResult",
+    "ccapm",
+    "CCAPMResult",
+    "fred_consumption_growth",
+    "fred_risk_free",
 ]
