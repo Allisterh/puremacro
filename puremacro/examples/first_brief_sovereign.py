@@ -248,7 +248,7 @@ def build_record(grids: Sequence[tuple[int, int]], *, design: dict, partial: Pat
         "scenarios": {},
     }
     for name, overrides in scenarios.items():
-        entry = {"overrides": dict(overrides), "cases": {}}
+        entry: dict[str, Any] = {"overrides": dict(overrides), "cases": {}}
         record["scenarios"][name] = entry
         for n_b, n_y in grids:
             key = _case_key(n_b, n_y)

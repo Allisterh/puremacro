@@ -42,3 +42,9 @@ times were 540-880 s at 6,401 x 641 and 250-390 s at 3,201 x 641, and each
 measurement took under 8 s. Peak resident memory was 3.4 GB. The run resumes
 from `sweep.partial.json` after an interruption, reusing only cases whose source
 hashes and design match.
+
+After the freeze, one type annotation was added to
+`puremacro/examples/first_brief_sovereign.py` (`entry: dict[str, Any]` in
+`build_record`, for mypy). It changes no behaviour, so the record was not
+re-run; its `source_sha256` entry for the example is that of commit `1752c83`,
+and the other four source hashes still match.
