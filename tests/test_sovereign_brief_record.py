@@ -93,3 +93,49 @@ def test_baseline_is_near_the_study_record(record):
     assert abs(summary["debt_output_pct"]["mean"] - 4.003) <= 1.5
     assert abs(summary["default_annual_pct"]["mean"] - 2.997) <= 1.0
 
+
+# --- The bilingual pages ------------------------------------------------------
+
+PAGES = {"en": ROOT / "docs" / "brief_sovereign_risk.md", "es": ROOT / "docs" / "es" / "brief_sovereign_risk.md"}
+
+
+def _first_paragraph(text: str) -> str:
+    body = text.split("\n# ", 1)[1].split("\n", 1)[1].strip()
+    return body.split("\n\n", 1)[0]
+
+
+@pytest.mark.parametrize("lang", ["en", "es"])
+def test_pages_carry_generated_table_and_answer(record, lang):
+    page = PAGES[lang].read_text(encoding="utf-8")
+    assert brief.render_table(record, lang) in page
+    assert brief.render_answer(record, lang) in page
+
+
+@pytest.mark.parametrize("lang,words", [("en", ("illustrative", "not a claim about any country")),
+                                        ("es", ("ilustrativ", "ningún país"))])
+def test_pages_frame_the_research_rule(lang, words):
+    first = _first_paragraph(PAGES[lang].read_text(encoding="utf-8"))
+    for word in words:
+        assert word in first, word
+    assert "arellano_replication.md" in first
+
+
+@pytest.mark.parametrize("lang,headings", [
+    ("en", ["## Question", "## Answer", "## Results", "## Run it yourself", "## Assumptions and limits"]),
+    ("es", ["## Pregunta", "## Respuesta", "## Resultados", "## Ejecútelo usted mismo", "## Supuestos y límites"]),
+])
+def test_pages_have_required_sections(lang, headings):
+    page = PAGES[lang].read_text(encoding="utf-8")
+    lines = page.splitlines()
+    positions = [lines.index(h) for h in headings]
+    assert positions == sorted(positions)
+    assert "python -m puremacro.examples.first_brief_sovereign --scenario theta=0.15" in page
+    assert ("Español" if lang == "en" else "English") in page[:600]
+    assert "```python" not in page
+
+
+@pytest.mark.parametrize("lang,ref", [("en", "assets/brief_sovereign_risk.en.svg"),
+                                      ("es", "../assets/brief_sovereign_risk.es.svg")])
+def test_figure_assets_exist_and_are_referenced(lang, ref):
+    assert (ROOT / "docs" / "assets" / f"brief_sovereign_risk.{lang}.svg").is_file()
+    assert f"]({ref})" in PAGES[lang].read_text(encoding="utf-8")

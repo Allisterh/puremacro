@@ -10,6 +10,9 @@ Cálculos de Bellman separados coinciden en ecuaciones, precios y políticas en
 dos mallas. Aún no replica momentos de una calibración publicada. Consulte el
 [plan de fiabilidad](research_reliability.md).
 
+Para una estática comparativa ilustrativa con este modelo validado, consulte el
+[informe de política sobre riesgo soberano](brief_sovereign_risk.md).
+
 La extensión de largo plazo suaviza la elección de deuda y necesita otra
 referencia. `dq_db` deriva el interpolante de precios, no todo el equilibrio.
 La monotonicidad puede imponerse; la referencia independiente la desactiva.
