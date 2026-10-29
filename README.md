@@ -21,6 +21,7 @@ python -m pip install puremacro
 |---|---|
 | **Analyze data** | Estimate a shock response with the [quickstart](docs/quickstart.md), then explore [data sources](docs/micro_data.md) and [research workflows](docs/research_workflows.md). |
 | **Simulate policy** | Declare a household model with [dynamic programming](docs/dp.md), study [monetary transmission](docs/monetary_transmission.md), or build a [trade counterfactual](docs/trade_accounting.md). |
+| **Write a policy brief** | Run a [tariff experiment on public data](docs/first_brief_tariffs.md) and read national and household welfare effects. |
 | **Learn or teach** | Choose a [notebook learning path](docs/notebooks.md) or use the [bilingual course and interactive labs](curso/README.md). Use the pinned course edition below. |
 
 **Status checked 2026-10-26:** this development checkout targets **6.0.1**. Publication of the preceding v6.0.0 tag failed. The latest distribution available on [PyPI](https://pypi.org/project/puremacro/) is **5.7.1**. Reliability corrections are in development; a source tag does not establish publication.

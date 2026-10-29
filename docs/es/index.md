@@ -20,6 +20,7 @@ python -m pip install puremacro
 |---|---|
 | **Analizar datos** | Estime una respuesta a un choque con el [inicio rápido](quickstart.md), luego explore las [fuentes de datos](micro_data.md) y los [flujos de investigación](research_workflows.md). |
 | **Simular políticas** | Declare un modelo de hogares con [programación dinámica](dp.md), estudie la [transmisión monetaria](monetary_transmission.md) o construya un [contrafactual comercial](trade_accounting.md). |
+| **Redactar un informe de política** | Ejecute un [experimento arancelario con datos públicos](first_brief_tariffs.md) y lea los efectos de bienestar nacionales y por hogares. |
 | **Aprender o enseñar** | Elija una [ruta de cuadernos](notebooks.md) o use el [curso bilingüe y sus laboratorios interactivos](https://github.com/jalonso1979/puremacro/tree/main/curso). Use la edición fija del curso indicada abajo. |
 
 **Estado comprobado el 2026-10-26:** esta rama de desarrollo corresponde a **6.0.1**. La publicación de la etiqueta anterior v6.0.0 falló. La última distribución disponible en [PyPI](https://pypi.org/project/puremacro/) es **5.7.1**. Las correcciones de fiabilidad están en desarrollo; una etiqueta no acredita una publicación.
