@@ -250,3 +250,11 @@ def test_answer_flags_unconverged_levels(record, lang, phrase):
     page = PAGES[lang].read_text(encoding="utf-8")
     answer = page.split(brief.render_answer(record, lang), 1)[1].split("\n## ", 1)[0]
     assert phrase in " ".join(answer.split())
+
+
+@pytest.mark.parametrize("lang,phrase", [("en", "averaged over the long-run income distribution"),
+                                         ("es", "promediados sobre la distribución de largo plazo del ingreso")])
+def test_question_defines_welfare_over_the_long_run_distribution(lang, phrase):
+    page = PAGES[lang].read_text(encoding="utf-8")
+    question = page.split("\n## ", 2)[1]
+    assert phrase in " ".join(question.split())

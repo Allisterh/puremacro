@@ -18,7 +18,8 @@ percentage of mean quarterly income, so roughly one quarter of a
 debt-to-annual-GDP ratio), the mean spread, the frequency of default, the volatility of spreads, and the value of market access: the
 permanent consumption gain, in percent, that would make an economy in
 financial autarky with no default cost as well off as one that can borrow
-starting from zero debt.
+starting from zero debt, with both values averaged over the long-run income
+distribution.
 
 ## Answer
 

@@ -20,7 +20,8 @@ parte de una razón deuda/PIB anual), el diferencial medio, la frecuencia de
 impago, la volatilidad de los diferenciales y el valor del
 acceso al mercado: la ganancia permanente de consumo, en porcentaje, que
 dejaría a una economía en autarquía financiera y sin coste de impago tan bien
-como una que puede endeudarse partiendo de deuda cero.
+como una que puede endeudarse partiendo de deuda cero, con ambos valores
+promediados sobre la distribución de largo plazo del ingreso.
 
 ## Respuesta
 
