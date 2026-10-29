@@ -49,21 +49,38 @@ def _validate_finite(x: Any, name: str, prefix: str = "r") -> pd.DataFrame:
     return _check_finite(_as_frame(x, name, prefix), name)
 
 
-def _validate_returns(x: Any, name: str) -> pd.DataFrame:
+#: A column looks percent-scaled when its median |r| exceeds this ...
+_PCT_MEDIAN = 0.2
+#: ... or when more than this share of its values exceed 1 in absolute value.
+_PCT_SHARE_ABOVE_ONE = 0.05
+
+
+def _validate_returns(x: Any, name: str, check_scale: bool = True) -> pd.DataFrame:
     """Validate net returns in decimals.
 
     Returns a float DataFrame (a Series keeps its name, ndarray columns are
     ``"r0" .. "r{N-1}"``). Raises ``ValueError`` on NaN/inf (naming the
-    columns) and when ``abs().max() > 1``, the signature of returns quoted in
-    percent (Ken French files, FRED ``TB3MS``): ``1.2`` meaning 1.2% would
-    otherwise inflate every statistic by a factor of 100.
+    columns). With ``check_scale`` (default) it also raises when a column
+    looks quoted in percent (Ken French files, FRED ``TB3MS``): median
+    ``|r| > 0.2`` or more than 5% of its values with ``|r| > 1``. The test is
+    per column, so one percent-scaled column among decimal ones is caught and
+    named, while a genuine decimal return above 100% in a single period (small
+    stocks in 1932, crypto) is accepted. ``check_scale=False`` skips it.
     """
     df = _validate_finite(x, name)
-    big = [str(c) for c in df.columns if float(np.abs(df[c].to_numpy()).max()) > 1.0]
-    if big:
+    if not check_scale:
+        return df
+    bad = []
+    for c in df.columns:
+        a = np.abs(df[c].to_numpy())
+        med = float(np.median(a))
+        share = float(np.mean(a > 1.0))
+        if med > _PCT_MEDIAN or share > _PCT_SHARE_ABOVE_ONE:
+            bad.append(f"{c!s} (median |r| = {med:.3g}, share |r| > 1 = {share:.1%})")
+    if bad:
         raise ValueError(
-            f"{name}: column(s) {big} have |value| > 1, which looks like returns "
-            "in percent; pass decimals (divide by 100)")
+            f"{name}: values look like percent: {'; '.join(bad)}. Pass decimals, or "
+            "check_scale=False if these are genuine decimal returns")
     return df
 
 

@@ -17,8 +17,9 @@ se necesitan NumPy, SciPy y pandas.
 Todas las entradas son rendimientos por periodo en **decimales**. Todos los
 estimadores rechazan valores NaN o infinitos y nombran las columnas
 afectadas; no se descarta nada en silencio. Se rechaza una columna de
-rendimientos netos con `|valor| > 1`, porque probablemente esté en
-porcentaje. Las series con `DatetimeIndex` se emparejan por fecha, y las
+rendimientos que parezca expresada en porcentaje (mediana de `|r|` mayor que
+0,2, o más del 5% de sus valores mayores que 1 en valor absoluto); use
+`check_scale=False` para rendimientos decimales genuinos de ese tamaño. Las series con `DatetimeIndex` se emparejan por fecha, y las
 frecuencias mezcladas producen un error.
 
 Los ejemplos siguientes se ejecutan sin conexión con datos sintéticos de
@@ -226,11 +227,12 @@ estándar y J coinciden con `IV2SLS`/`IVGMM` de linearmodels y con
 - **La gamma del CCAPM está débilmente identificada** con datos de consumo
   (Stock y Wright 2000). Reporte la prueba J y los intervalos del 95% que
   imprime `summary()`, no solo la estimación puntual.
-- **Protección contra porcentajes.** Se rechazan rendimientos netos
-  superiores al 100% en un solo periodo, porque probablemente estén en
-  porcentaje. El archivo histórico completo de las 25 carteras Size-B/M
-  tiene algunos meses así en la década de 1930. Restrinja la muestra, como
-  arriba, o reescale de forma deliberada.
+- **Protección contra porcentajes.** Es una heurística aplicada a cada
+  columna de rendimientos: mediana de `|r|` mayor que 0,2 o más del 5% de
+  valores con `|r| > 1`. Los rendimientos aislados superiores al 100% (el
+  archivo de las 25 carteras Size-B/M en 1932, acciones individuales,
+  criptoactivos) se aceptan. Las series volátiles que la activen pueden
+  pasarse con `check_scale=False`.
 - **Convenciones de GMM.** La covarianza sándwich no lleva corrección de
   muestra pequeña. J es `NaN` con ponderación identidad o de usuario, y
   exactamente cero cuando el modelo está exactamente identificado.

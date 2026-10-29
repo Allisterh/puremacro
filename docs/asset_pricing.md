@@ -15,8 +15,9 @@ NumPy, SciPy and pandas.
 
 All inputs are per-period **decimal** returns. Every estimator refuses NaN
 or inf values and names the offending columns; nothing is dropped
-silently. A net-return column with `|value| > 1` is refused as probably
-quoted in percent. Series with a `DatetimeIndex` are paired by date, and
+silently. A return column that looks quoted in percent (median `|r|` above
+0.2, or more than 5% of its values above 1 in absolute value) is refused;
+pass `check_scale=False` for genuine decimal returns of that size. Series with a `DatetimeIndex` are paired by date, and
 mixed frequencies raise an error.
 
 The examples below run offline on seeded synthetic data.
@@ -214,10 +215,10 @@ linearmodels `IV2SLS`/`IVGMM` and `inference.hansen_j` to 1e-8.
 - **CCAPM gamma is weakly identified** in consumption data (Stock and Wright
   2000). Report the J test and the 95% intervals that `summary()` prints,
   not the point estimate alone.
-- **Percent guard.** Net returns above 100% in a single period are refused
-  as probably quoted in percent. The full-history 25 Size-B/M file has a
-  few such months in the 1930s. Restrict the sample, as above, or
-  rescale deliberately.
+- **Percent guard.** It is a heuristic applied per return column: median
+  `|r| > 0.2` or more than 5% of values with `|r| > 1`. Isolated returns
+  above 100% (the 25 Size-B/M file in 1932, single stocks, crypto) pass.
+  Volatile series that trip it can be passed with `check_scale=False`.
 - **GMM conventions.** The sandwich covariance has no small-sample
   correction. J is `NaN` for identity or user weighting, and exactly zero
   when the model is just identified.

@@ -58,7 +58,7 @@ def to_returns(prices: Any, kind: str = "simple"):
     return _restore(out.iloc[1:], p)
 
 
-def excess_returns(returns: Any, rf: Any):
+def excess_returns(returns: Any, rf: Any, *, check_scale: bool = True):
     """``returns - rf``, pairing rows by date.
 
     ``rf`` is a scalar or a single series in the same per-period decimal
@@ -66,13 +66,14 @@ def excess_returns(returns: Any, rf: Any):
     ``rf`` with extra dates or another order is fine; mixed frequencies
     raise). Otherwise the inputs are paired by position and must have equal
     length. The output has the container type of ``returns``.
+    ``check_scale=False`` skips the percent-scale check on both inputs.
     """
-    r = _validate_returns(returns, "returns")
+    r = _validate_returns(returns, "returns", check_scale)
     if np.ndim(rf) == 0 and not isinstance(rf, (pd.Series, pd.DataFrame)):
-        rf_df = _validate_returns(np.full(len(r), float(rf)), "rf")
+        rf_df = _validate_returns(np.full(len(r), float(rf)), "rf", check_scale)
         rf_df.index = r.index
     else:
-        rf_df = _validate_returns(rf, "rf")
+        rf_df = _validate_returns(rf, "rf", check_scale)
     if rf_df.shape[1] != 1:
         raise ValueError(f"rf must be a single series; got {rf_df.shape[1]} columns")
     r, rf_df = _align(r, rf_df, names=("returns", "rf"))
@@ -83,7 +84,8 @@ def excess_returns(returns: Any, rf: Any):
 _PERIODS = {"M": "M", "Q": "Q", "A": "Y"}
 
 
-def compound(returns: Any, to: str = "M", kind: str = "simple"):
+def compound(returns: Any, to: str = "M", kind: str = "simple", *,
+             check_scale: bool = True):
     """Aggregate returns to a lower frequency.
 
     ``kind="simple"``: ``prod(1 + r) - 1`` within each period; ``"log"``:
@@ -94,7 +96,7 @@ def compound(returns: Any, to: str = "M", kind: str = "simple"):
         raise ValueError(f"compound: to must be 'M', 'Q' or 'A'; got {to!r}")
     if kind not in ("simple", "log"):
         raise ValueError(f"compound: kind must be 'simple' or 'log'; got {kind!r}")
-    r = _validate_returns(returns, "returns")
+    r = _validate_returns(returns, "returns", check_scale)
     if not isinstance(r.index, pd.DatetimeIndex):
         raise ValueError("compound: returns need a DatetimeIndex")
     key = r.index.to_period(_PERIODS[to]).start_time
@@ -122,18 +124,18 @@ def _scalar_or_series(values: np.ndarray, df: pd.DataFrame, like: Any):
     return float(values[0])
 
 
-def annualize_return(returns: Any, periods_per_year: float):
+def annualize_return(returns: Any, periods_per_year: float, *, check_scale: bool = True):
     """Geometric annualized return ``prod(1 + r)^(ppy / T) - 1``."""
     ppy = _check_ppy(periods_per_year)
-    r = _validate_returns(returns, "returns")
+    r = _validate_returns(returns, "returns", check_scale)
     T = len(r)
     vals = np.prod(1.0 + r.to_numpy(), axis=0) ** (ppy / T) - 1.0
     return _scalar_or_series(vals, r, returns)
 
 
-def annualize_volatility(returns: Any, periods_per_year: float):
+def annualize_volatility(returns: Any, periods_per_year: float, *, check_scale: bool = True):
     """Annualized volatility ``std(r, ddof=1) * sqrt(ppy)``."""
     ppy = _check_ppy(periods_per_year)
-    r = _validate_returns(returns, "returns")
+    r = _validate_returns(returns, "returns", check_scale)
     vals = r.to_numpy().std(axis=0, ddof=1) * np.sqrt(ppy)
     return _scalar_or_series(vals, r, returns)

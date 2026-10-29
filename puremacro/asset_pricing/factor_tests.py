@@ -41,6 +41,7 @@ def time_series_test(
     *,
     hac_lags: int | None = None,
     traded: bool = True,
+    check_scale: bool = True,
 ) -> TimeSeriesTestResult:
     """Time-series regressions of excess returns on factors; test alpha = 0.
 
@@ -65,8 +66,8 @@ def time_series_test(
 
     from ..inference.gmm import _long_run_cov, _resolve_lags
 
-    Rdf = _validate_returns(excess_returns, "excess_returns")
-    Fdf = _validate_returns(factors, "factors")
+    Rdf = _validate_returns(excess_returns, "excess_returns", check_scale)
+    Fdf = _validate_returns(factors, "factors", check_scale)
     Rdf, Fdf = _align(Rdf, Fdf, names=("excess_returns", "factors"))
     R = Rdf.to_numpy(dtype=float)
     F = Fdf.to_numpy(dtype=float)
@@ -143,6 +144,7 @@ def fama_macbeth(
     shanken: bool = True,
     hac_lags: int | None = None,
     intercept: bool = True,
+    check_scale: bool = True,
 ) -> FamaMacBethResult:
     """Fama-MacBeth (1973) two-pass cross-sectional regressions.
 
@@ -169,7 +171,7 @@ def fama_macbeth(
 
     if (factors is None) == (betas is None):
         raise ValueError("fama_macbeth: pass exactly one of factors or betas")
-    Rdf = _validate_returns(excess_returns, "excess_returns")
+    Rdf = _validate_returns(excess_returns, "excess_returns", check_scale)
     Sigma = Sigma_f = None
     if factors is not None:
         Fdf = _validate_returns(factors, "factors")

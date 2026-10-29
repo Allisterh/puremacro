@@ -25,8 +25,8 @@ __all__ = ["sdf_gmm", "hj_distance"]
 _STAGES = {"first": "identity", "two_step": "two_step", "iterated": "iterated"}
 
 
-def _inputs(excess_returns: Any, factors: Any):
-    Rdf = _validate_returns(excess_returns, "excess_returns")
+def _inputs(excess_returns: Any, factors: Any, check_scale: bool = True):
+    Rdf = _validate_returns(excess_returns, "excess_returns", check_scale)
     Fdf = _validate_returns(factors, "factors")
     if not hasattr(factors, "columns") and not hasattr(factors, "name"):
         Fdf.columns = [f"f{k}" for k in range(Fdf.shape[1])]
@@ -46,6 +46,7 @@ def sdf_gmm(
     stage: str = "two_step",
     demeaned: bool = True,
     hac_lags: int | None = None,
+    check_scale: bool = True,
 ) -> SDFResult:
     """GMM estimation of a linear SDF on excess returns, ``E[R_t m_t] = 0``.
 
@@ -66,7 +67,7 @@ def sdf_gmm(
 
     if stage not in _STAGES:
         raise ValueError(f"sdf_gmm: stage must be one of {tuple(_STAGES)}; got {stage!r}")
-    Rdf, Fdf, R, F = _inputs(excess_returns, factors)
+    Rdf, Fdf, R, F = _inputs(excess_returns, factors, check_scale)
     T, N = R.shape
     K = F.shape[1]
     if N <= K:
@@ -151,6 +152,7 @@ def hj_distance(
     hac_lags: int | None = None,
     n_sim: int = 100_000,
     seed: int = 0,
+    check_scale: bool = True,
 ) -> HJDistanceResult:
     """Hansen-Jagannathan (1997) distance of the linear SDF ``m = 1 - b'f``.
 
@@ -174,7 +176,7 @@ def hj_distance(
 
     if not isinstance(n_sim, (int, np.integer)) or n_sim < 100:
         raise ValueError(f"hj_distance: n_sim must be an integer >= 100; got {n_sim!r}")
-    Rdf, Fdf, R, F = _inputs(excess_returns, factors)
+    Rdf, Fdf, R, F = _inputs(excess_returns, factors, check_scale)
     T, N = R.shape
     K = F.shape[1]
     if N <= K:

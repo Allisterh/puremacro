@@ -64,6 +64,7 @@ def risk_summary(
     rf: Any = None,
     periods_per_year: float,
     hac_lags: int | None = None,
+    check_scale: bool = True,
 ) -> RiskSummaryResult:
     """Per-column risk statistics with a HAC standard error for the Sharpe ratio.
 
@@ -80,6 +81,9 @@ def risk_summary(
     hac_lags : int, optional
         Bartlett bandwidth for the Sharpe standard error; ``None`` uses
         ``floor(4 (T/100)^(2/9))`` and ``0`` the iid case.
+    check_scale : bool
+        Refuse percent-scaled input (median ``|r| > 0.2`` or more than 5% of
+        values above 1); ``False`` skips the check.
 
     Notes
     -----
@@ -99,9 +103,10 @@ def risk_summary(
 
     ppy = _check_ppy(periods_per_year)
     if rf is not None:
-        x_in = excess_returns(_validate_returns(returns, "returns"), rf)
+        x_in = excess_returns(_validate_returns(returns, "returns", check_scale), rf,
+                              check_scale=check_scale)
     else:
-        x_in = _validate_returns(returns, "returns")
+        x_in = _validate_returns(returns, "returns", check_scale)
     X = x_in.to_numpy(dtype=float)
     T, N = X.shape
     if T < 3:
@@ -178,7 +183,8 @@ def _var_es_one(x: np.ndarray, alpha: float, method: str, horizon: int) -> tuple
     return -(mean + s_next * qz), -(mean + s_next * float(zres[zres <= qz].mean()))
 
 
-def _var_es(returns: Any, alpha: float, method: str, horizon: int, which: int):
+def _var_es(returns: Any, alpha: float, method: str, horizon: int, which: int,
+            check_scale: bool = True):
     a = _check_alpha(alpha)
     if method not in _VAR_METHODS:
         raise ValueError(f"method must be one of {_VAR_METHODS}; got {method!r}")
@@ -189,7 +195,7 @@ def _var_es(returns: Any, alpha: float, method: str, horizon: int, which: int):
         raise ValueError(
             "method='garch' supports horizon=1 only: a multi-step filtered "
             "historical simulation needs simulated paths (out of scope)")
-    df = _validate_returns(returns, "returns")
+    df = _validate_returns(returns, "returns", check_scale)
     if len(df) - horizon + 1 < 2:
         raise ValueError(f"need more than {horizon} observations; got {len(df)}")
     vals = np.array([_var_es_one(df[c].to_numpy(), a, method, int(horizon))[which]
@@ -200,7 +206,7 @@ def _var_es(returns: Any, alpha: float, method: str, horizon: int, which: int):
 
 
 def value_at_risk(returns: Any, alpha: float = 0.05, method: str = "historical",
-                  horizon: int = 1):
+                  horizon: int = 1, *, check_scale: bool = True):
     """Next-period value at risk, reported as a positive loss ``-q_alpha``.
 
     ``method="historical"``: the empirical ``alpha`` quantile
@@ -213,19 +219,20 @@ def value_at_risk(returns: Any, alpha: float = 0.05, method: str = "historical",
     ``sigma_{T+1}^2 = omega + alpha eps_T^2 + beta sigma_T^2``.
 
     A Series (or 1-D array) gives a float, a DataFrame one value per column.
+    ``check_scale=False`` skips the percent-scale check.
     """
-    return _var_es(returns, alpha, method, horizon, 0)
+    return _var_es(returns, alpha, method, horizon, 0, check_scale)
 
 
 def expected_shortfall(returns: Any, alpha: float = 0.05, method: str = "historical",
-                       horizon: int = 1):
+                       horizon: int = 1, *, check_scale: bool = True):
     """Next-period expected shortfall ``-E[r | r <= q_alpha]`` (positive loss).
 
     Same methods and conventions as :func:`value_at_risk`; ``"normal"`` uses
     ``-(h mu - sqrt(h) sigma phi(z) / alpha)``, ``z = Phi^-1(alpha)``, and
     ``"garch"`` the mean of the standardized-residual tail.
     """
-    return _var_es(returns, alpha, method, horizon, 1)
+    return _var_es(returns, alpha, method, horizon, 1, check_scale)
 
 
 def _xlogy(x: float, p: float) -> float:
@@ -233,7 +240,8 @@ def _xlogy(x: float, p: float) -> float:
     return 0.0 if x == 0 else float(x * np.log(p))
 
 
-def var_backtest(returns: Any, var: Any, alpha: float = 0.05) -> VaRBacktestResult:
+def var_backtest(returns: Any, var: Any, alpha: float = 0.05, *,
+                 check_scale: bool = True) -> VaRBacktestResult:
     """Kupiec unconditional-coverage and Christoffersen independence tests.
 
     A violation is ``r_t < -var_t`` (``var`` positive, as returned by
@@ -247,7 +255,7 @@ def var_backtest(returns: Any, var: Any, alpha: float = 0.05) -> VaRBacktestResu
     from scipy import stats
 
     a = _check_alpha(alpha)
-    r = _validate_returns(returns, "returns")
+    r = _validate_returns(returns, "returns", check_scale)
     if r.shape[1] != 1:
         raise ValueError(f"var_backtest: returns must be a single series; got {r.shape[1]} columns")
     if np.ndim(var) == 0 and not isinstance(var, (pd.Series, pd.DataFrame)):

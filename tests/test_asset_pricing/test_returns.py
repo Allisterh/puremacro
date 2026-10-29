@@ -118,3 +118,46 @@ def test_annualize_helpers():
         annualize_return(r, 0)
     with pytest.raises(TypeError):
         annualize_volatility(r)  # periods_per_year is required
+
+
+def test_scale_guard_accepts_genuine_large_decimal_returns():
+    # Real decimal data can exceed 100% in one period (25 Size-B/M SMALL LoBM,
+    # 1932-07: 1.478): a single large value must not be mistaken for percent.
+    from puremacro.asset_pricing import risk_summary, time_series_test
+
+    rng = np.random.default_rng(20)
+    idx = _monthly(600)
+    r = pd.Series(rng.normal(0.01, 0.06, 600), index=idx, name="small_lobm")
+    r.iloc[78] = 1.478
+    assert _validate_returns(r, "returns").shape == (600, 1)
+    risk_summary(r, periods_per_year=12)
+    f = pd.DataFrame({"mkt": rng.normal(0.005, 0.04, 600)}, index=idx)
+    time_series_test(r.to_frame(), f)
+    # a percent-scaled series still raises, with a message that does not tell
+    # decimal users to divide by 100
+    with pytest.raises(ValueError, match="percent") as exc:
+        _validate_returns(r * 100, "returns")
+    assert "check_scale=False" in str(exc.value)
+    assert "divide by 100" not in str(exc.value)
+    # a column whose share of |r| > 1 exceeds 5% raises even with a small median
+    crazy = pd.Series(np.where(np.arange(100) % 10 == 0, 1.5, 0.01))
+    with pytest.raises(ValueError, match="percent"):
+        _validate_returns(crazy, "returns")
+
+
+def test_check_scale_false_bypasses_the_guard():
+    from puremacro.asset_pricing import (
+        annualize_volatility, risk_summary, time_series_test, value_at_risk,
+    )
+
+    rng = np.random.default_rng(21)
+    idx = _monthly(300)
+    pct = pd.DataFrame(rng.normal(1.0, 5.0, (300, 2)), index=idx, columns=["a", "b"])
+    with pytest.raises(ValueError, match="percent"):
+        risk_summary(pct, periods_per_year=12)
+    assert risk_summary(pct, periods_per_year=12, check_scale=False).sharpe.shape == (2,)
+    assert np.isfinite(annualize_volatility(pct["a"], 12, check_scale=False))
+    assert np.isfinite(value_at_risk(pct["a"], check_scale=False))
+    excess_returns(pct, pd.Series(0.5, index=idx), check_scale=False)
+    f = pd.DataFrame({"m": rng.normal(1.0, 4.0, 300)}, index=idx)
+    time_series_test(pct, f, check_scale=False)
