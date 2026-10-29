@@ -195,7 +195,9 @@ linearmodels `IV2SLS`/`IVGMM` and `inference.hansen_j` to 1e-8.
 ## Assumptions and limits
 
 - **GRS** is exact only under iid normal errors and requires traded
-  excess-return factors. Otherwise use the HAC Wald test.
+  excess-return factors. Otherwise use the HAC Wald test, but note that
+  it over-rejects in short samples (about 23% at a nominal 5% with T = 60
+  and N = 10): with traded factors and few periods, prefer GRS.
 - **HAC bandwidth.** The default for every Bartlett long-run covariance is
   `floor(4 (T/100)^(2/9))`, uncentered. `hac_lags=0` is the iid
   (heteroskedasticity-robust) case.

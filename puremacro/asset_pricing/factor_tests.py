@@ -63,6 +63,8 @@ def time_series_test(
     Factors are scale-checked like returns only when ``traded=True``;
     non-traded factors need only be finite.
     ``T <= N + K`` or a singular residual covariance raise ``ValueError``.
+    The asymptotic Wald test over-rejects in short samples (about 23% at a
+    nominal 5% with T = 60 and N = 10); with traded factors prefer GRS there.
     """
     from scipy import stats
 

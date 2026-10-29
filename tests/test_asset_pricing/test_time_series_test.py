@@ -155,3 +155,16 @@ def test_report_quintet_and_plot():
     assert isinstance(res.plot(), matplotlib.figure.Figure)
     _, ax = plt.subplots()
     assert res.plot(ax=ax) is ax
+
+
+def test_short_sample_wald_caveat_documented():
+    # The HAC Wald test over-rejects in short samples (about 23% at nominal 5%
+    # with T=60, N=10 in review); the docstring and both guides say to prefer GRS.
+    from pathlib import Path
+
+    assert "short samples" in time_series_test.__doc__
+    root = Path(__file__).resolve().parents[2] / "docs"
+    en = (root / "asset_pricing.md").read_text(encoding="utf-8")
+    es = (root / "es" / "asset_pricing.md").read_text(encoding="utf-8")
+    assert "short samples" in en.split("## Assumptions and limits")[1]
+    assert "muestras cortas" in es.split("## Supuestos y límites")[1]

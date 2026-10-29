@@ -206,7 +206,9 @@ estándar y J coinciden con `IV2SLS`/`IVGMM` de linearmodels y con
 
 - **GRS** es exacto solo con errores normales iid y requiere factores que
   sean excesos de rendimiento negociables. En otro caso, use la prueba de
-  Wald HAC.
+  Wald HAC, pero tenga en cuenta que rechaza en exceso en muestras cortas
+  (alrededor del 23% con un nivel nominal del 5%, T = 60 y N = 10): con
+  factores negociables y pocos periodos, prefiera el GRS.
 - **Ancho de banda HAC.** El valor por defecto de toda covarianza de largo
   plazo de Bartlett es `floor(4 (T/100)^(2/9))`, sin centrar. `hac_lags=0`
   es el caso iid (robusto a heterocedasticidad).
