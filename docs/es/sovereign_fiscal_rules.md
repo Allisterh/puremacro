@@ -105,9 +105,14 @@ fiscal *es* el de Arellano, y el solucionador reproduce
 `solve_sovereign_default` bit a bit (valores, precios, políticas,
 diferenciales y número de iteraciones). Esto enlaza el bloque fiscal con el
 solucionador validado en la [replicación de Arellano](arellano_replication.md).
-Con `tau=0.2` y la malla de deuda escalada por 0,2, la homogeneidad CRRA da
-las mismas políticas, conjuntos de impago y precios, y valores transformados
-por $\tau^{1-\gamma}$; las pruebas comprueban ambas cosas. Se rechaza `tau=1`
+Con `tau=0.2`, la malla de deuda escalada por 0,2 y aún
+`private_consumption=False`, la homogeneidad CRRA da las mismas políticas,
+conjuntos de impago y precios, y valores
+$V_\tau=\tau^{1-\gamma}V_1+(\tau^{1-\gamma}-1)/((1-\gamma)(1-\beta))$ (con
+$\gamma=1$, $V_1+\log\tau/(1-\beta)$); las pruebas comprueban ambas cosas. La
+calibración ilustrativa activa el consumo privado, así que *no* es un modelo
+de Arellano reescalado: el término privado cambia la decisión de impago, los
+precios y la deuda. Se rechaza `tau=1`
 con consumo privado activado (el consumo privado sería cero).
 
 ```python
@@ -157,8 +162,17 @@ desviación típica del diferencial aún baja de 321 a 641 estados de ingreso
 (2,784 → 2,716 pp), y la escalera no tiene un peldaño de 1.281 estados que muestre
 dónde se estabiliza. Su tercer dígito merece la misma cautela que la
 [guía de Arellano](arellano_replication.md) aplica a los refinamientos de ingreso.
-Con esta calibración ilustrativa el gobierno mantiene poca deuda: cerca del 0,83 %
-del producto trimestral, en torno al 0,2 % del producto anual.
+La deuda es baja, cerca del 0,83 % del producto trimestral (en torno al 0,2 %
+del producto anual), por la razón anterior: la elección de deuda escala con los
+recursos `tau*y`, de modo que el gobierno mantiene unas `tau` veces la deuda del
+propio modelo de Arellano, y los modelos de Arellano con deuda a corto plazo ya
+mantienen poca deuda. Medido con el mismo motor de trayectorias en mallas de
+801 × 161 (8 semillas × 100.000 trimestres), el modelo de Arellano con la
+calibración pública (`tau=1`, sin consumo privado) mantiene el 3,64 % del
+producto trimestral; `tau=0.2` sin consumo privado, el 0,727 %, exactamente un
+quinto; activar el consumo privado lo eleva al 0,86 % (0,83 % en la malla más
+fina de la tabla). Eso equivale a cerca del 4 % del ingreso tributario de un
+trimestre (`tau` por el producto medio, 0,2).
 
 ```sh
 MPLBACKEND=Agg python -m tools.reference_validation.check_fiscal_grids --output /tmp/fiscal-grids

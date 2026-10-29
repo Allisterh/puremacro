@@ -101,9 +101,14 @@ With `tau=1`, `psi=1`, `gamma_g=gamma` and `private_consumption=False` the
 fiscal model *is* the Arellano model, and the solver reproduces
 `solve_sovereign_default` bit for bit (values, prices, policies, spreads and
 iteration counts). This links the fiscal block to the solver validated in the
-[Arellano replication](arellano_replication.md). With `tau=0.2` and the debt
-grid scaled by 0.2, CRRA homogeneity gives the same policies, default sets and
-prices, and values transformed by $\tau^{1-\gamma}$; the tests check both.
+[Arellano replication](arellano_replication.md). With `tau=0.2`, the debt
+grid scaled by 0.2 and still `private_consumption=False`, CRRA homogeneity
+gives the same policies, default sets and prices, and values
+$V_\tau=\tau^{1-\gamma}V_1+(\tau^{1-\gamma}-1)/((1-\gamma)(1-\beta))$ (for
+$\gamma=1$, $V_1+\log\tau/(1-\beta)$); the tests check both. The illustrative
+calibration switches private consumption on, so it is *not* a rescaled
+Arellano model: the private term changes the default decision, prices and
+debt.
 `tau=1` with private consumption on is rejected (private consumption would be
 zero).
 
@@ -152,8 +157,16 @@ standard deviation still falls from 321 to 641 income states (2.784 → 2.716 pp
 and the ladder has no 1,281-state rung to show where it settles. Treat its
 third digit with the same caution as the [Arellano guide](arellano_replication.md)
 applies to income-grid refinements.
-At this illustrative calibration the government holds little debt: about 0.83% of
-quarterly output, roughly 0.2% of annual output.
+Debt is low, about 0.83% of quarterly output (roughly 0.2% of annual output),
+for the reason above: the debt choice scales with resources `tau*y`, so the
+government carries about `tau` times the Arellano model's own debt, and
+short-term-debt Arellano models carry little debt to begin with. Measured with
+the same path engine on 801 × 161 grids (8 seeds × 100,000 quarters), the
+public-calibration Arellano model (`tau=1`, private consumption off) holds
+3.64% of quarterly output; `tau=0.2` without private consumption holds 0.727%,
+exactly a fifth; switching private consumption on raises it to 0.86% (0.83%
+on the finest grid above). That is about 4% of one quarter's tax revenue
+(`tau` times mean output, 0.2).
 
 ```sh
 MPLBACKEND=Agg python -m tools.reference_validation.check_fiscal_grids --output /tmp/fiscal-grids
