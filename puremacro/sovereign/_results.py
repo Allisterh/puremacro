@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "SovereignDefaultResult",
+    "FiscalSovereignResult",
     "SuddenStopResult",
     "RestructuringResult",
 ]
@@ -391,6 +392,42 @@ class SovereignDefaultResult:
     ) -> matplotlib.figure.Figure:
         """Default plot showing price schedule and spread curves."""
         return self.plot_price_schedule(figsize=figsize)
+
+
+def _empty_index() -> np.ndarray:
+    return np.zeros((0,), dtype=int)
+
+
+@dataclass(frozen=True)
+class FiscalSovereignResult(SovereignDefaultResult):
+    """Sovereign default result with a government-spending block.
+
+    Adds the fiscal policies implied by the debt choice: public spending
+    ``g = tau*y - b + q(b', y) b'``, the primary balance ``b - q b'``
+    (``= tau*y - g``), debt-to-output ``b'/y`` and private consumption
+    ``(1 - tau) y``. Debt and spending are in units of mean quarterly output.
+    """
+
+    tau: float = 0.0
+    psi: float = 0.0
+    gamma_c: float = 2.0
+    gamma_g: float = 2.0
+    private_consumption: bool = True
+    policy_index: np.ndarray = field(default_factory=_empty_index)
+    g_policy: np.ndarray = field(default_factory=lambda: np.zeros((0,)))
+    g_default: np.ndarray = field(default_factory=lambda: np.zeros((0,)))
+    primary_balance: np.ndarray = field(default_factory=lambda: np.zeros((0,)))
+    debt_to_gdp: np.ndarray = field(default_factory=lambda: np.zeros((0,)))
+    private_consumption_repay: np.ndarray = field(default_factory=lambda: np.zeros((0,)))
+    private_consumption_default: np.ndarray = field(default_factory=lambda: np.zeros((0,)))
+
+    def summary(self) -> pd.DataFrame:
+        """Return the sovereign summary plus the fiscal parameters."""
+        base = super().summary()
+        extra = [("tau", self.tau), ("psi", self.psi), ("gamma_c", self.gamma_c),
+                 ("gamma_g", self.gamma_g), ("private_consumption", self.private_consumption)]
+        rows = pd.DataFrame({"metric": [r[0] for r in extra], "value": [_fmt_val(r[1]) for r in extra]})
+        return pd.concat([base, rows], ignore_index=True)
 
 
 @dataclass(frozen=True)
