@@ -3121,6 +3121,11 @@
       "solve_sovereign_default",
       "solve_sudden_stop"
     ],
+    "puremacro.sovereign._monotone": [
+      "exhaustive_maximize",
+      "maximize",
+      "min_candidate_consumption"
+    ],
     "puremacro.sovereign._results": [
       "RestructuringResult",
       "SovereignDefaultResult",

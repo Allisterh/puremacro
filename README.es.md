@@ -24,7 +24,7 @@ python -m pip install puremacro
 | **Simular políticas** | Declare un modelo de hogares con [programación dinámica](docs/es/dp.md), estudie la [transmisión monetaria](docs/es/monetary_transmission.md) o construya un [contrafactual comercial](docs/es/trade_accounting.md). |
 | **Aprender o enseñar** | Elija una [ruta de cuadernos](docs/es/notebooks.md) o use el [curso bilingüe y sus laboratorios interactivos](curso/README.md). Use la edición fija del curso indicada abajo. |
 
-**Estado comprobado el 2026-10-26:** esta rama de desarrollo corresponde a **6.0.1**. La publicación de la etiqueta anterior v6.0.0 falló. La última distribución disponible en [PyPI](https://pypi.org/project/puremacro/) es **5.7.1**. Las correcciones de fiabilidad están en desarrollo; una etiqueta no acredita una publicación.
+**Estado comprobado el 2026-10-29:** **6.0.1** está publicada en [PyPI](https://pypi.org/project/puremacro/6.0.1/), y `pip install puremacro` la instala. Es la primera versión publicada desde 5.7.1: las etiquetas 5.8.0, 5.9.0 y 6.0.0 nunca se publicaron (v6.0.0 falló en CI). Esta rama `main` puede contener trabajo no publicado hacia 6.1.0; una etiqueta no acredita por sí sola una publicación.
 Consulte las [pruebas recomendadas y próximos hitos](docs/es/research_reliability.md).
 Estas páginas corresponden a 6.0.0; consulte el
 [historial de cambios](CHANGELOG.md) y use la documentación correspondiente

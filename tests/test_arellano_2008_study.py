@@ -255,3 +255,38 @@ def test_guides_tabulate_the_frozen_public_grid_record(guide, thousands, decimal
         row = f'| {nodes} × {case["n_income"]} | ' + " | ".join(
             f'{moments[k]["mean"]:.3f}'.replace(".", decimal) for k in GUIDE_COLUMNS) + " |"
         assert row in text, row
+
+
+def _public_monotone(n_b: int, n_y: int):
+    """PureMacro's public solver at the reference study's public calibration."""
+    from puremacro.sovereign import solve_sovereign_default
+
+    return solve_sovereign_default(beta=.95282, r_star=.017, theta=.282, rho_y=.945, sigma_y=.025,
+                                   b_min=-.15, b_max=.33, n_b=n_b, n_y=n_y, sigma_eps=0,
+                                   y_penalty_type="arellano", enforce_monotonicity=False,
+                                   tol=1e-10, max_iter=10000, policy_search="monotone")
+
+
+def _assert_public_matches_reference(public, reference: Solution):
+    # Public debt index k is reference asset index n_b-1-k; income is scaled by 10,
+    # so u_public(c/10) = 1 - 10/c and V_public = 1/(1-beta) + 10 V_reference.
+    assert public.converged and public.metadata["monotone_certification_gap"] <= 1e-11
+    assert np.allclose(public.y_grid * 10, reference.income, rtol=1e-12, atol=0)
+    assert np.max(abs(public.bond_price - reference.price[::-1])) <= 1e-8
+    assert np.allclose(public.policy_b, (-reference.assets[reference.policy] / 10)[::-1], rtol=0, atol=1e-12)
+    default = reference.default[::-1]
+    assert np.array_equal(public.default_prob > .5, default)
+    repay = 1 / (1 - .95282) + 10 * reference.value[::-1]
+    assert np.max(abs(public.v_repay - repay)[~default]) <= 1e-8
+
+
+def test_public_monotone_matches_reference_401x21():
+    _assert_public_matches_reference(_public_monotone(401, 21),
+                                     solve(0, 21, timing="canonical", calibration="public"))
+
+
+@pytest.mark.slow
+def test_public_monotone_matches_reference_1601x21():
+    _assert_public_matches_reference(
+        _public_monotone(1601, 21),
+        solve(2, 21, timing="canonical", calibration="public", policy_search="monotone"))
