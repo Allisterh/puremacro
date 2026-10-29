@@ -169,7 +169,7 @@ Thirteen scripts that together span the methods catalogue. Read in this order if
 
 | Script | LOC | Headline |
 |---|---:|---|
-| `first_brief_sovereign` | 682 | Sovereign-risk policy brief: how reentry probability, income volatility and persistence move debt, spreads, default and the value of market access in the public Arellano calibration (illustrative; `--scenario`, `--sweep --coarse`, `--lang en\|es`). |
+| `first_brief_sovereign` | 692 | Sovereign-risk policy brief: how reentry probability, income volatility and persistence move debt, spreads, default and the value of market access in the public Arellano calibration (illustrative; `--scenario`, `--sweep --coarse`, `--lang en\|es`). |
 
 ### Data infrastructure
 

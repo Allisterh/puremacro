@@ -159,8 +159,7 @@ def test_timings_are_quoted_consistently(record, capsys):
         assert (f"{minutes} minutes" if lang == "en" else f"{minutes} minutos") in page
         assert ("under load" if lang == "en" else "bajo carga") in page
         assert "6,851 s (1.9 h)" in page or "6.851 s (1,9 h)" in page
-        sep = "/" 
-        loads = sep.join(f"{v:.0f}" for v in load)
+        loads = "/".join(f"{v:.0f}" for v in load)
         assert loads in page, loads
     assert "1.9 h" in " ".join(__doc__.split())
 
