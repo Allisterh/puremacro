@@ -162,3 +162,20 @@ def test_backtest_report_quintet():
     assert "\\begin{tabular}" in res.to_latex()
     assert "#table(" in res.to_typst()
     assert "Kupiec" in res.summary() and "Christoffersen" in res.summary()
+
+
+def test_garch_var_refuses_unconverged_fit(monkeypatch):
+    import dataclasses
+
+    import puremacro.garch as garch_pkg
+    from puremacro.garch import garch11_fit as real_fit
+
+    def unconverged(x, mean="zero"):
+        return dataclasses.replace(real_fit(x, mean=mean), converged=False)
+
+    monkeypatch.setattr(garch_pkg, "garch11_fit", unconverged)
+    r = _simulate_garch(1_000, seed=3)
+    with pytest.raises(ValueError, match="did not converge"):
+        value_at_risk(r, method="garch")
+    with pytest.raises(ValueError, match="did not converge"):
+        expected_shortfall(r, method="garch")

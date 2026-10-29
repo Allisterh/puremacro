@@ -174,6 +174,11 @@ def _var_es_one(x: np.ndarray, alpha: float, method: str, horizon: int) -> tuple
     from ..garch import garch11_fit
 
     fit = garch11_fit(x, mean="constant")
+    if not fit.converged:
+        raise ValueError(
+            "method='garch': the GARCH(1,1) fit did not converge, so its filtered "
+            "volatility cannot be trusted; use method='historical' or 'normal', or "
+            "check the series (length, scale, outliers)")
     mean = float(x.mean())
     eps = x - mean
     sig = np.asarray(fit.sigma, dtype=float)
@@ -216,7 +221,9 @@ def value_at_risk(returns: Any, alpha: float = 0.05, method: str = "historical",
     filtered historical simulation, ``-(mean + sigma_{T+1} q_alpha(z))`` with
     ``z`` the standardized residuals of a constant-mean
     :func:`puremacro.garch.garch11_fit` and
-    ``sigma_{T+1}^2 = omega + alpha eps_T^2 + beta sigma_T^2``.
+    ``sigma_{T+1}^2 = omega + alpha eps_T^2 + beta sigma_T^2``. A GARCH fit
+    that did not converge raises ``ValueError`` rather than returning a VaR
+    built on its volatility.
 
     A Series (or 1-D array) gives a float, a DataFrame one value per column.
     ``check_scale=False`` skips the percent-scale check.
