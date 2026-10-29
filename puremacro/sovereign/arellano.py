@@ -6,8 +6,8 @@ Implements:
    coupon debt model (delta in (0, 1], kappa >= 0).
 3. Extreme-value (Gumbel) taste shocks sigma_eps > 0 for smooth logistic default
    probabilities and differentiable log-sum-exp value functions.
-4. Machine-precision forward automatic differentiation via DualArray for
-   bond-price schedule derivatives dq(b', y)/db'.
+4. Bond-price schedule derivatives dq(b', y)/db' from a monotone PCHIP
+   interpolant (exact node tangents, vectorized).
 5. Optional monotonicity enforcement and unadjusted simulated spread diagnostics.
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ from typing import Any, Mapping
 import numpy as np
 from scipy.stats import norm
 
-from puremacro._autodiff import DualArray
+from puremacro.sovereign._monotone import exhaustive_maximize, maximize, min_candidate_consumption
 from puremacro.sovereign._results import SovereignDefaultResult
 
 __all__ = [
@@ -94,57 +94,24 @@ def _compute_default_penalty(
 
 
 def _compute_dq_db_dualarray(q: np.ndarray, b_grid: np.ndarray) -> np.ndarray:
-    """Evaluate forward automatic differentiation dq(b', y)/db' via DualArray.
+    """Evaluate the derivative dq(b', y)/db' of a monotone PCHIP interpolant.
 
-    Uses monotonic cubic Hermite (PCHIP) spline evaluated with DualArray
-    to ensure machine-precision tangents dq/db <= 0.
+    Uses Fritsch-Carlson harmonic-mean tangents, so derivatives satisfy
+    dq/db <= 0. At each grid node the cubic Hermite derivative equals the
+    node's tangent, which is computed for all nodes at once.
     """
-    n_b, n_y = q.shape
-    dq_db = np.zeros_like(q)
-    h = np.diff(b_grid)
-
-    for j in range(n_y):
-        q_col = q[:, j]
-        delta = np.diff(q_col) / h
-        d = np.zeros(n_b, dtype=np.float64)
-
-        # Fritsch-Carlson / harmonic PCHIP interior tangents
-        for k in range(1, n_b - 1):
-            if delta[k - 1] * delta[k] > 0.0:
-                d[k] = 2.0 / (1.0 / delta[k - 1] + 1.0 / delta[k])
-            else:
-                d[k] = 0.0
-
-        d[0] = delta[0] if len(delta) > 0 and delta[0] <= 0.0 else 0.0
-        d[-1] = delta[-1] if len(delta) > 0 and delta[-1] <= 0.0 else 0.0
-
-        # Evaluate through DualArray for interior intervals
-        for k in range(n_b - 1):
-            bk = b_grid[k]
-            hk = h[k]
-            b_pt = DualArray(bk, np.array([1.0]))
-            t = (b_pt - bk) / hk
-            h00 = 2.0 * t ** 3 - 3.0 * t ** 2 + 1.0
-            h10 = t ** 3 - 2.0 * t ** 2 + t
-            h01 = -2.0 * t ** 3 + 3.0 * t ** 2
-            h11 = t ** 3 - t ** 2
-            q_eval = h00 * q_col[k] + h10 * (hk * d[k]) + h01 * q_col[k + 1] + h11 * (hk * d[k + 1])
-            dq_db[k, j] = q_eval.der[0]
-
-        # Last grid point evaluated in the final interval
-        k_last = n_b - 2
-        bk = b_grid[k_last]
-        hk = h[k_last]
-        b_pt = DualArray(b_grid[-1], np.array([1.0]))
-        t = (b_pt - bk) / hk
-        h00 = 2.0 * t ** 3 - 3.0 * t ** 2 + 1.0
-        h10 = t ** 3 - 2.0 * t ** 2 + t
-        h01 = -2.0 * t ** 3 + 3.0 * t ** 2
-        h11 = t ** 3 - t ** 2
-        q_eval = h00 * q_col[k_last] + h10 * (hk * d[k_last]) + h01 * q_col[-1] + h11 * (hk * d[-1])
-        dq_db[-1, j] = q_eval.der[0]
-
-    return np.minimum(dq_db, 0.0)
+    if q.shape[0] < 2:
+        return np.zeros_like(q)
+    delta = np.diff(q, axis=0) / np.diff(b_grid)[:, None]
+    d = np.zeros_like(q)
+    left, right = delta[:-1], delta[1:]
+    same_sign = left * right > 0.0
+    with np.errstate(divide="ignore", invalid="ignore"):
+        harmonic = 2.0 / (1.0 / left + 1.0 / right)
+    d[1:-1] = np.where(same_sign, harmonic, 0.0)
+    d[0] = np.where(delta[0] <= 0.0, delta[0], 0.0)
+    d[-1] = np.where(delta[-1] <= 0.0, delta[-1], 0.0)
+    return np.minimum(d, 0.0)
 
 
 def solve_sovereign_default(
@@ -172,6 +139,7 @@ def solve_sovereign_default(
     howard_steps: int = 15,
     enforce_monotonicity: bool = True,
     y_penalty_type: str = "chatterjee_eyigungor",
+    policy_search: str = "dense",
 ) -> SovereignDefaultResult:
     """Solve quantitative sovereign default model with endogenous maturity and taste shocks.
 
@@ -229,12 +197,23 @@ def solve_sovereign_default(
         If True, enforce dq/db' <= 0 at each iteration.
     y_penalty_type : str, default "chatterjee_eyigungor"
         Default output cost function: "chatterjee_eyigungor" or "arellano".
+    policy_search : {"dense", "monotone"}, default "dense"
+        Debt-choice search. "dense" evaluates every candidate at once and
+        needs arrays of n_b * n_b * n_y entries. "monotone" (short-term debt
+        only, delta = 1 and kappa = 0) exploits concave utility to search
+        in O(n_b log n_b) per income state (gamma >= 0). It returns the same
+        values as "dense" and the same policies except at exact value ties
+        between choices with different bond proceeds. After convergence a
+        blocked exhaustive search at the returned prices and values
+        certifies it: a repayment-value gap above 1e-11 raises RuntimeError.
+        It raises ValueError if any candidate consumption reaches the 1e-6
+        utility barrier, where utility is not concave; use "dense" there.
 
     Returns
     -------
     SovereignDefaultResult
         Solved value functions, policy function, bond price schedule,
-        sovereign spreads, and DualArray derivatives dq/db'.
+        sovereign spreads, and PCHIP derivatives dq/db'.
     """
     if delta <= 0.0 or delta > 1.0:
         raise ValueError(f"delta must be in (0, 1]; got {delta}")
@@ -248,6 +227,13 @@ def solve_sovereign_default(
         raise ValueError(f"r_star must be > 0; got {r_star}")
     if not np.isfinite(theta) or not 0.0 <= theta <= 1.0:
         raise ValueError(f"theta must be finite and in [0, 1]; got {theta}")
+    if policy_search not in ("dense", "monotone"):
+        raise ValueError(f'policy_search must be "dense" or "monotone"; got {policy_search!r}')
+    monotone = policy_search == "monotone"
+    if monotone and (delta != 1.0 or kappa != 0.0):
+        raise ValueError('policy_search="monotone" supports short-term debt only (delta=1, kappa=0)')
+    if monotone and gamma < 0.0:
+        raise ValueError(f'policy_search="monotone" requires concave utility, gamma >= 0; got {gamma}')
 
     y_grid, p_trans, stat_dist = _discretize_endowment(n_y, rho_y, sigma_y, m=m_tauchen)
     y_def = _compute_default_penalty(y_grid, penalty_type=y_penalty_type, d0=d0, d1=d1,
@@ -320,14 +306,21 @@ def solve_sovereign_default(
         # Expected continuation value EV = V @ P_trans.T of shape (n_b, n_y)
         ev = v_exp @ p_trans.T
 
-        # Full tensor consumption c: shape (n_b, n_b, n_y)
-        # c(i, m, j) = y_j - service * b_i + q(m, j) * [b_m - retention * b_i]
-        q_next = q[None, :, :]
-        c_tensor = y_cur - service_coeff * b_cur + q_next * (b_next - retention_coeff * b_cur)
+        if monotone:
+            if min_candidate_consumption(b_grid, y_grid, q) <= 1e-6:
+                raise ValueError('Candidate consumption reaches the 1e-6 utility barrier, where '
+                                 'utility is not concave; use policy_search="dense"')
+            v_rep_new, m_opt = maximize(b_grid, y_grid, q, ev, beta, u_func)
+            c_opt = (y_grid[None, :] - 1.0 * b_grid[:, None]) + np.take_along_axis(q, m_opt, axis=0) * b_grid[m_opt]
+        else:
+            # Full tensor consumption c: shape (n_b, n_b, n_y)
+            # c(i, m, j) = y_j - service * b_i + q(m, j) * [b_m - retention * b_i]
+            q_next = q[None, :, :]
+            c_tensor = y_cur - service_coeff * b_cur + q_next * (b_next - retention_coeff * b_cur)
 
-        # Bellman objective
-        w_tensor = u_func(c_tensor) + beta * ev[None, :, :]
-        m_opt = np.argmax(w_tensor, axis=1)
+            # Bellman objective
+            w_tensor = u_func(c_tensor) + beta * ev[None, :, :]
+            m_opt = np.argmax(w_tensor, axis=1)
 
         if delta < 0.999:
             # Long-term debt: smooth choice eliminates grid chattering and secures residual < 1e-7
@@ -338,9 +331,10 @@ def solve_sovereign_default(
             q_tomorrow = np.sum(prob_b * q[None, :, :], axis=1)
         else:
             # Short-term debt (Arellano 2008): delta = 1.0, retention = 0.0
-            v_rep_new = np.take_along_axis(w_tensor, m_opt[:, None, :], axis=1).squeeze(axis=1)
+            if not monotone:
+                v_rep_new = np.take_along_axis(w_tensor, m_opt[:, None, :], axis=1).squeeze(axis=1)
+                c_opt = np.take_along_axis(c_tensor, m_opt[:, None, :], axis=1).squeeze(axis=1)
             # Howard policy iteration steps for fast convergence
-            c_opt = np.take_along_axis(c_tensor, m_opt[:, None, :], axis=1).squeeze(axis=1)
             for _ in range(howard_steps):
                 if sigma_eps == 0.0:
                     v_exp_h = np.maximum(v_rep_new, v_def[None, :])
@@ -386,10 +380,21 @@ def solve_sovereign_default(
         p_def = 1.0 / (1.0 + np.exp(np.clip((v_rep-v_def[None, :])/sigma_eps, -60.0, 60.0)))
         v_exp = sigma_eps * np.logaddexp(v_rep/sigma_eps, v_def[None, :]/sigma_eps)
 
+    certification_gap = exhaustive_residual = None
+    if monotone:
+        # Certify the accelerator against every candidate at the returned prices.
+        ev_final = v_exp @ p_trans.T
+        accelerated, _ = maximize(b_grid, y_grid, q, ev_final, beta, u_func)
+        exhaustive, _ = exhaustive_maximize(b_grid, y_grid, q, ev_final, beta, u_func)
+        certification_gap = float(np.max(np.abs(accelerated - exhaustive)))
+        if certification_gap > 1e-11:
+            raise RuntimeError(f"Monotone policy search failed exhaustive certification: gap {certification_gap:.3e}")
+        exhaustive_residual = float(np.max(np.abs(exhaustive - v_rep)))
+
     # Final policy b'(b, y)
     policy_b = b_grid[m_opt]
 
-    # Evaluate forward DualArray derivative dq/db'(b', y)
+    # Exact PCHIP node derivatives dq/db'(b', y)
     dq_db = _compute_dq_db_dualarray(q, b_grid)
 
     # Sovereign spread over risk-free rate
@@ -442,6 +447,9 @@ def solve_sovereign_default(
         "rho_y": rho_y,
         "sigma_y": sigma_y,
         "y_penalty_type": y_penalty_type,
+        "policy_search": policy_search,
+        "monotone_certification_gap": certification_gap,
+        "exhaustive_bellman_residual": exhaustive_residual,
         "d0": d0,
         "d1": d1,
         "m_tauchen": m_tauchen,
