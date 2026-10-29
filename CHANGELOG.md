@@ -8,6 +8,35 @@ Versions 5.3.0, 5.4.0 and 5.4.1 were tagged but not published to PyPI; their
 additions are included in 5.4.2. The v6.0.0 publication also failed; as checked
 on 2026-10-26, PyPI still serves 5.7.1. See the [release procedure](RELEASING.md).
 
+## 6.1.0 (unreleased)
+
+### Added
+
+- A bilingual sovereign-risk policy brief,
+  [`docs/brief_sovereign_risk.md`](docs/brief_sovereign_risk.md) (Spanish:
+  `docs/es/brief_sovereign_risk.md`). It shows how the market-reentry
+  probability, income volatility and income persistence move debt/output,
+  spreads, default frequency and the value of market access in the validated
+  short-term Arellano model. These are illustrative comparative statics of the
+  public calibration, not a claim about any country. Every number is shown with
+  its 95% interval across 16 seeds and its paired 3,201 -> 6,401 grid change.
+  The numbers come from a frozen converged sweep,
+  `tests/fixtures/sovereign_brief/sweep.json`.
+- `puremacro.sovereign.ergodic_moments(result, *, periods=500_000,
+  seeds=range(1979, 1995), burn=1_000)`: raw ergodic debt/output, mean spread,
+  annual default-entry frequency and spread SD, per seed and with 95%
+  t-intervals. It reproduces `SovereignDefaultResult.simulate` draw for draw
+  and runs 16 x 500,000 quarters in seconds. Continuing exclusion is not counted
+  as default.
+- `puremacro.sovereign.value_of_market_access(result)`: the
+  consumption-equivalent value (in %) of market access at zero debt, compared
+  with permanent autarky without a default cost.
+- Example `python -m puremacro.examples.first_brief_sovereign`:
+  `--scenario theta=0.15` (one scenario on the converged 6,401 x 641 grid),
+  `--sweep --coarse` (all seven scenarios at 801 x 161 in minutes, with a
+  coarse-grid caveat), `--output DIR`, `--lang en|es`, `--grid`, `--periods`,
+  `--n-seeds`, `--from-record PATH`, and `--freeze PATH` for maintainers.
+
 ## 6.0.1 (2026-10-29)
 
 **Reliability release: corrected sovereign timing and model fidelity, a

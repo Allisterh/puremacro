@@ -6,7 +6,7 @@ Standalone replication / demo scripts that each showcase one method. Every scrip
 python -m puremacro.examples.<name>
 ```
 
-There are **90 scripts** in `puremacro/examples/` (69 described below; the remainder are listed at the end).
+There are **91 scripts** in `puremacro/examples/` (70 described below; the remainder are listed at the end).
 
 ## Recommended starter shortlist
 
@@ -164,6 +164,12 @@ Thirteen scripts that together span the methods catalogue. Read in this order if
 | Script | LOC | Headline |
 |---|---:|---|
 | `scf_aiyagari` | 378 | Aiyagari (1994) `dp` economy calibrated to SCF wealth-to-income ratios; untargeted Gini and top shares against the SCF with replicate-weight standard errors (needs network). |
+
+### Policy briefs
+
+| Script | LOC | Headline |
+|---|---:|---|
+| `first_brief_sovereign` | 682 | Sovereign-risk policy brief: how reentry probability, income volatility and persistence move debt, spreads, default and the value of market access in the public Arellano calibration (illustrative; `--scenario`, `--sweep --coarse`, `--lang en\|es`). |
 
 ### Data infrastructure
 
