@@ -33,7 +33,7 @@ La misma ejecución desde Python:
 ```python
 from puremacro.examples.first_brief_tariffs import run_brief
 
-study = run_brief("first_brief")
+study = run_brief("first_brief", lang="es")
 print(study["record"]["national"]["ev_pct_consumption"])
 ```
 
@@ -166,7 +166,10 @@ nombrando la sección. Para la interfaz general y sus supuestos vea
 - **Cierres.** El ingreso arancelario y los demás ingresos fiscales se
   devuelven como suma fija. El ahorro externo se mantiene fijo como
   proporción del ingreso mundial (`foreign_saving_units="world_income"`), lo
-  que hace que el resultado no dependa del orden de los países en la tabla.
+  que hace que la VE y la VC no dependan del orden de los países. La división
+  entre las líneas de precios y de ingreso de los factores sigue dependiendo
+  del numerario (el precio de productor del primer sector del primer país de
+  la lista), así que lea esas dos líneas juntas.
 - **Elasticidades.** Las canastas de origen del uso final son fijas; el
   abastecimiento intermedio es Leontief en el resultado principal y `sigma` es
   el único supuesto que varía el experimento.
@@ -176,13 +179,17 @@ nombrando la sección. Para la interfaz general y sus supuestos vea
   equivalente al arancel para la canasta de consumo, según la definición de
   [Bienestar hicksiano del consumo](trade_welfare.md). No es una función de
   bienestar social, y las filas de hogares son incidencia condicional, no un
-  pronóstico para hogares reales.
+  pronóstico para hogares reales. La VE valora solo la canasta de consumo
+  (`C`); la inversión (`I`) y las compras de residentes en el exterior (`Cx`)
+  quedan fuera de la medida.
 
 ## 7. Cómo citar
 
 La tabla es una adaptación de datos de la OCDE, redistribuida según las
 condiciones de uso de la OCDE. **Si publica resultados calculados con ella, cite a la OCDE:
 "OECD (2023), OECD Inter-Country Input-Output Tables, http://oe.cd/icio"**, no a puremacro; la OCDE no está afiliada a este
-proyecto ni lo respalda (vea la
+proyecto ni lo respalda, y las opiniones expresadas en trabajos basados en
+esta adaptación no deben presentarse como la posición oficial de la OCDE ni de
+sus países miembros (vea la
 [sección 7 de la guía de comercio](spatial_and_trade_ge.md)). Para citar
 puremacro, use los metadatos de `CITATION.cff` en el repositorio.

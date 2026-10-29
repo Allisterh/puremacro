@@ -465,3 +465,20 @@ def test_pages_show_frozen_record(frozen, lang):
     old_claim = {"en": "unilateral terms-of-trade gain", "es": TOT_GAIN_CLAIM["es"]}[lang]
     assert old_claim not in text
     assert {"en": "adds up to the national EV", "es": "suma la VE nacional"}[lang] not in text
+    flat = " ".join(text.split())
+    expected = {
+        "en": ("makes EV and CV independent of the order of countries",
+               "still depends on the numeraire",
+               "investment (`I`) and residents' purchases abroad (`Cx`) are outside the measure",
+               "the opinions expressed in work built on this adaptation should not be reported as the "
+               "official views of the OECD or of its member countries"),
+        "es": ("que la VE y la VC no dependan del orden de los países",
+               "sigue dependiendo del numerario",
+               "la inversión (`I`) y las compras de residentes en el exterior (`Cx`) quedan fuera de la medida",
+               "las opiniones expresadas en trabajos basados en esta adaptación no deben presentarse como "
+               "la posición oficial de la OCDE ni de sus países miembros",
+               'run_brief("first_brief", lang="es")'),
+    }[lang]
+    for phrase in expected:
+        assert phrase in flat, phrase
+    assert "relative to the rest of the world" not in flat and "respecto al resto del mundo" not in flat

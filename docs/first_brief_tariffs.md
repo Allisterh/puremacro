@@ -157,8 +157,10 @@ For the general interface and its assumptions see
   economies outside the G20.
 - **Closures.** Tariff revenue and other fiscal receipts are rebated lump sum.
   Foreign saving is held fixed as a share of world income
-  (`foreign_saving_units="world_income"`), which makes the result independent
-  of the order of countries in the table.
+  (`foreign_saving_units="world_income"`), which makes EV and CV independent
+  of the order of countries. The split between the price and factor-income
+  lines still depends on the numeraire (the first-listed country's
+  first-sector producer price), so read those two lines together.
 - **Elasticities.** Final-use origin baskets are fixed; intermediate sourcing
   is Leontief in the headline and `sigma` is the one assumption the
   experiment varies.
@@ -167,7 +169,9 @@ For the general interface and its assumptions see
   equivalent to the tariff for the consumption basket, as defined in
   [Hicksian consumption welfare](trade_welfare.md). It is not a social welfare
   function, and the household rows are conditional incidence, not a forecast
-  for real households.
+  for real households. EV values the consumption basket (`C`) only;
+  investment (`I`) and residents' purchases abroad (`Cx`) are outside the
+  measure.
 
 ## 7. Cite
 
@@ -175,5 +179,7 @@ The table is an adaptation of OECD data, redistributed under the OECD terms
 of use. **If you publish results computed from it, credit the OECD:
 "OECD (2023), OECD Inter-Country Input-Output Tables, http://oe.cd/icio"**, not
 puremacro; the OECD is not affiliated with this project and does not endorse
-it (see [section 7 of the trade guide](spatial_and_trade_ge.md)). To cite
+it, and the opinions expressed in work built on this adaptation should not be
+reported as the official views of the OECD or of its member countries (see
+[section 7 of the trade guide](spatial_and_trade_ge.md)). To cite
 puremacro itself, use the metadata in `CITATION.cff` in the repository.
