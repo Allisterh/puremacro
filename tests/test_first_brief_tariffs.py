@@ -65,6 +65,23 @@ def test_default_solution_converged_and_split_adds_up(solved):
     assert set(solved.timings) == {"load", "calibration", "baseline", "counterfactual", "welfare"}
 
 
+def test_national_record_reports_terms_of_trade_and_wages(solved):
+    rec = fb.national_record(solved)
+    cc = list(solved.calib.country_codes)
+    i, e = cc.index("USA"), cc.index("CHN")
+    b, c = solved.base, solved.counterfactual
+    tot = 100 * (np.ravel(c.terms_of_trade) / np.ravel(b.terms_of_trade) - 1)
+    wage = 100 * (np.ravel(c.w_sol) / np.ravel(b.w_sol) - 1)
+    assert rec["terms_of_trade_pct_importer"] == pytest.approx(tot[i], rel=1e-12)
+    assert rec["terms_of_trade_pct_exporter"] == pytest.approx(tot[e], rel=1e-12)
+    assert rec["wage_pct_importer"] == pytest.approx(wage[i], rel=1e-12)
+    assert rec["wage_pct_exporter"] == pytest.approx(wage[e], rel=1e-12)
+    assert rec["relative_wage_pct"] == pytest.approx(
+        100 * ((1 + wage[i] / 100) / (1 + wage[e] / 100) - 1), rel=1e-12)
+    assert rec["terms_of_trade_pct_importer"] < 0 < rec["terms_of_trade_pct_exporter"]
+    assert rec["relative_wage_pct"] < 0
+
+
 def test_nonconvergence_raises(monkeypatch):
     monkeypatch.setattr(
         fb, "run_scenario",
@@ -208,8 +225,8 @@ def test_read_groups_csv_rejects(case, pattern, tmp_path):
 
 # --- Task 3: record, outputs and CLI -----------------------------------------
 
-NO_RETALIATION = {"en": "unilateral terms-of-trade gain with no retaliation",
-                  "es": "ganancia unilateral de términos de intercambio, sin represalias"}
+NO_RETALIATION = {"en": "No retaliation", "es": "Sin represalias"}
+TOT_GAIN_CLAIM = {"en": "terms-of-trade gain", "es": "ganancia unilateral de términos de intercambio"}
 CITATION = "OECD (2023), OECD Inter-Country Input-Output Tables, http://oe.cd/icio"
 BASE_FILES = {"national.md", "national.csv", "national.tex", "households.md", "households.csv",
               "households.tex", "first_brief.png", "headline.json", "manifest.json"}
@@ -236,6 +253,9 @@ def test_synthetic_label_everywhere(solved, households, tmp_path, lang):
     assert "SYNTHETIC" in summary
     assert NO_RETALIATION[lang] in (tmp_path / "national.md").read_text(encoding="utf-8")
     assert NO_RETALIATION[lang] in summary
+    national_md = (tmp_path / "national.md").read_text(encoding="utf-8")
+    for text in (national_md, summary, fb.__doc__):
+        assert TOT_GAIN_CLAIM[lang] not in text
 
 
 def test_manifest_provenance(solved, households, tmp_path):
@@ -269,6 +289,28 @@ def test_page_block_formats(solved, households):
     assert f"{nat['ev_musd']:,.0f}".replace(",", " ") in es
     assert fb.SYNTHETIC_LABEL in fb.page_block(record, "households", "en")
     assert fb.SYNTHETIC_LABEL_ES in fb.page_block(record, "households", "es")
+
+
+@pytest.mark.parametrize("lang", ["en", "es"])
+def test_headline_reading_states_only_what_the_record_shows(solved, households, lang):
+    record = fb.headline_record(solved, households)
+    nat = record["national"]
+    text = fb.page_block(record, "headline_reading", lang)
+    pf = -100 * (nat["price_effect_musd"] + nat["factor_income_effect_musd"]) / nat["consumption_base_musd"]
+    sep = "," if lang == "es" else "."
+    assert f"{pf:.3f}".replace(".", sep) in text
+    assert f"{abs(nat['relative_wage_pct']):.2f}".replace(".", sep) in text
+    assert f"{abs(nat['terms_of_trade_pct_importer']):.2f}".replace(".", sep) in text
+    assert {"en": "unilateral terms-of-trade gain", "es": TOT_GAIN_CLAIM["es"]}[lang] not in text
+    assert ("not a terms-of-trade gain" if lang == "en" else "No es una ganancia de términos de intercambio") in text
+    flipped = json.loads(json.dumps(record))
+    flipped["national"]["terms_of_trade_pct_importer"] = 0.5
+    with pytest.raises(ValueError, match="no longer matches"):
+        fb.page_block(flipped, "headline_reading", lang)
+    other = json.loads(json.dumps(record))
+    other["scenario"]["importer"] = "MEX"
+    with pytest.raises(ValueError, match="default scenario"):
+        fb.page_block(other, "headline_reading", lang)
 
 
 @pytest.mark.parametrize(("argv", "offending"), [
@@ -368,7 +410,7 @@ PAGE = {"en": ROOT / "docs" / "first_brief_tariffs.md", "es": ROOT / "docs" / "e
 @pytest.mark.parametrize("lang", ["en", "es"])
 def test_pages_show_frozen_record(frozen, lang):
     text = PAGE[lang].read_text(encoding="utf-8")
-    for block in ("headline", "households", "experiment"):
+    for block in ("headline", "headline_reading", "households", "experiment"):
         start, end = f"<!-- first-brief:{block} -->", f"<!-- /first-brief:{block} -->"
         assert text.count(start) == 1 and text.count(end) == 1, block
         shown = text.split(start, 1)[1].split(end, 1)[0].strip()
@@ -379,3 +421,5 @@ def test_pages_show_frozen_record(frozen, lang):
     assert CITATION in text
     assert "SYNTHETIC" in text
     assert "15 min" not in text
+    old_claim = {"en": "unilateral terms-of-trade gain", "es": TOT_GAIN_CLAIM["es"]}[lang]
+    assert old_claim not in text

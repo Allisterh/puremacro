@@ -58,18 +58,14 @@ the frozen output of the default run.
 | Fiscal transfers | 32,777 | 0.1954 |
 | **Equivalent variation** | **6,427** | **0.0383** |
 
-Positive values are gains. A positive EV here is a unilateral terms-of-trade gain with no retaliation: CHN does not respond.
+Positive values are gains. The three lines are an endpoint attribution valued in the model's numeraire; read purchaser prices and factor income together. No retaliation: CHN does not respond.
 <!-- /first-brief:headline -->
 
 ![First brief: national EV split and synthetic household groups](assets/first_brief_tariffs/first_brief_en.png)
 
-Read it this way: US purchaser prices rise and US factor income falls
-relative to the rest of the world, but the tariff revenue rebated to US
-residents is larger than both losses together, so the net EV is small and
-positive. The positive US number is a unilateral terms-of-trade gain with no
-retaliation: China does not respond here. A Chinese response would change it,
-and the brief does not model one unless you add it. The split is an endpoint
-attribution, not a set of separate causal channels.
+<!-- first-brief:headline_reading -->
+Read it this way: higher purchaser prices and lower US factor income together cost 0.157% of baseline consumption. The tariff revenue, rebated lump sum to US residents, adds 0.195%, so the net EV is small and positive (+0.038%). This is not a terms-of-trade gain. With fixed sourcing, Chinese producers do not cut their prices: US wages fall by about 0.14% relative to Chinese wages, and the US terms of trade (export over import unit values, before duties) worsen by about 0.04%. The split does not identify where the net gain comes from. It is an endpoint attribution, not a set of separate causal channels (see [Hicksian consumption welfare](trade_welfare.md)), and EV values the consumption basket only, not investment. The result is also unilateral: China does not retaliate here, and a response would change it.
+<!-- /first-brief:headline_reading -->
 
 ## 4. One experiment: let firms switch suppliers
 

@@ -27,7 +27,12 @@
     "factor_income_effect_musd": -21703.065445811033,
     "fiscal_transfer_effect_musd": 32776.66857588451,
     "tariff_rebate_effect_musd": 32579.07323127882,
-    "decomposition_residual_musd": 2.6178895495831966e-08
+    "decomposition_residual_musd": 2.6178895495831966e-08,
+    "terms_of_trade_pct_importer": -0.04003802479396468,
+    "terms_of_trade_pct_exporter": 0.003744076623735104,
+    "wage_pct_importer": -0.13439153890626443,
+    "wage_pct_exporter": 0.006759410661705267,
+    "relative_wage_pct": -0.14114140924050833
   },
   "households": {
     "label": "SYNTHETIC, method illustration only",
@@ -66,7 +71,12 @@
       "factor_income_effect_musd": 163635.1657096796,
       "fiscal_transfer_effect_musd": 37247.69196578256,
       "tariff_rebate_effect_musd": 30317.13214273811,
-      "decomposition_residual_musd": 2.3217580746859312e-08
+      "decomposition_residual_musd": 2.3217580746859312e-08,
+      "terms_of_trade_pct_importer": 1.008940730318053,
+      "terms_of_trade_pct_exporter": -0.7980289252878414,
+      "wage_pct_importer": 1.0184889871931446,
+      "wage_pct_exporter": -0.8977792232011117,
+      "relative_wage_pct": 1.9336279201150663
     }
   }
 }

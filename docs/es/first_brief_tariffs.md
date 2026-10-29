@@ -62,20 +62,14 @@ ejecución por defecto.
 | Transferencias fiscales | 32 777 | 0,1954 |
 | **Variación equivalente** | **6 427** | **0,0383** |
 
-Los valores positivos son ganancias. Una VE positiva aquí es una ganancia unilateral de términos de intercambio, sin represalias: CHN no responde.
+Los valores positivos son ganancias. Las tres líneas son una atribución entre los dos equilibrios valorada en el numerario del modelo; lea juntos los precios de comprador y el ingreso de los factores. Sin represalias: CHN no responde.
 <!-- /first-brief:headline -->
 
 ![Primer informe: descomposición de la VE nacional y grupos de hogares sintéticos](../assets/first_brief_tariffs/first_brief_es.png)
 
-Cómo leerla: los precios de comprador de Estados Unidos suben y el ingreso
-de los factores de Estados Unidos cae respecto al resto del mundo, pero el
-ingreso arancelario devuelto a los residentes de Estados Unidos es mayor que
-ambas pérdidas juntas, de modo que la VE neta es pequeña y positiva. La cifra
-positiva de Estados Unidos es una ganancia unilateral de términos de
-intercambio, sin represalias: China no responde aquí. Una respuesta de China
-la cambiaría, y el informe no la modela a menos que usted la agregue. La
-descomposición es una atribución entre los dos equilibrios, no un conjunto de
-canales causales separados.
+<!-- first-brief:headline_reading -->
+Cómo leerla: el alza de los precios de comprador y la caída del ingreso de los factores de Estados Unidos cuestan juntas 0,157% del consumo base. El ingreso arancelario, devuelto como suma fija a los residentes de Estados Unidos, agrega 0,195%, de modo que la VE neta es pequeña y positiva (+0,038%). No es una ganancia de términos de intercambio. Con abastecimiento fijo, los productores chinos no bajan sus precios: los salarios de Estados Unidos caen alrededor de 0,14% respecto a los salarios chinos, y los términos de intercambio de Estados Unidos (valores unitarios de exportación sobre los de importación, antes de aranceles) empeoran alrededor de 0,04%. La descomposición no identifica de dónde viene la ganancia neta. Es una atribución entre los dos equilibrios, no un conjunto de canales causales separados (vea [Bienestar hicksiano del consumo](trade_welfare.md)), y la VE valora solo la canasta de consumo, no la inversión. El resultado es además unilateral: China no toma represalias aquí, y una respuesta lo cambiaría.
+<!-- /first-brief:headline_reading -->
 
 ## 4. Un experimento: que las empresas cambien de proveedor
 

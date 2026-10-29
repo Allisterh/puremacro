@@ -19,8 +19,10 @@ The default household groups are SYNTHETIC, method illustration only: three
 groups built from the importer's national consumption basket by documented
 tilts. Supply your own group spending shares with ``--groups CSV``.
 
-The positive US number is a unilateral terms-of-trade gain with no
-retaliation: China does not respond in this experiment.
+The experiment is unilateral, with no retaliation: China does not respond.
+The three EV lines are an endpoint attribution valued in the model's
+numeraire, not separate causal channels; the record also reports each
+country's terms of trade and the importer's wage relative to the exporter's.
 """
 from __future__ import annotations
 
@@ -191,9 +193,22 @@ def solve_brief(importer: str = "USA", exporter: str = "CHN", sector: str = "all
     return BriefSolution(icio, calib, base, counterfactual, welfare, scenario, settings, timings)
 
 
+def _pct_change(base: Any, counterfactual: Any, index: int) -> float:
+    return 100.0 * (float(np.ravel(counterfactual)[index]) / float(np.ravel(base)[index]) - 1.0)
+
+
 def national_record(sol: BriefSolution) -> dict[str, float]:
-    """The importer's EV and its split, in million USD (the table's unit) and percent."""
+    """The importer's EV and its split, in million USD (the table's unit) and percent.
+
+    Also the terms of trade (export over import unit values, before duties) of
+    importer and exporter, their wages in the model's numeraire, and the
+    importer's wage relative to the exporter's (numeraire-free), as % changes.
+    """
     w = sol.welfare
+    countries = list(sol.calib.country_codes)
+    i, e = countries.index(sol.settings["importer"]), countries.index(sol.settings["exporter"])
+    b, c = sol.base, sol.counterfactual
+    wage_i, wage_e = _pct_change(b.w_sol, c.w_sol, i), _pct_change(b.w_sol, c.w_sol, e)
     return {
         "ev_musd": float(w.ev),
         "cv_musd": float(w.cv),
@@ -205,6 +220,11 @@ def national_record(sol: BriefSolution) -> dict[str, float]:
         "fiscal_transfer_effect_musd": float(w.fiscal_transfer_effect),
         "tariff_rebate_effect_musd": float(w.tariff_rebate_effect),
         "decomposition_residual_musd": float(w.decomposition_residual),
+        "terms_of_trade_pct_importer": _pct_change(b.terms_of_trade, c.terms_of_trade, i),
+        "terms_of_trade_pct_exporter": _pct_change(b.terms_of_trade, c.terms_of_trade, e),
+        "wage_pct_importer": wage_i,
+        "wage_pct_exporter": wage_e,
+        "relative_wage_pct": 100.0 * ((1.0 + wage_i / 100.0) / (1.0 + wage_e / 100.0) - 1.0),
     }
 
 
@@ -377,8 +397,9 @@ _TEXT = {
     "en": {
         "component": "Component", "musd": "million USD", "pct": "% of baseline consumption",
         "rows": ("Purchaser prices", "Factor income", "Fiscal transfers", "Equivalent variation"),
-        "headline_note": ("Positive values are gains. A positive EV here is a unilateral terms-of-trade "
-                          "gain with no retaliation: {exporter} does not respond."),
+        "headline_note": ("Positive values are gains. The three lines are an endpoint attribution valued "
+                          "in the model's numeraire; read purchaser prices and factor income together. "
+                          "No retaliation: {exporter} does not respond."),
         "groups_caption": "Household groups: {label}.",
         "group": "Group", "prop": "EV, proportional rebate (% of spending)",
         "equal": "EV, equal rebate (% of spending)", "all": "All groups (spending-weighted)",
@@ -405,8 +426,9 @@ _TEXT = {
         "component": "Componente", "musd": "millones de USD", "pct": "% del consumo base",
         "rows": ("Precios de comprador", "Ingreso de los factores", "Transferencias fiscales",
                  "Variación equivalente"),
-        "headline_note": ("Los valores positivos son ganancias. Una VE positiva aquí es una ganancia "
-                          "unilateral de términos de intercambio, sin represalias: {exporter} no responde."),
+        "headline_note": ("Los valores positivos son ganancias. Las tres líneas son una atribución entre "
+                          "los dos equilibrios valorada en el numerario del modelo; lea juntos los precios "
+                          "de comprador y el ingreso de los factores. Sin represalias: {exporter} no responde."),
         "groups_caption": "Grupos de hogares: {label}.",
         "group": "Grupo", "prop": "VE, reembolso proporcional (% del gasto)",
         "equal": "VE, reembolso igualitario (% del gasto)", "all": "Todos los grupos (ponderado por gasto)",
@@ -529,7 +551,64 @@ def _markdown_table(header: Sequence[str], rows: Sequence[Sequence[str]]) -> str
     return "\n".join(lines)
 
 
-def page_block(record: dict[str, Any], block: Literal["headline", "households", "experiment"],
+def _num(value: float, digits: int, lang: str, *, sign: bool = False) -> str:
+    text = f"{value:+.{digits}f}" if sign else f"{value:.{digits}f}"
+    return text.replace(".", ",") if lang == "es" else text
+
+
+def _require_default_scenario(record: dict[str, Any], block: str) -> None:
+    sc = record["scenario"]
+    if (sc["importer"], sc["exporter"], sc["sector"]) != ("USA", "CHN", "all"):
+        raise ValueError(f"block {block!r} describes the docs page's default scenario "
+                         "(USA tariff on all goods from CHN) only")
+
+
+def _require(condition: bool, block: str) -> None:
+    if not condition:
+        raise ValueError(f"block {block!r}: the prose no longer matches the record's signs; rewrite it")
+
+
+def _headline_reading(record: dict[str, Any], lang: str) -> str:
+    _require_default_scenario(record, "headline_reading")
+    nat = record["national"]
+    base = nat["consumption_base_musd"]
+    pf = -100.0 * (nat["price_effect_musd"] + nat["factor_income_effect_musd"]) / base
+    fiscal = 100.0 * nat["fiscal_transfer_effect_musd"] / base
+    ev, relw = nat["ev_pct_consumption"], nat["relative_wage_pct"]
+    tot_i, tot_e = nat["terms_of_trade_pct_importer"], nat["terms_of_trade_pct_exporter"]
+    _require(nat["price_effect_musd"] < 0 and nat["factor_income_effect_musd"] < 0 and fiscal > 0
+             and ev > 0 and relw < 0 and tot_i < 0 and tot_e >= 0, "headline_reading")
+    v = {"pf": _num(pf, 3, lang), "fiscal": _num(fiscal, 3, lang), "ev": _num(ev, 3, lang, sign=True),
+         "relw": _num(abs(relw), 2, lang), "tot": _num(abs(tot_i), 2, lang)}
+    if lang == "es":
+        return ("Cómo leerla: el alza de los precios de comprador y la caída del ingreso de los factores "
+                f"de Estados Unidos cuestan juntas {v['pf']}% del consumo base. El ingreso arancelario, "
+                "devuelto como suma fija a los residentes de Estados Unidos, agrega "
+                f"{v['fiscal']}%, de modo que la VE neta es pequeña y positiva ({v['ev']}%). No es una "
+                "ganancia de términos de intercambio. Con abastecimiento fijo, los productores chinos no "
+                f"bajan sus precios: los salarios de Estados Unidos caen alrededor de {v['relw']}% respecto "
+                "a los salarios chinos, y los términos de intercambio de Estados Unidos (valores unitarios "
+                "de exportación sobre los de importación, antes de aranceles) empeoran alrededor de "
+                f"{v['tot']}%. La descomposición no identifica de dónde viene la ganancia neta. Es una "
+                "atribución entre los dos equilibrios, no un conjunto de canales causales separados (vea "
+                "[Bienestar hicksiano del consumo](trade_welfare.md)), y la VE valora solo la canasta de "
+                "consumo, no la inversión. El resultado es además unilateral: China no toma represalias "
+                "aquí, y una respuesta lo cambiaría.")
+    return ("Read it this way: higher purchaser prices and lower US factor income together cost "
+            f"{v['pf']}% of baseline consumption. The tariff revenue, rebated lump sum to US residents, "
+            f"adds {v['fiscal']}%, so the net EV is small and positive ({v['ev']}%). This is not a "
+            "terms-of-trade gain. With fixed sourcing, Chinese producers do not cut their prices: US "
+            f"wages fall by about {v['relw']}% relative to Chinese wages, and the US terms of trade "
+            "(export over import unit values, before duties) worsen by about "
+            f"{v['tot']}%. The split does not identify where the net gain comes from. It is an endpoint "
+            "attribution, not a set of separate causal channels (see "
+            "[Hicksian consumption welfare](trade_welfare.md)), and EV values the consumption basket "
+            "only, not investment. The result is also unilateral: China does not retaliate here, and a "
+            "response would change it.")
+
+
+def page_block(record: dict[str, Any],
+               block: Literal["headline", "headline_reading", "households", "experiment"],
                lang: str) -> str:
     """A markdown table plus a one-sentence note, as the docs pages show it."""
     t = _lang(lang)
@@ -541,6 +620,8 @@ def page_block(record: dict[str, Any], block: Literal["headline", "households", 
         rows[-1] = tuple(f"**{cell}**" for cell in rows[-1])
         note = t["headline_note"].format(exporter=record["scenario"]["exporter"])
         return _markdown_table([t["component"], t["musd"], t["pct"]], rows) + "\n\n" + note
+    if block == "headline_reading":
+        return _headline_reading(record, lang)
     if block == "households":
         hh = record["households"]
         frame = _households_frame(hh, lang)
@@ -557,7 +638,8 @@ def page_block(record: dict[str, Any], block: Literal["headline", "households", 
         rows = [(name, f(row.iloc[0], lang), f(row.iloc[1], lang))
                 for f, (name, row) in zip(fmt, frame.iterrows())]
         return _markdown_table([t["measure"], *frame.columns], rows) + "\n\n" + t["exp_note"]
-    raise ValueError(f"block {block!r} must be 'headline', 'households' or 'experiment'")
+    raise ValueError(f"block {block!r} must be 'headline', 'headline_reading', 'households', "
+                     "'experiment' or 'experiment_reading'")
 
 
 def _title(record: dict[str, Any], lang: str) -> str:

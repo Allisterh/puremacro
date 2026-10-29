@@ -74,13 +74,13 @@
     }
   },
   "timings": {
-    "load": 0.0,
-    "calibration": 0.0,
-    "baseline": 0.008115750009892508,
-    "counterfactual": 5.248561165994033,
-    "welfare": 0.016802499987534247,
-    "households": 0.024255915996036492,
-    "experiment": 11.692214874987258
+    "load": 0.003450667005381547,
+    "calibration": 0.0013229579926701263,
+    "baseline": 0.007810082999640144,
+    "counterfactual": 4.850906916006352,
+    "welfare": 0.004473250010050833,
+    "households": 0.0298090830037836,
+    "experiment": 10.873243581998395
   },
   "experiment": {
     "name": "sigma",
@@ -100,14 +100,14 @@
   },
   "lang": "en",
   "load_average": [
-    5.86,
-    9.17,
-    11.99
+    4.77,
+    5.53,
+    7.66
   ],
   "artifacts": {
     "national.md": {
-      "sha256": "67764097a3a4a5865ad45fff59cf0ea3194dd88baa78e7dd39a3855a0ac3db25",
-      "bytes": 540
+      "sha256": "085ab08ae720a397c628a53a16efbbfb5e80d81c2f315175a8bd478f7db54334",
+      "bytes": 607
     },
     "national.csv": {
       "sha256": "e1f7e55bdcfa175ed95e43fd3ec9e3eab17b0d45733fd30db602623052334dbe",
@@ -146,8 +146,8 @@
       "bytes": 40600
     },
     "headline.json": {
-      "sha256": "9d9ec914e14c5a5bb1f975b1d3f6f9957e4a8f690f9e16babbf06df5b90c5d97",
-      "bytes": 2205
+      "sha256": "8de5081696e60e4ac15c340374fc64084935911b5bf2133dd07a65effbe4fdd4",
+      "bytes": 2716
     }
   }
 }
