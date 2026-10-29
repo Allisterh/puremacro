@@ -313,6 +313,29 @@ def test_headline_reading_states_only_what_the_record_shows(solved, households, 
         fb.page_block(other, "headline_reading", lang)
 
 
+@pytest.mark.parametrize("lang", ["en", "es"])
+def test_groups_note_claims_national_match_only_for_synthetic_groups(solved, households, tmp_path, lang):
+    matches = {"en": "matches the national EV", "es": "coincide con la VE nacional"}[lang]
+    synthetic = fb.page_block(fb.headline_record(solved, households), "households", lang)
+    assert matches in synthetic
+    sectors = list(solved.icio.sector_codes)
+    basket = fb.national_basket(solved.icio, "USA")
+    row_b = {"group": "b", "population_weight": 0.4, "annual_spending": 80_000, **{s: 0.0 for s in sectors}}
+    row_b.update({"C": 0.5, "G": 0.3, "L": 0.2})
+    rows = [{"group": "a", "population_weight": 0.6, "annual_spending": 40_000,
+             **{s: float(basket[s]) for s in sectors}}, row_b]
+    path = tmp_path / "two.csv"
+    pd.DataFrame(rows).to_csv(path, index=False)
+    user = fb.household_incidence(solved, fb.read_groups_csv(path, sectors, fb.supported_sectors(solved.icio, "USA")))
+    record = fb.headline_record(solved, user)
+    assert record["households"]["aggregate_ev_pct_proportional"] < 0 < record["national"]["ev_pct_consumption"]
+    text = fb.page_block(record, "households", lang)
+    for claim in ("adds up to", "suma la VE nacional", matches):
+        assert claim not in text
+    national = f"{record['national']['ev_pct_consumption']:.4f}".replace(".", "," if lang == "es" else ".")
+    assert national in text
+
+
 @pytest.mark.parametrize(("argv", "offending"), [
     (["--exporter", "USA"], "USA"),
     (["--importer", "XXX"], "XXX"),
@@ -441,3 +464,4 @@ def test_pages_show_frozen_record(frozen, lang):
     assert "15 min" not in text
     old_claim = {"en": "unilateral terms-of-trade gain", "es": TOT_GAIN_CLAIM["es"]}[lang]
     assert old_claim not in text
+    assert {"en": "adds up to the national EV", "es": "suma la VE nacional"}[lang] not in text

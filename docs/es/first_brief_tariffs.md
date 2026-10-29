@@ -117,7 +117,7 @@ Grupos de hogares: SINTÉTICO, solo ilustración del método (SYNTHETIC, method 
 | high | 0,0441 | -0,0373 |
 | Todos los grupos (ponderado por gasto) | 0,0383 | 0,0383 |
 
-Proporcional: el cambio en las transferencias (ingreso arancelario) se reembolsa en proporción al gasto base, lo que suma la VE nacional; igualitario: el mismo monto por hogar.
+Proporcional: el cambio en las transferencias (ingreso arancelario) se reembolsa en proporción al gasto base; igualitario: el mismo monto por hogar. La canasta media de estos grupos, ponderada por gasto, es igual a la nacional por construcción, por lo que el agregado proporcional coincide con la VE nacional.
 <!-- /first-brief:households -->
 
 Cómo se construyen los grupos sintéticos: tres grupos (`low`, `middle`,
@@ -132,7 +132,7 @@ los factores y transferencias en las proporciones nacionales de Estados
 Unidos; el ingreso de los factores se mueve con los salarios y las rentas del
 capital de Estados Unidos, que en este motor se mueven juntos. El cambio en
 las transferencias se reembolsa de dos maneras, lado a lado: en proporción al
-gasto base (esto suma la VE nacional) y como un monto igual por hogar (que
+gasto base (para estos grupos coincide con la VE nacional) y como un monto igual por hogar (que
 favorece a quienes gastan menos).
 
 Para usar sus propios grupos, escriba un CSV con las columnas `group`,

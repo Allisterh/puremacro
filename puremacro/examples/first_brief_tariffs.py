@@ -404,8 +404,12 @@ _TEXT = {
         "group": "Group", "prop": "EV, proportional rebate (% of spending)",
         "equal": "EV, equal rebate (% of spending)", "all": "All groups (spending-weighted)",
         "groups_note": ("Proportional: the change in transfers (tariff revenue) is rebated in proportion "
-                        "to baseline spending, which adds up to the national EV; equal: the same amount "
-                        "per household."),
+                        "to baseline spending; equal: the same amount per household."),
+        "groups_note_synthetic": (" These groups' spending-weighted basket equals the national basket by "
+                                  "construction, so the proportional aggregate matches the national EV."),
+        "groups_note_user": (" The aggregate equals the national EV only when the groups' spending-weighted "
+                             "basket equals the national basket; compare it with the national row."),
+        "national_row": "National EV (% of baseline consumption)",
         "user_label": "user-supplied groups",
         "no_experiment": "No experiment was run (use --experiment sigma=2).",
         "exp_rows": ("Purchaser prices (million USD)", "Factor income (million USD)",
@@ -433,8 +437,14 @@ _TEXT = {
         "group": "Grupo", "prop": "VE, reembolso proporcional (% del gasto)",
         "equal": "VE, reembolso igualitario (% del gasto)", "all": "Todos los grupos (ponderado por gasto)",
         "groups_note": ("Proporcional: el cambio en las transferencias (ingreso arancelario) se reembolsa en "
-                        "proporción al gasto base, lo que suma la VE nacional; igualitario: el mismo monto "
-                        "por hogar."),
+                        "proporción al gasto base; igualitario: el mismo monto por hogar."),
+        "groups_note_synthetic": (" La canasta media de estos grupos, ponderada por gasto, es igual a la "
+                                  "nacional por construcción, por lo que el agregado proporcional coincide con "
+                                  "la VE nacional."),
+        "groups_note_user": (" El agregado es igual a la VE nacional solo cuando la canasta media de los "
+                             "grupos, ponderada por gasto, es igual a la nacional; compárelo con la fila "
+                             "nacional."),
+        "national_row": "VE nacional (% del consumo base)",
         "user_label": "grupos proporcionados por el usuario",
         "no_experiment": "No se ejecutó ningún experimento (use --experiment sigma=2).",
         "exp_rows": ("Precios de comprador (millones de USD)", "Ingreso de los factores (millones de USD)",
@@ -686,9 +696,16 @@ def page_block(record: dict[str, Any],
         frame = _households_frame(hh, lang)
         rows = [(name, _fmt_pct(row.iloc[0], lang), _fmt_pct(row.iloc[1], lang))
                 for name, row in frame.iterrows()]
+        note = t["groups_note"]
+        if hh["is_synthetic"]:
+            note += t["groups_note_synthetic"]
+        else:
+            national = _fmt_pct(record["national"]["ev_pct_consumption"], lang)
+            rows.append((t["national_row"], national, national))
+            note += t["groups_note_user"]
         caption = t["groups_caption"].format(label=_label(hh, lang))
         return (caption + "\n\n" + _markdown_table([t["group"], t["prop"], t["equal"]], rows)
-                + "\n\n" + t["groups_note"])
+                + "\n\n" + note)
     if block == "experiment":
         if record["experiment"] is None:
             return t["no_experiment"]

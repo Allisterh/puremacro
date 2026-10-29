@@ -112,7 +112,7 @@ Household groups: SYNTHETIC, method illustration only.
 | high | 0.0441 | -0.0373 |
 | All groups (spending-weighted) | 0.0383 | 0.0383 |
 
-Proportional: the change in transfers (tariff revenue) is rebated in proportion to baseline spending, which adds up to the national EV; equal: the same amount per household.
+Proportional: the change in transfers (tariff revenue) is rebated in proportion to baseline spending; equal: the same amount per household. These groups' spending-weighted basket equals the national basket by construction, so the proportional aggregate matches the national EV.
 <!-- /first-brief:households -->
 
 How the synthetic groups are built: three groups (`low`, `middle`, `high`)
@@ -125,7 +125,7 @@ spending-weighted mean basket equals the national one. Each group's budget
 is split into factor income and transfers in the US national proportions;
 factor income moves with US wages and capital income, which move together in
 this engine. The change in transfers is rebated two ways, side by side:
-in proportion to baseline spending (this adds up to the national EV) and as an
+in proportion to baseline spending (for these groups this matches the national EV) and as an
 equal amount per household (which favours low spenders).
 
 To use your own groups, write a CSV with the columns `group`,
