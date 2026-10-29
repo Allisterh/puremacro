@@ -346,3 +346,170 @@ class LewbelIVResult:
         ax.set_title(title or f"Lewbel IV (first-stage F={self.first_stage_F:.1f})")
         fig.tight_layout()
         return fig
+
+
+class _ReportMixin:
+    """``to_frame`` / Markdown / LaTeX / Typst rendering of ``to_dataframe()``.
+
+    Shared by :class:`GMMFitResult` and the :mod:`puremacro.asset_pricing`
+    result objects.
+    """
+
+    def to_dataframe(self, *args: Any, **kwargs: Any) -> pd.DataFrame:  # pragma: no cover - overridden
+        raise NotImplementedError
+
+    def to_frame(self, *args: Any, **kwargs: Any) -> pd.DataFrame:
+        """Alias of ``to_dataframe()``."""
+        return self.to_dataframe(*args, **kwargs)
+
+    def to_markdown(self, *args: Any, **kwargs: Any) -> str:
+        """``to_dataframe(*args, **kwargs)`` rendered as a Markdown table."""
+        from ..reports import df_to_markdown
+
+        return df_to_markdown(self.to_dataframe(*args, **kwargs))
+
+    def to_latex(self, *args: Any, **kwargs: Any) -> str:
+        """``to_dataframe(*args, **kwargs)`` rendered as a LaTeX table."""
+        from ..reports import df_to_latex
+
+        return df_to_latex(self.to_dataframe(*args, **kwargs))
+
+    def to_typst(self, *args: Any, **kwargs: Any) -> str:
+        """``to_dataframe(*args, **kwargs)`` rendered as a Typst table."""
+        from ..reports import df_to_typst
+
+        return df_to_typst(self.to_dataframe(*args, **kwargs))
+
+
+def _coef_frame(names, coefs, se) -> pd.DataFrame:
+    """One row per parameter: name, coef, se, z, two-sided normal p-value."""
+    from scipy.stats import norm
+
+    coefs = np.asarray(coefs, dtype=float).ravel()
+    se = np.asarray(se, dtype=float).ravel()
+    with np.errstate(divide="ignore", invalid="ignore"):
+        z = np.where(se > 0, coefs / se, np.nan)
+    return pd.DataFrame({
+        "name": list(names),
+        "coef": coefs,
+        "se": se,
+        "z": z,
+        "pvalue": 2.0 * norm.sf(np.abs(z)),
+    })
+
+
+@dataclass(frozen=True)
+class GMMFitResult(_ReportMixin):
+    """Result of :func:`puremacro.inference.gmm`.
+
+    Attributes
+    ----------
+    coefs, se : np.ndarray, shape (p,)
+        Estimates and sandwich standard errors.
+    cov : np.ndarray, shape (p, p)
+        ``B G' W S W G B / T`` with ``B = (G' W G)^-1``.
+    names : tuple of str
+        Parameter names.
+    n_obs : int
+        Number of periods ``T``.
+    converged : bool
+        Every optimizer step succeeded (and, for ``"iterated"``, the
+        parameter change fell below ``tol`` within ``max_iter`` updates).
+    j_stat, j_pvalue : float
+        Hansen J ``T gbar' W gbar`` and its ``chi2(j_df)`` p-value; ``NaN``
+        for non-efficient weighting; ``j_stat = 0`` and ``j_pvalue = NaN``
+        when just identified.
+    j_df : int
+        ``q - p``.
+    weighting : str
+        ``"two_step"``, ``"iterated"``, ``"identity"`` or ``"array"``.
+    iterations : int
+        Number of efficient-weight updates (0 for one-step weighting, 1 for
+        two-step).
+    moment_means : np.ndarray, shape (q,)
+        ``gbar(theta_hat)``.
+    weight_matrix : np.ndarray, shape (q, q)
+        The last weight matrix used.
+    hac_lags : int
+        Bartlett bandwidth of the long-run covariance.
+    """
+
+    coefs: np.ndarray
+    se: np.ndarray
+    cov: np.ndarray
+    names: tuple[str, ...]
+    n_obs: int
+    converged: bool
+    j_stat: float
+    j_df: int
+    j_pvalue: float
+    weighting: str
+    iterations: int
+    moment_means: np.ndarray
+    weight_matrix: np.ndarray
+    hac_lags: int
+
+    def wald(self, R: Any, r: Any = None) -> dict:
+        """Wald test of ``R theta = r`` (``r`` defaults to zero).
+
+        Returns a dict with ``stat``, ``df`` and ``pvalue`` (``chi2(df)``).
+        """
+        from scipy.stats import chi2
+
+        R = np.atleast_2d(np.asarray(R, dtype=float))
+        if R.shape[1] != self.coefs.size:
+            raise ValueError(
+                f"wald: R has {R.shape[1]} columns for {self.coefs.size} parameters")
+        r = np.zeros(R.shape[0]) if r is None else np.atleast_1d(np.asarray(r, dtype=float))
+        if r.shape != (R.shape[0],):
+            raise ValueError(f"wald: r must have length {R.shape[0]}")
+        d = R @ self.coefs - r
+        V = R @ self.cov @ R.T
+        stat = float(d @ np.linalg.solve(V, d))
+        df = int(R.shape[0])
+        return {"stat": stat, "df": df, "pvalue": float(chi2.sf(stat, df))}
+
+    def to_dataframe(self) -> pd.DataFrame:
+        """One row per parameter: name, coef, se, z, pvalue."""
+        return _coef_frame(self.names, self.coefs, self.se)
+
+    def summary(self) -> str:
+        df = self.to_dataframe()
+        lines = [
+            f"GMM estimation ({self.weighting} weighting, Bartlett HAC lags = "
+            f"{self.hac_lags})",
+            f"  observations: {self.n_obs}   moments: {self.moment_means.size}   "
+            f"parameters: {self.coefs.size}   converged: {self.converged}",
+            f"  {'name':<14}{'coef':>12}{'se':>12}{'z':>9}{'p':>8}",
+        ]
+        for row in df.itertuples(index=False):
+            lines.append(f"  {row.name:<14}{row.coef:>12.5g}{row.se:>12.5g}"
+                         f"{row.z:>9.3f}{row.pvalue:>8.3f}")
+        if self.j_df == 0:
+            lines.append("  Hansen J = 0 (just identified, df 0)")
+        elif np.isfinite(self.j_stat):
+            lines.append(f"  Hansen J = {self.j_stat:.4f} (df {self.j_df}, "
+                         f"p = {self.j_pvalue:.4f})")
+        else:
+            lines.append("  J not reported (non-efficient weighting)")
+        return "\n".join(lines)
+
+    def plot(self, ax: Any = None, show: bool = False):
+        """Bar chart of the moment means at the estimate.
+
+        Returns the new Figure, or ``ax`` when one is given.
+        """
+        import matplotlib.pyplot as plt
+
+        given = ax is not None
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(5.5, 3.2))
+        m = np.asarray(self.moment_means, dtype=float)
+        ax.bar(np.arange(m.size), m, color="0.4")
+        ax.axhline(0.0, color="0.1", lw=0.7)
+        ax.set_xlabel("moment")
+        ax.set_ylabel("mean at estimate")
+        ax.set_title("GMM moment means")
+        if show:
+            plt.show()
+        return ax if given else ax.figure

@@ -463,3 +463,32 @@ def test_sigma_numpy_removed_in_v600():
     from puremacro.volatility.sigma import SigmaObject
     obj = SigmaObject(sig=np.array([0.1, 0.2]), R=np.eye(2), sectors=["A", "B"])
     assert obj.var(np.array([1.0, 1.0])) > 0
+
+
+# ---------------------------------------------------------------------------
+# 8. Generic GMM result (puremacro.inference.gmm)
+# ---------------------------------------------------------------------------
+
+def test_gmm_fit_result_quintet_and_plot():
+    from puremacro.inference import GMMFitResult, gmm
+
+    rng = np.random.default_rng(0)
+    T = 200
+    z = rng.standard_normal((T, 2))
+    x = z @ np.array([1.0, 0.5]) + rng.standard_normal(T)
+    y = 1.0 + 0.5 * x + rng.standard_normal(T)
+    Z = np.column_stack([np.ones(T), z])
+    X = np.column_stack([np.ones(T), x])
+    res = gmm(lambda th, d: d[2] * (d[0] - d[1] @ th)[:, None], np.zeros(2),
+              (y, X, Z), hac_lags=0)
+    assert isinstance(res, GMMFitResult)
+    assert isinstance(res.to_dataframe(), pd.DataFrame)
+    assert isinstance(res.to_frame(), pd.DataFrame)
+    assert "|" in res.to_markdown()
+    assert "\\begin{tabular}" in res.to_latex()
+    assert "#table(" in res.to_typst()
+    assert isinstance(res.summary(), str)
+    fig = res.plot()
+    assert isinstance(fig, matplotlib.figure.Figure)
+    _, ax = plt.subplots()
+    assert res.plot(ax=ax) is ax
