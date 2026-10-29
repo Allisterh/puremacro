@@ -302,7 +302,8 @@ _TEXT: dict[str, dict[str, Any]] = {
                  "parameter at a time from its low to its high value: "),
         "clause": "a higher {name} ({sym} {lo} → {hi}) {items}",
         "tail": ("Each number is a mean over {n} simulated paths of {periods} quarters; the table "
-                 "gives its 95% interval and its grid change."),
+                 "gives its 95% interval{grid}."),
+        "tail_grid": " and its grid change",
         "footnote": ("† At least one moment's paired {coarse} → {fine} grid change does not fit the "
                      "registered 0.10 tolerance (its status is in the record). The row is reported, "
                      "not dropped."),
@@ -333,7 +334,8 @@ _TEXT: dict[str, dict[str, Any]] = {
                  "parámetro cada vez de su valor bajo a su valor alto: "),
         "clause": "una mayor {name} ({sym} {lo} → {hi}) {items}",
         "tail": ("Cada número es una media sobre {n} trayectorias simuladas de {periods} trimestres; "
-                 "la tabla da su intervalo del 95 % y su cambio de malla."),
+                 "la tabla da su intervalo del 95 %{grid}."),
+        "tail_grid": " y su cambio de malla",
         "footnote": ("† El cambio de malla emparejado {coarse} → {fine} de al menos un momento no cabe "
                      "en la tolerancia registrada de 0,10 (su estado está en el registro). La fila se "
                      "informa, no se descarta."),
@@ -455,10 +457,13 @@ def render_answer(record: dict, lang: str, grid: str | None = None) -> str:
         joined = "; ".join(items[:-1]) + f"; {text['and']} " + items[-1]
         clauses.append(text["clause"].format(name=text["param_long"][key], sym=text["param"][key],
                                              lo=_num(lo_v, lang, "g"), hi=_num(hi_v, lang, "g"), items=joined))
+    if not clauses:
+        return ""
     design = record["design"]
     periods = f"{design['periods']:,}".replace(",", "." if lang == "es" else ",")
     body = text["lead"] + ". ".join(c[0].upper() + c[1:] if i else c for i, c in enumerate(clauses)) + ". "
-    return body + text["tail"].format(n=len(design["seeds"]), periods=periods)
+    grid_phrase = text["tail_grid"] if len(record["grids"]) >= 2 else ""
+    return body + text["tail"].format(n=len(design["seeds"]), periods=periods, grid=grid_phrase)
 
 
 _COLORS = ("#2a78d6", "#eb6834", "#1baf7a")  # dataviz reference palette, slots 1-3 (validated)
@@ -552,7 +557,8 @@ def write_outputs(record: dict, output: Path, lang: str) -> None:
     _check_lang(lang)
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
-    (output / "table.md").write_text(render_answer(record, lang) + "\n\n" + render_table(record, lang) + "\n")
+    answer = render_answer(record, lang)
+    (output / "table.md").write_text((answer + "\n\n" if answer else "") + render_table(record, lang) + "\n")
     with (output / "table.csv").open("w", newline="") as f:
         csv.writer(f).writerows(_csv_rows(record))
     fig = render_figure(record, lang)
@@ -669,8 +675,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(text["coarse_caveat"], flush=True)
     record = build_record([grid], design=design, scenarios=scenarios, log=_load_log)
     write_outputs(record, Path(args.output), args.lang)
-    print(render_answer(record, args.lang))
-    print()
+    answer = render_answer(record, args.lang)
+    if answer:
+        print(answer)
+        print()
     print(render_table(record, args.lang))
     if args.coarse:
         print(text["coarse_caveat"])

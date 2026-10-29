@@ -282,3 +282,40 @@ def test_coarse_sweep_smoke(tmp_path, capsys):
     record = json.loads((tmp_path / "record.json").read_text())
     welfare = [record["scenarios"][n]["cases"]["801x161"]["welfare_pct"] for n in ("theta=0.15", "baseline", "theta=0.5")]
     assert welfare[0] > welfare[1] > welfare[2], welfare
+
+
+# --- Final review fixes ---------------------------------------------------------
+
+def _only(record, names, grids=None):
+    out = copy.deepcopy(record)
+    out["scenarios"] = {n: out["scenarios"][n] for n in names}
+    if grids is not None:
+        out["grids"] = [list(g) for g in grids]
+        for s in out["scenarios"].values():
+            s["cases"] = {f"{g[0]}x{g[1]}": s["cases"][f"{g[0]}x{g[1]}"] for g in grids}
+            s.pop("grid_change", None)
+    return out
+
+
+@pytest.mark.parametrize("lang", ["en", "es"])
+@pytest.mark.parametrize("names", [["theta=0.15"], ["baseline"], ["baseline", "theta=0.15"]])
+def test_answer_is_empty_without_a_low_high_pair(tiny_record, lang, names):
+    assert brief.render_answer(_only(tiny_record, names), lang) == ""
+
+
+@pytest.mark.parametrize("lang,phrase", [("en", "grid change"), ("es", "cambio de malla")])
+def test_answer_mentions_grid_change_only_with_two_grids(tiny_record, lang, phrase):
+    assert phrase in brief.render_answer(tiny_record, lang)
+    single = _only(tiny_record, list(brief.SCENARIOS), grids=[TINY_GRIDS[0]])
+    text = brief.render_answer(single, lang)
+    assert text and phrase not in text
+
+
+def test_single_scenario_outputs_have_no_empty_answer(tmp_path, capsys):
+    assert brief.main(["--scenario", "theta=0.15", "--grid", "61x11", "--periods", "3000",
+                       "--n-seeds", "2", "--output", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    table = (tmp_path / "table.md").read_text()
+    for text in (out, table):
+        assert ": ." not in text and "high value:" not in text
+    assert table.startswith("| Scenario |")
