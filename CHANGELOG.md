@@ -8,10 +8,17 @@ Versions 5.3.0, 5.4.0 and 5.4.1 were tagged but not published to PyPI; their
 additions are included in 5.4.2. The v6.0.0 publication also failed; as checked
 on 2026-10-26, PyPI still serves 5.7.1. See the [release procedure](RELEASING.md).
 
-## 6.0.1 (unreleased)
+## 6.0.1 (2026-10-29)
 
-Reliability corrections after the failed v6.0.0 publication. This source
-version is a development candidate, not a published distribution.
+**Reliability release: corrected sovereign timing and model fidelity, a
+grid-converged Arellano benchmark, and a certified fast sovereign solver.**
+
+This is the first version published to PyPI since 5.7.1. The 5.8.0, 5.9.0 and
+6.0.0 tags were never published (the 6.0.0 release failed CI on Python 3.11
+typing), so installing 6.0.1 from 5.7.1 also brings everything listed under
+those three versions below.
+
+### Fixed
 
 - Fixed sovereign simulation timing: a successful reentry draw permits the
   current period's repayment/default decision, matching the Bellman equation.
@@ -20,35 +27,14 @@ version is a development candidate, not a published distribution.
   including an exact zero node; mixed saving/borrowing grids need at least
   three points. Reentry probabilities must be finite and within [0, 1].
   Simulation metadata states timing, seed, sample and annualization conventions.
-- Added independent public-calibration parity and paired-seed economic grid
-  convergence checks, separating discretization shifts from simulation error.
-- Arellano grid convergence: the independent reference solver gains a monotone
-  policy search certified by an exhaustive Bellman check, which makes debt grids
-  of 6,401 nodes affordable. For the public calibration, grid convergence is now
-  established at 6,401 × 641 under the pre-registered paired-seed tolerances,
-  after the registered precision escalation. The passing record is frozen and
-  machine-checked against the bilingual guide. At the archived calibration the
-  published spread volatility halves on fine grids, the pattern documented by
-  Hatchondo, Martinez and Sapriza (2010). `run_arellano_study --income-states`
-  reproduces the 161- and 321-state rows. Notebook 73 states that grid
-  resolution is part of the result.
-- `solve_sovereign_default(policy_search="monotone")`: for short-term debt, a
-  monotone policy search replaces the dense n_b × n_b × n_y tensors (about
-  210 GB each at 6,401 × 641), returns the same values as the dense search (and
-  the same policies except at exact value ties between choices with different
-  bond proceeds), and is certified after convergence by a blocked exhaustive search (a gap above
-  1e-11 raises). The converged 6,401 × 641 public design now solves in 28
-  minutes and 2.4 GB, matching the independent reference solution. The default
-  remains `"dense"`; convex utility (gamma < 0) is rejected. Price-schedule
-  derivatives `dq_db` are now computed in one vectorized step instead of a
-  per-node loop; values agree with the loop up to rounding (about 1e-15).
-- Release gate: a default-on Gate 8 runs mypy under the Python 3.11 floor
-  interpreter, natively and as `--platform win32`; `--no-tests --mypy-floor`
-  adds it to the fast run. The v5.4.0 and v6.0.0 tags passed every local gate
-  and failed only the 3.11 CI legs on typing. The release procedure now pushes
-  `main` and waits for green CI before the tag. The headless fan-chart test
-  closes stray figures before asserting that none leak.
-
+- Sovereign default now supports `sigma_eps=0`, uses stationary mean income for
+  the Arellano penalty, reenters at zero debt even on grids allowing saving, and
+  returns default decisions consistent with the final values. Spread correlations
+  are reported without sign changes; undefined correlations are `NaN` with status
+  metadata. No grid-average statistics substitute for missing simulation data.
+- Sovereign restructuring preserves the original income discretization,
+  default-cost calibration, recovery assumptions and solver settings. Recovery
+  paths use the model's actual default output and return to zero debt.
 - Model adapters now evaluate the supplied first-order DSGE or BlockDAG
   likelihood. Scores use native Kalman sensitivities or central differences of
   native Whittle likelihoods; they are not universally end-to-end DualArray AD.
@@ -60,22 +46,6 @@ version is a development candidate, not a published distribution.
   nonlinear models and unsupported aggregate-risk model/steady-state arguments
   are rejected. The legacy `asymmetry_ratio` is an unclipped nonlinear/linear
   peak ratio, not an independently solved opposite-shock comparison.
-- Sovereign default now supports `sigma_eps=0`, uses stationary mean income for
-  the Arellano penalty, reenters at zero debt even on grids allowing saving, and
-  returns default decisions consistent with the final values. Spread correlations
-  are reported without sign changes; undefined correlations are `NaN` with status
-  metadata. No grid-average statistics substitute for missing simulation data.
-- Sovereign restructuring preserves the original income discretization,
-  default-cost calibration, recovery assumptions and solver settings. Recovery
-  paths use the model's actual default output and return to zero debt.
-- Independent matched-grid references cover short-term deterministic-default
-  equations and one-asset household policies, distributions and Jacobians.
-  These checks do not certify complete published calibrations or policy moments.
-- Added an offline Arellano (2008) validation study using actual archived Fortran
-  and MATLAB/Octave references, published-moment comparisons, independent-seed
-  simulation intervals and debt/income grid refinements. The bilingual guide
-  records unresolved grid sensitivity and distinct exclusion/measurement
-  conventions; no published-moments replication or new policy result is claimed.
 - Fixed Python 3.11/NumPy 2.4 type-checking, retired notebook imports and isolated
   offline LLM-cache replay. Corrected bilingual guides and notebook explanations,
   including bridge identity checks and separately computed policy scenarios.
@@ -83,6 +53,48 @@ version is a development candidate, not a published distribution.
   risk-free price and labels maturity extension as a fractional duration change.
   Collateral amplification diagnostics and term-structure residual components
   retain explicitly documented experimental limitations.
+
+### Added
+
+- `solve_sovereign_default(policy_search="monotone")`: for short-term debt, a
+  monotone policy search replaces the dense n_b × n_b × n_y tensors (about
+  210 GB each at 6,401 × 641), returns the same values as the dense search (and
+  the same policies except at exact value ties between choices with different
+  bond proceeds), and is certified after convergence by a blocked exhaustive search (a gap above
+  1e-11 raises). The converged 6,401 × 641 public design now solves in 28
+  minutes and 2.4 GB, matching the independent reference solution. The default
+  remains `"dense"`; convex utility (gamma < 0) is rejected. Price-schedule
+  derivatives `dq_db` are now computed in one vectorized step instead of a
+  per-node loop; values agree with the loop up to rounding (about 1e-15).
+- Arellano grid convergence: the independent reference solver gains a monotone
+  policy search certified by an exhaustive Bellman check, which makes debt grids
+  of 6,401 nodes affordable. For the public calibration, grid convergence is now
+  established at 6,401 × 641 under the pre-registered paired-seed tolerances,
+  after the registered precision escalation. The passing record is frozen and
+  machine-checked against the bilingual guide. At the archived calibration the
+  published spread volatility halves on fine grids, the pattern documented by
+  Hatchondo, Martinez and Sapriza (2010). `run_arellano_study --income-states`
+  reproduces the 161- and 321-state rows. Notebook 73 states that grid
+  resolution is part of the result.
+- Added an offline Arellano (2008) validation study using actual archived Fortran
+  and MATLAB/Octave references, published-moment comparisons, independent-seed
+  simulation intervals and debt/income grid refinements. The bilingual guide
+  records the archived calibration's grid sensitivity and distinct
+  exclusion/measurement conventions; no published-moments replication or new policy result is claimed.
+- Added independent public-calibration parity and paired-seed economic grid
+  convergence checks, separating discretization shifts from simulation error.
+- Independent matched-grid references cover short-term deterministic-default
+  equations and one-asset household policies, distributions and Jacobians.
+  These checks do not certify complete published calibrations or policy moments.
+
+### Internal
+
+- Release gate: a default-on Gate 8 runs mypy under the Python 3.11 floor
+  interpreter, natively and as `--platform win32`; `--no-tests --mypy-floor`
+  adds it to the fast run. The v5.4.0 and v6.0.0 tags passed every local gate
+  and failed only the 3.11 CI legs on typing. The release procedure now pushes
+  `main` and waits for green CI before the tag. The headless fan-chart test
+  closes stray figures before asserting that none leak.
 
 ## 6.0.0 (2026-10-25)
 
