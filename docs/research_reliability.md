@@ -43,7 +43,7 @@ the specific scope described in each notebook, not blanket economic validation.
 
 | Comparison | Result on the tested grids | What remains open |
 |---|---|---|
-| Arellano short-term deterministic equations | Matched-grid equations pass; archived Fortran and MATLAB moments reproduce; public simulation timing and zero-debt reentry are corrected; public-calibration grids converge at 6,401 × 641 | Published-moment discrepancies, converged moments from the public solver itself, and long-term extension |
+| Arellano short-term deterministic equations | Matched-grid equations pass; archived Fortran and MATLAB moments reproduce; public simulation timing and zero-debt reentry are corrected; public-calibration grids converge at 6,401 × 641, and the public solver reaches that grid with a certified monotone search | Published-moment discrepancies and long-term extension |
 | One-asset household block | SSJ authors' code matches policies and consumption within 5e-11; return Jacobians within 4e-4 | Finer-grid economic convergence, full published equilibrium and nonlinear transition references |
 
 Both references are frozen with hashes and provenance in
@@ -66,10 +66,9 @@ alone would not have justified that conclusion.
    distinct; they use different economic conventions.
 2. Done for the public calibration: grids converge at 6,401 × 641 under the
    registered criterion, with sampling uncertainty kept separate from
-   discretization error and every raw moment retained. Next, bring the
-   certified monotone policy search into `solve_sovereign_default` so that the
-   public solver reproduces those moments; its dense search cannot reach that
-   grid.
+   discretization error and every raw moment retained.
+   `solve_sovereign_default(policy_search="monotone")` solves that grid,
+   certified by an exhaustive check, and matches the reference arrays.
 3. Study how income volatility, persistence and market-reentry probability
    change sustainable debt and default exposure in the validated short-term
    model. Report welfare and numerical uncertainty before adding maturity or

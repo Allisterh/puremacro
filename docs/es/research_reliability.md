@@ -43,7 +43,7 @@ la validez económica del modelo.
 
 | Comparación | Resultado en las mallas probadas | Pendiente |
 |---|---|---|
-| Ecuaciones Arellano de deuda corta y default determinista | Ecuaciones y archivos Fortran/MATLAB contrastados; reingreso e inicio con deuda cero corregidos; mallas de la calibración pública convergidas con 6.401 × 641 | Diferencias de momentos publicados, momentos convergidos con el propio solucionador público y deuda larga |
+| Ecuaciones Arellano de deuda corta y default determinista | Ecuaciones y archivos Fortran/MATLAB contrastados; reingreso e inicio con deuda cero corregidos; mallas de la calibración pública convergidas con 6.401 × 641, y el solucionador público alcanza esa malla con una búsqueda monótona certificada | Diferencias de momentos publicados y deuda larga |
 | Bloque de hogares de un activo | Políticas y consumo coinciden con los autores SSJ dentro de 5e-11; jacobianos de rendimientos dentro de 4e-4 | Convergencia económica de mallas, equilibrio publicado y transiciones no lineales |
 
 Las referencias, hashes y procedencia están en
@@ -67,10 +67,10 @@ habría bastado para esa conclusión.
    usan convenciones económicas diferentes.
 2. Hecho para la calibración pública: las mallas convergen con 6.401 × 641 bajo
    el criterio registrado, separando incertidumbre muestral de error de
-   discretización y conservando todos los momentos. Después, incorporar la
-   búsqueda monótona certificada a `solve_sovereign_default` para que el
-   solucionador público reproduzca esos momentos; su búsqueda densa no alcanza
-   esa malla.
+   discretización y conservando todos los momentos.
+   `solve_sovereign_default(policy_search="monotone")` resuelve esa malla,
+   certificada por una comprobación exhaustiva, y coincide con los arreglos de
+   referencia.
 3. Estudiar volatilidad, persistencia del ingreso y probabilidad de reingreso
    en el modelo validado de deuda corta. Reportar bienestar e incertidumbre
    numérica antes de agregar vencimientos y reestructuración no contrastados.

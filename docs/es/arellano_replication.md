@@ -212,21 +212,46 @@ dentro de su tolerancia, y el de la correlación 0,01 a 0,03 por encima de 0,813
 posiblemente fuera de ella. Reporte esa correlación con dos decimales. La
 extrapolación es un diagnóstico, no parte del criterio registrado.
 
+## Resolver el diseño convergido con el solucionador público
+
+```python
+from puremacro.sovereign import solve_sovereign_default
+
+converged = solve_sovereign_default(
+    beta=0.95282, r_star=0.017, theta=0.282, rho_y=0.945, sigma_y=0.025,
+    b_min=-0.15, b_max=0.33, n_b=6401, n_y=641, sigma_eps=0.0,
+    y_penalty_type="arellano", enforce_monotonicity=False,
+    tol=1e-10, max_iter=10000, policy_search="monotone",
+)
+```
+
+La búsqueda densa necesitaría arreglos de nodos de deuda × nodos de deuda ×
+estados de ingreso, cerca de 210 GB cada uno con esta malla.
+`policy_search="monotone"` busca la deuda de corto plazo en O(n_b log n_b) por
+estado de ingreso y devuelve los mismos valores que la búsqueda densa, y las
+mismas políticas salvo empates exactos de valor entre opciones con distinto
+ingreso por bonos. Tras la
+convergencia, una búsqueda exhaustiva por bloques sobre todos los candidatos la
+certifica; una diferencia de valor de reembolso superior a 1e-11 produce un
+error. En la máquina probada esta solución tardó 28 minutos, 138 iteraciones y
+2,4 GB de memoria, con diferencia de certificación cero. Sus precios coinciden
+con la solución de referencia de 6.401 × 641 dentro de 5,4e-9, con políticas y
+conjuntos de impago idénticos; una prueba repite la comparación con 401 × 21, y
+con 1.601 × 21 bajo `pytest -m slow`.
+
+Los momentos de la tabla anterior provienen del simulador del estudio: 16
+semillas emparejadas, 500.000 trimestres y ventanas anteriores al impago. Se
+trasladan a esta solución porque sus arreglos coinciden con los de referencia.
+`converged.simulate()` devuelve una trayectoria con otras convenciones de
+medición, de modo que sus estadísticas no son las mismas cifras.
+
 ## Próxima decisión
 
 La calibración pública ya tiene un diseño numérico fijo: 6.401 nodos de deuda,
 641 estados de ingreso y el diseño de precisión para los momentos simulados.
-Las cifras convergidas provienen del solucionador independiente de referencia,
-que coincide ecuación por ecuación con `solve_sovereign_default` en una malla de
-401 × 9. El solucionador público no alcanza esa malla: su búsqueda densa de
-políticas construye arreglos de nodos de deuda × nodos de deuda × estados de
-ingreso, cerca de 210 GB cada uno con 6.401 × 641. El siguiente paso de la
-biblioteca es incorporar la búsqueda monótona certificada al solucionador
-público para deuda de corto plazo, con la misma comprobación exhaustiva, para
-que los usuarios reproduzcan directamente los momentos convergidos.
-
-Después, los experimentos de reingreso, volatilidad y persistencia del ingreso
-pueden realizarse sobre el diseño convergido. Mantenga separadas la calibración
+Los experimentos de reingreso, volatilidad y persistencia del ingreso
+pueden realizarse sobre el diseño convergido, ahora con el solucionador
+público. Mantenga separadas la calibración
 archivada y la pública; la convergencia de la archivada no está establecida más
 allá de 797 puntos de deuda. Vencimientos y reestructuración requieren su propia
 validación externa. Cualquier recalibración sería un resultado nuevo, no parte
