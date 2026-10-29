@@ -75,6 +75,10 @@ arrays at each state's chosen debt `res.policy_index`; `res.g_default` and
 include `gdp` (`y` when repaying, $h(y)$ otherwise), and
 `g + private_consumption + primary_balance == gdp`. Its random stream differs
 from `SovereignDefaultResult.simulate` for the same seed.
+`res.spread_mean`, `res.spread_y_corr` and the spread rows of `res.summary()`
+come from the solver's own diagnostic path (1,500 quarters, seed 42, no
+burn-in), so they will not match the long paired-seed moments in the grid table
+below.
 
 ## Search and certification
 

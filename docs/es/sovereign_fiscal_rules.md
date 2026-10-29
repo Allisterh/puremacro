@@ -78,6 +78,10 @@ print(path[["debt_to_gdp", "primary_balance", "g", "spread"]].describe())
 columnas incluyen `gdp` (`y` si se reembolsa, $h(y)$ en otro caso), y
 `g + private_consumption + primary_balance == gdp`. Su flujo aleatorio difiere
 del de `SovereignDefaultResult.simulate` para la misma semilla.
+`res.spread_mean`, `res.spread_y_corr` y las filas de diferenciales de
+`res.summary()` proceden de la trayectoria de diagnóstico del propio solucionador
+(1.500 trimestres, semilla 42, sin calentamiento), por lo que no coincidirán con
+los momentos largos con semillas emparejadas de la tabla de mallas.
 
 ## Búsqueda y certificación
 
