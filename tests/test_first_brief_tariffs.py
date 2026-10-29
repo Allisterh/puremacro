@@ -323,8 +323,20 @@ def _assert_leaves_match(actual, expected, where="record"):
             _assert_leaves_match(a, e, f"{where}[{i}]")
     elif isinstance(expected, bool) or not isinstance(expected, (int, float)):
         assert actual == expected, where
+    elif "residual" in where.rsplit(".", 1)[-1]:
+        assert abs(actual) < 1e-4, where  # float noise, not a reproducible value
     else:
         assert actual == pytest.approx(expected, rel=1e-6, abs=1e-9), where
+
+
+def test_leaf_comparison_treats_residuals_as_noise():
+    """Decomposition residuals are float noise (2.6e-8 vs 1.25e-8 at a tighter tol)."""
+    frozen = {"ev_musd": 6427.19, "decomposition_residual_musd": 2.6e-8}
+    _assert_leaves_match({"ev_musd": 6427.19, "decomposition_residual_musd": 1.25e-8}, frozen)
+    with pytest.raises(AssertionError):
+        _assert_leaves_match({"ev_musd": 6427.19, "decomposition_residual_musd": 2e-4}, frozen)
+    with pytest.raises(AssertionError):
+        _assert_leaves_match({"ev_musd": 6427.5, "decomposition_residual_musd": 2.6e-8}, frozen)
 
 
 def test_default_run_reproduces_frozen_headline(frozen, tmp_path):
