@@ -429,6 +429,51 @@ class FiscalSovereignResult(SovereignDefaultResult):
         rows = pd.DataFrame({"metric": [r[0] for r in extra], "value": [_fmt_val(r[1]) for r in extra]})
         return pd.concat([base, rows], ignore_index=True)
 
+    def simulate(
+        self,
+        T: int | None = None,
+        periods: int | None = None,
+        seed: int = 42,
+    ) -> pd.DataFrame:
+        """Simulate one fiscal path from zero debt and the middle income node.
+
+        Uses the vectorized fiscal path engine with one path drawn from
+        ``np.random.default_rng(seed).random((3, periods))`` (income, default
+        and reentry planes), so the random stream differs from
+        :meth:`SovereignDefaultResult.simulate` for the same seed. The first
+        decision happens at the starting state; reentry is drawn before that
+        period's decision. ``gdp`` is ``y`` when repaying and ``y_def``
+        otherwise, and ``g + private_consumption + primary_balance == gdp``.
+        """
+        from puremacro.sovereign._fiscal_paths import draw_uniforms, simulate_paths
+
+        n_periods = 1000
+        if periods is not None:
+            n_periods = int(periods)
+        elif T is not None:
+            n_periods = int(T)
+        paths = simulate_paths(self, int(self.metadata["zero_index"]), len(self.y_grid) // 2,
+                               draw_uniforms([seed], n_periods))
+        repaid = paths.repaid[0]
+        y_idx = paths.y_index[0]
+        private = np.where(repaid, self.private_consumption_repay[y_idx], self.private_consumption_default[y_idx])
+        return pd.DataFrame({
+            "period": np.arange(n_periods),
+            "y": paths.y[0],
+            "gdp": paths.gdp[0],
+            "b": self.b_grid[paths.b_index[0]],
+            "b_next": self.b_grid[paths.b_next_index[0]],
+            "default": paths.default_entry[0],
+            "repaid": repaid,
+            "excluded": ~paths.access[0],
+            "g": paths.g[0],
+            "private_consumption": private,
+            "primary_balance": paths.primary_balance[0],
+            "debt_to_gdp": paths.debt_to_gdp[0],
+            "spread": paths.spread[0],
+            "bond_price": paths.bond_price[0],
+        })
+
 
 @dataclass(frozen=True)
 class SuddenStopResult:
