@@ -443,6 +443,12 @@ entries that could not be confirmed against the live API are marked `VERIFY_ONLI
   tests (ADF, KPSS, PP, Zivot-Andrews); Klein QZ solver for linear DSGE
   and 2nd-order perturbation with Kim et al. (2008) pruning, cross-terms,
   and Dynare `oo_.dr` parity (`dsge.dynare`).
+- **Macro-finance** (`asset_pricing.*`) — returns and risk (Sharpe with Lo
+  HAC se, drawdowns), VaR/ES with Kupiec/Christoffersen backtests, GRS and
+  HAC Wald time-series tests, Fama-MacBeth with Shanken se, linear SDF GMM,
+  Hansen-Jagannathan distance, Hansen-Singleton CCAPM, on the public GMM
+  engine `inference.gmm`; Ken French and FRED data fetched, never bundled;
+  see `docs/asset_pricing.md`.
 
 **Frontier methods (2.3)**
 

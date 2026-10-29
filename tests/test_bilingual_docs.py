@@ -115,6 +115,8 @@ _USER_DOCS = [
     "sovereign_default.md",
     "distributional_lp.md",
     "network_spatial_climate_iam.md",
+    # Macro-finance: returns, risk and asset-pricing tests.
+    "asset_pricing.md",
 ]
 
 

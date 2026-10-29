@@ -492,3 +492,54 @@ def test_gmm_fit_result_quintet_and_plot():
     assert isinstance(fig, matplotlib.figure.Figure)
     _, ax = plt.subplots()
     assert res.plot(ax=ax) is ax
+
+
+# ---------------------------------------------------------------------------
+# 9. Asset-pricing results (puremacro.asset_pricing)
+# ---------------------------------------------------------------------------
+
+def _ap_results():
+    from puremacro import asset_pricing as ap
+
+    rng = np.random.default_rng(0)
+    T, N, K = 120, 5, 2
+    idx = pd.date_range("2000-01-01", periods=T, freq="MS")
+    f = pd.DataFrame(0.005 + 0.04 * rng.standard_normal((T, K)), index=idx, columns=["mkt", "hml"])
+    r = pd.DataFrame(f.to_numpy() @ rng.uniform(0.5, 1.5, (K, N))
+                     + 0.02 * rng.standard_normal((T, N)), index=idx,
+                     columns=[f"p{i}" for i in range(N)])
+    g = pd.Series(np.exp(0.005 + 0.02 * rng.standard_normal(T)), index=idx)
+    gross = 1.0 + r.iloc[:, :2]
+    return {
+        "RiskSummaryResult": ap.risk_summary(r, periods_per_year=12),
+        "VaRBacktestResult": ap.var_backtest(r["p0"], 0.05),
+        "TimeSeriesTestResult": ap.time_series_test(r, f),
+        "FamaMacBethResult": ap.fama_macbeth(r, f),
+        "SDFResult": ap.sdf_gmm(r, f),
+        "HJDistanceResult": ap.hj_distance(r, f, n_sim=1_000),
+        "CCAPMResult": ap.ccapm(gross, g, instruments=np.ones((T, 1))),
+    }
+
+
+@pytest.mark.parametrize("cls_name", [
+    "RiskSummaryResult", "VaRBacktestResult", "TimeSeriesTestResult", "FamaMacBethResult",
+    "SDFResult", "HJDistanceResult", "CCAPMResult",
+])
+def test_asset_pricing_result_quintet_and_plot(cls_name):
+    from puremacro import asset_pricing as ap
+
+    res = _ap_results()[cls_name]
+    assert type(res) is getattr(ap, cls_name)
+    assert isinstance(res.to_dataframe(), pd.DataFrame)
+    assert isinstance(res.to_frame(), pd.DataFrame)
+    assert "|" in res.to_markdown()
+    assert "\\begin{tabular}" in res.to_latex()
+    assert "#table(" in res.to_typst()
+    assert isinstance(res.summary(), str)
+    if cls_name == "VaRBacktestResult":
+        assert not hasattr(res, "plot")
+        return
+    fig = res.plot()
+    assert isinstance(fig, matplotlib.figure.Figure)
+    _, ax = plt.subplots()
+    assert res.plot(ax=ax) is ax

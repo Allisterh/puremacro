@@ -79,6 +79,24 @@ version is a development candidate, not a published distribution.
   Jacobians, sandwich standard errors, Hansen J and Wald tests. Returns
   `GMMFitResult`. Linear IV estimates, standard errors and J match
   linearmodels `IV2SLS`/`IVGMM` and `inference.hansen_j` to 1e-8.
+- Added `puremacro.asset_pricing` (macro-finance): `to_returns`,
+  `excess_returns`, `compound` and annualization helpers; `risk_summary`
+  (Sharpe ratio with a Lo 2002 HAC standard error, Sortino, moments,
+  drawdowns); `value_at_risk` / `expected_shortfall` (historical, normal,
+  filtered GARCH) and `var_backtest` (Kupiec, Christoffersen);
+  `time_series_test` (GRS and HAC Wald); `fama_macbeth` (Fama-MacBeth,
+  Shanken and Newey-West se); `sdf_gmm` and `hj_distance` (Jagannathan-Wang
+  p-value); `ccapm` (Hansen-Singleton) with FRED helpers
+  `fred_consumption_growth` and `fred_risk_free`. Inputs are refused when they
+  contain NaN/inf, look percent-scaled or mix frequencies. Estimates match
+  statsmodels and linearmodels to 1e-8 where definitions coincide; the
+  remaining differences are documented. Bilingual guide `docs/asset_pricing.md`.
+- Added `puremacro.fetch.kenfrench_factors.fetch` for the Fama-French three-
+  and five-factor, momentum and 25 size/book-to-market files. Data are
+  downloaded into the user cache and never bundled (registry entry
+  `kenfrench.factors`, not redistributable). A network test reproduces the
+  Fama and French (2015) GRS of the three-factor model on the 25 portfolios
+  (3.57 against the published 3.62).
 
 ## 6.0.0 (2026-10-25)
 

@@ -91,6 +91,8 @@ nav:
           - GDP Nowcasting: nowcast.md
           - Latin America Real-Time Nowcasting & News: nowcast_latam_news.md
           - Penalized Forecasting: forecast.md
+      - Macro-finance:
+          - Returns, risk and asset-pricing tests: asset_pricing.md
       - Publication & Reporting:
           - Manuscript Tables & Exports: reporting.md
       - Structural Models:
@@ -201,6 +203,8 @@ nav:
           - Nowcasting del PIB: es/nowcast.md
           - Nowcasting en tiempo real de América Latina y descomposición de noticias: es/nowcast_latam_news.md
           - Pronóstico penalizado: es/forecast.md
+      - Macrofinanzas:
+          - Rendimientos, riesgo y pruebas de valoración de activos: es/asset_pricing.md
       - Publicación e informes:
           - Tablas y exportación de manuscritos: es/reporting.md
       - Modelos estructurales:
