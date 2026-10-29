@@ -8,6 +8,10 @@ Versions 5.3.0, 5.4.0 and 5.4.1 were tagged but not published to PyPI; their
 additions are included in 5.4.2. The v6.0.0 publication also failed; as checked
 on 2026-10-26, PyPI still serves 5.7.1. See the [release procedure](RELEASING.md).
 
+## 6.1.0 (unreleased)
+
+Development version after 6.0.1; not a published distribution.
+
 ## 6.0.1 (2026-10-29)
 
 **Reliability release: corrected sovereign timing and model fidelity, a
