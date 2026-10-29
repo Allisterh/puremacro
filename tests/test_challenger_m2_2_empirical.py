@@ -339,6 +339,9 @@ class TestForecastAndAggFanCharts:
         """Test rendering fan charts and saving to PNG buffer under Matplotlib Agg mode."""
         # Ensure Agg backend is active
         assert matplotlib.get_backend().lower() == "agg", "Matplotlib backend is not Agg"
+        # Earlier tests in the same process can leave figures open (seen once
+        # under pytest-xdist); the leak assertion below must measure this test only.
+        plt.close("all")
 
         sim = nk3_model.simulate(250, seed=42)
         data = sim[["y", "pi", "r"]]

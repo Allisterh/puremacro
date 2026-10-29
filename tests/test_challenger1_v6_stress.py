@@ -63,12 +63,12 @@ class TestTrackI1DifferentiableModelAdversarial:
     def test_adv_all_adapters_protocol_compliance(self):
         """Verify all six domain adapters satisfy DifferentiableModel protocol."""
         adapters = [
-            DSGEDifferentiableAdapter(object()),
-            HANKDAGDifferentiableAdapter(object()),
-            DFMDifferentiableAdapter(object()),
-            SVARDifferentiableAdapter(object()),
-            TradeDifferentiableAdapter(object()),
-            SpatialDifferentiableAdapter(object()),
+            DSGEDifferentiableAdapter(None),
+            HANKDAGDifferentiableAdapter(None),
+            DFMDifferentiableAdapter(None),
+            SVARDifferentiableAdapter(None),
+            TradeDifferentiableAdapter(None),
+            SpatialDifferentiableAdapter(None),
         ]
         for a in adapters:
             assert isinstance(a, DifferentiableModel), f"{type(a)} failed DifferentiableModel protocol check"
@@ -138,7 +138,7 @@ class TestTrackI1DifferentiableModelAdversarial:
             return grad_fd
 
         # 1. DSGE Adapter: Boundary AR persistence rho near 1.0 and -1.0
-        dsge = DSGEDifferentiableAdapter(object())
+        dsge = DSGEDifferentiableAdapter(None)
         test_thetas_dsge = [
             np.array([0.5, 0.1, 0.05]),
             np.array([0.95, 0.05, 0.02]),
@@ -152,7 +152,7 @@ class TestTrackI1DifferentiableModelAdversarial:
             np.testing.assert_allclose(grad_ad, grad_fd, rtol=1e-3, atol=1e-4)
 
         # 2. HANK DAG Adapter (Whittle spectral loglik)
-        hank_dag = HANKDAGDifferentiableAdapter(object())
+        hank_dag = HANKDAGDifferentiableAdapter(None)
         test_thetas_hank = [
             np.array([0.98, 1.0, 0.8]),
             np.array([0.95, 2.5, -0.6]),
@@ -164,28 +164,28 @@ class TestTrackI1DifferentiableModelAdversarial:
             np.testing.assert_allclose(grad_ad, grad_fd, rtol=1e-3, atol=1e-4)
 
         # 3. DFM Adapter
-        dfm = DFMDifferentiableAdapter(object())
+        dfm = DFMDifferentiableAdapter(None)
         th_dfm = np.array([0.75, 1.2, 0.15])
         ll_ad, grad_ad = dfm.loglik_and_grad(params=th_dfm)
         grad_fd = _central_fd(dfm, th_dfm, h=1e-5)
         np.testing.assert_allclose(grad_ad, grad_fd, rtol=1e-3, atol=1e-4)
 
         # 4. SVAR Adapter
-        svar = SVARDifferentiableAdapter(object())
+        svar = SVARDifferentiableAdapter(None)
         th_svar = np.array([0.65, 0.08, 0.04, 0.70, 0.12, 0.18])
         ll_ad, grad_ad = svar.loglik_and_grad(params=th_svar)
         grad_fd = _central_fd(svar, th_svar, h=1e-5)
         np.testing.assert_allclose(grad_ad, grad_fd, rtol=1e-3, atol=1e-4)
 
         # 5. Trade Adapter
-        trade = TradeDifferentiableAdapter(object())
+        trade = TradeDifferentiableAdapter(None)
         th_trade = np.array([4.2, 1.1, 0.30])
         ll_ad, grad_ad = trade.loglik_and_grad(params=th_trade)
         grad_fd = _central_fd(trade, th_trade, h=1e-5)
         np.testing.assert_allclose(grad_ad, grad_fd, rtol=1e-3, atol=1e-4)
 
         # 6. Spatial Adapter
-        spatial = SpatialDifferentiableAdapter(object())
+        spatial = SpatialDifferentiableAdapter(None)
         th_spatial = np.array([2.2, 0.96, 1.1])
         ll_ad, grad_ad = spatial.loglik_and_grad(params=th_spatial)
         grad_fd = _central_fd(spatial, th_spatial, h=1e-5)
@@ -193,7 +193,7 @@ class TestTrackI1DifferentiableModelAdversarial:
 
     def test_adv_complex_and_ragged_inputs(self):
         """Stress-test adapters with DataFrames, dict params with missing/extra keys, and ragged shocks."""
-        dsge = DSGEDifferentiableAdapter(object())
+        dsge = DSGEDifferentiableAdapter(None)
 
         # 1. Custom DataFrame with DatetimeIndex
         dates = pd.date_range("2020-01-01", periods=50, freq="QE")

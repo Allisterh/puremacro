@@ -1,0 +1,57 @@
+{
+  "scope": "matched-grid one-asset household block; not full published HANK replication",
+  "generated_on": "2026-10-26",
+  "reference_commit": "eb4ac4c3157357a4cacbea4b5a7a281f5b48cab9",
+  "reference_url": "https://github.com/shade-econ/sequence-jacobian/tree/eb4ac4c3157357a4cacbea4b5a7a281f5b48cab9",
+  "calibration": {
+    "beta": 0.985,
+    "gamma": 1.0,
+    "r_ss": 0.01,
+    "w_ss": 1.0,
+    "a_max": 100.0
+  },
+  "versions": {
+    "numpy": "2.4.6",
+    "scipy": "1.17.1",
+    "sequence-jacobian": "1.0.0"
+  },
+  "cases": [
+    {
+      "n_a": 50,
+      "horizon": 24,
+      "government_debt": 6.67730587706846,
+      "steady_state_converged": true,
+      "upper_grid_mass": 0.0,
+      "reference_assets_minus_debt": 4.1957815000159826e-10,
+      "max_abs_errors": {
+        "policy_c": 4.196598624162107e-11,
+        "policy_a": 4.196465397399152e-11,
+        "distribution": 1.0239309400361662e-11,
+        "jacobian_w": 1.9004088233631755e-11,
+        "jacobian_r": 2.944177782852886e-05,
+        "consumption": 1.9792945060714828e-11
+      }
+    },
+    {
+      "n_a": 100,
+      "horizon": 24,
+      "government_debt": 6.088840162407225,
+      "steady_state_converged": true,
+      "upper_grid_mass": 0.0,
+      "reference_assets_minus_debt": 3.633031653293983e-10,
+      "max_abs_errors": {
+        "policy_c": 4.263434050244541e-11,
+        "policy_a": 4.263256414560601e-11,
+        "distribution": 2.868247306331284e-12,
+        "jacobian_w": 7.823445016819086e-12,
+        "jacobian_r": 0.0003916800599546577,
+        "consumption": 9.814371537686384e-12
+      }
+    }
+  ],
+  "fixtures_sha256": {
+    "hank_ssj_100.npz": "51258d1944797424fcb3628464f9ccc7701acc26126419ffe093cb3c588c4afd",
+    "hank_ssj_50.npz": "f5ebce068d45059978d106f7257baecbe5261d9416614f6d95d08e3b2b55b7e2"
+  },
+  "passed": true
+}

@@ -24,7 +24,8 @@ python -m pip install puremacro
 | **Simular políticas** | Declare un modelo de hogares con [programación dinámica](docs/es/dp.md), estudie la [transmisión monetaria](docs/es/monetary_transmission.md) o construya un [contrafactual comercial](docs/es/trade_accounting.md). |
 | **Aprender o enseñar** | Elija una [ruta de cuadernos](docs/es/notebooks.md) o use el [curso bilingüe y sus laboratorios interactivos](curso/README.md). Use la edición fija del curso indicada abajo. |
 
-**Versión publicada 6.0.0.** Instale la [versión verificada de PyPI](https://pypi.org/project/puremacro/6.0.0/); consulte el [registro de publicación y validación](https://github.com/jalonso1979/puremacro/releases/tag/v6.0.0).
+**Estado comprobado el 2026-10-26:** esta rama de desarrollo corresponde a **6.0.1**. La publicación de la etiqueta anterior v6.0.0 falló. La última distribución disponible en [PyPI](https://pypi.org/project/puremacro/) es **5.7.1**. Las correcciones de fiabilidad están en desarrollo; una etiqueta no acredita una publicación.
+Consulte las [pruebas recomendadas y próximos hitos](docs/es/research_reliability.md).
 Estas páginas corresponden a 6.0.0; consulte el
 [historial de cambios](CHANGELOG.md) y use la documentación correspondiente
 a su versión instalada.
@@ -795,8 +796,8 @@ Si proviene de Stata, MATLAB/Dynare o statsmodels:
 
 Las replicaciones de extremo a extremo de artículos canónicos y cuadernos pedagógicos se encuentran en `notebooks/` y `puremacro/examples/`:
 - **Estudios reproducibles, flujos DSGE no lineales y macroeconomía de frontera**: flujos de trabajo de VAR monetario con datos congelados, transferencias a hogares y aranceles en redes de producción, con archivos portátiles del estudio y diagnósticos conservados (`69`), comandos `.mod` ordenados, condicionamiento de Sylvester, políticas separables de Chebyshev y transiciones restringidas Newton–Krylov (`70`), y la suite completa de frontera que une AD hacia adelante, HANK en espacio de secuencias, OccBin podado de orden superior, nowcasting de frecuencia mixta, HJB en tiempo continuo, equilibrio general de redes/espacial y mallas contrafactuales con autoauditoría en `PolicyStudio` (`71`).
-- **Suite insignia de frontera v6.0.0**: Protocolo unificado de modelo diferenciable con gradientes analíticos de score por AD hacia adelante, motor SMC templado vectorizado, HANK no lineal en espacio de secuencias con riesgo agregado, default soberano cuantitativo con paradas súbitas y colateral, proyecciones locales distributivas con aditividad exacta e IAM espacial climático dinámico integrado (`72`).
-- **Cuadernos tutoriales pedagógicos v6.0.0**: Default soberano cuantitativo, vencimiento de deuda de largo plazo, paradas súbitas con restricciones de colateral y contrafactuales de reestructuración de deuda (`73`); proyecciones locales distributivas funcionales y cuantílicas con aditividad transversal exacta, puentes estructurales hacia HANK, SMC templado adaptativo y transiciones no lineales en espacio de secuencias (`74`); cuellos de botella en cadenas de suministro con CES de 2.º orden de Baqaee–Farhi, álgebra dinámica de sombreros de migración espacial, IAM climático integrado multirregional y reportes interactivos autoauditados con PolicyStudio (`75`).
+- **Suite insignia de frontera v6.0.0**: Protocolo unificado de modelo diferenciable con métodos de gradiente nativos documentados, motor SMC templado vectorizado, demostraciones reducidas HANK no lineales y de riesgo agregado, default soberano cuantitativo con paradas súbitas y colateral, proyecciones locales distributivas con aditividad exacta e IAM espacial climático dinámico integrado (`72`).
+- **Cuadernos tutoriales pedagógicos v6.0.0**: Default soberano cuantitativo, vencimiento de deuda de largo plazo, paradas súbitas con restricciones de colateral y contrafactuales de reestructuración de deuda (`73`); proyecciones locales distributivas funcionales y cuantílicas con aditividad transversal exacta, comprobaciones de identidad del puente, SMC templado adaptativo y transiciones no lineales en espacio de secuencias (`74`); cuellos de botella en cadenas de suministro con CES de 2.º orden de Baqaee–Farhi, álgebra dinámica de sombreros de migración espacial, IAM climático integrado multirregional y reportes interactivos autoauditados con PolicyStudio (`75`).
 - **Replicaciones de resultados publicados**: discreción óptima, regla simple y compromiso atemporal de Clarida, Galí y Gertler (1999) verificados fórmula por fórmula, con la advertencia sobre pérdidas incondicionales y condicionales (`66`), las tablas de Huggett (1993) y Aiyagari (1994) resueltas de nuevo, con cotas de error numérico, un solucionador independiente y el efecto de la cadena de Markov (`67`), y la perturbación de tercer orden verificada tensor por tensor con formas cerradas y Dynare 7.0 en vivo (`68`).
 - **Nowcasting regional, ML causal y política comercial**: nowcasting sintético de América Latina con atribución de noticias por añadas (`59`), Double ML interactivo IRM y DML-IV (`60`), simuladores de política comercial y HANK (`61`), bloques del CGE comercial flexible (`62`), juegos arancelarios hicksianos con recuperación auditada del equilibrio (`63`), cotas espectrales y continuación de Keller (`64`), y cascadas de costes en cadenas globales de valor con atribución de la VE/VC hicksiana (`65`).
 - **ML causal, HJB en tiempo continuo y tiempo real regional**: HJB implícito con KFE adjunta y EG de Aiyagari (`56`), OccBin multirrestricción acoplado con DML (`57`) y añadas macroeconómicas en tiempo real de América Latina (`58`).
@@ -894,10 +895,10 @@ verificación y la orden que reconstruye el archivo, se distribuye como
 
 ## Estado
 
-La versión publicada **6.0.0** incluye `puremacro.trade` y sus módulos MRIO, reincorporados
+El **código fuente 6.0.0** incluye `puremacro.trade` y sus módulos MRIO, reincorporados
 en 5.2.0, junto con las adiciones y correcciones del
 [historial de cambios](CHANGELOG.md). Instale la
-[distribución 6.0.0 de PyPI](https://pypi.org/project/puremacro/6.0.0/). La versión 4.8.1 es la última con los estudios de investigación
+[distribución disponible en PyPI](https://pypi.org/project/puremacro/). La versión 4.8.1 es la última con los estudios de investigación
 retirados en 5.x (`pip install "puremacro<5"`). Los [niveles de estabilidad](ARCHITECTURE.md#stability-tiers)
 identifican las superficies estables, experimentales y de soporte limitado.
 Los cálculos estructurales tienen [límites de validación](docs/es/STRUCTURAL_VALIDATION_STATUS.md)

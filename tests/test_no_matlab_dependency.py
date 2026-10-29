@@ -65,10 +65,13 @@ def test_no_matlab_sources_are_distributed():
     )
     if tracked.returncode != 0:  # not a git checkout, e.g. an unpacked sdist
         pytest.skip("not a git checkout")
-    # These files reproduce external evidence and are excluded from wheel/sdist.
+    # These external development references live outside the runtime package.
+    # Ordinary tests use frozen exports; reproducing them may use MATLAB/Octave.
     # Keep an exact allowlist: a new runtime dependency must still fail here.
     development_references = {
         "tools/reference_validation/export_dynare.m",
+        "tests/fixtures/arellano_2008/original/markovchain.m",
+        "tests/fixtures/arellano_2008/original/policies_simulation.m",
         "curso/notebooks/modelos/rbc_mexico_dual/Output/rbc_mexico_dual_results.mat",
     }
     offenders = [

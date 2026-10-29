@@ -313,6 +313,7 @@ def test_main_emits_summary_pass(capsys, monkeypatch):
     monkeypatch.setattr(release_check, "gate_snapshot", lambda _r: {"name": "public_api_snapshot", "passed": True, "report": "  Gate 3: PASS"})
     monkeypatch.setattr(release_check, "gate_version_sync", lambda **kw: {"name": "version_sync", "passed": True, "report": "  Gate 4: PASS"})
     monkeypatch.setattr(release_check, "gate_min_python_syntax", lambda *a, **kw: {"name": "min_python_syntax", "passed": True, "report": "  Gate 7: PASS"})
+    monkeypatch.setattr(release_check, "gate_floor_mypy", lambda *a, **kw: {"name": "floor_mypy", "passed": True, "report": "  Gate 8: PASS"})
     rc = release_check.main([])
     captured = capsys.readouterr()
     assert rc == 0
@@ -324,6 +325,7 @@ def test_main_emits_summary_fail(capsys, monkeypatch):
     monkeypatch.setattr(release_check, "gate_pyodide", lambda _r: {"name": "pyodide", "passed": True, "report": "  Gate 2: PASS"})
     monkeypatch.setattr(release_check, "gate_snapshot", lambda _r: {"name": "public_api_snapshot", "passed": True, "report": "  Gate 3: PASS"})
     monkeypatch.setattr(release_check, "gate_version_sync", lambda **kw: {"name": "version_sync", "passed": False, "report": "  Gate 4: FAIL"})
+    monkeypatch.setattr(release_check, "gate_floor_mypy", lambda *a, **kw: {"name": "floor_mypy", "passed": True, "report": "  Gate 8: PASS"})
     rc = release_check.main([])
     captured = capsys.readouterr()
     assert rc == 1
@@ -566,6 +568,7 @@ def test_main_summary_5_gates_with_examples_flag(capsys, monkeypatch):
         release_check, "gate_examples_gallery",
         lambda _p, *, examples_source_dir, known_failures_path=None: {"name": "examples_gallery", "passed": True, "report": "  Gate 5: PASS"},
     )
+    monkeypatch.setattr(release_check, "gate_floor_mypy", lambda *a, **kw: {"name": "floor_mypy", "passed": True, "report": "  Gate 8: PASS"})
     rc = release_check.main(["--examples"])
     captured = capsys.readouterr()
     assert rc == 0
@@ -616,6 +619,7 @@ def test_main_summary_with_pyodide_flag(capsys, monkeypatch):
         release_check, "gate_pyodide_smoke",
         lambda _r: {"name": "pyodide_smoke", "passed": True, "report": "  Gate 6: PASS"},
     )
+    monkeypatch.setattr(release_check, "gate_floor_mypy", lambda *a, **kw: {"name": "floor_mypy", "passed": True, "report": "  Gate 8: PASS"})
     rc = release_check.main(["--examples", "--pyodide"])
     captured = capsys.readouterr()
     assert rc == 0
@@ -638,3 +642,135 @@ def test_check_external_oracle_fixtures(tmp_path, monkeypatch):
     monkeypatch.setenv("PUREMACRO_ABDATA", str(ab))
     monkeypatch.setenv("PUREMACRO_ADH_RDA", str(adh))
     assert release_check.check_external_oracle_fixtures(tmp_path) == []
+
+
+# ---------------------------------------------------------------------------
+# Gate 8 — mypy under the requires-python floor interpreter
+# ---------------------------------------------------------------------------
+
+def _fake_floor_run(mypy_by_platform, *, version_line="3 11", mypy_installed=True):
+    """A subprocess.run stand-in for Gate 8: version probe, mypy probe, mypy runs."""
+    def fake_run(cmd, **kwargs):
+        cmd = [str(c) for c in cmd]
+        joined = " ".join(cmd)
+        if "sys.version_info" in joined:
+            return subprocess.CompletedProcess(cmd, 0, stdout=version_line + "\n", stderr="")
+        if "import mypy.version" in joined:
+            if mypy_installed:
+                return subprocess.CompletedProcess(cmd, 0, stdout="1.19.1 2.4.6\n", stderr="")
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="ModuleNotFoundError: No module named 'mypy'")
+        if "-m" in cmd and "mypy" in cmd:
+            platform = cmd[cmd.index("--platform") + 1] if "--platform" in cmd else "native"
+            rc, out = mypy_by_platform[platform]
+            return subprocess.CompletedProcess(cmd, rc, stdout=out, stderr="")
+        raise AssertionError(f"unexpected command: {cmd}")
+    return fake_run
+
+
+_CLEAN = (0, "Success: no issues found in 890 source files\n")
+
+
+def test_gate8_passes_when_the_floor_interpreter_type_checks_natively_and_as_win32(monkeypatch, tmp_path):
+    monkeypatch.setattr(release_check.subprocess, "run",
+                        _fake_floor_run({"native": _CLEAN, "win32": _CLEAN}))
+    g = release_check.gate_floor_mypy(tmp_path, min_version=(3, 11), interpreter="/fake/.venv311/bin/python")
+    assert g["name"] == "floor_mypy"
+    assert g["passed"] is True
+    assert "Gate 8" in g["report"] and "3.11" in g["report"]
+    assert "win32" in g["report"] and "mypy 1.19.1" in g["report"] and "numpy 2.4.6" in g["report"]
+
+
+def test_gate8_reports_the_file_and_line_of_a_floor_only_typing_error(monkeypatch, tmp_path):
+    error = ("puremacro/lp/distributional.py:957: error: No overload variant of \"__call__\" "
+             "of \"_UFunc_Nin1_Nout1\" matches argument type [call-overload]\n"
+             "Found 1 error in 1 file (checked 889 source files)\n")
+    monkeypatch.setattr(release_check.subprocess, "run",
+                        _fake_floor_run({"native": (1, error), "win32": _CLEAN}))
+    g = release_check.gate_floor_mypy(tmp_path, min_version=(3, 11), interpreter="/fake/py311")
+    assert g["passed"] is False
+    assert "FAIL" in g["report"]
+    assert "[native]" in g["report"] and "distributional.py:957" in g["report"]
+    assert "Found 1 error" in g["report"]
+
+
+def test_gate8_fails_when_mypy_is_not_installed_in_the_floor_environment(monkeypatch, tmp_path):
+    monkeypatch.setattr(release_check.subprocess, "run",
+                        _fake_floor_run({"native": _CLEAN, "win32": _CLEAN}, mypy_installed=False))
+    g = release_check.gate_floor_mypy(tmp_path, min_version=(3, 11), interpreter="/fake/py311")
+    assert g["passed"] is False
+    assert "install" in g["report"].lower() and "/fake/py311" in g["report"]
+
+
+def test_gate8_fails_with_setup_instructions_when_no_floor_interpreter_exists(monkeypatch, tmp_path):
+    monkeypatch.setattr(release_check, "find_floor_interpreter",
+                        lambda repo_root, min_version: (None, ["running interpreter: /usr/bin/python3 is Python 3.13"]))
+    g = release_check.gate_floor_mypy(tmp_path, min_version=(3, 11))
+    assert g["passed"] is False
+    assert "no Python 3.11 interpreter" in g["report"]
+    assert "uv python install 3.11" in g["report"] and ".venv311" in g["report"]
+    assert "PUREMACRO_FLOOR_PYTHON" in g["report"]
+    assert "/usr/bin/python3 is Python 3.13" in g["report"]
+
+
+def test_find_floor_interpreter_takes_the_first_candidate_of_the_floor_version(monkeypatch, tmp_path):
+    venv_python = tmp_path / ".venv311" / "bin" / "python"
+    venv_python.parent.mkdir(parents=True)
+    venv_python.write_text("")
+    versions = {"/fake/py312": (3, 12), sys.executable: (3, 13), str(venv_python): (3, 11)}
+    monkeypatch.setenv("PUREMACRO_FLOOR_PYTHON", "/fake/py312")
+    monkeypatch.setattr(release_check, "_probe_interpreter_version", lambda exe: versions.get(str(exe)))
+    monkeypatch.setattr(release_check.shutil, "which", lambda name: None)
+    found, notes = release_check.find_floor_interpreter(tmp_path, (3, 11))
+    assert found == str(venv_python)
+    # The rejected candidates are named with the version they actually report.
+    assert any("PUREMACRO_FLOOR_PYTHON" in n and "3.12" in n for n in notes)
+    assert any("running interpreter" in n and "3.13" in n for n in notes)
+
+
+def test_find_floor_interpreter_accepts_the_running_interpreter_when_it_is_the_floor(monkeypatch, tmp_path):
+    monkeypatch.delenv("PUREMACRO_FLOOR_PYTHON", raising=False)
+    monkeypatch.setattr(release_check, "_probe_interpreter_version",
+                        lambda exe: (3, 11) if str(exe) == sys.executable else None)
+    monkeypatch.setattr(release_check.shutil, "which", lambda name: None)
+    found, notes = release_check.find_floor_interpreter(tmp_path, (3, 11))
+    assert found == sys.executable
+    assert notes == []
+
+
+def test_find_floor_interpreter_reports_every_rejected_candidate(monkeypatch, tmp_path):
+    monkeypatch.delenv("PUREMACRO_FLOOR_PYTHON", raising=False)
+    monkeypatch.setattr(release_check, "_probe_interpreter_version", lambda exe: None)
+    monkeypatch.setattr(release_check.shutil, "which", lambda name: "/opt/bin/python3.11")
+    found, notes = release_check.find_floor_interpreter(tmp_path, (3, 11))
+    assert found is None
+    assert any("unavailable" in n and "/opt/bin/python3.11" in n for n in notes)
+
+
+def test_main_runs_gate8_in_the_full_gate_and_only_on_request_with_no_tests(capsys, monkeypatch):
+    for name, fn in {
+        "gate_test_baseline": lambda _r: {"name": "test_baseline", "passed": True, "report": "  Gate 1: PASS"},
+        "gate_pyodide": lambda _r: {"name": "pyodide", "passed": True, "report": "  Gate 2: PASS"},
+        "gate_snapshot": lambda _r: {"name": "public_api_snapshot", "passed": True, "report": "  Gate 3: PASS"},
+        "gate_version_sync": lambda **kw: {"name": "version_sync", "passed": True, "report": "  Gate 4: PASS"},
+        "gate_min_python_syntax": lambda *a, **kw: {"name": "min_python_syntax", "passed": True, "report": "  Gate 7: PASS"},
+    }.items():
+        monkeypatch.setattr(release_check, name, fn)
+    calls = []
+
+    def gate8(_r):
+        calls.append(_r)
+        return {"name": "floor_mypy", "passed": True, "report": "  Gate 8: PASS"}
+
+    monkeypatch.setattr(release_check, "gate_floor_mypy", gate8)
+
+    assert release_check.main(["--no-tests"]) == 0
+    assert calls == [], "--no-tests alone must keep the fast path fast; CI relies on it"
+    assert _summary_count_matches_reported_gates(capsys.readouterr().out)
+
+    assert release_check.main(["--no-tests", "--mypy-floor"]) == 0
+    assert len(calls) == 1
+    assert _summary_count_matches_reported_gates(capsys.readouterr().out)
+
+    assert release_check.main([]) == 0
+    assert len(calls) == 2, "the full pre-tag gate must run Gate 8 without being asked"
+    assert _summary_count_matches_reported_gates(capsys.readouterr().out)

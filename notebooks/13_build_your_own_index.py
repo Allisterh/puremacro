@@ -73,7 +73,7 @@ from puremacro.narrative.indices import epu
 from puremacro.factor import pca_factors
 from puremacro.garch import garch11_fit
 from puremacro.gar import fci
-from puremacro.sigma import SigmaObject
+from puremacro.volatility.sigma import SigmaObject
 
 # Pyodide-clean guard: none of these heavy/paid modules should have leaked.
 _bad = [m for m in ("bs4", "requests", "anthropic", "sentence_transformers",

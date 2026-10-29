@@ -1,6 +1,6 @@
 """tools/release_check.py — single pre-tag gate for puremacro releases.
 
-Run me before `git tag X.Y.Z`. Up to seven gates (all run; no fail-fast):
+Run me before `git tag X.Y.Z`. Up to eight gates (all run; no fail-fast):
 
   Gate 1 (test baseline)    — pytest failures and setup errors must equal
                               tests/known_failures.json
@@ -15,6 +15,10 @@ Run me before `git tag X.Y.Z`. Up to seven gates (all run; no fail-fast):
   Gate 7 (min-Python syntax) — every .py parses on the requires-python floor
                               (default-on, seconds); catches what only the
                               oldest CI leg would otherwise reject at collection
+  Gate 8 (floor mypy)        — mypy under a real interpreter of the requires-python
+                              floor, natively and as --platform win32 (default-on
+                              in the full gate, minutes; --mypy-floor adds it to
+                              --no-tests); v5.4.0 and v6.0.0 failed only there
 
 Exit 0 iff every gate run passed.
 """
@@ -873,6 +877,171 @@ def gate_min_python_syntax(
     }
 
 
+# ---------------------------------------------------------------------------
+# Gate 8 — mypy under the requires-python floor interpreter
+# ---------------------------------------------------------------------------
+
+#: Environment variable naming an interpreter of the floor version explicitly.
+FLOOR_PYTHON_ENV = "PUREMACRO_FLOOR_PYTHON"
+
+#: mypy is run once per entry; "native" means no --platform override.
+MYPY_PLATFORMS: tuple[str, ...] = ("native", "win32")
+
+#: The CI step and tests/test_e2e_upgrade.py run exactly this command.
+MYPY_ARGS: tuple[str, ...] = ("-m", "mypy", "puremacro", "--ignore-missing-imports")
+
+
+def _run_quiet(cmd: list[str], *, cwd: Path, timeout: float) -> subprocess.CompletedProcess | None:
+    """subprocess.run with captured text output; None when it cannot run or times out."""
+    try:
+        return subprocess.run(
+            cmd, cwd=str(cwd), capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
+def _probe_interpreter_version(exe: str | Path) -> tuple[int, int] | None:
+    """``(major, minor)`` reported by running ``exe``; None when it cannot run."""
+    res = _run_quiet(
+        [str(exe), "-c", "import sys; print(sys.version_info[0], sys.version_info[1])"],
+        cwd=REPO_ROOT, timeout=60,
+    )
+    if res is None or res.returncode != 0:
+        return None
+    parts = res.stdout.split()
+    try:
+        return int(parts[0]), int(parts[1])
+    except (IndexError, ValueError):
+        return None
+
+
+def floor_interpreter_candidates(repo_root: Path, min_version: tuple[int, int]) -> list[tuple[str, str]]:
+    """``(path, origin)`` pairs to try, in order.
+
+    ``$PUREMACRO_FLOOR_PYTHON`` first, then the running interpreter (the CI leg
+    on the floor is already it), then a repo-local ``.venvXY`` (which ``uv venv``
+    and ``python -m venv`` ignore through their own ``.gitignore``), then
+    ``pythonX.Y`` on PATH. Only existence is checked here; versions are probed
+    by :func:`find_floor_interpreter`.
+    """
+    major, minor = min_version
+    tag = f"{major}.{minor}"
+    out: list[tuple[str, str]] = []
+    explicit = os.environ.get(FLOOR_PYTHON_ENV, "").strip()
+    if explicit:
+        out.append((explicit, f"${FLOOR_PYTHON_ENV}"))
+    out.append((sys.executable, "running interpreter"))
+    venv = Path(repo_root) / f".venv{major}{minor}"
+    for rel in ("bin/python", "Scripts/python.exe"):
+        candidate = venv / rel
+        if candidate.exists():
+            out.append((str(candidate), f"{venv.name}/{rel}"))
+    on_path = shutil.which(f"python{tag}")
+    if on_path:
+        out.append((on_path, f"python{tag} on PATH"))
+    return out
+
+
+def find_floor_interpreter(repo_root: Path, min_version: tuple[int, int]) -> tuple[str | None, list[str]]:
+    """The first candidate that really is Python ``min_version``, plus notes on
+    every candidate rejected before it (with the version it reported)."""
+    notes: list[str] = []
+    for exe, origin in floor_interpreter_candidates(repo_root, min_version):
+        version = _probe_interpreter_version(exe)
+        if version == tuple(min_version):
+            return exe, notes
+        found = "unavailable" if version is None else f"Python {version[0]}.{version[1]}"
+        notes.append(f"{origin}: {exe} is {found}")
+    return None, notes
+
+
+def gate_floor_mypy(
+    repo_root: Path,
+    *,
+    min_version: tuple[int, int] | None = None,
+    interpreter: str | None = None,
+    platforms: tuple[str, ...] = MYPY_PLATFORMS,
+    timeout: float = 1800.0,
+) -> dict:
+    """Gate 8 — mypy passes under a real interpreter of the requires-python floor.
+
+    Gates 1-7 run under whatever interpreter invokes the script. ``v5.4.0`` and
+    ``v6.0.0`` passed all of them on Python 3.13 and then failed the three
+    Python 3.11 CI legs on typing alone: the floor resolves NumPy 2.4, whose
+    stubs differ from 2.5's. This gate runs the CI command under a floor
+    interpreter with its own resolved dependencies, once natively and once as
+    ``--platform win32`` (the Windows legs failed 5.4.0 on POSIX-only code).
+    """
+    name = "floor_mypy"
+    repo_root = Path(repo_root)
+    if min_version is None:
+        min_version = read_requires_python_min(repo_root / "pyproject.toml")
+    major, minor = min_version
+    tag = f"{major}.{minor}"
+    head = f"  Gate 8 (mypy under Python {tag}): "
+
+    notes: list[str] = []
+    if interpreter is None:
+        interpreter, notes = find_floor_interpreter(repo_root, min_version)
+    if interpreter is None:
+        lines = [head + f"FAIL — no Python {tag} interpreter found"]
+        lines.extend(f"    {n}" for n in notes)
+        lines.append("    one-time setup (see RELEASING.md §4):")
+        lines.append(f"      uv python install {tag} && uv venv .venv{major}{minor} --python {tag}")
+        lines.append(f"      uv pip install --python .venv{major}{minor}/bin/python -e '.[dev,notebooks]'")
+        lines.append(f"    or point ${FLOOR_PYTHON_ENV} at an existing Python {tag} with the package installed")
+        return {"name": name, "passed": False, "report": "\n".join(lines)}
+
+    probe = _run_quiet(
+        [interpreter, "-c", "import mypy.version, numpy; print(mypy.version.__version__, numpy.__version__)"],
+        cwd=repo_root, timeout=120,
+    )
+    if probe is None or probe.returncode != 0:
+        detail = "" if probe is None else (probe.stderr.strip().splitlines() or [""])[-1]
+        lines = [head + f"FAIL — mypy or numpy is not installed in {interpreter}"]
+        if detail:
+            lines.append(f"    {detail}")
+        lines.append(f"    install the package there: {interpreter} -m pip install -e '.[dev,notebooks]'")
+        return {"name": name, "passed": False, "report": "\n".join(lines)}
+    versions = probe.stdout.split()
+    mypy_version = versions[0] if versions else "?"
+    numpy_version = versions[1] if len(versions) > 1 else "?"
+
+    problems: list[str] = []
+    for platform in platforms:
+        cmd = [interpreter, *MYPY_ARGS]
+        if platform != "native":
+            cmd += ["--platform", platform]
+        res = _run_quiet(cmd, cwd=repo_root, timeout=timeout)
+        if res is None:
+            problems.append(f"[{platform}] mypy did not complete within {timeout:.0f}s or could not start")
+            continue
+        if res.returncode == 0:
+            continue
+        output = (res.stdout + "\n" + res.stderr).splitlines()
+        errors = [line for line in output if ": error:" in line]
+        summary = next((line for line in reversed(output) if line.strip()), f"exit {res.returncode}")
+        problems.append(f"[{platform}] {summary}")
+        problems.extend(f"[{platform}] {e}" for e in errors[:25])
+        if len(errors) > 25:
+            problems.append(f"[{platform}] ... {len(errors) - 25} more")
+
+    if problems:
+        lines = [head + f"FAIL — {interpreter} (mypy {mypy_version}, numpy {numpy_version})"]
+        lines.extend(f"    {p}" for p in problems)
+        return {"name": name, "passed": False, "report": "\n".join(lines)}
+    return {
+        "name": name,
+        "passed": True,
+        "report": head + (
+            f"PASS — {interpreter} (mypy {mypy_version}, numpy {numpy_version}); "
+            f"platforms: {', '.join(platforms)}"
+        ),
+    }
+
+
 def check_external_oracle_fixtures(repo_root: Path | None = None) -> list[str]:
     """Return human-readable warnings for absent external parity oracle fixtures (Batch B3c / D14).
 
@@ -908,7 +1077,7 @@ def check_external_oracle_fixtures(repo_root: Path | None = None) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="release_check",
-        description="Release-gate for puremacro — runs 5 default gates + up to 2 opt-in pre-tag.",
+        description="Release-gate for puremacro — runs 6 default gates (5 with --no-tests) + up to 2 opt-in pre-tag.",
     )
     parser.add_argument(
         "--no-tests",
@@ -933,6 +1102,14 @@ def main(argv: list[str] | None = None) -> int:
         help="Also run Gate 6 (real Pyodide smoke). Builds the wheel + boots "
              "Pyodide via node tools/pyodide/runner.js. Slow (~60-180s); "
              "requires node + one-time `npm install` in tools/pyodide/.",
+    )
+    parser.add_argument(
+        "--mypy-floor",
+        action="store_true",
+        help="Also run Gate 8 (mypy under a real requires-python-floor interpreter, natively "
+             "and as --platform win32) when --no-tests would skip it. Gate 8 is default-on "
+             "in the full gate; it needs a Python 3.11 with the package installed "
+             "($PUREMACRO_FLOOR_PYTHON, .venv311/, or python3.11 on PATH).",
     )
     parser.add_argument(
         "--allow-skipped-oracles",
@@ -972,6 +1149,9 @@ def main(argv: list[str] | None = None) -> int:
     gates.append(g4)
     g7 = gate_min_python_syntax(REPO_ROOT)
     gates.append(g7)
+    if not args.no_tests or args.mypy_floor:
+        g8 = gate_floor_mypy(REPO_ROOT)
+        gates.append(g8)
     if args.examples:
         g5 = gate_examples_gallery(
             REPO_ROOT / "docs" / "examples_gallery.json",

@@ -1,0 +1,54 @@
+{
+  "scope": "independent short-term deterministic-default equations on matched grids; not paper moments",
+  "generated_on": "2026-10-26",
+  "equations": "https://eqm.quantecon.org/arellano.html",
+  "original_paper": "https://doi.org/10.1257/aer.98.3.690",
+  "calibration": {
+    "beta": 0.953,
+    "gamma": 2,
+    "r_star": 0.01,
+    "rho_y": 0.945,
+    "sigma_y": 0.025,
+    "theta": 0.282,
+    "b_min": -0.4,
+    "b_max": 0.4,
+    "sigma_eps": 0
+  },
+  "cases": [
+    {
+      "n_b": 41,
+      "n_y": 9,
+      "converged": true,
+      "max_abs_errors": {
+        "b_grid": 8.326672684688674e-17,
+        "y_grid": 1.3322676295501878e-15,
+        "p_trans": 2.220446049250313e-16,
+        "v_repay": 1.5196732761069143e-12,
+        "v_default": 1.5207834991315394e-12,
+        "q_bond": 7.771561172376096e-16,
+        "default_prob": 0.0,
+        "policy_b_prime": 8.326672684688674e-17
+      }
+    },
+    {
+      "n_b": 81,
+      "n_y": 9,
+      "converged": true,
+      "max_abs_errors": {
+        "b_grid": 1.1102230246251565e-16,
+        "y_grid": 1.3322676295501878e-15,
+        "p_trans": 2.220446049250313e-16,
+        "v_repay": 3.108047152977633e-11,
+        "v_default": 3.107691881609753e-11,
+        "q_bond": 7.771561172376096e-16,
+        "default_prob": 0.0,
+        "policy_b_prime": 1.1102230246251565e-16
+      }
+    }
+  ],
+  "fixtures_sha256": {
+    "arellano_41.npz": "910075253f894ef964b960701c5ea062b0f402af6226b29d7ec44a5fb3a0ae96",
+    "arellano_81.npz": "1f3f2ff59f4ff3a037141efdc4ea62d56fb793e9a15018dff8ab2273da794f4d"
+  },
+  "passed": true
+}

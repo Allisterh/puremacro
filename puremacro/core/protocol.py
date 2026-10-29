@@ -17,12 +17,16 @@ Canonical Method Signatures:
 - `.counterfactual(scenario, **kwargs) -> Any`
 - `.to_interactive_html(result_or_df=None, title=..., **kwargs) -> str`
 
-Gradients through `.loglik_and_grad()` are computed via `DualArray` forward automatic
-differentiation and verified against central finite differences to `rtol <= 1e-5`.
+Native first-order DSGE scores use the Kalman sensitivity recursion; structural
+state-space derivatives may use finite differences. BlockDAG scores centrally
+difference the native Whittle likelihood, conditional on a supplied steady state.
+Other adapters delegate supported native operations and reject unsupported ones.
+Passing model=None explicitly selects a synthetic DualArray demonstration.
 """
 from __future__ import annotations
 
 import math
+import warnings
 from typing import (
     Any,
     Callable,
@@ -90,7 +94,7 @@ class DifferentiableModel(Protocol):
         data: Optional[Union[np.ndarray, pd.DataFrame]] = None,
         **kwargs: Any,
     ) -> Tuple[float, np.ndarray]:
-        """Evaluate log-likelihood and its exact DualArray score gradient."""
+        """Evaluate the native likelihood and score using the adapter's documented method."""
         ...
 
     def counterfactual(
@@ -141,6 +145,15 @@ class BaseDifferentiableAdapter:
 
     def __init__(self, model: Any) -> None:
         self.model = model
+        self.demonstration = model is None
+        if self.demonstration:
+            warnings.warn("model=None selects a synthetic demonstration, not a fitted economic model", UserWarning, stacklevel=3)
+
+    def _native(self, method: str, **kwargs: Any) -> Any:
+        operation = getattr(self.model, method, None)
+        if not callable(operation):
+            raise NotImplementedError(f"Native model does not implement {method}")
+        return operation(**kwargs)
 
     def simulate(
         self,
@@ -192,6 +205,15 @@ class DSGEDifferentiableAdapter(BaseDifferentiableAdapter):
             if default_data is not None
             else None
         )
+        if model is not None:
+            from puremacro.state_space import StateSpaceModel
+            calibration = dict(getattr(model, "_params", None) or {})
+            if isinstance(model, StateSpaceModel):
+                calibration = {"rho": float(model.T[0, 0]), "sigma_eps": float(np.sqrt(model.Q[0, 0])),
+                               "sigma_meas": float(np.sqrt(model.H[0, 0]))}
+            self._param_names = tuple(param_names) if param_names is not None else tuple(calibration)
+            if default_params is None:
+                self._default_params = np.array([calibration.get(k, np.nan) for k in self._param_names])
 
     def impulse_response(
         self,
@@ -205,13 +227,22 @@ class DSGEDifferentiableAdapter(BaseDifferentiableAdapter):
             if isinstance(shock, (int, np.integer)) and 0 <= shock < len(self.shocks)
             else str(shock)
         )
+        from puremacro.state_space import StateSpaceModel
+        if isinstance(self.model, StateSpaceModel):
+            from puremacro.core._native_likelihoods import state_space_paths
+            index = int(shock) if isinstance(shock, (int, np.integer)) else (0 if shock == "eps" else -1)
+            result = state_space_paths(self.model, horizon + 1, impulse=index, size=size)
+            result.index.name = "h"
+            return result
         if hasattr(self.model, "irf"):
             df = self.model.irf(shock=shock_name, horizon=horizon, size=size)
             if not isinstance(df, pd.DataFrame):
                 df = pd.DataFrame(df)
             df.index.name = "h"
             return df
-        # Fallback simulation of impulse
+        if self.model is not None:
+            raise NotImplementedError("Native model does not implement irf; no demonstration fallback is used")
+        # Synthetic demonstration, selected explicitly with model=None.
         periods = horizon + 1
         paths = np.zeros((periods, len(self.variables)))
         paths[0, 0] = size
@@ -228,14 +259,15 @@ class DSGEDifferentiableAdapter(BaseDifferentiableAdapter):
         seed: Optional[int] = 0,
         **kwargs: Any,
     ) -> pd.DataFrame:
+        from puremacro.state_space import StateSpaceModel
+        if isinstance(self.model, StateSpaceModel):
+            from puremacro.core._native_likelihoods import state_space_paths
+            return state_space_paths(self.model, periods, shocks=shocks, seed=seed, **kwargs)
         if hasattr(self.model, "simulate"):
-            try:
-                res = self.model.simulate(periods=periods, shocks=shocks, seed=seed, **kwargs)
-                if isinstance(res, pd.DataFrame):
-                    return res
-                return pd.DataFrame(res)
-            except Exception:
-                pass
+            res = self.model.simulate(periods=periods, shocks=shocks, seed=seed, **kwargs)
+            return res if isinstance(res, pd.DataFrame) else pd.DataFrame(res)
+        if self.model is not None:
+            raise NotImplementedError("Native model does not implement simulate; no demonstration fallback is used")
         rng = np.random.default_rng(seed)
         n_vars = len(self.variables)
         n_shocks = len(self.shocks)
@@ -258,8 +290,30 @@ class DSGEDifferentiableAdapter(BaseDifferentiableAdapter):
     ) -> Any:
         if hasattr(self.model, "counterfactual"):
             return self.model.counterfactual(scenario, **kwargs)
+        if self.model is not None and isinstance(scenario, Mapping) and "param_override" in scenario:
+            from puremacro.dsge.build import LinearModel
+            from puremacro.dsge._gradients import _re_solve_model
+            if not isinstance(self.model, LinearModel):
+                raise NotImplementedError("Parameter counterfactual requires a first-order LinearModel")
+            calibration = dict(self.model._params or {})
+            overrides = dict(scenario["param_override"])
+            if set(overrides) - set(calibration):
+                raise ValueError("Unknown structural parameter in param_override")
+            calibration.update(overrides)
+            changed = _re_solve_model(self.model, calibration)
+            paths = scenario.get("shock_sequence")
+            if not isinstance(paths, Mapping) or not paths or set(paths) - set(self.shocks):
+                raise ValueError("shock_sequence must map declared shocks to paths")
+            lengths = {len(v) for v in paths.values()}
+            if len(lengths) != 1:
+                raise ValueError("shock_sequence paths must have equal lengths")
+            periods = lengths.pop()
+            innovations = np.column_stack([paths.get(k, np.zeros(periods)) for k in self.shocks])
+            return changed.simulate(periods=periods, shocks=innovations, **kwargs)
         if isinstance(scenario, Mapping) and "shocks" in scenario:
             return self.simulate(shocks=scenario["shocks"], periods=len(scenario["shocks"]), **kwargs)
+        if self.model is not None:
+            raise NotImplementedError("Supply a shocks scenario or a native counterfactual implementation")
         return self.simulate(periods=50, **kwargs)
 
     def loglik_and_grad(
@@ -268,6 +322,12 @@ class DSGEDifferentiableAdapter(BaseDifferentiableAdapter):
         data: Optional[Union[np.ndarray, pd.DataFrame]] = None,
         **kwargs: Any,
     ) -> Tuple[float, np.ndarray]:
+        if self.model is not None:
+            from puremacro.core._native_likelihoods import dsge_score, parameter_vector
+            theta_native = parameter_vector(params, self._param_names, self._default_params)
+            return dsge_score(self.model, self._param_names, theta_native,
+                              self._default_data if data is None else data,
+                              observables=kwargs.pop("observables", None), **kwargs)
         if params is None:
             theta = self._default_params.copy()
         elif isinstance(params, Mapping):
@@ -345,6 +405,10 @@ class HANKDAGDifferentiableAdapter(BaseDifferentiableAdapter):
             if default_params is not None
             else np.array([0.98, 1.0, 0.8], dtype=float)
         )
+        if model is not None:
+            self._param_names = tuple(param_names) if param_names is not None else tuple(self.params)
+            if default_params is None:
+                self._default_params = np.array([self.params.get(k, np.nan) for k in self._param_names])
 
     def impulse_response(
         self,
@@ -359,8 +423,12 @@ class HANKDAGDifferentiableAdapter(BaseDifferentiableAdapter):
             else str(shock)
         )
         if hasattr(self.model, "impulse_responses"):
+            if not self.steady_state:
+                raise ValueError("Supply the calibrated steady_state for the BlockDAG")
+            if shock_name not in self.exogenous:
+                raise ValueError(f"Unknown exogenous shock: {shock_name}")
             shocks_dict = {shock_name: np.array([size])}
-            ss = self.steady_state or {z: 0.0 for z in self.exogenous}
+            ss = self.steady_state
             p = self.params or {}
             res = self.model.impulse_responses(steady_state=ss, params=p, shocks=shocks_dict, T=horizon + 1)
             df = getattr(res, "paths", res)
@@ -368,7 +436,9 @@ class HANKDAGDifferentiableAdapter(BaseDifferentiableAdapter):
                 df = df.copy()
                 df.index.name = "h"
                 return df
-        # Fallback sequence-space IRF
+        if self.model is not None:
+            raise NotImplementedError("Native model does not implement impulse_responses")
+        # Synthetic demonstration IRF
         periods = horizon + 1
         paths = np.zeros((periods, len(self.unknowns) + len(self.exogenous)))
         cols = list(self.exogenous) + list(self.unknowns)
@@ -387,6 +457,18 @@ class HANKDAGDifferentiableAdapter(BaseDifferentiableAdapter):
         seed: Optional[int] = 0,
         **kwargs: Any,
     ) -> pd.DataFrame:
+        if self.model is not None:
+            from puremacro.dsge.ssj_dag import BlockDAG
+            if not isinstance(self.model, BlockDAG):
+                raise NotImplementedError("Native HANK simulation requires a BlockDAG")
+            if not self.steady_state:
+                raise ValueError("Supply the calibrated steady_state for the BlockDAG")
+            innovations = (np.random.default_rng(seed).standard_normal((periods, len(self.exogenous)))
+                           if shocks is None else np.asarray(shocks, dtype=float))
+            if innovations.shape != (periods, len(self.exogenous)) or not np.all(np.isfinite(innovations)):
+                raise ValueError("shocks must have shape (periods, number of exogenous variables) and be finite")
+            paths = {name: innovations[:, i] for i, name in enumerate(self.exogenous)}
+            return self.model.impulse_responses(self.steady_state, self.params, paths, T=periods, **kwargs).paths
         rng = np.random.default_rng(seed)
         n_exo = len(self.exogenous)
         if shocks is None:
@@ -407,7 +489,11 @@ class HANKDAGDifferentiableAdapter(BaseDifferentiableAdapter):
         **kwargs: Any,
     ) -> Any:
         if hasattr(self.model, "solve_nonlinear_transition"):
-            return self.model.solve_nonlinear_transition(scenario, **kwargs)
+            if not isinstance(scenario, Mapping):
+                raise ValueError("DAG counterfactual requires a mapping of shock paths")
+            return self.model.solve_nonlinear_transition(self.steady_state, self.params, scenario, **kwargs)
+        if self.model is not None:
+            raise NotImplementedError("Native model does not implement nonlinear counterfactuals")
         return self.simulate(periods=50, **kwargs)
 
     def loglik_and_grad(
@@ -416,6 +502,13 @@ class HANKDAGDifferentiableAdapter(BaseDifferentiableAdapter):
         data: Optional[Union[np.ndarray, pd.DataFrame]] = None,
         **kwargs: Any,
     ) -> Tuple[float, np.ndarray]:
+        if self.model is not None:
+            from puremacro.core._native_likelihoods import dag_score, parameter_vector
+            theta_native = parameter_vector(params, self._param_names, self._default_params)
+            return dag_score(self.model, self._param_names, theta_native, data,
+                             steady_state=self.steady_state, params=self.params,
+                             observables=kwargs.pop("observables", None),
+                             shock_cov=kwargs.pop("shock_cov", None), **kwargs)
         if params is None:
             theta = self._default_params.copy()
         elif isinstance(params, Mapping):
@@ -479,6 +572,8 @@ class DFMDifferentiableAdapter(BaseDifferentiableAdapter):
         size: float = 1.0,
         **kwargs: Any,
     ) -> pd.DataFrame:
+        if self.model is not None:
+            return self._native("impulse_response", shock=shock, horizon=horizon, size=size, **kwargs)
         periods = horizon + 1
         res = getattr(self.model, "result_", self.model)
         A = res.get("A", np.array([[0.8]])) if isinstance(res, dict) else np.array([[0.8]])
@@ -505,6 +600,8 @@ class DFMDifferentiableAdapter(BaseDifferentiableAdapter):
         seed: Optional[int] = 0,
         **kwargs: Any,
     ) -> pd.DataFrame:
+        if self.model is not None:
+            return self._native("simulate", periods=periods, shocks=shocks, seed=seed, **kwargs)
         rng = np.random.default_rng(seed)
         k = self.n_factors
         res = getattr(self.model, "result_", self.model)
@@ -529,6 +626,8 @@ class DFMDifferentiableAdapter(BaseDifferentiableAdapter):
         scenario: Any,
         **kwargs: Any,
     ) -> Any:
+        if self.model is not None:
+            return self._native("counterfactual", scenario=scenario, **kwargs)
         return self.simulate(periods=60, **kwargs)
 
     def loglik_and_grad(
@@ -537,6 +636,11 @@ class DFMDifferentiableAdapter(BaseDifferentiableAdapter):
         data: Optional[Union[np.ndarray, pd.DataFrame]] = None,
         **kwargs: Any,
     ) -> Tuple[float, np.ndarray]:
+        if self.model is not None:
+            native = getattr(self.model, "loglik_and_grad", None)
+            if native is None:
+                raise NotImplementedError("This model has no native likelihood/score adapter; model=None selects a synthetic demonstration")
+            return native(params=params, data=data, **kwargs)
         if params is None:
             theta = self._default_params.copy()
         elif isinstance(params, Mapping):
@@ -627,7 +731,9 @@ class SVARDifferentiableAdapter(BaseDifferentiableAdapter):
             col_resp = irf_arr[:, :, shock_idx] * size
             return pd.DataFrame(col_resp, index=pd.RangeIndex(0, periods, name="h"), columns=list(self.names))
 
-        # Fallback companion IRF
+        if self.model is not None:
+            raise NotImplementedError("Native model does not implement irf")
+        # Explicit demonstration companion IRF
         A = self._default_params[:4].reshape((2, 2))
         sig = np.diag(self._default_params[4:])
         irf_mat = np.zeros((periods, n))
@@ -645,6 +751,8 @@ class SVARDifferentiableAdapter(BaseDifferentiableAdapter):
     ) -> pd.DataFrame:
         rng = np.random.default_rng(seed)
         n = len(self.names)
+        if self.model is not None:
+            return self._native("simulate", periods=periods, shocks=shocks, seed=seed, **kwargs)
         if shocks is None:
             shocks = rng.standard_normal((periods, n))
 
@@ -660,6 +768,8 @@ class SVARDifferentiableAdapter(BaseDifferentiableAdapter):
         scenario: Any,
         **kwargs: Any,
     ) -> Any:
+        if self.model is not None:
+            return self._native("counterfactual", scenario=scenario, **kwargs)
         return self.simulate(periods=60, **kwargs)
 
     def loglik_and_grad(
@@ -668,6 +778,11 @@ class SVARDifferentiableAdapter(BaseDifferentiableAdapter):
         data: Optional[Union[np.ndarray, pd.DataFrame]] = None,
         **kwargs: Any,
     ) -> Tuple[float, np.ndarray]:
+        if self.model is not None:
+            native = getattr(self.model, "loglik_and_grad", None)
+            if native is None:
+                raise NotImplementedError("This model has no native likelihood/score adapter; model=None selects a synthetic demonstration")
+            return native(params=params, data=data, **kwargs)
         if params is None:
             theta = self._default_params.copy()
         elif isinstance(params, Mapping):
@@ -737,6 +852,8 @@ class TradeDifferentiableAdapter(BaseDifferentiableAdapter):
         size: float = 1.0,
         **kwargs: Any,
     ) -> pd.DataFrame:
+        if self.model is not None:
+            return self._native("impulse_response", shock=shock, horizon=horizon, size=size, **kwargs)
         periods = horizon + 1
         cols = list(self.country_codes)
         irf = np.zeros((periods, len(cols)))
@@ -757,6 +874,8 @@ class TradeDifferentiableAdapter(BaseDifferentiableAdapter):
         seed: Optional[int] = 0,
         **kwargs: Any,
     ) -> pd.DataFrame:
+        if self.model is not None:
+            return self._native("simulate", periods=periods, shocks=shocks, seed=seed, **kwargs)
         rng = np.random.default_rng(seed)
         n = len(self.country_codes)
         if shocks is None:
@@ -775,6 +894,8 @@ class TradeDifferentiableAdapter(BaseDifferentiableAdapter):
             if isinstance(scenario, Mapping):
                 return self.model.solve_counterfactual(**scenario)
             return self.model.solve_counterfactual()
+        if self.model is not None:
+            raise NotImplementedError("Native model does not implement solve_counterfactual")
         return self.simulate(periods=40, **kwargs)
 
     def loglik_and_grad(
@@ -783,6 +904,11 @@ class TradeDifferentiableAdapter(BaseDifferentiableAdapter):
         data: Optional[Union[np.ndarray, pd.DataFrame]] = None,
         **kwargs: Any,
     ) -> Tuple[float, np.ndarray]:
+        if self.model is not None:
+            native = getattr(self.model, "loglik_and_grad", None)
+            if native is None:
+                raise NotImplementedError("This model has no native likelihood/score adapter; model=None selects a synthetic demonstration")
+            return native(params=params, data=data, **kwargs)
         if params is None:
             theta = self._default_params.copy()
         elif isinstance(params, Mapping):
@@ -834,6 +960,8 @@ class SpatialDifferentiableAdapter(BaseDifferentiableAdapter):
         size: float = 1.0,
         **kwargs: Any,
     ) -> pd.DataFrame:
+        if self.model is not None:
+            return self._native("impulse_response", shock=shock, horizon=horizon, size=size, **kwargs)
         periods = horizon + 1
         cols = [f"region_{i}" for i in range(self.n_regions)]
         irf = np.zeros((periods, self.n_regions))
@@ -859,6 +987,8 @@ class SpatialDifferentiableAdapter(BaseDifferentiableAdapter):
         seed: Optional[int] = 0,
         **kwargs: Any,
     ) -> pd.DataFrame:
+        if self.model is not None:
+            return self._native("simulate", periods=periods, shocks=shocks, seed=seed, **kwargs)
         rng = np.random.default_rng(seed)
         cols = [f"region_{i}" for i in range(self.n_regions)]
         if shocks is None:
@@ -877,6 +1007,8 @@ class SpatialDifferentiableAdapter(BaseDifferentiableAdapter):
         scenario: Any,
         **kwargs: Any,
     ) -> Any:
+        if self.model is not None:
+            return self._native("counterfactual", scenario=scenario, **kwargs)
         return self.simulate(periods=50, **kwargs)
 
     def loglik_and_grad(
@@ -885,6 +1017,11 @@ class SpatialDifferentiableAdapter(BaseDifferentiableAdapter):
         data: Optional[Union[np.ndarray, pd.DataFrame]] = None,
         **kwargs: Any,
     ) -> Tuple[float, np.ndarray]:
+        if self.model is not None:
+            native = getattr(self.model, "loglik_and_grad", None)
+            if native is None:
+                raise NotImplementedError("This model has no native likelihood/score adapter; model=None selects a synthetic demonstration")
+            return native(params=params, data=data, **kwargs)
         if params is None:
             theta = self._default_params.copy()
         elif isinstance(params, Mapping):
@@ -958,5 +1095,7 @@ def wrap_differentiable_model(model: Any, **adapter_kwargs: Any) -> Differentiab
     elif hasattr(model, "migration_shares") or cls_name in ("DynamicSpatialHatModel", "DynamicSpatialHatResult"):
         return SpatialDifferentiableAdapter(model, **adapter_kwargs)
 
-    # General fallback
-    return DSGEDifferentiableAdapter(model, **adapter_kwargs)
+    from puremacro.state_space import StateSpaceModel
+    if isinstance(model, StateSpaceModel):
+        return DSGEDifferentiableAdapter(model, **adapter_kwargs)
+    raise TypeError(f"No differentiable adapter registered for {type(model).__name__}")

@@ -152,28 +152,12 @@ un experimento; no establece su precisión ni su generalidad.
   variaciones relativas espacial dinámica de Caliendo–Parro–Rossi-Hansberg y
   mallas contrafactuales con autoauditoría en `PolicyStudio` con exportación
   HTML5/SVG interactiva sin servidor.
-- **72 — flujos insignia de v6.0.0:** demuestra el protocolo unificado `DifferentiableModel`
-  con gradientes exactos de AD hacia adelante, SMC templado adaptativo vectorizado
-  (`smc_sample`), transiciones HANK no lineales dependientes del estado
-  (`solve_hank_nonlinear_transition`) y perturbación de riesgo agregado de 2.º orden
-  (`solve_hank_aggregate_risk_order2`), default soberano cuantitativo (Arellano,
-  Chatterjee–Eyigungor) con paradas súbitas de Mendoza y reestructuración por quita,
-  proyecciones locales distributivas funcionales y cuantílicas con aditividad exacta
-  ($\max_h |\sum_b \hat{\beta}_{b,h}| < 10^{-12}$), y el IAM climático espacial
-  multirregional con análisis de fuga bajo CBAM.
-- **73 — crisis de deuda soberana y reestructuración:** comprueba que la curva de
-  precios de bonos satisface las cotas teóricas $q(b', y) \in [0, (1+r)^{-1}]$ y
-  la monotonicidad débil $\partial q/\partial b' \le 0$; evalúa la amplificación por
-  ventas forzosas bajo la restricción colateral de Mendoza ($\mu_t > 0$ durante
-  paradas súbitas); y audita la compresión de la estructura temporal de diferenciales
-  soberanos bajo reestructuración por quita vs extensión de vencimiento.
-- **74 — desigualdad, LP distributiva y HANK:** verifica las restricciones empíricas
-  de aditividad transversal exacta entre deciles y tramos cuantílicos ($\sum_b \Delta s_{b,h} = 0$
-  a $< 10^{-12}$); diagnostica la aceptación del templado SMC y el tamaño muestral
-  efectivo ($ESS \ge 0.5N$); alinea las respuestas al impulso empíricas por decil con
-  las respuestas estructurales HANK de `HetBlock` / `BlockDAG` mediante
-  `bridge_hank_distributional_irf`; y contrasta el SSJ lineal con la masa de restricción
-  de endeudamiento activa ($\Phi_t$) ante choques contractivos grandes.
+- **72 — componentes v6:** verosimilitud DSGE nativa, referencia gaussiana SMC, demostraciones HANK reducidas, cálculos soberanos, LP sintéticas y escenarios climáticos separados. Cada sección explica sus límites de validación.
+- **73 — deuda soberana y reestructuración:** comprueba cotas de precios a corto
+  plazo y residuos, distingue promedios de malla de estadísticas simuladas y
+  explora precios largos, diagnósticos experimentales de colateral, contabilidad
+  de diferenciales y efectos con signo. No es una replicación publicada.
+- **74 — LP distributivas y transiciones reducidas:** aditividad de un panel sintético, identidad del puente con la misma matriz, diagnósticos SMC gaussianos y respuestas DAG prescritas. No estima HANK ni valida deciles de hogares independientes.
 - **75 — redes en la transición verde e IAM espacial:** verifica la conservación exacta
   de la población global ($\sum_r L_{r,t} = \bar{L}$ a $< 10^{-12}$) y el balance de
   masa de carbono atmosférico; documenta la amplificación por hessiano macroeconómico
@@ -276,6 +260,6 @@ Cada título abre un cuaderno ejecutado; «fuente» abre su archivo `.py` editab
 | [71_frontier_macro_workflows_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/71_frontier_macro_workflows_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/71_frontier_macro_workflows_es.py) | Suite macroeconómica de frontera: AD hacia adelante, HANK en secuencias, OccBin podado, nowcasting, HJB continuo, GE redes/espacial y PolicyStudio | [71_frontier_macro_workflows](https://github.com/jalonso1979/puremacro/blob/main/notebooks/71_frontier_macro_workflows.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/71_frontier_macro_workflows.py) |
 | [72_macro_v6_flagship_workflows_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/72_macro_v6_flagship_workflows_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/72_macro_v6_flagship_workflows_es.py) | Suite insignia de puremacro v6.0.0: protocolo diferenciable, SMC templado, HANK no lineal y riesgo agregado, default soberano cuantitativo, LP distributiva e IAM climático espacial | [72_macro_v6_flagship_workflows](https://github.com/jalonso1979/puremacro/blob/main/notebooks/72_macro_v6_flagship_workflows.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/72_macro_v6_flagship_workflows.py) |
 | [73_sovereign_debt_crises_and_restructuring_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/73_sovereign_debt_crises_and_restructuring_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/73_sovereign_debt_crises_and_restructuring_es.py) | Crisis de deuda soberana: default endógeno de Arellano, deuda de largo plazo de Chatterjee–Eyigungor, paradas súbitas de Mendoza y reestructuración de deuda | [73_sovereign_debt_crises_and_restructuring](https://github.com/jalonso1979/puremacro/blob/main/notebooks/73_sovereign_debt_crises_and_restructuring.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/73_sovereign_debt_crises_and_restructuring.py) |
-| [74_inequality_distributional_lp_and_hank_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/74_inequality_distributional_lp_and_hank_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/74_inequality_distributional_lp_and_hank_es.py) | Desigualdad de micro a macro: LP distributiva funcional/cuantílica con aditividad exacta, puente estructural HANK, SMC templado y transiciones no lineales | [74_inequality_distributional_lp_and_hank](https://github.com/jalonso1979/puremacro/blob/main/notebooks/74_inequality_distributional_lp_and_hank.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/74_inequality_distributional_lp_and_hank.py) |
+| [74_inequality_distributional_lp_and_hank_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/74_inequality_distributional_lp_and_hank_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/74_inequality_distributional_lp_and_hank_es.py) | Desigualdad de micro a macro: LP distributiva funcional/cuantílica con aditividad exacta, identidad del puente, SMC templado y transiciones no lineales | [74_inequality_distributional_lp_and_hank](https://github.com/jalonso1979/puremacro/blob/main/notebooks/74_inequality_distributional_lp_and_hank.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/74_inequality_distributional_lp_and_hank.py) |
 | [75_green_transition_networks_and_spatial_iam_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/75_green_transition_networks_and_spatial_iam_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/75_green_transition_networks_and_spatial_iam_es.py) | Transición verde e IAM espacial: cuellos de botella en redes CES de 2.º orden de Baqaee–Farhi, migración espacial dinámica, ajustes en frontera por carbono y PolicyStudio | [75_green_transition_networks_and_spatial_iam](https://github.com/jalonso1979/puremacro/blob/main/notebooks/75_green_transition_networks_and_spatial_iam.ipynb) · [source](https://github.com/jalonso1979/puremacro/blob/main/notebooks/75_green_transition_networks_and_spatial_iam.py) |
 | [local_llm_uncertainty_es](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty_es.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty_es.py) | Inferencia local con motores opcionales de escritorio; respaldo simulado sin conexión | [local_llm_uncertainty](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty.ipynb) · [fuente](https://github.com/jalonso1979/puremacro/blob/main/notebooks/local_llm_uncertainty.py) |

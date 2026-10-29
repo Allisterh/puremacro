@@ -1,0 +1,46 @@
+{
+  "scope": "Author's MATLAB aggregation block on identical path/windows, executed in Octave",
+  "source_sha256": "5c6b963341f3191d6368711213ecf1733537e82d8219f8dd13688df91b20302e",
+  "runtime": "GNU Octave (aarch64-apple-darwin25.4.0) version 11.3.0",
+  "seed": 1979,
+  "periods": 100000,
+  "burn": 1000,
+  "windows": 100,
+  "window_quarters": 74,
+  "adaptations": [
+    "Path supplied as MAT variables instead of original file loaders",
+    "Loop over 100 supplied eligible windows instead of candidates 2:300",
+    "Use the Fortran gross risk-free rate (original MATLAB hardcodes 1.017)",
+    "Use a consistent post-burn denominator and default-entry count",
+    "Export moments as CSV"
+  ],
+  "moments": {
+    "debt_pct": 6.534994971919969,
+    "spread_mean_pct": 3.3251135721864595,
+    "spread_std_pp": 5.906749972377231,
+    "tb_std_pp": 1.478932788351699,
+    "consumption_std_pct": 6.381750854503278,
+    "output_std_pct": 5.810185095408468,
+    "corr_spread_y": -0.2651940396685884,
+    "corr_tb_y": -0.24492348769340783,
+    "corr_c_y": 0.9699402132058097,
+    "corr_tb_spread": 0.42621593011193526,
+    "corr_c_spread": -0.3450762871511367,
+    "annual_default_pct": 2.8591827119801017
+  },
+  "max_abs_errors": {
+    "debt_pct": 0.0,
+    "spread_mean_pct": 1.0658141036401503e-14,
+    "spread_std_pp": 1.7763568394002505e-15,
+    "tb_std_pp": 0.0,
+    "consumption_std_pct": 8.881784197001252e-16,
+    "output_std_pct": 0.0,
+    "corr_spread_y": 1.609823385706477e-15,
+    "corr_tb_y": 5.551115123125783e-17,
+    "corr_c_y": 1.1102230246251565e-16,
+    "corr_tb_spread": 5.551115123125783e-17,
+    "corr_c_spread": 1.5543122344752192e-15,
+    "annual_default_pct": 0.0
+  },
+  "passed": true
+}

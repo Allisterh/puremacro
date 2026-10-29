@@ -32,6 +32,8 @@ if not _cache_file.is_file():
     _cache_file = Path.cwd() / "notebooks" / "_llm_cache" / "local_llm_uncertainty.sqlite"
 if _cache_file.is_file():
     os.environ.setdefault("PUREMACRO_LLM_CACHE", str(_cache_file.resolve()))
+    # Keep the shipped responses readable when a caller selects a fresh write cache.
+    os.environ.setdefault("PUREMACRO_LLM_FALLBACK_CACHE", str(_cache_file.resolve()))
 
 from puremacro.narrative.scoring import get_default_backend, score_llm
 from puremacro.narrative.indices import get_default_provider, llm_prob_kernel
