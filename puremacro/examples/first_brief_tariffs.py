@@ -607,8 +607,65 @@ def _headline_reading(record: dict[str, Any], lang: str) -> str:
             "response would change it.")
 
 
+def _experiment_reading(record: dict[str, Any], lang: str) -> str:
+    _require_default_scenario(record, "experiment_reading")
+    exp = record["experiment"]
+    if exp is None:
+        raise ValueError("block 'experiment_reading' needs a record with an experiment")
+    n0, n2 = record["national"], exp["national"]
+    pf0 = n0["price_effect_musd"] + n0["factor_income_effect_musd"]
+    pf2 = n2["price_effect_musd"] + n2["factor_income_effect_musd"]
+    _require(n2["ev_pct_consumption"] > n0["ev_pct_consumption"] > 0
+             and n2["wage_pct_exporter"] < 0 < n2["wage_pct_importer"]
+             and n2["terms_of_trade_pct_importer"] > 0
+             and n2["price_effect_musd"] < 0 < n2["factor_income_effect_musd"]
+             and pf0 < pf2 < 0
+             and n2["tariff_rebate_effect_musd"] < n0["tariff_rebate_effect_musd"]
+             and n2["fiscal_transfer_effect_musd"] > n0["fiscal_transfer_effect_musd"], "experiment_reading")
+    def m(x: float) -> str:
+        return _fmt_musd(x, lang)
+
+    v = {"value": _num(exp["value"], 0, lang),
+         "ev2": _num(n2["ev_pct_consumption"], 3, lang, sign=True),
+         "ev0": _num(n0["ev_pct_consumption"], 3, lang, sign=True),
+         "we": _num(abs(n2["wage_pct_exporter"]), 1, lang), "wi": _num(n2["wage_pct_importer"], 1, lang),
+         "relw": _num(n2["relative_wage_pct"], 1, lang), "tot": _num(n2["terms_of_trade_pct_importer"], 1, lang),
+         "p2": m(n2["price_effect_musd"]), "f2": m(n2["factor_income_effect_musd"]),
+         "pf2": m(pf2), "pf0": m(pf0), "tr0": m(n0["tariff_rebate_effect_musd"]),
+         "tr2": m(n2["tariff_rebate_effect_musd"]), "fi0": m(n0["fiscal_transfer_effect_musd"]),
+         "fi2": m(n2["fiscal_transfer_effect_musd"])}
+    if lang == "es":
+        return (f"Con `sigma={v['value']}` la ganancia de Estados Unidos es varias veces mayor ({v['ev2']}% "
+                f"frente a {v['ev0']}% del consumo base). `sigma` se aplica a los compradores de insumos "
+                "intermedios de todos los países, no solo de Estados Unidos. Los salarios chinos caen "
+                f"alrededor de {v['we']}% y los de Estados Unidos suben alrededor de {v['wi']}% (ambos en el "
+                f"numerario del modelo; los de Estados Unidos suben {v['relw']}% respecto a los chinos), y los términos de intercambio de "
+                f"Estados Unidos mejoran alrededor de {v['tot']}%: aquí sí aparece un efecto de términos de "
+                "intercambio, a diferencia del resultado principal. Las líneas de precios de comprador y de "
+                f"ingreso de los factores son grandes y se compensan ({v['p2']} y {v['f2']} millones de USD), "
+                f"así que lea su suma ({v['pf2']} frente a {v['pf0']}). La parte de aranceles a la importación "
+                f"de la línea fiscal baja ligeramente (de {v['tr0']} a {v['tr2']} millones de USD), mientras "
+                f"la línea fiscal sube (de {v['fi0']} a {v['fi2']}) porque crecen otros ingresos tributarios "
+                "devueltos. `sigma` no es una elasticidad comercial (las canastas de origen del uso final "
+                "no cambian) y la tabla no la identifica: varíela como un supuesto, no la trate como una "
+                "constante conocida.")
+    return (f"With `sigma={v['value']}` the US gain is several times larger ({v['ev2']}% against "
+            f"{v['ev0']}% of baseline consumption). `sigma` applies to intermediate buyers in every country, "
+            f"not only in the US. Chinese wages fall by about {v['we']}% and US wages rise by about "
+            f"{v['wi']}% (both in the model's numeraire; US wages rise {v['relw']}% relative to Chinese "
+            "wages), and the US "
+            f"terms of trade improve by about {v['tot']}%: a terms-of-trade effect appears here, not in the "
+            "headline. The purchaser-price and factor-income lines are large and offsetting "
+            f"({v['p2']} and {v['f2']} million USD), so read their sum ({v['pf2']} against {v['pf0']}). "
+            f"The import-duty part of the fiscal line falls slightly ({v['tr0']} to {v['tr2']} million USD), "
+            f"while the fiscal line rises ({v['fi0']} to {v['fi2']}) because other rebated tax receipts "
+            "grow. `sigma` is not a trade elasticity (final-use origin baskets stay fixed), and the table "
+            "does not identify it: vary it as an assumption, not as a known constant.")
+
+
 def page_block(record: dict[str, Any],
-               block: Literal["headline", "headline_reading", "households", "experiment"],
+               block: Literal["headline", "headline_reading", "households", "experiment",
+                              "experiment_reading"],
                lang: str) -> str:
     """A markdown table plus a one-sentence note, as the docs pages show it."""
     t = _lang(lang)
@@ -622,6 +679,8 @@ def page_block(record: dict[str, Any],
         return _markdown_table([t["component"], t["musd"], t["pct"]], rows) + "\n\n" + note
     if block == "headline_reading":
         return _headline_reading(record, lang)
+    if block == "experiment_reading":
+        return _experiment_reading(record, lang)
     if block == "households":
         hh = record["households"]
         frame = _households_frame(hh, lang)

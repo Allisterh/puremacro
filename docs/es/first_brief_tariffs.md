@@ -79,9 +79,9 @@ python -m puremacro.examples.first_brief_tariffs --experiment sigma=2 --lang es 
 
 `sigma` es la elasticidad de sustitución entre los orígenes de los insumos
 intermedios. El resultado principal usa `sigma=0` (Leontief: cada industria
-mantiene fijas sus proporciones de abastecimiento); con `sigma=2` las empresas
-de Estados Unidos desplazan parte de sus compras fuera de los insumos chinos
-gravados. Las canastas de origen del uso final no cambian en ninguna de las
+mantiene fijas sus proporciones de abastecimiento); con `sigma=2` los
+compradores de insumos intermedios de todos los países pueden cambiar de
+origen cuando cambian los precios relativos. Las canastas de origen del uso final no cambian en ninguna de las
 dos ejecuciones. La tabla compara ambas:
 
 <!-- first-brief:experiment -->
@@ -96,13 +96,9 @@ dos ejecuciones. La tabla compara ambas:
 sigma es la elasticidad de sustitución entre orígenes de los insumos intermedios (0 = Leontief, abastecimiento fijo); las canastas de origen del uso final no cambian.
 <!-- /first-brief:experiment -->
 
-Con `sigma=2` la ganancia de Estados Unidos es varias veces mayor. Las líneas
-de precios de comprador y de ingreso de los factores se vuelven mucho más
-grandes y de signo contrario, y se compensan en buena parte (ambas se valoran
-en el numerario común del modelo), de modo que lo que hay que leer es su suma. Esa suma es menos negativa que
-en el resultado principal y las transferencias fiscales son algo mayores. El
-resultado depende de una elasticidad que la tabla no identifica: trate `sigma`
-como un supuesto que se varía, no como una constante conocida.
+<!-- first-brief:experiment_reading -->
+Con `sigma=2` la ganancia de Estados Unidos es varias veces mayor (+0,140% frente a +0,038% del consumo base). `sigma` se aplica a los compradores de insumos intermedios de todos los países, no solo de Estados Unidos. Los salarios chinos caen alrededor de 0,9% y los de Estados Unidos suben alrededor de 1,0% (ambos en el numerario del modelo; los de Estados Unidos suben 1,9% respecto a los chinos), y los términos de intercambio de Estados Unidos mejoran alrededor de 1,0%: aquí sí aparece un efecto de términos de intercambio, a diferencia del resultado principal. Las líneas de precios de comprador y de ingreso de los factores son grandes y se compensan (-177 385 y 163 635 millones de USD), así que lea su suma (-13 750 frente a -26 349). La parte de aranceles a la importación de la línea fiscal baja ligeramente (de 32 579 a 30 317 millones de USD), mientras la línea fiscal sube (de 32 777 a 37 248) porque crecen otros ingresos tributarios devueltos. `sigma` no es una elasticidad comercial (las canastas de origen del uso final no cambian) y la tabla no la identifica: varíela como un supuesto, no la trate como una constante conocida.
+<!-- /first-brief:experiment_reading -->
 
 ## 5. Hogares
 

@@ -75,9 +75,9 @@ python -m puremacro.examples.first_brief_tariffs --experiment sigma=2 --output f
 
 `sigma` is the elasticity of substitution between the origins of
 intermediate inputs. The headline uses `sigma=0` (Leontief: each industry
-keeps its sourcing shares fixed); with `sigma=2` US firms move part of their
-purchases away from tariffed Chinese inputs. Final-use origin baskets stay
-fixed in both runs. The table compares the two:
+keeps its sourcing shares fixed); with `sigma=2` intermediate buyers in every
+country can shift between origins when relative prices change. Final-use
+origin baskets stay fixed in both runs. The table compares the two:
 
 <!-- first-brief:experiment -->
 | Measure | sigma = 0 (headline) | sigma = 2 |
@@ -91,13 +91,9 @@ fixed in both runs. The table compares the two:
 sigma is the substitution elasticity between origins of intermediate inputs (0 = Leontief, fixed sourcing); final-use origin baskets stay fixed.
 <!-- /first-brief:experiment -->
 
-With `sigma=2` the US gain is several times larger. The purchaser-price and
-factor-income lines become much larger and of opposite sign, and largely
-offset each other (both are valued on the model's common numeraire), so their
-sum is what to read. That sum is less negative than in the
-headline and fiscal transfers are somewhat larger. The result depends on an
-elasticity the table does not identify: treat `sigma` as an assumption to
-vary, not as a known constant.
+<!-- first-brief:experiment_reading -->
+With `sigma=2` the US gain is several times larger (+0.140% against +0.038% of baseline consumption). `sigma` applies to intermediate buyers in every country, not only in the US. Chinese wages fall by about 0.9% and US wages rise by about 1.0% (both in the model's numeraire; US wages rise 1.9% relative to Chinese wages), and the US terms of trade improve by about 1.0%: a terms-of-trade effect appears here, not in the headline. The purchaser-price and factor-income lines are large and offsetting (-177,385 and 163,635 million USD), so read their sum (-13,750 against -26,349). The import-duty part of the fiscal line falls slightly (32,579 to 30,317 million USD), while the fiscal line rises (32,777 to 37,248) because other rebated tax receipts grow. `sigma` is not a trade elasticity (final-use origin baskets stay fixed), and the table does not identify it: vary it as an assumption, not as a known constant.
+<!-- /first-brief:experiment_reading -->
 
 ## 5. Households
 

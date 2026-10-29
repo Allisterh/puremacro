@@ -381,6 +381,24 @@ def test_leaf_comparison_treats_residuals_as_noise():
         _assert_leaves_match({"ev_musd": 6427.5, "decomposition_residual_musd": 2.6e-8}, frozen)
 
 
+@pytest.mark.parametrize("lang", ["en", "es"])
+def test_experiment_reading_explains_the_jump_from_the_record(frozen, lang):
+    n2 = frozen["experiment"]["national"]
+    text = fb.page_block(frozen, "experiment_reading", lang)
+    sep = "," if lang == "es" else "."
+    for value in (abs(n2["wage_pct_exporter"]), n2["wage_pct_importer"], n2["terms_of_trade_pct_importer"]):
+        assert f"{value:.1f}".replace(".", sep) in text
+    assert ("not a trade elasticity" if lang == "en" else "no es una elasticidad comercial") in text
+    assert ("every country" if lang == "en" else "todos los países") in text
+    no_exp = dict(frozen, experiment=None)
+    with pytest.raises(ValueError, match="needs a record with an experiment"):
+        fb.page_block(no_exp, "experiment_reading", lang)
+    flipped = json.loads(json.dumps(frozen))
+    flipped["experiment"]["national"]["terms_of_trade_pct_importer"] = -0.1
+    with pytest.raises(ValueError, match="no longer matches"):
+        fb.page_block(flipped, "experiment_reading", lang)
+
+
 def test_default_run_reproduces_frozen_headline(frozen, tmp_path):
     """The default CLI run reproduces the frozen record the docs pages show."""
     t0 = time.perf_counter()
@@ -410,7 +428,7 @@ PAGE = {"en": ROOT / "docs" / "first_brief_tariffs.md", "es": ROOT / "docs" / "e
 @pytest.mark.parametrize("lang", ["en", "es"])
 def test_pages_show_frozen_record(frozen, lang):
     text = PAGE[lang].read_text(encoding="utf-8")
-    for block in ("headline", "headline_reading", "households", "experiment"):
+    for block in ("headline", "headline_reading", "households", "experiment", "experiment_reading"):
         start, end = f"<!-- first-brief:{block} -->", f"<!-- /first-brief:{block} -->"
         assert text.count(start) == 1 and text.count(end) == 1, block
         shown = text.split(start, 1)[1].split(end, 1)[0].strip()
