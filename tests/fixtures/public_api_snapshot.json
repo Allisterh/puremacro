@@ -3053,9 +3053,11 @@
       "SovereignDefaultResult",
       "SuddenStopResult",
       "decompose_spread_term_structure",
+      "ergodic_moments",
       "evaluate_debt_restructuring",
       "solve_sovereign_default",
-      "solve_sudden_stop"
+      "solve_sudden_stop",
+      "value_of_market_access"
     ],
     "puremacro.sovereign._monotone": [
       "exhaustive_maximize",
@@ -3069,6 +3071,11 @@
     ],
     "puremacro.sovereign.arellano": [
       "solve_sovereign_default"
+    ],
+    "puremacro.sovereign.measurement": [
+      "MOMENTS",
+      "ergodic_moments",
+      "value_of_market_access"
     ],
     "puremacro.sovereign.mendoza": [
       "solve_sudden_stop"
