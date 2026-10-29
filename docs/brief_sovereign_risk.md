@@ -66,8 +66,9 @@ solved quantity, without sampling error).
 
 Install PureMacro 6.1.0 or later from PyPI and run one scenario on the converged grid. On the
 maintainer's workstation the θ = 0.15 solve took about 14 minutes,
-plus seconds for the measurement, with a peak memory of about 3.4 GB for the
-whole sweep process:
+plus seconds for the measurement, measured under load on a shared machine (load
+averages 5/13/27); the whole frozen sweep, seven scenarios on both grids, took
+6,851 s (1.9 h), with a peak memory of about 3.4 GB:
 
 ```bash
 pip install "puremacro>=6.1"

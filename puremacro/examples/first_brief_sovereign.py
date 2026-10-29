@@ -594,7 +594,8 @@ def _parser():
         description=("Illustrative sovereign-risk policy brief on PureMacro's public Arellano "
                      "calibration (not a claim about any country)."))
     p.add_argument("--scenario", help="baseline or key=value with key theta, sigma_y or rho_y "
-                                      "(default grid: converged 6401x641, about half an hour)")
+                                      "(default grid: converged 6401x641; the theta=0.15 solve took about 14 minutes, "
+                                      "measured under load on a shared workstation)")
     p.add_argument("--sweep", action="store_true", help="all seven scenarios; requires --coarse")
     p.add_argument("--coarse", action="store_true", help="801x161 grid, minutes, orientation only")
     p.add_argument("--grid", help="NBxNY grid override for quick runs, e.g. 201x41")
@@ -647,8 +648,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.sweep and not args.coarse:
-        print("--sweep runs only with --coarse (801 x 161, minutes). The converged sweep takes "
-              "about five hours: maintainers use --freeze PATH.", file=sys.stderr)
+        print("--sweep runs only with --coarse (801 x 161, minutes). The converged sweep (seven "
+              "scenarios on two grids) took 6,851 s (1.9 h), measured under load on a shared "
+              "workstation: maintainers use --freeze PATH.", file=sys.stderr)
         return 2
     if not args.sweep and args.scenario is None:
         print("Give --scenario NAME or --sweep --coarse (see --help).", file=sys.stderr)

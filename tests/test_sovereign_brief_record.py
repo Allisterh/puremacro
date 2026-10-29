@@ -2,7 +2,8 @@
 
 The record is produced once by the maintainer
 (``python -m puremacro.examples.first_brief_sovereign --freeze
-tests/fixtures/sovereign_brief/sweep.json``, about five hours); these tests
+tests/fixtures/sovereign_brief/sweep.json``, 6,851 s or 1.9 h measured under
+load on a shared workstation, including the error grid); these tests
 read it and never re-run the sweep.
 """
 from __future__ import annotations
@@ -139,3 +140,26 @@ def test_pages_have_required_sections(lang, headings):
 def test_figure_assets_exist_and_are_referenced(lang, ref):
     assert (ROOT / "docs" / "assets" / f"brief_sovereign_risk.{lang}.svg").is_file()
     assert f"]({ref})" in PAGES[lang].read_text(encoding="utf-8")
+
+
+def test_timings_are_quoted_consistently(record, capsys):
+    # One timing source: the frozen theta=0.15 converged solve (measured on a
+    # shared machine under load) and the full freeze wall time, 6,851 s (1.9 h).
+    case = record["scenarios"]["theta=0.15"]["cases"]["6401x641"]
+    minutes = round(case["solver"]["elapsed_s"] / 60)
+    help_text = brief._parser().format_help()
+    assert f"about {minutes} minutes" in " ".join(help_text.split())
+    assert "under load" in " ".join(help_text.split())
+    assert brief.main(["--sweep"]) == 2
+    err = " ".join(capsys.readouterr().err.split())
+    assert "1.9 h" in err and "under load" in err
+    load = record["load_averages"]["theta=0.15 6401x641"]
+    for lang, page_path in PAGES.items():
+        page = " ".join(page_path.read_text(encoding="utf-8").split())
+        assert (f"{minutes} minutes" if lang == "en" else f"{minutes} minutos") in page
+        assert ("under load" if lang == "en" else "bajo carga") in page
+        assert "6,851 s (1.9 h)" in page or "6.851 s (1,9 h)" in page
+        sep = "/" 
+        loads = sep.join(f"{v:.0f}" for v in load)
+        assert loads in page, loads
+    assert "1.9 h" in " ".join(__doc__.split())

@@ -69,8 +69,10 @@ acceso al mercado es una magnitud resuelta, sin error de muestreo).
 
 Instale PureMacro 6.1.0 o posterior desde PyPI y ejecute un escenario en la malla convergida. En
 la estación de trabajo del mantenedor, la resolución con θ = 0,15 tardó unos
-14 minutos, más unos segundos de medición, con un pico de memoria de
-unos 3,4 GB para todo el proceso del barrido:
+14 minutos, más unos segundos de medición, medidos bajo carga en una
+máquina compartida (cargas medias 5/13/27); el barrido congelado completo, siete
+escenarios en ambas mallas, tardó 6.851 s (1,9 h), con un pico de memoria de
+unos 3,4 GB:
 
 ```bash
 pip install "puremacro>=6.1"
