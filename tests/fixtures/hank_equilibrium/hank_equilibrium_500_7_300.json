@@ -1,0 +1,57 @@
+{
+  "calibration": {
+    "r": 0.005,
+    "rstar": 0.005,
+    "eis": 0.5,
+    "frisch": 0.5,
+    "B": 5.6,
+    "mu": 1.2,
+    "rho_s": 0.966,
+    "sigma_s": 0.5,
+    "kappa": 0.1,
+    "phi": 1.5,
+    "Y": 1.0,
+    "Z": 1.0,
+    "pi": 0.0,
+    "nS": 7,
+    "amax": 150.0,
+    "nA": 500
+  },
+  "steady_state": {
+    "beta": 0.9822435540961653,
+    "vphi": 0.7864334301189531,
+    "C": 0.9999999999928959,
+    "A": 5.5999999999009304,
+    "NE": 1.0000000000008349,
+    "r": 0.004999999999999893,
+    "w": 0.8333333333333334,
+    "Y": 1.0,
+    "Div": 0.16666666666666663,
+    "Tax": 0.0279999999999994
+  },
+  "horizon": 300,
+  "magnitude": -0.0025,
+  "rho": 0.61,
+  "steady_residuals": {
+    "asset_mkt": -9.906919729019137e-11,
+    "labor_mkt": 8.348877145181177e-13,
+    "goods_mkt": 7.104095089971452e-12
+  },
+  "reference_commit": "eb4ac4c3157357a4cacbea4b5a7a281f5b48cab9",
+  "source_sha256": {
+    "examples/hank.py": "d44fdbbfa6c518243b92660acfb5af1bc35441d75bf58b16ca1113120cb099be",
+    "hetblocks/hh_labor.py": "3e4990af9e1c34bc7e2d5f0f413713c3d1deb028d1a685137b3a3815c63783c0",
+    "blocks/het_block.py": "c5f19214edecc85896dcb2116840cfa69d689e4202a056a167f289eb353182ec",
+    "blocks/block.py": "5fbade12f55bb2c8781a8689bcbad49f06345f0260f18b81bfff8ca048c02340",
+    "utilities/discretize.py": "be5ecc164dff09e3bcf0fece2ca9a0fab0a831ed013833c40fd5a2ff5a191c39"
+  },
+  "reference_url": "https://github.com/shade-econ/sequence-jacobian/tree/eb4ac4c3157357a4cacbea4b5a7a281f5b48cab9",
+  "notebook": "notebooks/hank.ipynb",
+  "fixture_sha256": "35add49fcb2459e576e9ec6d739a62f13b1c65b5220858de38dd34b8cb5af139",
+  "seconds": 8.21370287501486,
+  "versions": {
+    "numpy": "2.4.6",
+    "scipy": "1.17.1",
+    "sequence-jacobian": "1.0.0"
+  }
+}

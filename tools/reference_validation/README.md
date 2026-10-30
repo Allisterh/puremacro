@@ -27,6 +27,20 @@ production solver helpers. Manifests record scope and hashes. See
 `tests/fixtures/research_reliability/README.md` for tolerances and limitations.
 Neither comparison claims to reproduce the full moments of a published paper.
 
+## Published one-asset HANK equilibrium
+
+The full endogenous-labor equilibrium now has a separate author-code benchmark:
+
+```sh
+python -m pytest tests/test_models/test_one_asset_hank.py -q
+python -m tools.reference_validation.check_hank_equilibrium --output /tmp/hank-equilibrium --convergence
+```
+
+It checks the published calibration, all equilibrium markets, linear and
+nonlinear paths for both signs, and asset/income/bound/horizon refinements.
+See [`hank_equilibrium/README.md`](../../tests/fixtures/hank_equilibrium/README.md)
+for exact provenance and the retained failed intermediate refinements.
+
 ## Arellano original code, published targets and grid convergence
 
 ```sh

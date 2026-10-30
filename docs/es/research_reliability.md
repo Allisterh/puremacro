@@ -86,10 +86,12 @@ El cuaderno 73 y la [guía soberana](sovereign_default.md) explican estos límit
 
 ## Después: incidencia sobre hogares y docencia
 
-Completar una referencia publicada HANK de un activo igualando reglas fiscales,
-fechas de rendimientos y cierre de equilibrio. Validar transiciones no lineales
-antes de enlazar deciles de hogares con LP de datos observados. El riesgo
-agregado general de orden superior viene después de esas comprobaciones.
+El [equilibrio HANK publicado de un activo](hank_equilibrium.md) ya cuenta con
+reglas fiscales, fechas de rendimientos y mercados comparables, trayectorias
+no lineales independientes para ambos signos y una malla/horizonte ampliados
+que pasan el criterio. Sigue vincular la incidencia sobre hogares con LP de
+datos observados. El riesgo agregado general de orden superior sigue siendo
+una tarea posterior separada.
 
 Convertir el estudio validado en una ruta bilingüe breve: instalar un wheel
 verificado, reproducir una base, cambiar un supuesto y revisar diagnósticos.

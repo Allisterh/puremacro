@@ -86,10 +86,11 @@ accounting, not an independently identified risk premium. Notebook 73 and the
 
 ## Then: household incidence and teaching
 
-Complete a published one-asset HANK benchmark with matched fiscal rules,
-return timing and equilibrium closure. Independently validate nonlinear
-transitions before linking household deciles to distributional LPs on observed
-data. A general higher-order aggregate-risk solver comes after those checks.
+The [published one-asset HANK equilibrium](hank_equilibrium.md) now has matched
+fiscal rules, return timing and market clearing, independent nonlinear paths
+for both shock signs, and a passing extended grid/horizon study. Next, link
+household incidence to distributional LPs on observed data. A general
+higher-order aggregate-risk solver remains a separate later task.
 
 Use the validated study to build a short bilingual path: install a verified
 wheel, reproduce one baseline, change one policy assumption, and inspect a

@@ -2,6 +2,10 @@
 
 # Sequence-Space HANK
 
+For the published model with endogenous hours and asset/labor market clearing,
+see [the independently checked one-asset HANK equilibrium](hank_equilibrium.md).
+The older routines below implement a reduced closure and remain separate APIs.
+
 `puremacro.models` is the structural side of the package: models you solve for a
 steady state and then push along a transition path, with no compiler, no MEX
 toolchain and no Dynare in the loop. Everything on this page is offline — none

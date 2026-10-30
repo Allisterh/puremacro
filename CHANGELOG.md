@@ -13,6 +13,14 @@ but not published; their additions are included in 6.0.1, published on
 
 Development version after 6.0.1; not a published distribution.
 
+- `calibrate_one_asset_hank` and `solve_one_asset_hank`: the published ABRS
+  one-asset equilibrium with endogenous labor, debt revaluation, asset/labor
+  clearing and nonlinear Phillips curve. Independent author-code fixtures
+  check the published 500×7 calibration and both shock signs. A fixed-tolerance
+  study extends income refinement to31 states and checks assets and horizons;
+  failed intermediate refinements remain visible. The existing reduced HANK
+  API keeps its original closure. [Guide](docs/hank_equilibrium.md).
+
 - Added `puremacro.inference.gmm`, a public generic GMM engine: user moment
   functions, two-step, iterated, identity or user weighting, Bartlett HAC
   long-run covariance (package default bandwidth), analytic or numerical

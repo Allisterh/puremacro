@@ -99,6 +99,7 @@ nav:
       - Structural Models:
           - Empirical-to-structural estimation: structural_bridge.md
           - Sequence-Space HANK: models.md
+          - Published one-asset HANK equilibrium: hank_equilibrium.md
           - Non-Linear HANK Transitions: hank_nonlinear.md
           - Editable HANK equations and panels: hank_model_closure.md
           - Nonlinear HANK & 2nd-Order Aggregate Risk: hank_ssj_and_aggregate_risk.md
@@ -214,6 +215,7 @@ nav:
       - Modelos estructurales:
           - Estimación empírica-estructural: es/structural_bridge.md
           - HANK en el espacio de secuencias: es/models.md
+          - Equilibrio HANK publicado de un activo: es/hank_equilibrium.md
           - Transiciones no lineales en HANK: es/hank_nonlinear.md
           - Ecuaciones HANK editables y paneles: es/hank_model_closure.md
           - HANK no lineal y riesgo agregado de 2.º orden: es/hank_ssj_and_aggregate_risk.md
