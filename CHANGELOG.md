@@ -100,6 +100,20 @@ Development version after 6.0.1; not a published distribution.
 - Sovereign brief outputs use explicit UTF-8 and portable resource diagnostics.
   Custom scenarios appear in figures, and effect directions compare numerical
   values while treating indistinguishable displayed values as flat.
+- Added a first policy brief, `python -m puremacro.examples.first_brief_tariffs`:
+  a 10% US tariff on Chinese goods solved with the exact trade engine on the
+  bundled OECD ICIO 2019 table, reporting national EV with its purchaser-price,
+  factor-income and fiscal split, one alternative assumption (`--experiment
+  sigma=2`) and household incidence under proportional and equal rebates. The
+  default household groups are synthetic, labelled "SYNTHETIC, method
+  illustration only"; no survey data ship, and `--groups CSV` takes your own.
+  Outputs carry a manifest with versions, the table's citation and hash, solver
+  settings, convergence and timings. New bilingual page "Your first policy
+  brief" shows the frozen result, which a test re-renders from the fixture.
+  Credit the table as OECD (2023), OECD Inter-Country Input-Output Tables.
+
+- Tariff-brief resource diagnostics work on Windows; reruns remove obsolete
+  generated experiment tables and Spanish figures use decimal commas.
 
 ## 6.0.1 (2026-10-29)
 

@@ -10,7 +10,7 @@ There are **91 scripts** in `puremacro/examples/` (70 described below; the remai
 
 ## Recommended starter shortlist
 
-Thirteen scripts that together span the methods catalogue. Read in this order if you want a one-week tour:
+Fourteen scripts that together span the methods catalogue. Read in this order if you want a one-week tour:
 
 | # | Script | What it teaches |
 |---|---|---|
@@ -27,6 +27,7 @@ Thirteen scripts that together span the methods catalogue. Read in this order if
 | 11 | `vulnerable_growth` | Adrian-Boyarchenko-Giannone-style quantile growth-at-risk |
 | 12 | `sigma_decomposition` | SigmaObject: var(w'X) into diagonal vs covariance terms |
 | 13 | `did_callaway_santanna_demo` | Modern staggered DiD (CS 2021 + SA 2021) vs naive TWFE |
+| 14 | `first_brief_tariffs` | Your first policy brief: a tariff on public ICIO data, national EV split and (synthetic) household groups |
 
 ## All scripts, grouped by topic
 

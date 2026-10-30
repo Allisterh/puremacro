@@ -2,11 +2,11 @@
 
 # Galería de ejemplos de puremacro
 
-Generado: 2026-10-19T00:01:39Z
+Generado: 2026-10-29T05:09:05Z
 
 | Estado | Cantidad |
 |---|---|
-| PASS | 84 |
+| PASS | 85 |
 | SKIP | 8 |
 | FAIL | 1 |
 
@@ -21,7 +21,7 @@ Generado: 2026-10-19T00:01:39Z
 - **Última ejecución:** 2026-10-19T00:01:39Z
 - **Figuras:** ninguna
 
-## PASS (84)
+## PASS (85)
 
 ### anderson_rubin_weak_iv_demo
 
@@ -252,6 +252,14 @@ Generado: 2026-10-19T00:01:39Z
 - **Última ejecución:** 2026-10-18T23:42:02Z
 - **Figuras:**
   - `../puremacro/examples/output/fetch_fred_demo.png`
+
+### first_brief_tariffs
+
+- **Descripción:** Your first policy brief: a 10% US tariff on Chinese goods on the bundled OECD ICIO 2019 table, national EV with its price / factor-income / fiscal split, and synthetic household groups.
+- **Estado:** PASS
+- **Tiempo de ejecución:** 6.051 s
+- **Última ejecución:** 2026-10-29T05:09:05Z
+- **Figuras:** ninguna
 
 ### fm_ols_dols_demo
 
