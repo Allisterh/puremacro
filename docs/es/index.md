@@ -20,15 +20,16 @@ python -m pip install puremacro
 |---|---|
 | **Analizar datos** | Estime una respuesta a un choque con el [inicio rápido](quickstart.md), luego explore las [fuentes de datos](micro_data.md) y los [flujos de investigación](research_workflows.md). |
 | **Simular políticas** | Declare un modelo de hogares con [programación dinámica](dp.md), estudie la [transmisión monetaria](monetary_transmission.md) o construya un [contrafactual comercial](trade_accounting.md). |
+| **Redactar un informe de política** | Ejecute un [experimento arancelario con datos públicos](first_brief_tariffs.md) y lea los efectos de bienestar nacionales y por hogares. |
 | **Aprender o enseñar** | Elija una [ruta de cuadernos](notebooks.md) o use el [curso bilingüe y sus laboratorios interactivos](https://github.com/jalonso1979/puremacro/tree/main/curso). Use la edición fija del curso indicada abajo. |
 
 **Estado comprobado el 2026-10-29:** **6.0.1** está publicada en [PyPI](https://pypi.org/project/puremacro/6.0.1/), y `pip install puremacro` la instala. Es la primera versión publicada desde 5.7.1: las etiquetas 5.8.0, 5.9.0 y 6.0.0 nunca se publicaron (v6.0.0 falló en CI). Esta rama `main` puede contener trabajo no publicado hacia 6.1.0; una etiqueta no acredita por sí sola una publicación.
 Consulte las [pruebas recomendadas y próximos hitos](research_reliability.md).
-Estos ejemplos describen la API de 6.0.0; consulte el
+Estas páginas siguen la API de desarrollo de 6.1.0; las adiciones aún no publicadas requieren instalar desde el código fuente. consulte el
 [historial de cambios](https://github.com/jalonso1979/puremacro/blob/main/CHANGELOG.md) y use la documentación correspondiente
 a su versión instalada.
 
-Novedades de v6.0.0: [Diferenciación automática directa y protocolo de modelos diferenciables](autodiff_and_protocol.md), [SMC templado vectorizado](smc_inference.md), [HANK no lineal y riesgo agregado de segundo orden](hank_ssj_and_aggregate_risk.md), [Default soberano cuantitativo](sovereign_default.md), [Proyecciones locales distribucionales](distributional_lp.md) y [Redes de producción, IAM climático espacial y PolicyStudio](network_spatial_climate_iam.md).
+Disponible desde 6.0.1 (introducido en la etiqueta fuente 6.0.0): [Diferenciación automática directa y protocolo de modelos diferenciables](autodiff_and_protocol.md), [SMC templado vectorizado](smc_inference.md), [HANK no lineal y riesgo agregado de segundo orden](hank_ssj_and_aggregate_risk.md), [Default soberano cuantitativo](sovereign_default.md), [Proyecciones locales distribucionales](distributional_lp.md) y [Redes de producción, IAM climático espacial y PolicyStudio](network_spatial_climate_iam.md).
 
 También se incluye el desarrollo de ciclos anteriores: [flujos DSGE y elección del método](dsge_workflows.md), [modelos no lineales](dsge_nonlinear.md), [transiciones y anuncios](dsge_transitions.md) y [precisión local/global](dsge_global.md). Consulte los [límites de la inferencia experimental](dependence_bootstrap.md) y las [auditorías de resultados resueltos admitidos](result_audits.md). Si usa `STEADY_STATE()` en trayectorias no lineales, consulte el [aviso de corrección](ADVISORY.md) y vuelva a ejecutar los cálculos afectados.
 

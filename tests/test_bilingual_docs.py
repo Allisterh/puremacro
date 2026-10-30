@@ -9,6 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]  # package root (README.md, docs/, no
 
 # User-facing docs that get a docs/es/<same-name> Spanish version (exact case).
 _USER_DOCS = [
+    "brief_sovereign_risk.md",
+    "first_brief_tariffs.md",
     "dp_modfiles.md",
     "studies.md",
     "study_workflows.md",
@@ -113,8 +115,11 @@ _USER_DOCS = [
     "smc_inference.md",
     "hank_ssj_and_aggregate_risk.md",
     "sovereign_default.md",
+    "sovereign_fiscal_rules.md",
     "distributional_lp.md",
     "network_spatial_climate_iam.md",
+    # Macro-finance: returns, risk and asset-pricing tests.
+    "asset_pricing.md",
 ]
 
 

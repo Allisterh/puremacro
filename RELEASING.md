@@ -462,3 +462,17 @@ Before bundling any third-party table, record its publisher, source page, terms,
 changed and the SHA-256 in a `SOURCES.md` next to it, state that the MIT licence covers
 puremacro's code and not the data, and carry any acknowledgment requirement of the
 publisher's terms forward to redistributors.
+
+## Representative examples from the installed wheel
+
+Run `python tools/check_installed_examples.py dist/puremacro-*.whl` after
+building. It creates a fresh environment with base dependencies only, runs
+from outside the checkout with isolated Python imports, and verifies the
+installed package path and version. The workflows cover the exact-diffuse
+Kalman example, GMM and compounded historical risk, and the bundled-data
+tariff brief with Spanish UTF-8 output and artifact hashes. Network access
+is blocked during the examples. CI runs this separately from the long test
+matrix; publication repeats it on the exact wheel about to be uploaded.
+This is a small packaging gate; full notebook execution and reference
+validation remain separate requirements. Native and Windows-target mypy
+now run before the long numerical tests, so portability failures surface early.

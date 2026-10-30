@@ -31,6 +31,8 @@ matplotlib.use("Agg")
 REPO = Path(__file__).resolve().parents[1]
 
 PAGES = [
+    "docs/first_brief_tariffs.md",
+    "docs/es/first_brief_tariffs.md",
     "docs/dsge_nonlinear.md",
     "docs/es/dsge_nonlinear.md",
     "docs/dsge_transitions.md",
@@ -116,6 +118,12 @@ PAGES = [
     # Local language models: the blocks that need no model (cache mode, report) run here.
     "docs/local_llm.md",
     "docs/es/local_llm.md",
+    # Macro-finance (English and Spanish, identical code).
+    "docs/asset_pricing.md",
+    "docs/es/asset_pricing.md",
+    # The sovereign fiscal block (English and Spanish, identical code).
+    "docs/sovereign_fiscal_rules.md",
+    "docs/es/sovereign_fiscal_rules.md",
 ]
 
 _FENCE = re.compile(r"```python\n(.*?)```", re.S)

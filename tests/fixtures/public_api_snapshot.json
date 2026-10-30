@@ -51,6 +51,61 @@
       "sqlite3",
       "ssl"
     ],
+    "puremacro.asset_pricing": [
+      "CCAPMResult",
+      "FamaMacBethResult",
+      "HJDistanceResult",
+      "RiskSummaryResult",
+      "SDFResult",
+      "TimeSeriesTestResult",
+      "VaRBacktestResult",
+      "annualize_return",
+      "annualize_volatility",
+      "ccapm",
+      "compound",
+      "excess_returns",
+      "expected_shortfall",
+      "fama_macbeth",
+      "fred_consumption_growth",
+      "fred_risk_free",
+      "hj_distance",
+      "risk_summary",
+      "sdf_gmm",
+      "time_series_test",
+      "to_returns",
+      "value_at_risk",
+      "var_backtest"
+    ],
+    "puremacro.asset_pricing._results": [],
+    "puremacro.asset_pricing._validate": [],
+    "puremacro.asset_pricing.ccapm": [
+      "ccapm"
+    ],
+    "puremacro.asset_pricing.factor_tests": [
+      "fama_macbeth",
+      "time_series_test"
+    ],
+    "puremacro.asset_pricing.macro_data": [
+      "fred_consumption_growth",
+      "fred_risk_free"
+    ],
+    "puremacro.asset_pricing.returns": [
+      "annualize_return",
+      "annualize_volatility",
+      "compound",
+      "excess_returns",
+      "to_returns"
+    ],
+    "puremacro.asset_pricing.risk": [
+      "expected_shortfall",
+      "risk_summary",
+      "value_at_risk",
+      "var_backtest"
+    ],
+    "puremacro.asset_pricing.sdf": [
+      "hj_distance",
+      "sdf_gmm"
+    ],
     "puremacro.bartik": [
       "ShiftShareIVResult",
       "build_base_year_shares",
@@ -1132,6 +1187,10 @@
       "INDUSTRY_CODES",
       "fetch_jolts"
     ],
+    "puremacro.fetch.kenfrench_factors": [
+      "DATASETS",
+      "fetch"
+    ],
     "puremacro.fetch.labor_ilostat": [
       "fetch_ilostat_lfs_panel",
       "fetch_ilostat_sectoral_panel"
@@ -1656,6 +1715,7 @@
     "puremacro.inference": [
       "ARTestResult",
       "AdaptiveTemperingSchedule",
+      "GMMFitResult",
       "LewbelIVResult",
       "SIMEXResult",
       "SMCResult",
@@ -1669,6 +1729,7 @@
       "effective_sample_size",
       "enumerate_specs",
       "fdrcorrection",
+      "gmm",
       "hac_fixed_b",
       "hansen_j",
       "kleibergen_paap_f",
@@ -1707,6 +1768,9 @@
     ],
     "puremacro.inference.dk": [
       "driscoll_kraay"
+    ],
+    "puremacro.inference.gmm": [
+      "gmm"
     ],
     "puremacro.inference.hac_fixed_b": [
       "hac_fixed_b",
@@ -2086,16 +2150,20 @@
       "MonetaryTransmissionResult",
       "MonetaryTransmissionSimulator",
       "NonlinearHANKResult",
+      "OneAssetHANKResult",
+      "OneAssetHANKSteadyState",
       "SequenceSpaceHANKResult",
       "TradePolicySimulationResult",
       "TradePolicySimulator",
       "TwoAssetSequenceSpaceHANKResult",
+      "calibrate_one_asset_hank",
       "dmp_irf",
       "dmp_steady_state",
       "fake_news_algorithm",
       "simulate_targeted_transfer",
       "solve_hank_sequence_space",
       "solve_nonlinear_transition",
+      "solve_one_asset_hank",
       "solve_two_asset_hank_sequence_space"
     ],
     "puremacro.models.hank_sequence_space": [
@@ -3049,13 +3117,24 @@
       "shapley_var"
     ],
     "puremacro.sovereign": [
+      "FiscalSovereignResult",
       "RestructuringResult",
       "SovereignDefaultResult",
       "SuddenStopResult",
       "decompose_spread_term_structure",
+      "ergodic_moments",
       "evaluate_debt_restructuring",
+      "solve_fiscal_sovereign_default",
       "solve_sovereign_default",
-      "solve_sudden_stop"
+      "solve_sudden_stop",
+      "value_of_market_access"
+    ],
+    "puremacro.sovereign._fiscal_paths": [
+      "FiscalPaths",
+      "MOMENTS",
+      "draw_uniforms",
+      "ergodic_moments",
+      "simulate_paths"
     ],
     "puremacro.sovereign._monotone": [
       "exhaustive_maximize",
@@ -3063,12 +3142,21 @@
       "min_candidate_consumption"
     ],
     "puremacro.sovereign._results": [
+      "FiscalSovereignResult",
       "RestructuringResult",
       "SovereignDefaultResult",
       "SuddenStopResult"
     ],
     "puremacro.sovereign.arellano": [
       "solve_sovereign_default"
+    ],
+    "puremacro.sovereign.fiscal": [
+      "solve_fiscal_sovereign_default"
+    ],
+    "puremacro.sovereign.measurement": [
+      "MOMENTS",
+      "ergodic_moments",
+      "value_of_market_access"
     ],
     "puremacro.sovereign.mendoza": [
       "solve_sudden_stop"
@@ -4487,6 +4575,120 @@
       "d12",
       "d2",
       "val"
+    ],
+    "puremacro.asset_pricing._results.CCAPMResult": [
+      "asset_names",
+      "coefs",
+      "converged",
+      "cov",
+      "gmm",
+      "j_df",
+      "j_pvalue",
+      "j_stat",
+      "n_obs",
+      "names",
+      "pricing_errors",
+      "se"
+    ],
+    "puremacro.asset_pricing._results.FamaMacBethResult": [
+      "asset_names",
+      "betas",
+      "coefs",
+      "converged",
+      "cov",
+      "cs_r2",
+      "hac_lags",
+      "intercept",
+      "lambda_series",
+      "mean_returns",
+      "n_obs",
+      "names",
+      "pricing_errors",
+      "se",
+      "se_fm",
+      "se_nw",
+      "se_shanken",
+      "se_type"
+    ],
+    "puremacro.asset_pricing._results.HJDistanceResult": [
+      "asset_names",
+      "coefs",
+      "converged",
+      "cov",
+      "distance",
+      "hac_lags",
+      "n_obs",
+      "n_sim",
+      "names",
+      "pricing_errors",
+      "pvalue",
+      "se",
+      "seed",
+      "weights"
+    ],
+    "puremacro.asset_pricing._results.RiskSummaryResult": [
+      "excess_kurtosis",
+      "hac_lags",
+      "max_drawdown",
+      "max_drawdown_duration",
+      "mean",
+      "n_obs",
+      "names",
+      "periods_per_year",
+      "sharpe",
+      "sharpe_se",
+      "skewness",
+      "sortino",
+      "volatility"
+    ],
+    "puremacro.asset_pricing._results.SDFResult": [
+      "asset_names",
+      "coefs",
+      "converged",
+      "cov",
+      "demeaned",
+      "gmm",
+      "j_df",
+      "j_pvalue",
+      "j_stat",
+      "lambda_se",
+      "lambdas",
+      "mu",
+      "n_obs",
+      "names",
+      "pricing_errors",
+      "se",
+      "stage"
+    ],
+    "puremacro.asset_pricing._results.TimeSeriesTestResult": [
+      "coefs",
+      "converged",
+      "cov",
+      "factor_names",
+      "grs_df",
+      "grs_pvalue",
+      "grs_stat",
+      "hac_lags",
+      "n_obs",
+      "names",
+      "r2",
+      "se",
+      "traded",
+      "wald_df",
+      "wald_pvalue",
+      "wald_stat"
+    ],
+    "puremacro.asset_pricing._results.VaRBacktestResult": [
+      "alpha",
+      "lr_cc",
+      "lr_ind",
+      "lr_uc",
+      "n_obs",
+      "n_violations",
+      "p_cc",
+      "p_ind",
+      "p_uc",
+      "violation_rate"
     ],
     "puremacro.bartik.akm.ShiftShareIVResult": [
       "akm_shocks",
@@ -6336,6 +6538,22 @@
       "residual_ss",
       "stat"
     ],
+    "puremacro.inference._results.GMMFitResult": [
+      "coefs",
+      "converged",
+      "cov",
+      "hac_lags",
+      "iterations",
+      "j_df",
+      "j_pvalue",
+      "j_stat",
+      "moment_means",
+      "n_obs",
+      "names",
+      "se",
+      "weight_matrix",
+      "weighting"
+    ],
     "puremacro.inference._results.LewbelIVResult": [
       "beta",
       "first_stage_F",
@@ -6918,6 +7136,28 @@
       "std_urate",
       "welfare"
     ],
+    "puremacro.models.one_asset_hank.OneAssetHANKResult": [
+      "converged",
+      "diagnostics",
+      "nonlinear",
+      "paths",
+      "steady_state"
+    ],
+    "puremacro.models.one_asset_hank.OneAssetHANKSteadyState": [
+      "_jacobians",
+      "aggregates",
+      "asset_grid",
+      "calibration",
+      "converged",
+      "diagnostics",
+      "distribution",
+      "e_grid",
+      "marginal_value",
+      "policy_a",
+      "policy_c",
+      "policy_n",
+      "transition"
+    ],
     "puremacro.models.smm.MomentVector": [
       "cross_section",
       "horizons_ts",
@@ -7447,6 +7687,46 @@
       "label",
       "loader",
       "name"
+    ],
+    "puremacro.sovereign._results.FiscalSovereignResult": [
+      "b_grid",
+      "bellman_residual",
+      "bond_price",
+      "converged",
+      "coupon_rate_kappa",
+      "debt_to_gdp",
+      "default_prob",
+      "dq_db",
+      "g_default",
+      "g_policy",
+      "gamma_c",
+      "gamma_g",
+      "iterations",
+      "maturity_param_delta",
+      "metadata",
+      "p_trans",
+      "policy_b",
+      "policy_b_prime",
+      "policy_index",
+      "primary_balance",
+      "private_consumption",
+      "private_consumption_default",
+      "private_consumption_repay",
+      "psi",
+      "q_bond",
+      "residual",
+      "spread",
+      "spread_mean",
+      "spread_y_corr",
+      "taste_shock_scale",
+      "tau",
+      "v_d",
+      "v_default",
+      "v_expected",
+      "v_r",
+      "v_repay",
+      "v_star",
+      "y_grid"
     ],
     "puremacro.sovereign._results.RestructuringResult": [
       "baseline_spread",

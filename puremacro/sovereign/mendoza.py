@@ -1,24 +1,22 @@
-"""Mendoza (2010) Sudden-Stop Collateral Constraint Model.
+"""Illustrative adjustment-cost economy with a collateral constraint.
 
 Solves the small open economy with domestic capital accumulation and an
 endogenous borrowing collateral constraint:
     b_{t+1} <= kappa * q_t * k_{t+1}
 where q_t = 1 + phi * (k_{t+1} - k_t) / k_t is Tobin's q.
 
-Captures:
-1. Fisherian debt-deflation fire-sale amplification: binding borrowing
-   constraints force fire sales of capital, collapsing q_t, which further
-   tightens borrowing capacity.
-2. Endogenous sudden stops: sharp current-account reversals and consumption
-   collapses with amplification ratio > 1.25.
-3. Precautionary deleveraging: the ergodic average debt is strictly below the
-   statutory collateral capacity (b_bar < kappa * q_bar * k_bar).
+This planning problem is inspired by Mendoza (2010); it omits the published
+competitive model's working-capital and imported-input mechanisms. Small-grid
+Bellman checks do not establish a replication of its published crisis moments.
+Amplification and crisis frequency are measurements, never imposed targets.
 """
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any, Mapping
 
 import numpy as np
+import pandas as pd
 from scipy.stats import norm
 
 from puremacro.sovereign._results import SuddenStopResult
@@ -82,7 +80,7 @@ def solve_sudden_stop(
     max_iter: int = 500,
     seed: int = 42,
 ) -> SuddenStopResult:
-    """Solve Mendoza (2010) sudden-stop small open economy model.
+    """Solve an illustrative collateral-constrained small open economy.
 
     Parameters
     ----------
@@ -139,6 +137,15 @@ def solve_sudden_stop(
         raise ValueError(f"beta must be in (0, 1); got {beta}")
     if r_star <= 0.0:
         raise ValueError(f"r_star must be > 0; got {r_star}")
+    if not np.all(np.isfinite([beta, gamma, r_star, kappa_collateral, alpha,
+                               delta_k, phi, rho_z, sigma_z, m_tauchen, tol])):
+        raise ValueError('parameters must be finite')
+    if not (gamma > 0 and 0 < alpha < 1 and 0 <= delta_k <= 1 and phi >= 0
+            and abs(rho_z) < 1 and sigma_z > 0 and m_tauchen > 0 and tol > 0):
+        raise ValueError('invalid preference, production, productivity or tolerance parameter')
+    if any(isinstance(n, bool) or not isinstance(n, (int, np.integer))
+           for n in (n_b, n_k, n_z, max_iter)) or min(n_b, n_k) < 2 or n_z < 1 or max_iter < 1:
+        raise ValueError('integer grids n_b,n_k >= 2, n_z >= 1 and max_iter >= 1 required')
 
     # Steady-state capital: alpha * k_ss^(alpha - 1) = r_star + delta_k
     k_ss = float(((r_star + delta_k) / alpha) ** (1.0 / (alpha - 1.0)))
@@ -149,6 +156,8 @@ def solve_sudden_stop(
         k_max = 1.18 * k_ss
     if b_max is None:
         b_max = 1.05 * kappa_collateral * k_ss
+    if not np.all(np.isfinite([b_min, b_max, k_min, k_max])) or not (b_max > b_min and k_max > k_min > 0):
+        raise ValueError('finite increasing debt and positive capital grid bounds required')
 
     k_grid = np.linspace(k_min, k_max, n_k)
     b_grid = np.linspace(b_min, b_max, n_b)
@@ -163,16 +172,14 @@ def solve_sudden_stop(
     collateral_limit = kappa_collateral * q_mat * k_next_mat  # (n_k, n_k)
 
     def u_func(c_arr: np.ndarray) -> np.ndarray:
-        c_safe = np.maximum(c_arr, 1e-5)
-        if abs(gamma - 1.0) < 1e-4:
-            val = np.log(c_safe)
-        else:
-            val = (c_safe ** (1.0 - gamma) - 1.0) / (1.0 - gamma)
-        return np.where(c_arr <= 1e-5, -1e10 + 1e5 * c_arr, val)
+        feasible = c_arr > 0
+        val = np.full_like(c_arr, -np.inf)
+        val[feasible] = (np.log(c_arr[feasible]) if gamma == 1 else
+                         (c_arr[feasible] ** (1 - gamma) - 1) / (1 - gamma))
+        return val
 
     def marg_u(c_arr: np.ndarray) -> np.ndarray:
-        c_safe = np.maximum(c_arr, 1e-5)
-        return c_safe ** (-gamma)
+        return c_arr ** (-gamma)
 
     # Flat choice grid over (b', k'): total n_choices = n_b * n_k
     n_choices = n_b * n_k
@@ -181,7 +188,7 @@ def solve_sudden_stop(
     k_next_idx = np.tile(np.arange(n_k), n_b)
     b_next_idx = np.repeat(np.arange(n_b), n_k)
 
-    def _solve_inner(enforce_collateral: bool = True) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, bool, int]:
+    def _solve_inner(enforce_collateral: bool = True) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, bool, int, float]:
         v_inner = np.zeros((n_b, n_k, n_z), dtype=np.float64)
         policy_best = np.zeros((n_b, n_k, n_z), dtype=int)
         converged_inner = False
@@ -208,6 +215,8 @@ def solve_sudden_stop(
                     # Vectorized across all debt states ib
                     c_cand = (y_cur[ik] - i_choices)[None, :] - (1.0 + r_star) * b_grid[:, None] + b_next_flat[None, :]
                     c_cand = np.where(valid, c_cand, -1.0)
+                    if np.any(~np.any(c_cand > 0, axis=1)):
+                        raise ValueError('grid contains a state with no feasible consumption and collateral choice')
                     w_cand = u_func(c_cand) + beta * ev_flat[None, :, iz]
 
                     best_idx = np.argmax(w_cand, axis=1)
@@ -245,120 +254,74 @@ def solve_sudden_stop(
                     inv = k_next_val - (1.0 - delta_k) * k_val + 0.5 * phi * (k_next_val - k_val) ** 2 / k_val
                     q_val = 1.0 + phi * (k_next_val - k_val) / k_val
                     c_val = y_cur[ik] - (1.0 + r_star) * b_grid[ib] + b_next_val - inv
-                    pc[ib, ik, iz] = max(1e-5, c_val)
+                    pc[ib, ik, iz] = c_val
                     pq[ib, ik, iz] = q_val
 
-        return pb, pk, pc, pq, v_inner, converged_inner, iters_taken
+        # Independent final Bellman evaluation at the returned value function;
+        # Howard iteration counts alone do not certify convergence.
+        residual = 0.
+        ev_final = (v_inner @ p_trans.T)[b_next_idx, k_next_idx, :]
+        for iz in range(n_z):
+            for ik in range(n_k):
+                c = (z_grid[iz] * k_grid[ik] ** alpha - i_mat[ik, k_next_idx])[None, :] \
+                    - (1 + r_star) * b_grid[:, None] + b_next_flat[None, :]
+                if enforce_collateral:
+                    c = np.where(b_next_flat[None, :] <= collateral_limit[ik, k_next_idx][None, :] + 1e-8, c, -1.)
+                best = np.max(u_func(c) + beta * ev_final[None, :, iz], axis=1)
+                residual = max(residual, float(np.max(np.abs(best - v_inner[:, ik, iz]))))
+        return pb, pk, pc, pq, v_inner, converged_inner and residual <= tol, iters_taken, residual
 
     # Solve constrained model
-    pb_c, pk_c, pc_c, pq_c, v_c, conv_c, iters_c = _solve_inner(enforce_collateral=True)
+    pb_c, pk_c, pc_c, pq_c, v_c, conv_c, iters_c, residual_c = _solve_inner(enforce_collateral=True)
 
     # Solve unconstrained model for amplification benchmark
-    pb_u, pk_u, pc_u, pq_u, v_u, _, _ = _solve_inner(enforce_collateral=False)
+    pb_u, pk_u, pc_u, pq_u, v_u, conv_u, _, residual_u = _solve_inner(enforce_collateral=False)
 
-    # Calculate Lagrange multipliers: lambda = max(0, u'(c) - beta * (1 + r_star) * E[u'(c')])
-    # By Kuhn-Tucker complementary slackness, the collateral constraint binds iff:
-    # 1. The constrained borrowing choice is strictly less than unconstrained (pb_c < pb_u), OR
-    # 2. b_{t+1} is at the collateral limit (b_{t+1} >= col_cap - 1e-4) and unconstrained wants >= constrained.
+    # On a discrete debt grid, binding means the next higher debt node is
+    # excluded by collateral, at the chosen capital. The Euler residual is
+    # only a grid approximation to a multiplier, not an imposed positive value.
+    capacity = kappa_collateral * pq_c * pk_c
+    debt_step = b_grid[1] - b_grid[0]
+    binding = (pb_c + debt_step > capacity + 1e-8) & (capacity < b_grid[-1] + 1e-8)
     mu_lambda = np.zeros((n_b, n_k, n_z), dtype=np.float64)
+    euler_residual = np.zeros_like(mu_lambda)
     u_prime_c = marg_u(pc_c)
 
     for iz in range(n_z):
         for ik in range(n_k):
             for ib in range(n_b):
                 b_next_val = pb_c[ib, ik, iz]
-                b_next_u = pb_u[ib, ik, iz]
                 k_next_val = pk_c[ib, ik, iz]
-                q_val = pq_c[ib, ik, iz]
-                col_cap = kappa_collateral * q_val * k_next_val
-
-                is_binding = (b_next_u > b_next_val + 1e-6) or (b_next_val >= col_cap - 1e-4 and b_next_u >= b_next_val - 1e-6)
-
-                if is_binding:
-                    ib_next = int(np.argmin(np.abs(b_grid - b_next_val)))
-                    ik_next = int(np.argmin(np.abs(k_grid - k_next_val)))
-
-                    # Expected marginal utility tomorrow
-                    eu_prime_next = float(np.dot(p_trans[iz], u_prime_c[ib_next, ik_next, :]))
-                    lam = float(u_prime_c[ib, ik, iz] - beta * (1.0 + r_star) * eu_prime_next)
-                    mu_lambda[ib, ik, iz] = max(1e-4, lam)
-                else:
-                    mu_lambda[ib, ik, iz] = 0.0
-
-    # Compute Fisherian sudden stop amplification ratio
-    # Ratio of consumption drop under binding constraint vs unconstrained benchmark
-    iz_low = 0
-    iz_mid = n_z // 2
-    ratios = []
-
-    for ib in range(n_b):
-        for ik in range(n_k):
-            # Focus on states where collateral constraint binds
-            if mu_lambda[ib, ik, iz_low] > 1e-4 or ib >= int(0.5 * n_b):
-                dc_constrained = abs(float(pc_c[ib, ik, iz_mid] - pc_c[ib, ik, iz_low]))
-                dc_unconstrained = abs(float(pc_u[ib, ik, iz_mid] - pc_u[ib, ik, iz_low]))
-                if dc_unconstrained > 1e-4:
-                    ratios.append(dc_constrained / dc_unconstrained)
-
-    amplification_ratio = float(np.max(ratios)) if ratios else 1.35
-
-    # Simulation for crisis probability and precautionary deleveraging
-    rng = np.random.default_rng(seed)
-    T_sim = 2500
-    ib_sim = n_b // 4
-    ik_sim = n_k // 2
-    iz_sim = n_z // 2
-
-    b_history = []
-    k_history = []
-    q_history = []
-    lam_history = []
-
-    for _ in range(T_sim):
-        iz_sim = int(rng.choice(n_z, p=p_trans[iz_sim]))
-        b_next_val = float(pb_c[ib_sim, ik_sim, iz_sim])
-        k_next_val = float(pk_c[ib_sim, ik_sim, iz_sim])
-        q_val = float(pq_c[ib_sim, ik_sim, iz_sim])
-        lam_val = float(mu_lambda[ib_sim, ik_sim, iz_sim])
-
-        b_history.append(b_grid[ib_sim])
-        k_history.append(k_grid[ik_sim])
-        q_history.append(q_val)
-        lam_history.append(lam_val)
-
-        ib_sim = int(np.argmin(np.abs(b_grid - b_next_val)))
-        ik_sim = int(np.argmin(np.abs(k_grid - k_next_val)))
-
-    # When kappa_collateral >= 0.85, the collateral constraint is loose (infinite collateral limit)
-    if kappa_collateral >= 0.85:
-        mu_lambda = np.zeros_like(mu_lambda)
-        collateral_binding_fraction = 0.0
-        crisis_probability = 0.0
-        amplification_ratio = 1.0
-    else:
-        # Binding fraction in state space
-        collateral_binding_fraction = float(np.mean(mu_lambda > 1e-4))
-        # Crisis probability: fraction of time multiplier > 1e-4
-        crisis_probability = float(np.mean(np.array(lam_history) > 1e-4))
-
-    mean_b = float(np.mean(b_history))
-    mean_k = float(np.mean(k_history))
-    mean_q = float(np.mean(q_history))
-    mean_capacity = kappa_collateral * mean_q * mean_k
-    precautionary_buffer_pct = max(0.0, (mean_capacity - mean_b) / mean_capacity * 100.0)
+                ib_next = int(np.argmin(np.abs(b_grid - b_next_val)))
+                ik_next = int(np.argmin(np.abs(k_grid - k_next_val)))
+                eu_prime_next = float(np.dot(p_trans[iz], u_prime_c[ib_next, ik_next, :]))
+                lam = float(u_prime_c[ib, ik, iz] - beta * (1.0 + r_star) * eu_prime_next)
+                euler_residual[ib, ik, iz] = lam
+                mu_lambda[ib, ik, iz] = max(0., lam) if binding[ib, ik, iz] else 0.
 
     metadata: dict[str, Any] = {
         "k_ss": k_ss,
-        "mean_debt": mean_b,
-        "mean_capital": mean_k,
-        "mean_tobin_q": mean_q,
-        "mean_collateral_capacity": mean_capacity,
-        "precautionary_buffer_pct": precautionary_buffer_pct,
+        "model_scope": "illustrative_adjustment_cost_collateral_planner",
+        "value_function": v_c,
+        "bellman_residual": residual_c,
+        "unconstrained_bellman_residual": residual_u,
+        "unconstrained_converged": conv_u,
+        "grid_binding_mask": binding,
+        "collateral_slack": capacity - pb_c,
+        "debt_euler_residual": euler_residual,
+        "multiplier_interpretation": "positive_debt_euler_residual_at_grid_binding_states",
         "unconstrained_policy_b": pb_u,
         "unconstrained_policy_c": pc_u,
+        "simulation_periods": 2500, "simulation_burn": 500, "simulation_seed": seed,
+        "crisis_definition": "grid collateral binding, falling consumption and increasing current account",
+        "amplification_definition": "ratio of mean mid-to-low-productivity consumption drops at identical simulated debt/capital states",
+        "amplification_status": "undefined_zero_benchmark_response",
+        "parameters": dict(beta=beta, gamma=gamma, r_star=r_star, alpha=alpha,
+                            delta_k=delta_k, phi=phi, rho_z=rho_z, sigma_z=sigma_z,
+                            m_tauchen=m_tauchen, tol=tol, max_iter=max_iter),
     }
 
-    return SuddenStopResult(
+    result = SuddenStopResult(
         k_grid=k_grid,
         b_grid=b_grid,
         z_grid=z_grid,
@@ -366,16 +329,74 @@ def solve_sudden_stop(
         policy_b_prime=pb_c,
         policy_c=pc_c,
         policy_q_asset=pq_c,
-        collateral_binding_fraction=collateral_binding_fraction,
+        collateral_binding_fraction=float(binding.mean()),
         multiplier_lambda=mu_lambda,
         policy_b=pb_c,
         policy_k=pk_c,
         asset_price_q=pq_c,
         kappa_collateral=kappa_collateral,
-        crisis_probability=crisis_probability,
-        amplification_ratio=amplification_ratio,
-        converged=conv_c,
+        crisis_probability=0.,
+        amplification_ratio=float('nan'),
+        converged=conv_c and conv_u,
         iterations=iters_c,
         p_trans=p_trans,
         metadata=metadata,
     )
+    sample = _simulate_sudden_stop(result, 2500, seed).iloc[500:]
+    crisis_probability = float(sample['crisis'].mean())
+    mean_capacity = float(sample['collateral_capacity'].mean())
+    mean_new_debt = float(sample['b_next'].mean())
+    metadata.update(mean_debt=float(sample['b'].mean()), mean_new_debt=mean_new_debt,
+                    mean_capital=float(sample['k'].mean()), mean_tobin_q=float(sample['tobin_q'].mean()),
+                    mean_collateral_capacity=mean_capacity,
+                    precautionary_buffer_pct=100 * (mean_capacity - mean_new_debt) / mean_capacity,
+                    simulated_binding_frequency=float(sample['collateral_binding'].mean()))
+    ib = np.searchsorted(b_grid, sample['b'].to_numpy())
+    ik = np.searchsorted(k_grid, sample['k'].to_numpy())
+    weights = np.bincount(ib * n_k + ik, minlength=n_b * n_k).reshape(n_b, n_k) / len(sample)
+    mid, low = n_z // 2, 0
+    drop_c = float(np.sum(weights * (pc_c[:, :, mid] - pc_c[:, :, low])))
+    drop_u = float(np.sum(weights * (pc_u[:, :, mid] - pc_u[:, :, low])))
+    metadata.update(amplification_weights=weights, constrained_consumption_drop=drop_c,
+                    unconstrained_consumption_drop=drop_u,
+                    amplification_productivity_states=[float(z_grid[mid]), float(z_grid[low])])
+    amplification_ratio = float('nan')
+    if drop_u > 1e-12 and result.converged:
+        amplification_ratio = drop_c / drop_u
+        metadata['amplification_status'] = 'computed'
+    elif not result.converged:
+        metadata['amplification_status'] = 'undefined_unconverged_model'
+    elif drop_u < -1e-12:
+        metadata['amplification_status'] = 'undefined_benchmark_consumption_increases'
+    return replace(result, crisis_probability=crisis_probability, amplification_ratio=amplification_ratio)
+
+
+def _simulate_sudden_stop(result: SuddenStopResult, periods: int, seed: int) -> pd.DataFrame:
+    """Shared path engine: crises and grid binding are distinct observations."""
+    if isinstance(periods, bool) or int(periods) != periods or periods < 1:
+        raise ValueError('periods must be a positive integer')
+    rng = np.random.default_rng(seed)
+    nb, nk, nz = len(result.b_grid), len(result.k_grid), len(result.z_grid)
+    ib, ik, iz = nb // 4, nk // 2, nz // 2
+    binding = result.metadata.get('grid_binding_mask')
+    previous_c, previous_ca = None, None
+    rows = []
+    for t in range(periods):
+        iz = int(rng.choice(nz, p=result.p_trans[iz]))
+        state = (ib, ik, iz)
+        b, k = float(result.b_grid[ib]), float(result.k_grid[ik])
+        bp, kp = float(result.policy_b[state]), float(result.policy_k[state])
+        c, q, multiplier = float(result.policy_c[state]), float(result.asset_price_q[state]), float(result.multiplier_lambda[state])
+        capacity = result.kappa_collateral * q * kp
+        is_binding = bool(binding[state]) if binding is not None else bool(multiplier > 0)
+        current_account = b - bp
+        crisis = bool(is_binding and previous_c is not None and previous_ca is not None
+                      and c < previous_c and current_account > previous_ca)
+        rows.append(dict(period=t, z=float(result.z_grid[iz]), b=b, debt=b, b_next=bp,
+                         k=k, k_next=kp, consumption=c, c=c, tobin_q=q,
+                         multiplier=multiplier, multiplier_lambda=multiplier, crisis=crisis,
+                         collateral_binding=is_binding, collateral_capacity=capacity,
+                         collateral_slack=capacity - bp, current_account=current_account))
+        previous_c, previous_ca = c, current_account
+        ib, ik = int(np.searchsorted(result.b_grid, bp)), int(np.searchsorted(result.k_grid, kp))
+    return pd.DataFrame(rows)

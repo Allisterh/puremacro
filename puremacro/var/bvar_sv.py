@@ -683,12 +683,16 @@ class BVAR_SVResult:
         h_prev = self.h_draws[:, -1, :].copy()
         paths = np.empty((D, horizon, n))
         h_paths = np.empty((D, horizon, n))
+        x = np.empty((D, 1 + p * n))
+        x[:, 0] = 1.0
         for j in range(horizon):
             h_t = self.mu_draws + self.phi_draws * (h_prev - self.mu_draws) \
                 + self.sigma_h_draws * rng.standard_normal((D, n))
             nu = np.exp(h_t / 2.0) * rng.standard_normal((D, n))
             u = np.linalg.solve(self.a_draws, nu[:, :, None])[:, :, 0]
-            x = np.concatenate([np.ones((D, 1))] + [lag_buf[:, -l, :] for l in range(1, p + 1)], axis=1)
+            # Reuse the design matrix; preserve newest-to-oldest lag order.
+            for lag in range(1, p + 1):
+                x[:, 1 + (lag - 1) * n:1 + lag * n] = lag_buf[:, -lag, :]
             y = np.einsum("dk,dkn->dn", x, self.beta_draws) + u
             paths[:, j] = y
             h_paths[:, j] = h_t

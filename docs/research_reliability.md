@@ -3,11 +3,12 @@
 The agreed order is **research reliability and replications**, then **economic
 models and policy applications**, then **teaching and usability**.
 
-## Current correction branch
+## Published corrections and current development
 
-The v6.0.0 source tag did not reach PyPI. As checked on 2026-10-26, the published
-package is 5.7.1. Use the development checkout for these corrections; a new
-release still needs the supported-platform CI matrix and publishing gates.
+Version **6.0.1** was published to PyPI on 2026-10-29 and includes the
+corrections below. Version **6.1.0** is under development; additions marked
+unreleased require a source checkout. The 5.8.0, 5.9.0 and 6.0.0 source tags
+were not published. See the [current roadmap and API policy](1.0_path.md).
 
 Native model adapters now preserve the supplied equations and loadings.
 First-order DSGE scores use Kalman sensitivities; DAG scores centrally difference
@@ -43,7 +44,7 @@ the specific scope described in each notebook, not blanket economic validation.
 
 | Comparison | Result on the tested grids | What remains open |
 |---|---|---|
-| Arellano short-term deterministic equations | Matched-grid equations pass; archived Fortran and MATLAB moments reproduce; public simulation timing and zero-debt reentry are corrected; public-calibration grids converge at 6,401 × 641, and the public solver reaches that grid with a certified monotone search | Published-moment discrepancies and long-term extension |
+| Arellano short-term deterministic equations | Matched-grid equations pass; archived Fortran and MATLAB moments reproduce; public simulation timing and zero-debt reentry are corrected; public-calibration grids converge at 6,401 × 641, and the public solver reaches that grid with a certified monotone search | Published-moment discrepancies and extension-specific economic convergence |
 | One-asset household block | SSJ authors' code matches policies and consumption within 5e-11; return Jacobians within 4e-4 | Finer-grid economic convergence, full published equilibrium and nonlinear transition references |
 
 Both references are frozen with hashes and provenance in
@@ -77,18 +78,21 @@ alone would not have justified that conclusion.
 This creates a research result that can be reviewed from equations through
 policy tables. It also supplies the model and output contracts for future work.
 
-The collateral/sudden-stop diagnostics need a separate correction and reference:
-the current amplification includes a legacy fallback and the loose-constraint
-branch prescribes diagnostic values. The term-structure residual component is
-accounting, not an independently identified risk premium. Notebook 73 and the
-[sovereign guide](sovereign_default.md) state these remaining limits explicitly.
+The [sovereign extension references](sovereign_extensions_validation.md) now
+check the stated long-term smoothed operator, haircut/maturity states and
+collateral-planner policies independently. Long-term simulation draws from the
+same debt-choice distribution used in pricing. Collateral diagnostics are
+measured from simulated paths, with explicit undefined amplification and no
+prescribed fallback. The survival-spread residual is a compounding adjustment.
+These are small-grid equation checks, not published extension-moment replications.
 
 ## Then: household incidence and teaching
 
-Complete a published one-asset HANK benchmark with matched fiscal rules,
-return timing and equilibrium closure. Independently validate nonlinear
-transitions before linking household deciles to distributional LPs on observed
-data. A general higher-order aggregate-risk solver comes after those checks.
+The [published one-asset HANK equilibrium](hank_equilibrium.md) now has matched
+fiscal rules, return timing and market clearing, independent nonlinear paths
+for both shock signs, and a passing extended grid/horizon study. Next, link
+household incidence to distributional LPs on observed data. A general
+higher-order aggregate-risk solver remains a separate later task.
 
 Use the validated study to build a short bilingual path: install a verified
 wheel, reproduce one baseline, change one policy assumption, and inspect a

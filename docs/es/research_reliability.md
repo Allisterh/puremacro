@@ -3,11 +3,12 @@
 El orden acordado es **fiabilidad y replicaciones**, después **modelos y
 aplicaciones de política**, y finalmente **docencia y facilidad de uso**.
 
-## Rama de correcciones actual
+## Correcciones publicadas y desarrollo actual
 
-La etiqueta fuente v6.0.0 no llegó a PyPI. Según la comprobación del 2026-10-26,
-la distribución publicada es 5.7.1. Estas correcciones requieren el código de
-desarrollo; una nueva publicación aún necesita la matriz CI y sus controles.
+La versión **6.0.1** se publicó en PyPI el 2026-10-29 e incluye las correcciones
+siguientes. **6.1.0** está en desarrollo; las adiciones aún no publicadas
+requieren el código fuente. Las etiquetas 5.8.0, 5.9.0 y 6.0.0 no se publicaron.
+Consulte la [hoja de ruta y política de API](1.0_path.md).
 
 Los adaptadores conservan ecuaciones y cargas del modelo suministrado.
 DSGE usa sensibilidades de Kalman; DAG usa diferencias centrales de Whittle
@@ -43,7 +44,7 @@ la validez económica del modelo.
 
 | Comparación | Resultado en las mallas probadas | Pendiente |
 |---|---|---|
-| Ecuaciones Arellano de deuda corta y default determinista | Ecuaciones y archivos Fortran/MATLAB contrastados; reingreso e inicio con deuda cero corregidos; mallas de la calibración pública convergidas con 6.401 × 641, y el solucionador público alcanza esa malla con una búsqueda monótona certificada | Diferencias de momentos publicados y deuda larga |
+| Ecuaciones Arellano de deuda corta y default determinista | Ecuaciones y archivos Fortran/MATLAB contrastados; reingreso e inicio con deuda cero corregidos; mallas de la calibración pública convergidas con 6.401 × 641, y el solucionador público alcanza esa malla con una búsqueda monótona certificada | Diferencias de momentos publicados y convergencia económica de extensiones |
 | Bloque de hogares de un activo | Políticas y consumo coinciden con los autores SSJ dentro de 5e-11; jacobianos de rendimientos dentro de 4e-4 | Convergencia económica de mallas, equilibrio publicado y transiciones no lineales |
 
 Las referencias, hashes y procedencia están en
@@ -77,18 +78,22 @@ habría bastado para esa conclusión.
 
 Así se obtiene un resultado revisable desde ecuaciones hasta tablas de política.
 
-Los diagnósticos de colateral y paradas repentinas requieren corrección y una
-referencia independiente: la amplificación incluye un valor de sustitución
-heredado y la rama de restricción holgada prescribe diagnósticos. El residuo de
-la estructura temporal es contable, no una prima de riesgo identificada.
-El cuaderno 73 y la [guía soberana](sovereign_default.md) explican estos límites.
+Las [referencias de extensiones soberanas](sovereign_extensions_validation.md)
+contrastan independientemente el operador suavizado de deuda larga, estados tras
+quitas/vencimientos y políticas del planificador con colateral. Simulación y
+valoración usan la misma distribución de decisiones de deuda. Los diagnósticos
+se miden sobre trayectorias, con amplificación indefinida explícita y sin valores
+sustitutos impuestos. El residuo temporal es un ajuste de capitalización. Son
+contrastes de ecuaciones en mallas pequeñas, no replicaciones de momentos publicados.
 
 ## Después: incidencia sobre hogares y docencia
 
-Completar una referencia publicada HANK de un activo igualando reglas fiscales,
-fechas de rendimientos y cierre de equilibrio. Validar transiciones no lineales
-antes de enlazar deciles de hogares con LP de datos observados. El riesgo
-agregado general de orden superior viene después de esas comprobaciones.
+El [equilibrio HANK publicado de un activo](hank_equilibrium.md) ya cuenta con
+reglas fiscales, fechas de rendimientos y mercados comparables, trayectorias
+no lineales independientes para ambos signos y una malla/horizonte ampliados
+que pasan el criterio. Sigue vincular la incidencia sobre hogares con LP de
+datos observados. El riesgo agregado general de orden superior sigue siendo
+una tarea posterior separada.
 
 Convertir el estudio validado en una ruta bilingüe breve: instalar un wheel
 verificado, reproducir una base, cambiar un supuesto y revisar diagnósticos.

@@ -27,6 +27,20 @@ production solver helpers. Manifests record scope and hashes. See
 `tests/fixtures/research_reliability/README.md` for tolerances and limitations.
 Neither comparison claims to reproduce the full moments of a published paper.
 
+## Published one-asset HANK equilibrium
+
+The full endogenous-labor equilibrium now has a separate author-code benchmark:
+
+```sh
+python -m pytest tests/test_models/test_one_asset_hank.py -q
+python -m tools.reference_validation.check_hank_equilibrium --output /tmp/hank-equilibrium --convergence
+```
+
+It checks the published calibration, all equilibrium markets, linear and
+nonlinear paths for both signs, and asset/income/bound/horizon refinements.
+See [`hank_equilibrium/README.md`](../../tests/fixtures/hank_equilibrium/README.md)
+for exact provenance and the retained failed intermediate refinements.
+
 ## Arellano original code, published targets and grid convergence
 
 ```sh
@@ -67,6 +81,28 @@ hash-verified solutions. The solves take about two hours on the tested
 workstation. The passing record is frozen in
 `tests/fixtures/arellano_2008/public_grid_convergence.json`; see the
 [comparison guide](../../docs/arellano_replication.md) for the result.
+
+## Fiscal sovereign default: grid convergence
+
+```sh
+MPLBACKEND=Agg python -m tools.reference_validation.check_fiscal_grids --output /tmp/fiscal-grids
+```
+
+The illustrative fiscal calibration (`tau=0.2, psi=1, gamma_c=gamma_g=2`,
+public sovereign parameters otherwise; not fitted to any target) is solved
+with `solve_fiscal_sovereign_default(..., policy_search="monotone")` at
+`n_b` = 1,601, 3,201, 6,401 and `n_y` = 321, 641. There is no independent
+fiscal reference: each solve is certified by its own exhaustive search, and
+`tau=1` without private consumption is bit-identical to the Arellano-validated
+`solve_sovereign_default`. Sixteen paired seeds (1979-1994) of 500,000
+periods after a 1,000-period burn-in measure debt/output, mean spread,
+annual default frequency, spread volatility, spending share and the
+primary-balance/income correlation. Tolerances (0.10 for percent moments,
+0.02 for correlations) and the design are written to `grid_protocol.json`
+before solving and are not changed afterwards. A failing ladder is frozen as
+`convergence_not_established`. The record is
+`tests/fixtures/sovereign_fiscal/fiscal_grid_convergence.json`; see the
+[fiscal rules guide](../../docs/sovereign_fiscal_rules.md).
 
 ## Dynare 7.0 / MATLAB
 

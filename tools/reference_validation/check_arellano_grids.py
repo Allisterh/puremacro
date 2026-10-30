@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 import platform
 import subprocess
+from typing import Mapping
 
 import numpy as np
 from scipy.stats import t as student_t
@@ -35,14 +36,15 @@ def solve_case(refinement: int, n_y: int) -> reference.Solution:
                            calibration="public", policy_search=POLICY_SEARCH)
 
 
-def paired_comparison(coarse: dict, fine: dict) -> dict:
+def paired_comparison(coarse: dict, fine: dict, tolerances: Mapping[str, float] = TOLERANCES) -> dict:
+    """Paired-seed change of each moment in ``tolerances`` from ``coarse`` to ``fine``."""
     left = {run["seed"]: run["moments"] for run in coarse["runs"]}
     right = {run["seed"]: run["moments"] for run in fine["runs"]}
     if (len(left) != len(coarse["runs"]) or len(right) != len(fine["runs"])
             or len(left) < 2 or left.keys() != right.keys()):
         raise ValueError("Paired comparisons require the same distinct seeds and at least two replications")
     moments = {}
-    for name, tolerance in TOLERANCES.items():
+    for name, tolerance in tolerances.items():
         differences = np.array([right[seed][name]-left[seed][name] for seed in sorted(left)])
         if not np.all(np.isfinite(differences)):
             raise ValueError(f"Nonfinite moment: {name}")

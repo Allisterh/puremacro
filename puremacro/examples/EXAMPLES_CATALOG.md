@@ -6,11 +6,11 @@ Standalone replication / demo scripts that each showcase one method. Every scrip
 python -m puremacro.examples.<name>
 ```
 
-There are **90 scripts** in `puremacro/examples/` (69 described below; the remainder are listed at the end).
+There are **91 scripts** in `puremacro/examples/` (70 described below; the remainder are listed at the end).
 
 ## Recommended starter shortlist
 
-Thirteen scripts that together span the methods catalogue. Read in this order if you want a one-week tour:
+Fourteen scripts that together span the methods catalogue. Read in this order if you want a one-week tour:
 
 | # | Script | What it teaches |
 |---|---|---|
@@ -27,6 +27,7 @@ Thirteen scripts that together span the methods catalogue. Read in this order if
 | 11 | `vulnerable_growth` | Adrian-Boyarchenko-Giannone-style quantile growth-at-risk |
 | 12 | `sigma_decomposition` | SigmaObject: var(w'X) into diagonal vs covariance terms |
 | 13 | `did_callaway_santanna_demo` | Modern staggered DiD (CS 2021 + SA 2021) vs naive TWFE |
+| 14 | `first_brief_tariffs` | Your first policy brief: a tariff on public ICIO data, national EV split and (synthetic) household groups |
 
 ## All scripts, grouped by topic
 
@@ -164,6 +165,12 @@ Thirteen scripts that together span the methods catalogue. Read in this order if
 | Script | LOC | Headline |
 |---|---:|---|
 | `scf_aiyagari` | 378 | Aiyagari (1994) `dp` economy calibrated to SCF wealth-to-income ratios; untargeted Gini and top shares against the SCF with replicate-weight standard errors (needs network). |
+
+### Policy briefs
+
+| Script | LOC | Headline |
+|---|---:|---|
+| `first_brief_sovereign` | 692 | Sovereign-risk policy brief: how reentry probability, income volatility and persistence move debt, spreads, default and the value of market access in the public Arellano calibration (illustrative; `--scenario`, `--sweep --coarse`, `--lang en\|es`). |
 
 ### Data infrastructure
 

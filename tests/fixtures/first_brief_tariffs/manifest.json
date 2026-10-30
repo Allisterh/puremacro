@@ -1,0 +1,153 @@
+{
+  "package_version": "6.1.0",
+  "python": "3.11.17",
+  "numpy": "2.4.6",
+  "pandas": "3.1.0",
+  "table": {
+    "file": "icio_oecd2023_2019_isic_g20.npz",
+    "citation": "OECD (2023), OECD Inter-Country Input-Output Tables, http://oe.cd/icio",
+    "unit": "current million USD",
+    "year": 2019,
+    "source_md5": "28cba31491177955445051d459053744",
+    "sha256": "07bc20e77cd15a65dec28b195f6eeef672a1336fd8b4f03a04bd1d3e3efa9b77"
+  },
+  "scenario": {
+    "importer": "USA",
+    "exporter": "CHN",
+    "sector": "all",
+    "tariff": 0.1
+  },
+  "solver": {
+    "method": "equilibrated_newton",
+    "tol": 1e-05,
+    "foreign_saving_units": "world_income",
+    "sigma": 0.0
+  },
+  "convergence": {
+    "baseline": {
+      "converged": true,
+      "solver_termination": "tolerance",
+      "account_residuals": {
+        "goods": 1.4901161193847656e-08,
+        "foreign_balance": 1.1059455573558807e-09,
+        "household_budget": 7.450580596923828e-09,
+        "government_budget": 1.1641532182693481e-10,
+        "gdp_income_expenditure": 7.450580596923828e-09,
+        "physical_equations": 1.4901161193847656e-08
+      }
+    },
+    "counterfactual": {
+      "converged": true,
+      "solver_termination": "tolerance",
+      "account_residuals": {
+        "goods": 3.4590138966450468e-06,
+        "foreign_balance": 3.4360054996795952e-06,
+        "household_budget": 1.1175870895385742e-08,
+        "government_budget": 5.168840289115906e-08,
+        "gdp_income_expenditure": 3.436347469687462e-06,
+        "physical_equations": 3.4590138966450468e-06
+      }
+    },
+    "experiment_baseline": {
+      "converged": true,
+      "solver_termination": "tolerance",
+      "account_residuals": {
+        "goods": 1.30385160446167e-08,
+        "foreign_balance": 5.238689482212067e-10,
+        "household_budget": 7.450580596923828e-09,
+        "government_budget": 1.1641532182693481e-10,
+        "gdp_income_expenditure": 7.450580596923828e-09,
+        "physical_equations": 1.4901161193847656e-08
+      }
+    },
+    "experiment_counterfactual": {
+      "converged": true,
+      "solver_termination": "tolerance",
+      "account_residuals": {
+        "goods": 3.80168785341084e-08,
+        "foreign_balance": 3.848617780022323e-08,
+        "household_budget": 3.725290298461914e-09,
+        "government_budget": 2.3283064365386963e-10,
+        "gdp_income_expenditure": 3.789318725466728e-08,
+        "physical_equations": 3.848617780022323e-08
+      }
+    }
+  },
+  "timings": {
+    "load": 0.006588124990230426,
+    "calibration": 0.002873249992262572,
+    "baseline": 0.013758333021542057,
+    "counterfactual": 6.239820374990813,
+    "welfare": 0.0059527500125113875,
+    "households": 0.026701291993958876,
+    "experiment": 14.383540876006009
+  },
+  "experiment": {
+    "name": "sigma",
+    "value": 2.0,
+    "description": "substitution across all country-sector intermediate inputs (0 = Leontief)",
+    "solver": {
+      "method": "equilibrated_newton",
+      "tol": 1e-05,
+      "foreign_saving_units": "world_income",
+      "sigma": 2.0
+    }
+  },
+  "groups": {
+    "source": "synthetic groups from the bundled national basket (puremacro.examples.first_brief_tariffs)",
+    "label": "SYNTHETIC, method illustration only",
+    "is_synthetic": true
+  },
+  "lang": "en",
+  "load_average": [
+    17.76,
+    29.5,
+    38.77
+  ],
+  "artifacts": {
+    "national.md": {
+      "sha256": "bf6a966d86f02e9b877dd857decdfcffa58fe7062e41b6faa974c9778c18b86d",
+      "bytes": 638
+    },
+    "national.csv": {
+      "sha256": "3be5209f82483c2179754471daf19e499623f1f2546c0cb15304b0036ecfa97d",
+      "bytes": 278
+    },
+    "national.tex": {
+      "sha256": "2df070c5d2a6aef5c79323d1e31d538ed8c1782d8c94d1d4770e89e5416571c6",
+      "bytes": 377
+    },
+    "households.md": {
+      "sha256": "2976bf1e7d47ef7ffc1c788c025602063bf28ec7fed8e087c46f343ff2d0771c",
+      "bytes": 575
+    },
+    "households.csv": {
+      "sha256": "e1c4ee70c4504124e27318d7ce798eeae4650465fa3bff16a0fc0b79acdfffd1",
+      "bytes": 568
+    },
+    "households.tex": {
+      "sha256": "63a89e33a6a8bedf7149b2d78b158d59158564636f4aec2d4303251d991ab8f2",
+      "bytes": 319
+    },
+    "experiment.md": {
+      "sha256": "4c52942d07e8e7e3ce6680b6b7541e0a4c7aae00827debf1391b277d487535ef",
+      "bytes": 504
+    },
+    "experiment.csv": {
+      "sha256": "3f90fd78749b25f79d1b05a954ef50b4558972df93ecc78dca2122552198c370",
+      "bytes": 405
+    },
+    "experiment.tex": {
+      "sha256": "dbc4159c7c7961c18a048a5b4c8689f41d6086e9d2d019efbc144f6986328938",
+      "bytes": 557
+    },
+    "first_brief.png": {
+      "sha256": "ad7aaacf4f1cf166f927790a99848d27690967f28843d8c2920b92db674cedd9",
+      "bytes": 34809
+    },
+    "headline.json": {
+      "sha256": "aed9be36d81a58b0e81d7d10e79eebbfbf80782b67f9cd3d30579a679781a09a",
+      "bytes": 2980
+    }
+  }
+}

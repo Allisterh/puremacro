@@ -31,6 +31,13 @@ from .diagnostics import durbin_watson
 from . import proxy
 from .proxy import effective_sample_size, matched_filter, stacked_matched_filter
 from .smc import AdaptiveTemperingSchedule, SMCResult, smc_sample
+# Generic GMM. As with newey_west above, load the submodule first so that a
+# later ``import puremacro.inference.gmm`` finds it in sys.modules and does
+# not rebind this package attribute: ``puremacro.inference.gmm`` is the
+# function.
+from . import gmm as _gmm_module  # noqa: F401
+from .gmm import gmm
+from ._results import GMMFitResult
 
 # quandt_andrews_supF is loaded lazily because quandt_andrews.py depends on
 # puremacro.tests.breaks, which can fail to resolve when the project root is
@@ -85,4 +92,6 @@ __all__ = [
     "AdaptiveTemperingSchedule",
     "SMCResult",
     "smc_sample",
+    "gmm",
+    "GMMFitResult",
 ]

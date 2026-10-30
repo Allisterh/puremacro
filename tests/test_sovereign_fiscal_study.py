@@ -1,0 +1,134 @@
+"""Paired-seed grid ladder for the illustrative fiscal calibration and its frozen record."""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+GRID_RECORD = ROOT / "tests" / "fixtures" / "sovereign_fiscal" / "fiscal_grid_convergence.json"
+
+
+def test_fiscal_grid_check_uses_the_public_certified_solver(monkeypatch):
+    from tools.reference_validation import check_fiscal_grids as grids
+
+    calls = []
+
+    def recorder(**kwargs):
+        calls.append(kwargs)
+        return "solution"
+
+    monkeypatch.setattr(grids, "solve_fiscal_sovereign_default", recorder)
+    assert grids.solve_case(1601, 321) == "solution"
+    assert calls == [dict(grids.ILLUSTRATIVE, n_b=1601, n_y=321, policy_search="monotone")]
+    assert grids.ILLUSTRATIVE == dict(tau=.2, psi=1., gamma_c=2., gamma_g=2.)
+
+
+def test_fiscal_tolerances_cover_the_registered_moments():
+    from puremacro.sovereign._fiscal_paths import MOMENTS
+    from tools.reference_validation.check_fiscal_grids import TOLERANCES
+
+    assert list(TOLERANCES) == [m for m in MOMENTS if m != "boundary_choice_share_pct"]
+    assert TOLERANCES["corr_pb_y"] == .02
+    assert all(v == .10 for k, v in TOLERANCES.items() if not k.startswith("corr_"))
+
+
+def test_paired_comparison_accepts_custom_tolerances():
+    from tools.reference_validation.check_arellano_grids import paired_comparison
+
+    def runs(shift):
+        return dict(runs=[dict(seed=s, moments=dict(debt_pct=1. + shift + .001 * s, corr_pb_y=.3 + shift))
+                          for s in (1, 2, 3)])
+
+    result = paired_comparison(runs(0.), runs(.05), tolerances=dict(debt_pct=.10, corr_pb_y=.02))
+    assert set(result["moments"]) == {"debt_pct", "corr_pb_y"}
+    assert result["moments"]["debt_pct"]["status"] == "passed"
+    assert result["moments"]["corr_pb_y"]["status"] == "grid_shift_exceeds_tolerance"
+    assert not result["passed"]
+
+
+def test_frozen_fiscal_grid_record_recomputes_from_its_seeds():
+    from tools.reference_validation.check_arellano_grids import paired_comparison
+    from tools.reference_validation.check_fiscal_grids import ILLUSTRATIVE, TOLERANCES
+
+    record = json.loads(GRID_RECORD.read_text())
+    assert record["tolerances"] == TOLERANCES
+    assert {k: record["calibration"][k] for k in ILLUSTRATIVE} == ILLUSTRATIVE
+    assert record["calibration"]["policy_search"] == "monotone"
+    assert {(c["n_b"], c["n_y"]) for c in record["cases"].values()} == {
+        (n_b, n_y) for n_b in (1601, 3201, 6401) for n_y in (321, 641)}
+    for case in record["cases"].values():
+        design, diagnostics = case["design"], case["diagnostics"]
+        assert design["seeds"] == list(range(1979, 1995))
+        assert (design["periods"], design["burn"]) == (500000, 1000)
+        assert diagnostics["converged"] is True
+        assert diagnostics["monotone_certification_gap"] <= 1e-11
+        runs = case["simulation"]["runs"]
+        assert [run["seed"] for run in runs] == design["seeds"]
+        assert all(run["moments"]["boundary_choice_share_pct"] == 0 for run in runs)
+    comparisons = record["comparisons"]
+    assert set(comparisons) == {"final_asset_refinement", "final_income_refinement"}
+    assert (comparisons["final_asset_refinement"]["coarse"], comparisons["final_asset_refinement"]["fine"]) \
+        == ("fiscal_3201_641", "fiscal_6401_641")
+    assert (comparisons["final_income_refinement"]["coarse"], comparisons["final_income_refinement"]["fine"]) \
+        == ("fiscal_6401_321", "fiscal_6401_641")
+    # Recompute from per-seed moments: the verdict must not rest on the stored summary.
+    for comparison in comparisons.values():
+        recomputed = paired_comparison(record["cases"][comparison["coarse"]]["simulation"],
+                                       record["cases"][comparison["fine"]]["simulation"],
+                                       tolerances=TOLERANCES)
+        assert recomputed["passed"] == comparison["passed"]
+        for name, value in recomputed["moments"].items():
+            assert value["status"] == comparison["moments"][name]["status"]
+            assert value["absolute_change_bound"] == pytest.approx(
+                comparison["moments"][name]["absolute_change_bound"], abs=1e-12)
+    all_passed = all(c["passed"] for c in comparisons.values())
+    assert (record["status"] == "passed") == all_passed
+    assert record["status"] in ("passed", "convergence_not_established")
+
+
+@pytest.mark.parametrize("guide,thousands,decimal", [("docs/sovereign_fiscal_rules.md", ",", "."),
+                                                     ("docs/es/sovereign_fiscal_rules.md", ".", ",")])
+def test_fiscal_guides_tabulate_the_frozen_record(guide, thousands, decimal):
+    from tools.reference_validation.check_fiscal_grids import GUIDE_COLUMNS
+
+    assert GUIDE_COLUMNS == ("debt_pct", "spread_mean_pct", "annual_default_pct", "spread_std_pp",
+                             "spending_pct", "corr_pb_y")
+    record = json.loads(GRID_RECORD.read_text())
+    text = (ROOT / guide).read_text(encoding="utf-8")
+    for case in record["cases"].values():
+        moments = case["simulation"]["moments"]
+        nodes = f'{case["n_b"]:,}'.replace(",", thousands)
+        row = f'| {nodes} × {case["n_y"]} | ' + " | ".join(
+            f'{moments[k]["mean"]:.3f}'.replace(".", decimal) for k in GUIDE_COLUMNS) + " |"
+        assert row in text, row
+    verdict = {"passed": ("passed", "superada"), "convergence_not_established": (
+        "convergence not established", "convergencia no establecida")}[record["status"]]
+    assert verdict[0 if decimal == "." else 1] in text
+    # The guide reports the remaining income-grid drift of the spread SD at the finest debt grid.
+    sd = [record["cases"][name]["simulation"]["moments"]["spread_std_pp"]["mean"]
+          for name in ("fiscal_6401_321", "fiscal_6401_641")]
+    drift = " → ".join(f"{v:.3f}".replace(".", decimal) for v in sd)
+    assert drift in text, drift
+
+
+@pytest.mark.parametrize("changed", ["calibration", "search"])
+def test_cached_solution_and_simulation_follow_effective_calibration(tmp_path, monkeypatch, changed):
+    from argparse import Namespace
+    from tools.reference_validation import check_fiscal_grids as grids
+
+    args = Namespace(output=tmp_path, replications=2, periods=2000, burn=100)
+    source_hash = "fixed-solver-source"
+    first = grids.case(31, 7, args, source_hash)
+    assert grids.case(31, 7, args, source_hash) == first
+    if changed == "calibration":
+        monkeypatch.setattr(grids, "ILLUSTRATIVE", {**grids.ILLUSTRATIVE, "tau": 0.3})
+    else:
+        monkeypatch.setattr(grids, "POLICY_SEARCH", "dense")
+    second = grids.case(31, 7, args, source_hash)
+    assert second["design"] != first["design"]
+    manifest = json.loads((tmp_path / "fiscal_31_7_solution.json").read_text(encoding="utf-8"))
+    assert manifest["calibration"] == grids._calibration()
+    assert second["design"]["solution_identity"] == manifest["solution_identity"]
+    assert manifest["scalars"]["tau"] == grids.ILLUSTRATIVE["tau"]

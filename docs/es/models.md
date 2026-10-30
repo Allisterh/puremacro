@@ -2,6 +2,11 @@
 
 # HANK en el espacio de secuencias
 
+Para el modelo publicado con horas endógenas y equilibrio de activos y trabajo,
+consulte el [equilibrio HANK de un activo con referencia independiente](hank_equilibrium.md).
+Las rutinas anteriores descritas abajo utilizan un cierre reducido y mantienen
+sus propias APIs.
+
 `puremacro.models` constituye la vertiente estructural del paquete: modelos que se resuelven para un estado estacionario y luego se proyectan a lo largo de una trayectoria de transición, sin compiladores, sin archivos MEX y sin Dynare. Todo el contenido de esta página se ejecuta de forma local y autónoma, sin acceder a la red.
 
 ```python

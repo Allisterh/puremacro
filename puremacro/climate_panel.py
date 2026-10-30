@@ -17,13 +17,10 @@ puremacro's cached data layer.
 """
 from __future__ import annotations
 
-import datetime as dt
-from typing import Sequence
+from collections.abc import Sequence
 
 import numpy as np
 import pandas as pd
-
-from ._codes import is_country
 
 _SCHEMA_COLS = ["code", "date", "variable", "value", "sa_source", "source"]
 _EMPTY = pd.DataFrame(
@@ -55,6 +52,44 @@ def _harmonize_annual_to_quarterly(
     if df_annual.empty:
         return _EMPTY.copy()
 
+    if harmonization == "repeat":
+        # Retain the original group/date ordering, including its precedence
+        # for duplicate observations, but expand whole arrays instead of rows.
+        groups = [group.sort_values("date")
+                  for _, group in df_annual.groupby(["code", "variable"])]
+        if not groups:
+            return _EMPTY.copy()
+        df = pd.concat(groups, ignore_index=True).dropna(subset=["value"]).copy()
+        if df.empty:
+            return _EMPTY.copy()
+
+        is_a = df["variable"].str.endswith("_a")
+        df["variable"] = np.where(
+            is_a,
+            df["variable"].str[:-2] + "_q",
+            df["variable"] + "_q"
+        )
+
+        df["source"] = "resampled_from_A:" + df["source"].astype(str)
+        df["sa_source"] = "annual_repeated"
+        df["value"] = df["value"].astype(float)
+
+        n = len(df)
+        expanded = df.iloc[np.repeat(np.arange(n), 4)].reset_index(drop=True)
+
+        months = np.tile([1, 4, 7, 10], n)
+        years = expanded["date"].dt.year
+
+        expanded["date"] = pd.to_datetime({
+            "year": years,
+            "month": months,
+            "day": 1
+        })
+
+        expanded["is_imputed"] = months != 1
+        return expanded.loc[:, _SCHEMA_COLS + ["is_imputed"]].drop_duplicates(
+            subset=["code", "date", "variable"], keep="first")
+
     records: list[dict[str, object]] = []
 
     for (code, var), grp in df_annual.groupby(["code", "variable"]):
@@ -64,22 +99,7 @@ def _harmonize_annual_to_quarterly(
 
         q_var = var[:-2] + "_q" if var.endswith("_a") else f"{var}_q"
 
-        if harmonization == "repeat":
-            for _, row in grp_sorted.iterrows():
-                yr = row["date"].year
-                val = float(row["value"])
-                src = f"resampled_from_A:{row['source']}"
-                for m in (1, 4, 7, 10):
-                    records.append({
-                        "code": code,
-                        "date": pd.Timestamp(f"{yr}-{m:02d}-01"),
-                        "variable": q_var,
-                        "value": val,
-                        "sa_source": "annual_repeated",
-                        "source": src,
-                        "is_imputed": m != 1,
-                    })
-        elif harmonization == "interpolate":
+        if harmonization == "interpolate":
             s = grp_sorted.set_index("date")["value"].astype(float)
             s = s[~s.index.duplicated(keep="first")]
             if len(s) == 1:

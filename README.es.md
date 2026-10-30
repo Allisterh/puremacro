@@ -2,7 +2,7 @@
 
 # puremacro
 
-**Novedades de 5.7:** [un modelo, varios métodos de solución](docs/es/dsge_workflows.md): programas `.mod` ordenados, transiciones no lineales, comparaciones de políticas locales/globales y ocho cuadernos MAV revisados. Esta versión también incluye [DP en archivos `.mod`](docs/es/dp_modfiles.md), [estudios reproducibles](docs/es/studies.md) y [ecuaciones HANK editables](docs/es/hank_model_closure.md) desarrollados para 5.6.0.
+**Flujos de trabajo destacados:** [un modelo, varios métodos de solución](docs/es/dsge_workflows.md): programas `.mod` ordenados, transiciones no lineales, comparaciones de políticas locales/globales y ocho cuadernos MAV revisados. Esta versión también incluye [DP en archivos `.mod`](docs/es/dp_modfiles.md), [estudios reproducibles](docs/es/studies.md) y [ecuaciones HANK editables](docs/es/hank_model_closure.md) desarrollados para 5.6.0.
 
 **Macroeconometría y modelos estructurales sobre el núcleo científico de Python.**
 
@@ -21,12 +21,13 @@ python -m pip install puremacro
 | Comience por su tarea | Primeros pasos |
 |---|---|
 | **Analizar datos** | Estime una respuesta a un choque con el [inicio rápido](docs/es/quickstart.md), luego explore las [fuentes de datos](docs/es/micro_data.md) y los [flujos de investigación](docs/es/research_workflows.md). |
-| **Simular políticas** | Declare un modelo de hogares con [programación dinámica](docs/es/dp.md), estudie la [transmisión monetaria](docs/es/monetary_transmission.md) o construya un [contrafactual comercial](docs/es/trade_accounting.md). |
+| **Simular políticas** | Declare un modelo de hogares con [programación dinámica](docs/es/dp.md), estudie la [transmisión monetaria](docs/es/monetary_transmission.md), construya un [contrafactual comercial](docs/es/trade_accounting.md) o lea el [informe de política sobre riesgo soberano](docs/es/brief_sovereign_risk.md). |
+| **Redactar un informe de política** | Ejecute un [experimento arancelario con datos públicos](docs/es/first_brief_tariffs.md) y lea los efectos de bienestar nacionales y por hogares. |
 | **Aprender o enseñar** | Elija una [ruta de cuadernos](docs/es/notebooks.md) o use el [curso bilingüe y sus laboratorios interactivos](curso/README.md). Use la edición fija del curso indicada abajo. |
 
 **Estado comprobado el 2026-10-29:** **6.0.1** está publicada en [PyPI](https://pypi.org/project/puremacro/6.0.1/), y `pip install puremacro` la instala. Es la primera versión publicada desde 5.7.1: las etiquetas 5.8.0, 5.9.0 y 6.0.0 nunca se publicaron (v6.0.0 falló en CI). Esta rama `main` puede contener trabajo no publicado hacia 6.1.0; una etiqueta no acredita por sí sola una publicación.
 Consulte las [pruebas recomendadas y próximos hitos](docs/es/research_reliability.md).
-Estas páginas corresponden a 6.0.0; consulte el
+Estas páginas siguen el desarrollo de 6.1.0; las adiciones aún no publicadas requieren instalar desde el código fuente. Consulte el
 [historial de cambios](CHANGELOG.md) y use la documentación correspondiente
 a su versión instalada.
 
@@ -434,6 +435,7 @@ vivo están marcadas con `VERIFY_ONLINE`.
 - **Proyecciones locales** (`lp.*`) — LP-HAC para un solo país, LP-IV, LP con retardos aumentados (Montiel Olea-Plagborg-Møller 2021), LP de panel con errores estándar agrupados / Driscoll-Kraay, LP dependiente del estado, LP suavizada (B-splines de Barnichon-Brownlees), LP asimétrica (Tenreyro-Thwaites), LP-GARCH en estado, LP-GARCH en media, grupo medio, CCE, LP cuantílica.
 - **Inferencia** (`inference.*`) — MCO con HAC central, Newey-West, Kiefer-Vogelsang de b fijo, Driscoll-Kraay; diagnósticos de instrumentos débiles (Cragg-Donald, Kleibergen-Paap, Anderson-Rubin, Montiel Olea-Pflueger); Hansen-J / Stock-Yogo para sobreidentificación; CD de Pesaran, homogeneidad de pendientes de Swamy, quiebres estructurales de Quandt-Andrews, curvas de especificación.
 - **Otros estimadores** — índice de derrame de Diebold-Yilmaz; comparación de pronósticos Diebold-Mariano / Giacomini-White y evaluación de pronósticos en densidad (CRPS, log-score); quiebres de Bai-Perron; pruebas de raíz unitaria (ADF, KPSS, PP, Zivot-Andrews); solver QZ de Klein para DSGE lineales y perturbación de segundo orden con poda de Kim et al. (2008), términos cruzados y paridad con Dynare `oo_.dr` (`dsge.dynare`).
+- **Macrofinanzas** (`asset_pricing.*`) — rendimientos y riesgo (Sharpe con error estándar HAC de Lo, caídas máximas), VaR/ES con pruebas retrospectivas de Kupiec/Christoffersen, pruebas de serie temporal GRS y Wald HAC, Fama-MacBeth con errores de Shanken, GMM del SDF lineal, distancia de Hansen-Jagannathan y CCAPM de Hansen-Singleton, sobre el motor GMM público `inference.gmm`; los datos de Ken French y FRED se descargan, nunca se incluyen; véase `docs/es/asset_pricing.md`.
 
 **Métodos de frontera (2.3)**
 
@@ -814,6 +816,7 @@ Todos los cuadernos cumplen estrictamente el contrato con Pyodide y la arquitect
 - **`docs/es/smc_inference.md`** — Monte Carlo secuencial templado adaptativo vectorizado (SMC), mutación por gradientes Langevin/MALA y estimación de densidad marginal de datos (`puremacro.inference.smc`, `puremacro.dsge.hank_estimate`).
 - **`docs/es/hank_ssj_and_aggregate_risk.md`** — Jacobianos de espacio de secuencias con `BlockDAG` composicional, transiciones HANK no lineales con Broyden dependiente del estado y perturbación de riesgo agregado de 2.º orden con reducción de momentos de corte transversal (`puremacro.dsge.ssj_dag`, `puremacro.dsge.hank_nonlinear`, `puremacro.dsge.occbin_nonlinear`).
 - **`docs/es/sovereign_default.md`** — Default soberano cuantitativo con deuda de corto y largo plazo (Arellano, Chatterjee–Eyigungor), gradientes de curva de bonos con `DualArray`, paradas súbitas con restricción colateral de Mendoza y reestructuraciones con quita vs. extensión de vencimiento (`puremacro.sovereign`).
+- **`docs/es/brief_sovereign_risk.md`** — Informe de política sobre riesgo soberano: estática comparativa ilustrativa de la probabilidad de reingreso, la volatilidad y la persistencia del ingreso en la calibración pública de Arellano, con intervalos del 95 % y cambios de malla junto a cada cifra (`python -m puremacro.examples.first_brief_sovereign --lang es`).
 - **`docs/es/distributional_lp.md`** — Proyecciones locales funcionales, cuantílicas y distributivas con restricciones exactas de aditividad transversal y puentes de funciones de respuesta al impulso hacia HANK (`puremacro.lp.distributional`).
 - **`docs/es/network_spatial_climate_iam.md`** — Agregación no lineal de redes de producción de 2.º orden de Baqaee–Farhi, álgebra de sombreros dinámica de migración espacial de Caliendo–Parro–Rossi-Hansberg, IAM climático espacial multirregional y exportación interactiva HTML5/SVG con `PolicyStudio` (`puremacro.trade.network_macro`, `puremacro.spatial.dynamic_hat`, `puremacro.climate.spatial_iam`, `puremacro.study.studio`).
 - **`docs/es/vfi_continuous_projection.md`** — Programación dinámica en espacio de estados continuo: colocación con polinomios de Chebyshev y proyección Galerkin por elementos finitos con restricciones de endeudamiento de Fischer-Burmeister.

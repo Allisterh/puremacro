@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "SovereignDefaultResult",
+    "FiscalSovereignResult",
     "SuddenStopResult",
     "RestructuringResult",
 ]
@@ -59,7 +60,11 @@ def _fmt_val(v: Any, digits: int = 4) -> Any:
 
 @dataclass(frozen=True)
 class SovereignDefaultResult:
-    """Result container for Arellano / Chatterjee-Eyigungor sovereign default models."""
+    """Short-term default or the smoothed long-term coupon-debt extension.
+
+    For long-term debt, ``policy_b`` is the modal choice; simulations draw from
+    ``metadata['debt_choice_probabilities']`` to match the pricing operator.
+    """
 
     b_grid: np.ndarray
     y_grid: np.ndarray
@@ -219,6 +224,8 @@ class SovereignDefaultResult:
             spreads, and default indicators. The path starts at the zero-debt
             node (nearest node if the grid omits zero). Reentry returns to that
             node before the current period's default/repayment decision.
+            Long-term debt choices follow their smoothed probabilities;
+            the reported ``policy_b`` array is their mode.
         """
         n_periods = 1000
         if periods is not None:
@@ -232,6 +239,7 @@ class SovereignDefaultResult:
         kappa = self.coupon_rate_kappa
         theta = float(self.metadata.get("theta", 0.282))
         y_def_vec = self.metadata.get("y_default_vec", 0.969 * self.y_grid)
+        debt_probabilities = self.metadata.get('debt_choice_probabilities')
 
         y_idx = n_y // 2
         zero_idx = int(np.argmin(np.abs(self.b_grid)))
@@ -295,6 +303,9 @@ class SovereignDefaultResult:
 
             # Find nearest grid index for next debt
             b_next_idx = int(np.argmin(np.abs(self.b_grid - b_next_val)))
+            if debt_probabilities is not None:
+                b_next_idx = int(rng.choice(len(self.b_grid), p=debt_probabilities[b_idx, :, y_idx]))
+                b_next_val = float(self.b_grid[b_next_idx])
             q_val = float(self.bond_price[b_next_idx, y_idx])
             spread_val = float(self.spread[b_next_idx, y_idx])
 
@@ -393,9 +404,90 @@ class SovereignDefaultResult:
         return self.plot_price_schedule(figsize=figsize)
 
 
+def _empty_index() -> np.ndarray:
+    return np.zeros((0,), dtype=int)
+
+
+@dataclass(frozen=True)
+class FiscalSovereignResult(SovereignDefaultResult):
+    """Sovereign default result with a government-spending block.
+
+    Adds the fiscal policies implied by the debt choice: public spending
+    ``g = tau*y - b + q(b', y) b'``, the primary balance ``b - q b'``
+    (``= tau*y - g``), debt-to-output ``b'/y`` and private consumption
+    ``(1 - tau) y``. Debt and spending are in units of mean quarterly output.
+    """
+
+    tau: float = 0.0
+    psi: float = 0.0
+    gamma_c: float = 2.0
+    gamma_g: float = 2.0
+    private_consumption: bool = True
+    policy_index: np.ndarray = field(default_factory=_empty_index)
+    g_policy: np.ndarray = field(default_factory=lambda: np.zeros((0,)))
+    g_default: np.ndarray = field(default_factory=lambda: np.zeros((0,)))
+    primary_balance: np.ndarray = field(default_factory=lambda: np.zeros((0,)))
+    debt_to_gdp: np.ndarray = field(default_factory=lambda: np.zeros((0,)))
+    private_consumption_repay: np.ndarray = field(default_factory=lambda: np.zeros((0,)))
+    private_consumption_default: np.ndarray = field(default_factory=lambda: np.zeros((0,)))
+
+    def summary(self) -> pd.DataFrame:
+        """Return the sovereign summary plus the fiscal parameters."""
+        base = super().summary()
+        extra = [("tau", self.tau), ("psi", self.psi), ("gamma_c", self.gamma_c),
+                 ("gamma_g", self.gamma_g), ("private_consumption", self.private_consumption)]
+        rows = pd.DataFrame({"metric": [r[0] for r in extra], "value": [_fmt_val(r[1]) for r in extra]})
+        return pd.concat([base, rows], ignore_index=True)
+
+    def simulate(
+        self,
+        T: int | None = None,
+        periods: int | None = None,
+        seed: int = 42,
+    ) -> pd.DataFrame:
+        """Simulate one fiscal path from zero debt and the middle income node.
+
+        Uses the vectorized fiscal path engine with one path drawn from
+        ``np.random.default_rng(seed).random((3, periods))`` (income, default
+        and reentry planes), so the random stream differs from
+        :meth:`SovereignDefaultResult.simulate` for the same seed. The first
+        decision happens at the starting state; reentry is drawn before that
+        period's decision. ``gdp`` is ``y`` when repaying and ``y_def``
+        otherwise, and ``g + private_consumption + primary_balance == gdp``.
+        """
+        from puremacro.sovereign._fiscal_paths import draw_uniforms, simulate_paths
+
+        n_periods = 1000
+        if periods is not None:
+            n_periods = int(periods)
+        elif T is not None:
+            n_periods = int(T)
+        paths = simulate_paths(self, int(self.metadata["zero_index"]), len(self.y_grid) // 2,
+                               draw_uniforms([seed], n_periods))
+        repaid = paths.repaid[0]
+        y_idx = paths.y_index[0]
+        private = np.where(repaid, self.private_consumption_repay[y_idx], self.private_consumption_default[y_idx])
+        return pd.DataFrame({
+            "period": np.arange(n_periods),
+            "y": paths.y[0],
+            "gdp": paths.gdp[0],
+            "b": self.b_grid[paths.b_index[0]],
+            "b_next": self.b_grid[paths.b_next_index[0]],
+            "default": paths.default_entry[0],
+            "repaid": repaid,
+            "excluded": ~paths.access[0],
+            "g": paths.g[0],
+            "private_consumption": private,
+            "primary_balance": paths.primary_balance[0],
+            "debt_to_gdp": paths.debt_to_gdp[0],
+            "spread": paths.spread[0],
+            "bond_price": paths.bond_price[0],
+        })
+
+
 @dataclass(frozen=True)
 class SuddenStopResult:
-    """Result container for Mendoza (2010) sudden-stop collateral constraint model."""
+    """Policies and measured diagnostics of the illustrative collateral model."""
 
     k_grid: np.ndarray
     b_grid: np.ndarray
@@ -432,11 +524,6 @@ class SuddenStopResult:
             object.__setattr__(self, "asset_price_q", self.policy_q_asset)
         elif len(self.policy_q_asset) == 0 and len(self.asset_price_q) > 0:
             object.__setattr__(self, "policy_q_asset", self.asset_price_q)
-
-        if self.collateral_binding_fraction == 0.0 and self.crisis_probability != 0.0:
-            object.__setattr__(self, "collateral_binding_fraction", self.crisis_probability)
-        elif self.crisis_probability == 0.0 and self.collateral_binding_fraction != 0.0:
-            object.__setattr__(self, "crisis_probability", self.collateral_binding_fraction)
 
     def summary(self) -> pd.DataFrame:
         """Return a structured summary DataFrame of the sudden stop model."""
@@ -515,49 +602,9 @@ class SuddenStopResult:
         elif T is not None:
             n_periods = int(T)
 
-        rng = np.random.default_rng(seed)
-        n_b = len(self.b_grid)
-        n_k = len(self.k_grid)
-        n_z = len(self.z_grid)
+        from puremacro.sovereign.mendoza import _simulate_sudden_stop
 
-        ib = n_b // 4
-        ik = n_k // 2
-        iz = n_z // 2
-
-        records = []
-        for t in range(n_periods):
-            iz = int(rng.choice(n_z, p=self.p_trans[iz]))
-            z_val = float(self.z_grid[iz])
-            b_val = float(self.b_grid[ib])
-            k_val = float(self.k_grid[ik])
-
-            b_next = float(self.policy_b[ib, ik, iz])
-            k_next = float(self.policy_k[ib, ik, iz])
-            c_val = float(self.policy_c[ib, ik, iz])
-            lam_val = float(self.multiplier_lambda[ib, ik, iz])
-            q_val = float(self.asset_price_q[ib, ik, iz])
-
-            is_crisis = bool(lam_val > 1e-4)
-            records.append({
-                "period": t,
-                "z": z_val,
-                "b": b_val,
-                "debt": b_val,
-                "b_next": b_next,
-                "k": k_val,
-                "k_next": k_next,
-                "consumption": c_val,
-                "c": c_val,
-                "tobin_q": q_val,
-                "multiplier": lam_val,
-                "multiplier_lambda": lam_val,
-                "crisis": is_crisis,
-            })
-
-            ib = int(np.argmin(np.abs(self.b_grid - b_next)))
-            ik = int(np.argmin(np.abs(self.k_grid - k_next)))
-
-        return pd.DataFrame(records)
+        return _simulate_sudden_stop(self, n_periods, seed)
 
     def plot_crisis_dynamics(
         self,

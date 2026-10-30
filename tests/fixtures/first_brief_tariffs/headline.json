@@ -1,0 +1,86 @@
+{
+  "schema": 1,
+  "scenario": {
+    "importer": "USA",
+    "exporter": "CHN",
+    "sector": "all",
+    "tariff": 0.1
+  },
+  "solver": {
+    "method": "equilibrated_newton",
+    "tol": 1e-05,
+    "foreign_saving_units": "world_income",
+    "sigma": 0.0
+  },
+  "table": {
+    "citation": "OECD (2023), OECD Inter-Country Input-Output Tables, http://oe.cd/icio",
+    "unit": "current million USD",
+    "year": 2019
+  },
+  "national": {
+    "ev_musd": 6427.190468467059,
+    "cv_musd": 6428.971011228559,
+    "ev_pct_consumption": 0.038322842097390605,
+    "ev_pct_gdp": 0.030061563250481326,
+    "consumption_base_musd": 16771173.839699863,
+    "price_effect_musd": -4646.4126230042775,
+    "factor_income_effect_musd": -21703.065482954815,
+    "fiscal_transfer_effect_musd": 32776.668574422205,
+    "tariff_rebate_effect_musd": 32579.07323124239,
+    "decomposition_residual_musd": 3.943569026887417e-09,
+    "terms_of_trade_pct_importer": -0.0400380247975507,
+    "terms_of_trade_pct_exporter": 0.003744076622913539,
+    "wage_pct_importer": -0.1343915391361694,
+    "wage_pct_exporter": 0.006759410434464819,
+    "relative_wage_pct": -0.14114140924349483,
+    "investment_change_base_prices_musd": -7095.644847028042,
+    "abroad_change_base_prices_musd": -466.69647939163764
+  },
+  "households": {
+    "label": "SYNTHETIC, method illustration only",
+    "is_synthetic": true,
+    "rows": [
+      {
+        "group": "low",
+        "ev_pct_proportional": 0.015152021109532397,
+        "ev_pct_equal": 0.2756349882717224
+      },
+      {
+        "group": "middle",
+        "ev_pct_proportional": 0.038322842097304737,
+        "ev_pct_equal": 0.07089075635486887
+      },
+      {
+        "group": "high",
+        "ev_pct_proportional": 0.04411722495896164,
+        "ev_pct_equal": -0.03730727665174349
+      }
+    ],
+    "aggregate_ev_pct_proportional": 0.03832380073428407,
+    "aggregate_ev_pct_equal": 0.03831248491064087
+  },
+  "experiment": {
+    "name": "sigma",
+    "value": 2.0,
+    "description": "substitution across all country-sector intermediate inputs (0 = Leontief)",
+    "national": {
+      "ev_musd": 23497.93390489509,
+      "cv_musd": 23747.603797276897,
+      "ev_pct_consumption": 0.1401090593269744,
+      "ev_pct_gdp": 0.10990566248243024,
+      "consumption_base_musd": 16771173.839699863,
+      "price_effect_musd": -177384.92377087756,
+      "factor_income_effect_musd": 163635.16570996307,
+      "fiscal_transfer_effect_musd": 37247.69196579341,
+      "tariff_rebate_effect_musd": 30317.132142738337,
+      "decomposition_residual_musd": 1.6174453776329756e-08,
+      "terms_of_trade_pct_importer": 1.0089407303183862,
+      "terms_of_trade_pct_exporter": -0.7980289252879191,
+      "wage_pct_importer": 1.0184889871948988,
+      "wage_pct_exporter": -0.8977792231999238,
+      "relative_wage_pct": 1.9336279201156215,
+      "investment_change_base_prices_musd": -2840.7830109643837,
+      "abroad_change_base_prices_musd": 1470.6933779401168
+    }
+  }
+}

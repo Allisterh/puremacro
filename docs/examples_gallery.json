@@ -1,7 +1,15 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-19T00:01:39Z",
+  "generated_at": "2026-10-29T05:09:05Z",
   "examples": {
+    "first_brief_tariffs": {
+      "description": "Your first policy brief: a 10% US tariff on Chinese goods on the bundled OECD ICIO 2019 table, national EV with its price / factor-income / fiscal split, and synthetic household groups.",
+      "status": "PASS",
+      "reason": null,
+      "runtime_s": 6.051,
+      "figures": [],
+      "last_run": "2026-10-29T05:09:05Z"
+    },
     "romer_romer_2010_replication": {
       "description": "Original-data Romer\u2013Romer (2010) baseline and independent evidence.",
       "status": "FAIL",

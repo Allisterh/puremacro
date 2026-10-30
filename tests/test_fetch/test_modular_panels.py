@@ -557,3 +557,22 @@ class TestRemediationRegressions:
         assert pd.isna(parsed.iloc[1])
         assert parsed.iloc[2] == pd.Timestamp("2021-07-01")
         assert pd.isna(parsed.iloc[3])
+
+
+def test_repeat_retains_duplicate_precedence_and_excludes_missing_keys():
+    from puremacro.climate_panel import _harmonize_annual_to_quarterly
+
+    annual = pd.DataFrame({
+        'code': ['USA', 'USA', None, 'MEX'],
+        'variable': ['energy_a'] * 4,
+        'date': pd.to_datetime(['2020-01-01'] * 4),
+        'value': [1., 99., 100., np.nan],
+        'source': ['first', 'duplicate', 'missing code', 'missing value'],
+        'sa_source': ['annual'] * 4,
+    })
+    out = _harmonize_annual_to_quarterly(annual, 'repeat')
+    assert len(out) == 4
+    assert out['code'].tolist() == ['USA'] * 4
+    assert out['value'].tolist() == [1.] * 4
+    assert out['source'].tolist() == ['resampled_from_A:first'] * 4
+    assert out['is_imputed'].tolist() == [False, True, True, True]

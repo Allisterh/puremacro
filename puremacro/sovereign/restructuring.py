@@ -3,7 +3,7 @@
 Implements:
 1. `decompose_spread_term_structure`: Multi-horizon forward zero-coupon survival
    pricing, decomposing sovereign yields and spreads into physical expected default
-   loss vs. maturity/dilution risk premium components across horizons
+   log-survival loss vs. the discrete-compounding adjustment across horizons
    (e.g. 1Q, 1Y, 2Y, 3Y, 5Y, 10Y).
 2. `evaluate_debt_restructuring`: Evaluates debt restructuring counterfactuals
    (face-value haircuts and maturity extensions), computing immediate sovereign
@@ -37,7 +37,12 @@ def decompose_spread_term_structure(
 
     Recursively prices m-period zero-coupon defaultable claims conditional on
     no default occurring prior to maturity, decomposing the credit spread into:
-        Spread(m) = Default Loss Component(m) + Risk / Dilution Premium(m)
+        Spread(m) = Log-survival Loss(m) + Compounding Adjustment(m)
+
+    Lenders here are risk neutral: q_m = survival_m / (1+r_star)**m.
+    The legacy column ``risk_premium_component`` is the difference between
+    the discrete annual spread and the continuously compounded loss rate.
+    It does not identify a structural risk, liquidity or dilution premium.
 
     Parameters
     ----------
@@ -63,7 +68,8 @@ def decompose_spread_term_structure(
         - ``spread_annualized``: Annualized sovereign spread over risk-free rate.
         - ``spread_bps``: Spread in basis points.
         - ``default_loss_component``: Physical expected default loss spread (bps).
-        - ``risk_premium_component``: Maturity / dilution risk premium (bps).
+        - ``risk_premium_component``: Discrete-compounding adjustment (bps),
+          retained under its legacy column name for compatibility.
     """
     n_b = len(result.b_grid)
     n_y = len(result.y_grid)
@@ -86,6 +92,7 @@ def decompose_spread_term_structure(
             policy_idx[i, j] = int(np.argmin(np.abs(result.b_grid - result.policy_b[i, j])))
 
     repay_prob = 1.0 - result.default_prob  # (n_b, n_y)
+    debt_probabilities = result.metadata.get('debt_choice_probabilities')
 
     if maturities is not None:
         h_list = list(maturities)
@@ -93,6 +100,9 @@ def decompose_spread_term_structure(
         h_list = list(horizons)
     else:
         h_list = [1, 4, 8, 12, 20, 40]
+
+    if not h_list or any(isinstance(h, bool) or not isinstance(h, (int, np.integer)) or h < 1 for h in h_list):
+        raise ValueError('horizons must contain positive integer quarters')
 
     max_h = max(h_list)
     q_tensor = np.zeros((max_h + 1, n_b, n_y), dtype=np.float64)
@@ -106,6 +116,9 @@ def decompose_spread_term_structure(
     for h in range(2, max_h + 1):
         q_tomorrow = np.take_along_axis(q_tensor[h - 1], policy_idx, axis=0)
         s_tomorrow = np.take_along_axis(s_tensor[h - 1], policy_idx, axis=0)
+        if debt_probabilities is not None:
+            q_tomorrow = np.einsum('imj,mj->ij', debt_probabilities, q_tensor[h - 1])
+            s_tomorrow = np.einsum('imj,mj->ij', debt_probabilities, s_tensor[h - 1])
 
         payoff_q = repay_prob * q_tomorrow
         payoff_s = repay_prob * s_tomorrow
@@ -120,17 +133,16 @@ def decompose_spread_term_structure(
         qh = float(q_tensor[h, ib, iy])
         sh = float(s_tensor[h, ib, iy])
 
-        qh_safe = max(1e-12, qh)
-        sh_safe = max(1e-12, sh)
-
-        r_quarterly = (1.0 / qh_safe) ** (1.0 / float(h)) - 1.0
-        r_ann = (1.0 + r_quarterly) ** 4 - 1.0
-        spread_ann = max(0.0, r_ann - r_rf_ann)
-        spread_bps = spread_ann * 10000.0
-
-        # Physical default loss spread in bps
-        loss_spread_bps = max(0.0, -(4.0 / float(h)) * np.log(sh_safe) * 10000.0)
-        risk_prem_bps = max(0.0, spread_bps - loss_spread_bps)
+        # No artificial positive price/survival floor: a worthless claim has
+        # infinite yield, with an undefined infinity-minus-infinity adjustment.
+        # Use log survival to avoid separately flooring discounted prices.
+        with np.errstate(divide='ignore', over='ignore', invalid='ignore'):
+            loss_rate = max(0.0, -4.0 / float(h) * float(np.log(sh)))
+            spread_ann = float((1.0 + r_rf_ann) * np.expm1(loss_rate))
+            r_ann = r_rf_ann + spread_ann
+            spread_bps = spread_ann * 10000.0
+            loss_spread_bps = loss_rate * 10000.0
+            risk_prem_bps = spread_bps - loss_spread_bps
 
         records.append({
             "maturity": int(h),
@@ -146,7 +158,10 @@ def decompose_spread_term_structure(
             "risk_premium_component": risk_prem_bps,
         })
 
-    return pd.DataFrame(records)
+    frame = pd.DataFrame(records)
+    frame.attrs['pricing'] = 'risk-neutral zero-recovery survival claims'
+    frame.attrs['risk_premium_component'] = 'discrete-compounding adjustment; no identified risk premium'
+    return frame
 
 
 def evaluate_debt_restructuring(
@@ -194,10 +209,16 @@ def evaluate_debt_restructuring(
     """
     from puremacro.sovereign.arellano import solve_sovereign_default
 
-    if haircut < 0.0 or haircut >= 1.0:
+    if not np.isfinite(haircut) or haircut < 0.0 or haircut >= 1.0:
         raise ValueError(f"haircut must be in [0, 1); got {haircut}")
-    if maturity_extension < 0.0:
+    if not np.isfinite(maturity_extension) or maturity_extension < 0.0:
         raise ValueError(f"maturity_extension must be >= 0; got {maturity_extension}")
+    if not result.converged:
+        raise ValueError('restructuring requires a converged baseline equilibrium')
+    if isinstance(horizon, bool) or not isinstance(horizon, (int, np.integer)) or horizon < 1:
+        raise ValueError('horizon must be a positive integer')
+    if any(value is not None and not np.isfinite(value) for value in (b_distress, y_distress)):
+        raise ValueError('distress debt and income must be finite')
 
     n_b = len(result.b_grid)
     n_y = len(result.y_grid)
@@ -229,8 +250,10 @@ def evaluate_debt_restructuring(
     duration_new_yrs = 1.0 / (4.0 * delta_new)
     maturity_extension_years = duration_new_yrs - duration_orig_yrs
 
-    # Solve restructured sovereign model
-    res_restructured = solve_sovereign_default(
+    # A face-value haircut changes the inherited state only. Reuse the solved
+    # equilibrium exactly; rerunning a fine monotone grid with the dense default
+    # could otherwise allocate an enormous action tensor unnecessarily.
+    res_restructured = result if maturity_extension == 0 else solve_sovereign_default(
         beta=float(result.metadata.get("beta", 0.953)),
         gamma=float(result.metadata.get("gamma", 2.0)),
         r_star=float(result.metadata.get("r_star", 0.01)),
@@ -253,8 +276,10 @@ def evaluate_debt_restructuring(
         b_min=float(result.b_grid[0]),
         n_y=n_y,
         tol=float(result.metadata.get("tol", 1e-7)),
-        max_iter=max(500, int(result.metadata.get("max_iter", 2000))),
+        max_iter=int(result.metadata.get("max_iter", 2000)),
     )
+    if not res_restructured.converged:
+        raise RuntimeError('the maturity counterfactual did not converge')
 
     ib_new = int(np.argmin(np.abs(res_restructured.b_grid - b_new)))
     counterfactual_spread = float(res_restructured.spread[ib_new, iy_distress])
@@ -273,7 +298,8 @@ def evaluate_debt_restructuring(
 
     path_records = []
     for t in range(horizon):
-        y_idx = int(rng.choice(n_y, p=result.p_trans[y_idx]))
+        if t > 0:
+            y_idx = int(rng.choice(n_y, p=res_restructured.p_trans[y_idx]))
         y_val = float(res_restructured.y_grid[y_idx])
 
         if in_def:
@@ -309,6 +335,10 @@ def evaluate_debt_restructuring(
         b_cur = float(res_restructured.b_grid[b_idx])
         b_next = float(res_restructured.policy_b[b_idx, y_idx])
         b_next_idx = int(np.argmin(np.abs(res_restructured.b_grid - b_next)))
+        debt_probabilities = res_restructured.metadata.get('debt_choice_probabilities')
+        if debt_probabilities is not None:
+            b_next_idx = int(rng.choice(n_b, p=debt_probabilities[b_idx, :, y_idx]))
+            b_next = float(res_restructured.b_grid[b_next_idx])
         q_val = float(res_restructured.bond_price[b_next_idx, y_idx])
         sp_bps = float(res_restructured.spread[b_next_idx, y_idx] * 10000.0)
 
@@ -319,7 +349,7 @@ def evaluate_debt_restructuring(
             "debt": b_cur,
             "debt_gdp_pct": b_cur / y_val * 100.0,
             "output": y_val,
-            "consumption": max(1e-5, c_val),
+            "consumption": c_val,
             "spread_bps": sp_bps,
             "default_prob": p_d,
         })
@@ -333,6 +363,9 @@ def evaluate_debt_restructuring(
         "delta_orig": delta_orig,
         "delta_new": delta_new,
         "res_restructured": res_restructured,
+        "income_timing": "period_zero_is_selected_distress_state",
+        "debt_grid_state": float(res_restructured.b_grid[ib_new]),
+        "debt_grid_rounding_error": float(res_restructured.b_grid[ib_new] - b_new),
     }
 
     return RestructuringResult(

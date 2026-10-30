@@ -49,5 +49,7 @@ jobs:
         run: |
           python -m pip install --upgrade twine
           python -m twine check dist/*
+      - name: Verify examples from the exact wheel to publish
+        run: python tools/check_installed_examples.py dist/*.whl
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
