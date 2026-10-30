@@ -156,7 +156,7 @@ nav:
           - Signal contract: SIGNAL_CONTRACT.md
           - Examples gallery: examples_gallery.md
           - Lexicon review: lexicon_review.md
-          - Path to 1.0: 1.0_path.md
+          - Roadmap and API policy: 1.0_path.md
   - Documentación en Español:
       - Inicio: es/index.md
       - Inicio rápido: es/quickstart.md
@@ -266,4 +266,4 @@ nav:
           - Contrato de señales: es/SIGNAL_CONTRACT.md
           - Galería de ejemplos: es/examples_gallery.md
           - Revisión de léxico: es/lexicon_review.md
-          - Ruta a 1.0: es/1.0_path.md
+          - Hoja de ruta y API: es/1.0_path.md

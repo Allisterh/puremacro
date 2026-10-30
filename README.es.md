@@ -2,7 +2,7 @@
 
 # puremacro
 
-**Novedades de 5.7:** [un modelo, varios métodos de solución](docs/es/dsge_workflows.md): programas `.mod` ordenados, transiciones no lineales, comparaciones de políticas locales/globales y ocho cuadernos MAV revisados. Esta versión también incluye [DP en archivos `.mod`](docs/es/dp_modfiles.md), [estudios reproducibles](docs/es/studies.md) y [ecuaciones HANK editables](docs/es/hank_model_closure.md) desarrollados para 5.6.0.
+**Flujos de trabajo destacados:** [un modelo, varios métodos de solución](docs/es/dsge_workflows.md): programas `.mod` ordenados, transiciones no lineales, comparaciones de políticas locales/globales y ocho cuadernos MAV revisados. Esta versión también incluye [DP en archivos `.mod`](docs/es/dp_modfiles.md), [estudios reproducibles](docs/es/studies.md) y [ecuaciones HANK editables](docs/es/hank_model_closure.md) desarrollados para 5.6.0.
 
 **Macroeconometría y modelos estructurales sobre el núcleo científico de Python.**
 
@@ -26,7 +26,7 @@ python -m pip install puremacro
 
 **Estado comprobado el 2026-10-29:** **6.0.1** está publicada en [PyPI](https://pypi.org/project/puremacro/6.0.1/), y `pip install puremacro` la instala. Es la primera versión publicada desde 5.7.1: las etiquetas 5.8.0, 5.9.0 y 6.0.0 nunca se publicaron (v6.0.0 falló en CI). Esta rama `main` puede contener trabajo no publicado hacia 6.1.0; una etiqueta no acredita por sí sola una publicación.
 Consulte las [pruebas recomendadas y próximos hitos](docs/es/research_reliability.md).
-Estas páginas corresponden a 6.0.0; consulte el
+Estas páginas siguen el desarrollo de 6.1.0; las adiciones aún no publicadas requieren instalar desde el código fuente. consulte el
 [historial de cambios](CHANGELOG.md) y use la documentación correspondiente
 a su versión instalada.
 

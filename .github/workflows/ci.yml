@@ -48,6 +48,22 @@ jobs:
       - name: Verify portable cartridge compatibility
         run: pytest tests/test_runtime_store_attrs.py -q
 
+      # The 3.11 leg resolves NumPy 2.4 (NumPy 2.5 requires Python 3.12), whose
+      # stubs differ from 2.5's; v5.4.0 failed typing only there. Check both.
+      - name: Run static type checking (mypy)
+        if: matrix.os == 'ubuntu-latest' && (matrix.python-version == '3.11' || matrix.python-version == '3.12')
+        run: |
+          mypy puremacro --ignore-missing-imports
+          mypy puremacro --ignore-missing-imports --platform win32 --no-incremental
+
+      # On 3.11 (the requires-python floor) Gate 7 is the interpreter's own
+      # parser; on 3.12 it is the PEP 701 f-string scan. Running both keeps
+      # the scan honest against the real thing.
+      - name: Run pre-tag release gate verification
+        if: matrix.os == 'ubuntu-latest' && (matrix.python-version == '3.11' || matrix.python-version == '3.12')
+        run: |
+          python tools/release_check.py --no-tests
+
       - name: Run pytest test suite
         env:
           # Shared runners are several times slower than the machines the
@@ -59,21 +75,6 @@ jobs:
         run: |
           pytest --durations=10
 
-      # The 3.11 leg resolves NumPy 2.4 (NumPy 2.5 requires Python 3.12), whose
-      # stubs differ from 2.5's; v5.4.0 failed typing only there. Check both.
-      - name: Run static type checking (mypy)
-        if: matrix.os == 'ubuntu-latest' && (matrix.python-version == '3.11' || matrix.python-version == '3.12')
-        run: |
-          mypy puremacro --ignore-missing-imports
-
-      # On 3.11 (the requires-python floor) Gate 7 is the interpreter's own
-      # parser; on 3.12 it is the PEP 701 f-string scan. Running both keeps
-      # the scan honest against the real thing.
-      - name: Run pre-tag release gate verification
-        if: matrix.os == 'ubuntu-latest' && (matrix.python-version == '3.11' || matrix.python-version == '3.12')
-        run: |
-          python tools/release_check.py --no-tests
-
       # The docs site is built nowhere else: pages.yml deploys only the
       # JupyterLite playground. Without this step mkdocs.yml rots silently --
       # it accumulated five nav entries pointing at files that do not exist,
@@ -83,3 +84,18 @@ jobs:
         run: |
           pip install mkdocs-material
           mkdocs build --strict --site-dir /tmp/site
+
+  installed-examples:
+    name: Examples from installed wheel
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Build wheel and exercise clean installation
+        run: |
+          python -m pip install build
+          python -m build --wheel
+          python tools/check_installed_examples.py dist/*.whl

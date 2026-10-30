@@ -2,7 +2,7 @@
 
 # puremacro
 
-**New in 5.7:** [one model, several solution methods](docs/dsge_workflows.md): ordered `.mod` programs, nonlinear transitions, local/global policy comparisons, and eight revised MAV notebooks. This version also includes [DP models in `.mod` files](docs/dp_modfiles.md), [reproducible studies](docs/studies.md) and [editable HANK equations](docs/hank_model_closure.md) developed for 5.6.0.
+**Workflow highlights:** [one model, several solution methods](docs/dsge_workflows.md): ordered `.mod` programs, nonlinear transitions, local/global policy comparisons, and eight revised MAV notebooks. This version also includes [DP models in `.mod` files](docs/dp_modfiles.md), [reproducible studies](docs/studies.md) and [editable HANK equations](docs/hank_model_closure.md) developed for 5.6.0.
 
 **Macroeconometrics and structural modeling on the core scientific-Python stack.**
 
@@ -25,7 +25,7 @@ python -m pip install puremacro
 
 **Status checked 2026-10-29:** **6.0.1** is published on [PyPI](https://pypi.org/project/puremacro/6.0.1/), and `pip install puremacro` installs it. It is the first published version since 5.7.1: the 5.8.0, 5.9.0 and 6.0.0 tags were never published (v6.0.0 failed CI). This `main` branch may contain unreleased work toward 6.1.0; a source tag alone does not establish publication.
 See the [recommended tests and next milestones](docs/research_reliability.md).
-These pages target 6.0.0; see the [changelog](CHANGELOG.md) for additions and fixes. Match your installed version to the documentation.
+These pages track the 6.1.0 development tree; unreleased additions require a source install. see the [changelog](CHANGELOG.md) for additions and fixes. Match your installed version to the documentation.
 
 New DSGE workflows share [nonlinear model equations](docs/dsge_nonlinear.md)
 across [robust transitions and announcements](docs/dsge_transitions.md) and

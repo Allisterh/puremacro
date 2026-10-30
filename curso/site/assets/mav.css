@@ -115,6 +115,7 @@ select, .btn {
 }
 select { width: 100%; }
 .btn { cursor: pointer; display: inline-flex; gap: 6px; align-items: center; text-decoration: none; }
+.btn, .seg button, .chart-tools button { transition: color 0.15s, border-color 0.15s, background-color 0.15s; }
 .btn:hover { border-color: var(--ink); }
 .btn-primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }

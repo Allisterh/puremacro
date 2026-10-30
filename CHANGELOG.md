@@ -13,6 +13,15 @@ but not published; their additions are included in 6.0.1, published on
 
 Development version after 6.0.1; not a published distribution.
 
+- Faster annual-to-quarterly panel expansion preserves duplicate precedence,
+  missing-value handling and provenance; BVAR-SV forecasts reuse their design
+  matrix with unchanged seeded paths.
+- Course scatter charts support arrow keys, Home/End and Escape. Lab CSV buttons
+  retain bilingual accessible labels; button transitions respect reduced motion.
+- Bilingual roadmap/API guidance now describes the published 6.0.1 release and
+  6.1.0 development. CI checks native/Windows typing before numerical tests and
+  verifies representative workflows from a clean installed wheel before publish.
+
 ## 6.0.1 (2026-10-29)
 
 **Reliability release: corrected sovereign timing and model fidelity, a
