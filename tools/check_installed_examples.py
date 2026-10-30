@@ -55,7 +55,7 @@ print('PASS: GMM and compounded risk workflow', flush=True)
 
 from puremacro.examples.first_brief_tariffs import run_brief
 output = Path('tariff_brief')
-manifest = run_brief(output, lang='es')
+manifest = run_brief(output, lang='es')['manifest']
 assert manifest['lang'] == 'es'
 for state in manifest['convergence'].values():
     assert state['converged']
