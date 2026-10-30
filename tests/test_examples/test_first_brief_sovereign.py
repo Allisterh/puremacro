@@ -149,13 +149,13 @@ def test_freeze_resume_discards_stale_partial(tmp_path, monkeypatch):
     # A complete run writes the partial after every case.
     first = brief.build_record(grids, design=TINY_DESIGN, partial=partial, log=lambda *a: None)
     assert len(calls) == len(brief.SCENARIOS)
-    saved = json.loads(partial.read_text())
+    saved = json.loads(partial.read_text(encoding="utf-8"))
     assert saved["source_sha256"] == brief.source_hashes()
 
     # A partial from an older source is discarded: every case is re-solved.
     stale = copy.deepcopy(saved)
     stale["source_sha256"] = {k: "0" * 64 for k in stale["source_sha256"]}
-    partial.write_text(json.dumps(stale))
+    partial.write_text(json.dumps(stale), encoding="utf-8")
     calls.clear()
     messages = []
     second = brief.build_record(grids, design=TINY_DESIGN, partial=partial, log=messages.append)
@@ -167,7 +167,7 @@ def test_freeze_resume_discards_stale_partial(tmp_path, monkeypatch):
     matching = copy.deepcopy(saved)
     for name in list(matching["scenarios"])[1:]:
         del matching["scenarios"][name]
-    partial.write_text(json.dumps(matching))
+    partial.write_text(json.dumps(matching), encoding="utf-8")
     calls.clear()
     third = brief.build_record(grids, design=TINY_DESIGN, partial=partial, log=lambda *a: None)
     assert len(calls) == len(brief.SCENARIOS) - 1
@@ -175,7 +175,7 @@ def test_freeze_resume_discards_stale_partial(tmp_path, monkeypatch):
 
     # A partial with a different design is discarded too.
     other_design = {**TINY_DESIGN, "periods": 4_000}
-    partial.write_text(json.dumps(saved))
+    partial.write_text(json.dumps(saved), encoding="utf-8")
     calls.clear()
     brief.build_record(grids, design=other_design, partial=partial, log=lambda *a: None)
     assert len(calls) == len(brief.SCENARIOS)
@@ -189,14 +189,14 @@ def test_single_scenario_cli_writes_outputs(tmp_path):
     assert code == 0
     for name in ("table.md", "table.csv", "figure.png", "manifest.json"):
         assert (tmp_path / name).is_file(), name
-    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["seeds"] == [1979, 1980]
     assert manifest["grids"] == [[61, 11]]
     assert manifest["periods"] == 5000 and manifest["burn"] == 1000
     assert manifest["measurement"] == "raw ergodic (ergodic_moments)"
     case = manifest["cases"]["theta=0.15"]["61x11"]
     assert {"monotone_certification_gap", "elapsed_s"} <= set(case)
-    table = (tmp_path / "table.md").read_text()
+    table = (tmp_path / "table.md").read_text(encoding="utf-8")
     assert "Escenario" in table
     assert any(ch.isdigit() and nxt == "," and after.isdigit()
                for ch, nxt, after in zip(table, table[1:], table[2:]))
@@ -221,7 +221,7 @@ def test_coarse_prints_caveat(capsys, tmp_path):
     assert brief.main(["--scenario", "baseline", "--coarse", "--grid", "31x11", "--periods", "3000",
                        "--n-seeds", "2", "--output", str(tmp_path)]) == 0
     assert "Coarse grid (801 x 161): for orientation only" in capsys.readouterr().out
-    assert json.loads((tmp_path / "manifest.json").read_text())["coarse_grid_caveat"] is True
+    assert json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))["coarse_grid_caveat"] is True
 
 
 @pytest.mark.parametrize("lang,label,footnote", [("en", "Scenario", "†"), ("es", "Escenario", "†")])
@@ -275,11 +275,11 @@ def test_coarse_sweep_smoke(tmp_path, capsys):
     elapsed = time.perf_counter() - start
     assert elapsed <= budget(1800), f"{elapsed:.0f} s > budget {budget(1800):.0f} s"
     assert "Coarse grid (801 x 161)" in capsys.readouterr().out
-    rows = (tmp_path / "table.csv").read_text().strip().splitlines()
+    rows = (tmp_path / "table.csv").read_text(encoding="utf-8").strip().splitlines()
     assert len(rows) == 1 + 7
-    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["grids"] == [[801, 161]] and manifest["coarse_grid_caveat"] is True
-    record = json.loads((tmp_path / "record.json").read_text())
+    record = json.loads((tmp_path / "record.json").read_text(encoding="utf-8"))
     welfare = [record["scenarios"][n]["cases"]["801x161"]["welfare_pct"] for n in ("theta=0.15", "baseline", "theta=0.5")]
     assert welfare[0] > welfare[1] > welfare[2], welfare
 
@@ -315,7 +315,7 @@ def test_single_scenario_outputs_have_no_empty_answer(tmp_path, capsys):
     assert brief.main(["--scenario", "theta=0.15", "--grid", "61x11", "--periods", "3000",
                        "--n-seeds", "2", "--output", str(tmp_path)]) == 0
     out = capsys.readouterr().out
-    table = (tmp_path / "table.md").read_text()
+    table = (tmp_path / "table.md").read_text(encoding="utf-8")
     for text in (out, table):
         assert ": ." not in text and "high value:" not in text
     assert table.startswith("| Scenario |")
@@ -333,3 +333,91 @@ def test_debt_is_labelled_as_a_share_of_quarterly_income(tiny_record, lang, colu
     assert fig.axes[0].get_title(loc="left") == column
     for word in banned:
         assert word not in table and word not in answer
+
+
+# --- Windows portability ---------------------------------------------------------
+
+def _text_io_without_encoding(path):
+    """Calls of write_text/read_text/open in ``path`` that pass no encoding= (text mode)."""
+    import ast
+
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    missing = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        name = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else None
+        if name not in {"write_text", "read_text", "open"}:
+            continue
+        keywords = {k.arg for k in node.keywords}
+        mode = next((a.value for a in node.args if isinstance(a, ast.Constant) and isinstance(a.value, str)), "r")
+        mode = next((k.value.value for k in node.keywords if k.arg == "mode" and isinstance(k.value, ast.Constant)), mode)
+        if "b" in str(mode) or "encoding" in keywords:
+            continue
+        missing.append(f"{path.name}:{node.lineno} {name}")
+    return missing
+
+
+def test_every_text_io_in_the_brief_names_its_encoding():
+    from pathlib import Path
+
+    root = Path(brief.__file__).resolve().parents[2]
+    files = [Path(brief.__file__), Path(__file__), root / "tests" / "test_sovereign_brief_record.py"]
+    missing = [m for f in files for m in _text_io_without_encoding(f)]
+    assert missing == [], missing
+
+
+def test_cli_runs_without_getloadavg_or_resource(tmp_path, monkeypatch):
+    # Windows has neither os.getloadavg nor the resource module.
+    import sys
+
+    monkeypatch.delattr(os, "getloadavg", raising=False)
+    monkeypatch.setitem(sys.modules, "resource", None)  # makes `import resource` raise ImportError
+    assert brief.main(["--scenario", "theta=0.15", "--grid", "31x11", "--periods", "3000",
+                       "--n-seeds", "2", "--output", str(tmp_path)]) == 0
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["peak_rss_gb"] is None
+    assert manifest["load_averages"] == {}
+    assert manifest["load_average_status"] == "unavailable on this platform"
+
+
+def test_brief_is_mypy_clean_on_windows():
+    import importlib.util
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    if importlib.util.find_spec("mypy") is None:
+        pytest.skip("mypy not installed")
+    root = Path(brief.__file__).resolve().parents[2]
+    proc = subprocess.run([sys.executable, "-m", "mypy", "--platform", "win32", "--ignore-missing-imports",
+                           "--follow-imports=silent", "--no-incremental", str(Path(brief.__file__))],
+                          cwd=root, capture_output=True, text=True, encoding="utf-8", timeout=600)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+@pytest.mark.parametrize("lang", ["en", "es"])
+def test_custom_scenario_figure_contains_its_measured_values(tiny_record, lang):
+    record = _only(tiny_record, ["baseline"])
+    scenario = record["scenarios"].pop("baseline")
+    scenario["overrides"] = {"theta": 0.3}
+    record["scenarios"]["theta=0.3"] = scenario
+    fig = brief.render_figure(record, lang)
+    case = scenario["cases"]["61x11"]
+    expected = [case["simulation"]["summary"][m]["mean"] for m in MOMENTS] + [case["welfare_pct"]]
+    for ax, value in zip(fig.axes, expected):
+        assert len(ax.containers) == 1
+        np.testing.assert_allclose(np.asarray(ax.containers[0].lines[0].get_ydata(), dtype=float), [value])
+        assert any(("0.3" if lang == "en" else "0,3") in t.get_text() for t in ax.get_xticklabels())
+
+
+@pytest.mark.parametrize("lang", ["en", "es"])
+@pytest.mark.parametrize("lo,hi,direction", [(9.0, 10.0, "up"), (10.0, 9.0, "down"),
+                                            (-9.0, -10.0, "down"), (1.0001, 1.0002, "flat")])
+def test_answer_compares_numbers_across_decimal_boundaries(tiny_record, lang, lo, hi, direction):
+    record = _only(tiny_record, ["theta=0.15", "theta=0.5"])
+    for name, value in [("theta=0.15", lo), ("theta=0.5", hi)]:
+        record["scenarios"][name]["cases"]["61x11"]["simulation"]["summary"]["debt_output_pct"]["mean"] = value
+    expected = brief._TEXT[lang][direction] + " " + brief._TEXT[lang]["outcome"]["debt_output_pct"]
+    assert expected in brief.render_answer(record, lang)

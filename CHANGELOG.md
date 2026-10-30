@@ -41,6 +41,10 @@ Development version after 6.0.1; not a published distribution.
   coarse-grid caveat), `--output DIR`, `--lang en|es`, `--grid`, `--periods`,
   `--n-seeds`, `--from-record PATH`, and `--freeze PATH` for maintainers.
 
+- Sovereign brief outputs use explicit UTF-8 and portable resource diagnostics.
+  Custom scenarios appear in figures, and effect directions compare numerical
+  values while treating indistinguishable displayed values as flat.
+
 ## 6.0.1 (2026-10-29)
 
 **Reliability release: corrected sovereign timing and model fidelity, a

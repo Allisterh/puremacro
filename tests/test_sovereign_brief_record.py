@@ -24,7 +24,7 @@ RECORD_PATH = ROOT / "tests" / "fixtures" / "sovereign_brief" / "sweep.json"
 
 @pytest.fixture(scope="module")
 def record():
-    return json.loads(RECORD_PATH.read_text())
+    return json.loads(RECORD_PATH.read_text(encoding="utf-8"))
 
 
 def _cases(record):
@@ -81,7 +81,7 @@ def test_record_recomputes_from_per_seed(record):
 
 
 def test_record_has_no_local_paths():
-    text = RECORD_PATH.read_text()
+    text = RECORD_PATH.read_text(encoding="utf-8")
     for forbidden in ("/Users/", "/home/", "/private/", "C:\\\\", "\\\\Users\\\\"):
         assert forbidden not in text, forbidden
 
@@ -170,11 +170,12 @@ _EXAMPLE = "puremacro/examples/first_brief_sovereign.py"
 # The example's bytes changed after the freeze (record hash 4823e9ef…, commit
 # 1752c83) without touching solve_scenario, measure_case or paired_change:
 # 60a04ce0 added one type annotation, then the final-review fixes (caad961d,
-# 38682a89, 072e549f) changed only answer/table/figure wording and CLI text.
+# 38682a89, 072e549f) changed only answer/table/figure wording and CLI text;
+# the Windows fixes add explicit utf-8 encodings and platform guards.
 # Any further edit must be reviewed the same way and its hash added here.
 _EXAMPLE_HASHES = {
     "4823e9efa4b98fd3f1cd309baf1d5f79ebe201b9c918e3f15f0a17b297fd5858",  # frozen (1752c83)
-    "59b96c52dcba6bf43184209d47af3901742f975acaef788117344435718a8ec2",  # current (072e549f)
+    "819b52aeac1762b1c93d3bd5ad18b7bd85d7de0e01097aa2a172725929b94d58",  # current: portable I/O and corrected presentation; numerical generation unchanged
 }
 
 

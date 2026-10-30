@@ -173,10 +173,25 @@ def source_hashes() -> dict[str, str]:
     return {f"puremacro/{rel}": hashlib.sha256((root / rel).read_bytes()).hexdigest() for rel in _SOURCES}
 
 
+def _load_average() -> tuple[float, float, float] | None:
+    """``os.getloadavg()``, or None where it does not exist (Windows) or fails."""
+    getloadavg = getattr(os, "getloadavg", None)
+    if getloadavg is None:
+        return None
+    try:
+        one, five, fifteen = getloadavg()
+    except OSError:
+        return None
+    return float(one), float(five), float(fifteen)
+
+
 def _peak_rss_gb() -> float | None:
+    """Peak resident memory of this process in GB, or None where unavailable (Windows)."""
+    if sys.platform == "win32":
+        return None
     try:
         import resource
-    except ImportError:  # Windows
+    except ImportError:
         return None
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     scale = 1.0 if sys.platform == "darwin" else 1024.0  # bytes on macOS, KiB on Linux
@@ -199,7 +214,7 @@ def _package_version() -> str:
 
 def _write_atomic(path: Path, record: dict) -> None:
     tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(record, indent=1, allow_nan=False) + "\n")
+    tmp.write_text(json.dumps(record, indent=1, allow_nan=False) + "\n", encoding="utf-8")
     os.replace(tmp, path)
 
 
@@ -225,7 +240,7 @@ def build_record(grids: Sequence[tuple[int, int]], *, design: dict, partial: Pat
     if partial is not None and Path(partial).exists():
         partial = Path(partial)
         try:
-            old = json.loads(partial.read_text())
+            old = json.loads(partial.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             old = {}
         if old.get("source_sha256") == hashes and old.get("design") == design:
@@ -267,10 +282,9 @@ def build_record(grids: Sequence[tuple[int, int]], *, design: dict, partial: Pat
                 + ", ".join(f"{m} {summary[m]['mean']:.4f}" for m in MOMENTS)
                 + f", welfare {case['welfare_pct']:.4f}%")
             entry["cases"][key] = case
-            try:
-                record["load_averages"][f"{name} {key}"] = [round(v, 2) for v in os.getloadavg()]
-            except (AttributeError, OSError):  # Windows
-                pass
+            load = _load_average()
+            if load is not None:
+                record["load_averages"][f"{name} {key}"] = [round(v, 2) for v in load]
             record["peak_rss_gb"] = _peak_rss_gb()
             if partial is not None:
                 _write_atomic(Path(partial), record)
@@ -450,7 +464,7 @@ def render_answer(record: dict, lang: str, grid: str | None = None) -> str:
         for outcome in outcomes:
             a, b = _mean(record, lo_name, grid, outcome), _mean(record, hi_name, grid, outcome)
             sa, sb = _num(a, lang), _num(b, lang)
-            verb = text["up"] if sb > sa and b > a else text["down"] if sb < sa and b < a else text["flat"]
+            verb = text["flat"] if sa == sb else text["up"] if b > a else text["down"]
             unit = text["unit"][outcome]
             items.append(f"{verb} {text['outcome'][outcome]} "
                          + text["from_to"].format(a=sa + unit, b=sb + unit))
@@ -470,7 +484,7 @@ _COLORS = ("#2a78d6", "#eb6834", "#1baf7a")  # dataviz reference palette, slots 
 
 
 def render_figure(record: dict, lang: str, grid: str | None = None):
-    """Five panels (four moments and welfare): low / baseline / high per parameter with 95% whiskers."""
+    """Five panels showing every supplied scenario, grouped by its varied parameter."""
     from matplotlib.figure import Figure
 
     text = _check_lang(lang)
@@ -479,18 +493,24 @@ def render_figure(record: dict, lang: str, grid: str | None = None):
     axes = fig.subplots(2, 3).ravel()
     axes[-1].remove()
     outcomes = MOMENTS + ("welfare_pct",)
+    groups = []
+    for g, key in enumerate(_SCENARIO_KEYS):
+        entries = [(name, float(scenario["overrides"][key]))
+                   for name, scenario in record["scenarios"].items()
+                   if key in scenario["overrides"]]
+        if not entries and not (len(record["scenarios"]) == 1 and "baseline" in record["scenarios"] and g == 0):
+            continue
+        if "baseline" in record["scenarios"]:
+            entries.append(("baseline", float(record["baseline"][key])))
+        groups.append((g, sorted(entries, key=lambda item: item[1])))
     for ax, outcome, title in zip(axes[:5], outcomes, text["panel"]):
         ax.set_facecolor("#fcfcfb")
         ticks, labels = [], []
-        for g, key in enumerate(_SCENARIO_KEYS):
-            lo_v, hi_v = _SCENARIO_VALUES[key]
-            names = [f"{key}={lo_v:g}", "baseline", f"{key}={hi_v:g}"]
-            values = [lo_v, BASELINE[key], hi_v]
-            for j, (name, value) in enumerate(zip(names, values)):
-                if name not in record["scenarios"]:
-                    continue
+        offset = 0
+        for g, entries in groups:
+            for j, (name, value) in enumerate(entries):
                 case = record["scenarios"][name]["cases"][grid]
-                x = 4 * g + j
+                x = offset + j
                 if outcome == "welfare_pct":
                     y, err = case["welfare_pct"], 0.0
                 else:
@@ -501,7 +521,8 @@ def render_figure(record: dict, lang: str, grid: str | None = None):
                             mfc="#fcfcfb" if base else _COLORS[g], mew=2, elinewidth=2, capsize=3)
                 ticks.append(x)
                 label = _num(value, lang, "g")
-                labels.append(label + "\n" + text["groups"][g] if j == 1 else label)
+                labels.append(label + "\n" + text["groups"][g] if j == len(entries) // 2 else label)
+            offset += len(entries) + 1
         ax.set_xticks(ticks, labels, fontsize=8, color="#52514e")
         ax.set_title(title, fontsize=10, color="#0b0b0b", loc="left")
         ax.grid(axis="y", color="#e4e3df", linewidth=0.8)
@@ -558,12 +579,12 @@ def write_outputs(record: dict, output: Path, lang: str) -> None:
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     answer = render_answer(record, lang)
-    (output / "table.md").write_text((answer + "\n\n" if answer else "") + render_table(record, lang) + "\n")
-    with (output / "table.csv").open("w", newline="") as f:
+    (output / "table.md").write_text((answer + "\n\n" if answer else "") + render_table(record, lang) + "\n", encoding="utf-8")
+    with (output / "table.csv").open("w", newline="", encoding="utf-8") as f:
         csv.writer(f).writerows(_csv_rows(record))
     fig = render_figure(record, lang)
     fig.savefig(output / "figure.png", dpi=150, metadata={"Software": None})
-    (output / "record.json").write_text(json.dumps(record, indent=1, allow_nan=False) + "\n")
+    (output / "record.json").write_text(json.dumps(record, indent=1, allow_nan=False) + "\n", encoding="utf-8")
     single = len(record["grids"]) == 1
     manifest = {
         "package_version": record["package_version"],
@@ -574,6 +595,8 @@ def write_outputs(record: dict, output: Path, lang: str) -> None:
         "measurement": "raw ergodic (ergodic_moments)",
         "peak_rss_gb": record.get("peak_rss_gb"),
         "load_averages": record.get("load_averages", {}),
+        "load_average_status": ("recorded" if record.get("load_averages")
+                                else "unavailable on this platform"),
         "cases": {name: {key: {"monotone_certification_gap": case["solver"]["monotone_certification_gap"],
                                "elapsed_s": case["solver"]["elapsed_s"]}
                          for key, case in s["cases"].items()}
@@ -581,7 +604,7 @@ def write_outputs(record: dict, output: Path, lang: str) -> None:
     }
     if single and tuple(record["grids"][0]) != GRIDS["converged"]:
         manifest["coarse_grid_caveat"] = True
-    (output / "manifest.json").write_text(json.dumps(manifest, indent=2, allow_nan=False) + "\n")
+    (output / "manifest.json").write_text(json.dumps(manifest, indent=2, allow_nan=False) + "\n", encoding="utf-8")
 
 
 # --- Command line ------------------------------------------------------------
@@ -616,11 +639,8 @@ def _parse_grid(text: str) -> tuple[int, int]:
 
 
 def _load_log(message: str) -> None:
-    try:
-        load = " (load %.1f %.1f %.1f)" % os.getloadavg()
-    except (AttributeError, OSError):
-        load = ""
-    print(message + load, flush=True)
+    load = _load_average()
+    print(message + (" (load %.1f %.1f %.1f)" % load if load is not None else ""), flush=True)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -642,7 +662,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.from_record is not None:
-        record = json.loads(Path(args.from_record).read_text())
+        record = json.loads(Path(args.from_record).read_text(encoding="utf-8"))
         write_outputs(record, Path(args.output), args.lang)
         print(render_table(record, args.lang))
         return 0
