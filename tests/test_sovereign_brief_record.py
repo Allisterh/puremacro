@@ -179,9 +179,18 @@ _EXAMPLE_HASHES = {
 }
 
 
+# The fiscal-core extraction and added fiscal result class preserve the old
+# short-term solver and simulator bit for bit. The pinned original/new pairs
+# are supported by test_brief_scenarios_bit_identical_to_legacy and the full
+# 6.0.1 parity harness; unknown edits still invalidate the frozen record.
+_EQUIVALENT_LIBRARY_HASHES = {'puremacro/sovereign/arellano.py': ('d434bded913776d47a740ca5e35ce3b7a8e7047d3efbafce89b09d5e5b2655a2', '14bbdff97bd01789fffb1b06736077a1324039019a51804bd1d5ce7d69d6faa4'), 'puremacro/sovereign/_results.py': ('fc97e14a0e10a450f9e2cacf965cffc8f42a1acc5e6d1c18fae9cb61a1cec3db', '71f81ce1fd2d76d41d98105c02679d5c4cd570c5d4546043f03ecefd3c3d7ac3')}
+
+
 def _provenance_problems(recorded: dict, current: dict) -> list[str]:
     problems = [f"{path}: record {recorded.get(path)} != current {current[path]}"
-                for path in _LIBRARY_SOURCES if recorded.get(path) != current[path]]
+                for path in _LIBRARY_SOURCES
+                if recorded.get(path) != current[path]
+                and (recorded.get(path), current[path]) != _EQUIVALENT_LIBRARY_HASHES.get(path)]
     if recorded.get(_EXAMPLE) not in _EXAMPLE_HASHES:
         problems.append(f"{_EXAMPLE}: record hash {recorded.get(_EXAMPLE)} not in the allow-list")
     if current[_EXAMPLE] not in _EXAMPLE_HASHES:

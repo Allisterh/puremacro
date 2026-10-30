@@ -134,3 +134,20 @@ def test_independent_simulator_detects_a_one_ulp_change() -> None:
     changed.loc[150, "consumption"] = np.nextafter(changed.loc[150, "consumption"], np.inf)
     with pytest.raises(AssertionError):
         pd.testing.assert_frame_equal(frame, changed, check_exact=True)
+
+
+@pytest.mark.parametrize("overrides", [
+    {}, {"theta": .15}, {"theta": .5}, {"sigma_y": .02},
+    {"sigma_y": .03}, {"rho_y": .9}, {"rho_y": .97},
+])
+def test_brief_scenarios_bit_identical_to_legacy(overrides):
+    from puremacro.examples.first_brief_sovereign import BASELINE
+
+    kwargs = dict(BASELINE)
+    kwargs.update(overrides)
+    kwargs.update(n_b=101, n_y=11, policy_search="monotone")
+    current = solve_sovereign_default(**kwargs)
+    legacy = legacy_solve(**kwargs)
+    assert_results_identical(current, legacy)
+    pd.testing.assert_frame_equal(current.simulate(periods=500),
+                                  legacy_simulate(legacy, periods=500), check_exact=True)
