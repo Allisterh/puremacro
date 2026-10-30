@@ -1,0 +1,162 @@
+{
+  "schema": 1,
+  "scope": "small-grid equations; no published-moment replication",
+  "versions": {
+    "python": "3.11.17",
+    "numpy": "2.4.6",
+    "scipy": "1.17.1"
+  },
+  "tolerances": {
+    "value_price": 1e-07,
+    "accounting": 1e-08
+  },
+  "source_sha256": {
+    "puremacro/sovereign/arellano.py": "0e70f71915c76dcdc93e628e3439592c66a75b5a43b55f6c82c77f631b850345",
+    "puremacro/sovereign/_results.py": "21e0bd69e131b5bf3171c96ed79bc0ebf2ed38e86f115a8de82cf6491e922a98",
+    "puremacro/sovereign/mendoza.py": "bddf1d086da1df27a666a09f3ea786b1c030b8a4c18d72b50f4c2c70c17ae94a",
+    "puremacro/sovereign/restructuring.py": "59f3562655746313a57a017410426b0cdc0c80b7b0d6e9a60f9d12f1f04597e4",
+    "puremacro/sovereign/measurement.py": "3a3588d95722c08b8c4392852d5bc41420d20bde29f12e514d876228b38c90a3",
+    "tools/reference_validation/sovereign_extensions.py": "c89532352c9d2eb5c4bac5cb6abe3c1e083371cd1f295cfeae4f946b364ee73e",
+    "tools/reference_validation/check_sovereign_extensions.py": "ed0f43fbfbefa8cceddf981468d648ea22a0c4f00d00755cc3a2303e6b5ffe1f"
+  },
+  "long_term": [
+    {
+      "parameters": {
+        "n_b": 17,
+        "n_y": 5,
+        "b_min": -0.1,
+        "b_max": 0.25,
+        "delta": 0.2,
+        "kappa": 0.03,
+        "sigma_eps": 0.01,
+        "enforce_monotonicity": false,
+        "howard_steps": 0,
+        "tol": 1e-10,
+        "max_iter": 10000
+      },
+      "errors": {
+        "v_repay": 1.745226185789761e-09,
+        "v_default": 1.7452248535221315e-09,
+        "q_bond": 1.8207657603852567e-14,
+        "default_prob": 2.1871393585115584e-14,
+        "policy_b": 0.0,
+        "choice_probabilities": 9.786615962070755e-14
+      },
+      "reference_residual": 9.739764550431573e-12,
+      "deterministic_optimality_gap": 0.0052831812394869004,
+      "passed": true
+    },
+    {
+      "parameters": {
+        "n_b": 17,
+        "n_y": 5,
+        "b_min": -0.1,
+        "b_max": 0.25,
+        "delta": 0.5,
+        "kappa": 0.01,
+        "sigma_eps": 0.01,
+        "enforce_monotonicity": false,
+        "howard_steps": 0,
+        "tol": 1e-10,
+        "max_iter": 10000
+      },
+      "errors": {
+        "v_repay": 1.7556316400657579e-09,
+        "v_default": 1.7556307518873382e-09,
+        "q_bond": 1.7319479184152442e-14,
+        "default_prob": 2.08305594995295e-14,
+        "policy_b": 0.0,
+        "choice_probabilities": 1.2867484855405564e-13
+      },
+      "reference_residual": 9.78683800667568e-12,
+      "deterministic_optimality_gap": 0.004246249742197783,
+      "passed": true
+    },
+    {
+      "parameters": {
+        "n_b": 17,
+        "n_y": 5,
+        "b_min": -0.1,
+        "b_max": 0.25,
+        "delta": 1.0,
+        "kappa": 0.0,
+        "sigma_eps": 0.01,
+        "enforce_monotonicity": false,
+        "howard_steps": 0,
+        "tol": 1e-10,
+        "max_iter": 10000
+      },
+      "errors": {
+        "v_repay": 1.7404984120616973e-09,
+        "v_default": 1.740496191615648e-09,
+        "q_bond": 1.7708057242771247e-14,
+        "default_prob": 2.0539125955565396e-14,
+        "policy_b": 0.0
+      },
+      "reference_residual": 9.872103134966892e-12,
+      "deterministic_optimality_gap": 9.407585821463726e-12,
+      "passed": true
+    }
+  ],
+  "collateral": [
+    {
+      "parameters": {
+        "n_b": 7,
+        "n_k": 6,
+        "n_z": 3,
+        "b_max": 1.2,
+        "kappa_collateral": 0.3,
+        "tol": 1e-10,
+        "max_iter": 2000
+      },
+      "errors": {
+        "policy_b": 0.0,
+        "policy_k": 0.0,
+        "policy_c": 0.0,
+        "value": 2.0541612855140556e-09
+      },
+      "bellman_residual": 9.29212262690271e-11,
+      "crisis_probability": 0.0,
+      "grid_binding_fraction": 0.18253968253968253,
+      "amplification_status": "computed",
+      "passed": true
+    },
+    {
+      "parameters": {
+        "n_b": 7,
+        "n_k": 6,
+        "n_z": 3,
+        "b_max": 1.2,
+        "kappa_collateral": 0.9,
+        "tol": 1e-10,
+        "max_iter": 2000
+      },
+      "errors": {
+        "policy_b": 0.0,
+        "policy_k": 0.0,
+        "policy_c": 0.0,
+        "value": 2.1089281432296048e-09
+      },
+      "bellman_residual": 9.489831143127958e-11,
+      "crisis_probability": 0.0,
+      "grid_binding_fraction": 0.0,
+      "amplification_status": "computed",
+      "passed": true
+    }
+  ],
+  "restructuring": [
+    {
+      "haircut": 0.2,
+      "extension": 0.0,
+      "default_probability_error": 1.4016565685892601e-15,
+      "passed": true
+    },
+    {
+      "haircut": 0.2,
+      "extension": 0.5,
+      "default_probability_error": 6.994405055138486e-15,
+      "passed": true
+    }
+  ],
+  "passed": true
+}

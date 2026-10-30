@@ -123,20 +123,28 @@ no valida independientemente toda la economía de la reestructuración.
 
 ## Extensiones experimentales
 
-- **Deuda larga:** el precio sin riesgo es
-  $[\delta+(1-\delta)\kappa]/(r^*+\delta)$, distinto del precio a un período.
-  Una derivada no positiva bajo proyección monótona no es una prueba independiente
-  de dilución estructural.
-- **Colateral (`solve_sudden_stop`):** la amplificación actual es un máximo de
-  comparaciones entre estados, con un valor heredado de 1.35 si no hay cocientes
-  válidos. La rama de restricción holgada también prescribe diagnósticos. Hay
-  que corregirlos y obtener una referencia independiente antes de afirmar una
-  replicación cuantitativa de Mendoza o extraer conclusiones de política. La
-  fracción vinculante de malla no es una frecuencia simulada de crisis.
-- **Estructura temporal (`decompose_spread_term_structure`):** valora derechos
-  de supervivencia. `risk_premium_component` es un residuo contable después de un
-  componente de pérdida por log-supervivencia; no identifica por separado primas
-  de liquidez o dilución. La aditividad no constituye validación económica.
+- **Deuda larga:** un punto fijo independiente en malla pequeña coincide en
+  valores, precios y probabilidades de elección. Es el operador existente de
+  política probabilística suavizada, no el óptimo determinista ni una replicación
+  de momentos publicados. La simulación usa las probabilidades de deuda de la
+  valoración; `policy_b` muestra su moda. El precio sin riesgo es
+  $[\delta+(1-\delta)\kappa]/(r^*+\delta)$.
+- **Colateral (`solve_sudden_stop`):** las políticas coinciden con una referencia
+  exhaustiva con restricciones vinculantes y holgadas. La amplificación usa
+  caídas medias de consumo en los mismos estados simulados, sin valores impuestos;
+  los casos indefinidos devuelven `NaN`. Fracción vinculante de malla y frecuencia
+  simulada de crisis son distintas. Es un planificador ilustrativo, no el modelo
+  completo de Mendoza.
+- **Reestructuración:** las quitas reutilizan el equilibrio, los cambios de
+  vencimiento conservan la calibración, se rechazan escenarios sin convergencia
+  y la trayectoria comienza en el ingreso elegido. Los estados posteriores
+  coinciden con una referencia independiente en malla pequeña.
+- **Estructura temporal:** la valoración de supervivencia usa la distribución
+  completa de decisiones de deuda. `risk_premium_component` es un ajuste de
+  capitalización discreta, no una prima económica identificada.
+
+Vea [ecuaciones y diagnósticos medidos](sovereign_extensions_validation.md)
+para umbrales, evidencia archivada y límites económicos.
 
 ## Proceso de validación
 
@@ -153,7 +161,8 @@ flowchart TD
 ```
 
 Las herramientas de regeneración y la procedencia de las referencias están en
-`tools/reference_validation/` y `tests/fixtures/research_reliability/`. El cuaderno
-73 recorre la interfaz de forma exploratoria. El siguiente hito es una calibración
-publicada de corto plazo, comparación de momentos, incertidumbre muestral y
-convergencia de malla antes de ampliar las conclusiones de política.
+`tools/reference_validation/` y `tests/fixtures/research_reliability/`. El cuaderno 73 explora la interfaz. La referencia publicada de corto plazo y
+el estudio de malla de la calibración pública están completos; los contrastes
+anteriores de extensiones tienen un alcance separado y más limitado. Ampliar
+las conclusiones de política requiere convergencia de malla y momentos empíricos
+propios de cada extensión.

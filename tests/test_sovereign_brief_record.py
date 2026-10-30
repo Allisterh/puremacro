@@ -185,7 +185,20 @@ _EXAMPLE_HASHES = {
 # short-term solver and simulator bit for bit. The pinned original/new pairs
 # are supported by test_brief_scenarios_bit_identical_to_legacy and the full
 # 6.0.1 parity harness; unknown edits still invalidate the frozen record.
-_EQUIVALENT_LIBRARY_HASHES = {'puremacro/sovereign/arellano.py': ('d434bded913776d47a740ca5e35ce3b7a8e7047d3efbafce89b09d5e5b2655a2', '14bbdff97bd01789fffb1b06736077a1324039019a51804bd1d5ce7d69d6faa4'), 'puremacro/sovereign/_results.py': ('fc97e14a0e10a450f9e2cacf965cffc8f42a1acc5e6d1c18fae9cb61a1cec3db', '71f81ce1fd2d76d41d98105c02679d5c4cd570c5d4546043f03ecefd3c3d7ac3')}
+# The later extension corrections change only long-term debt simulations and
+# collateral diagnostics. Every brief calibration and short-term random path
+# remains bit-identical in the parity tests; measurement parity is also tested.
+_EQUIVALENT_LIBRARY_HASHES = {
+    'puremacro/sovereign/arellano.py': (
+        'd434bded913776d47a740ca5e35ce3b7a8e7047d3efbafce89b09d5e5b2655a2',
+        '0e70f71915c76dcdc93e628e3439592c66a75b5a43b55f6c82c77f631b850345'),
+    'puremacro/sovereign/_results.py': (
+        'fc97e14a0e10a450f9e2cacf965cffc8f42a1acc5e6d1c18fae9cb61a1cec3db',
+        '21e0bd69e131b5bf3171c96ed79bc0ebf2ed38e86f115a8de82cf6491e922a98'),
+    'puremacro/sovereign/measurement.py': (
+        '104c41d31181121ae543d9544c908726435bbaa15a3f605f4b2c071bb2957365',
+        '3a3588d95722c08b8c4392852d5bc41420d20bde29f12e514d876228b38c90a3'),
+}
 
 
 def _provenance_problems(recorded: dict, current: dict) -> list[str]:

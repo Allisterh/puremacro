@@ -195,12 +195,14 @@ class TestTrackII5SovereignDefaultStress:
         assert res_tight.collateral_binding_fraction >= 0.0
         assert not np.isnan(res_tight.multiplier_lambda).any()
 
-        # Loose leverage: kappa=0.90 (unconstrained limit)
+        # Hold the debt support fixed so higher collateral actually makes the
+        # whole choice grid feasible, rather than expanding debt with kappa.
         res_loose = solve_sudden_stop(
             beta=0.96,
             gamma=2.0,
             r_star=0.04,
             kappa_collateral=0.90,
+            b_max=float(res_tight.b_grid[-1]),
             n_b=15,
             n_k=15,
             n_z=3,

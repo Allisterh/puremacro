@@ -44,7 +44,7 @@ the specific scope described in each notebook, not blanket economic validation.
 
 | Comparison | Result on the tested grids | What remains open |
 |---|---|---|
-| Arellano short-term deterministic equations | Matched-grid equations pass; archived Fortran and MATLAB moments reproduce; public simulation timing and zero-debt reentry are corrected; public-calibration grids converge at 6,401 × 641, and the public solver reaches that grid with a certified monotone search | Published-moment discrepancies and long-term extension |
+| Arellano short-term deterministic equations | Matched-grid equations pass; archived Fortran and MATLAB moments reproduce; public simulation timing and zero-debt reentry are corrected; public-calibration grids converge at 6,401 × 641, and the public solver reaches that grid with a certified monotone search | Published-moment discrepancies and extension-specific economic convergence |
 | One-asset household block | SSJ authors' code matches policies and consumption within 5e-11; return Jacobians within 4e-4 | Finer-grid economic convergence, full published equilibrium and nonlinear transition references |
 
 Both references are frozen with hashes and provenance in
@@ -78,11 +78,13 @@ alone would not have justified that conclusion.
 This creates a research result that can be reviewed from equations through
 policy tables. It also supplies the model and output contracts for future work.
 
-The collateral/sudden-stop diagnostics need a separate correction and reference:
-the current amplification includes a legacy fallback and the loose-constraint
-branch prescribes diagnostic values. The term-structure residual component is
-accounting, not an independently identified risk premium. Notebook 73 and the
-[sovereign guide](sovereign_default.md) state these remaining limits explicitly.
+The [sovereign extension references](sovereign_extensions_validation.md) now
+check the stated long-term smoothed operator, haircut/maturity states and
+collateral-planner policies independently. Long-term simulation draws from the
+same debt-choice distribution used in pricing. Collateral diagnostics are
+measured from simulated paths, with explicit undefined amplification and no
+prescribed fallback. The survival-spread residual is a compounding adjustment.
+These are small-grid equation checks, not published extension-moment replications.
 
 ## Then: household incidence and teaching
 

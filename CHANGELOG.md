@@ -28,6 +28,25 @@ Development version after 6.0.1; not a published distribution.
   default tariff covers all modeled sectors including services; the CES input
   composite substitutes across all country-sector inputs. Both descriptions
   are corrected without changing the recorded equilibrium results.
+- Independently checked the stated long-term sovereign operator, haircut/maturity
+  states and collateral-planner policies on small grids. Long-term simulation,
+  spread diagnostics and survival pricing now use the debt-choice probabilities
+  used by the smoothed pricing operator; `policy_b` remains the modal choice.
+  Short-term values, prices and simulations retain exact 6.0.1 parity. The
+  long-term operator is explicitly documented as a quantal-policy approximation,
+  with its deterministic-optimality gap exposed.
+- Replaced prescribed collateral diagnostics with reproducible simulated
+  measurements. Amplification uses weighted consumption drops at identical
+  debt/capital states; undefined cases return `NaN` with a status, and no 1.35
+  fallback or lower bound remains. Crisis frequency and grid binding are distinct;
+  capacity averages the actual product `kappa*q*k_next`. Infeasible consumption
+  grids are rejected, and final Bellman residuals certify both policy problems.
+- Haircut-only restructuring reuses the original equilibrium; maturity changes
+  preserve its numerical budget and reject nonconvergence. Recovery starts at
+  the selected income state and reports debt-grid rounding. The legacy survival
+  spread `risk_premium_component` is documented as a compounding adjustment,
+  with independent risk-free/constant-hazard checks. Bilingual notebook 73 and
+  guides now use the corrected measurements and state their validation scope.
 
 - Added `puremacro.inference.gmm`, a public generic GMM engine: user moment
   functions, two-step, iterated, identity or user weighting, Bartlett HAC
@@ -72,9 +91,12 @@ Development version after 6.0.1; not a published distribution.
   `tests/fixtures/sovereign_fiscal/fiscal_grid_convergence.json`.
 
 - `solve_sovereign_default` now calls a private Bellman core parameterized by
-  resources, a choice utility and an income-only flow. Results are
-  bit-identical to 6.0.1 (pinned against a verbatim copy of the 6.0.1 solver,
-  dense and monotone, short- and long-term debt).
+  resources, a choice utility and an income-only flow. The value and pricing
+  fixed points retain exact 6.0.1 parity for dense and monotone short-term debt
+  and the smoothed long-term operator. Short-term paths are also unchanged;
+  long-term paths now follow the pricing operator’s debt-choice probabilities.
+- Sovereign brief resumes validate the baseline and scenario overrides before
+  reusing a cached case, preventing stale results from being relabeled.
 - Fiscal grid caches now include the effective calibration and policy-search
   settings in both solution and simulation identities. The 6.0.1 parity harness
   independently pins the legacy simulation algorithm on each platform; archived

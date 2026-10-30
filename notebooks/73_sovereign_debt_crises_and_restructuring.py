@@ -50,12 +50,13 @@
 # it is not a derivative of the entire equilibrium with respect to a parameter.
 # Monotonicity is imposed by the solver's default projection.
 #
-# The collateral example imposes $b'\leq\kappa q k'$. Its amplification diagnostic
-# is a maximum of selected state comparisons and includes a fallback when no valid
-# comparison exists. Treat it as experimental, not a measured crisis elasticity.
-# The term-structure routine prices survival claims and labels a residual spread
-# component as `risk_premium_component`; additivity does not identify an economic
-# risk premium.
+# Long-term debt choices use a smoothed quantal policy, with values equal to
+# weighted objectives rather than an inclusive value. Simulations draw from the
+# same probabilities used in pricing; the displayed debt policy is their mode.
+# The collateral example imposes $b'\leq\kappa q k'$. Its amplification divides
+# weighted consumption drops at identical simulated debt/capital states. It may
+# be below one or undefined. Survival-claim pricing's `risk_premium_component`
+# is a discrete-compounding adjustment, not an identified economic premium.
 
 # %% [markdown]
 # ## Intuition
@@ -126,7 +127,7 @@ res_arellano = solve_sovereign_default(
     sigma_eps=0.01,
     n_b=30,
     n_y=9,
-    max_iter=250,
+    max_iter=2000,
 )
 
 q_max_rf = 1.0 / (1.0 + 0.015)
@@ -165,7 +166,7 @@ res_ce = solve_sovereign_default(
     sigma_eps=0.01,
     n_b=30,
     n_y=9,
-    max_iter=250,
+    max_iter=2000,
 )
 
 err_ce_res = float(res_ce.residual)
@@ -177,7 +178,7 @@ med_b_idx = len(res_ce.b_grid) // 2
 spread_lt = float(np.mean(res_ce.spread[med_b_idx, :]) * 10000.0)
 spread_st = float(np.mean(res_arellano.spread[med_b_idx, :]) * 10000.0)
 
-record("Chatterjee-Eyigungor: Bellman residual", err_ce_res, 1e-7, "PASS" if err_ce_res <= 1e-7 else "FAIL")
+record("Long-term quantal operator: residual", err_ce_res, 1e-7, "PASS" if err_ce_res <= 1e-7 else "FAIL")
 record("Long-term: projected interpolant derivative dq/db <= 0", err_dq_db_mono, 0.0, "PASS" if err_dq_db_mono <= 0.0 else "FAIL")
 
 print(f"Long-term example solved in {res_ce.iterations} iterations.")
@@ -187,12 +188,12 @@ print(f"Average spread at median debt: Long-Term = {spread_lt:.1f} bps, Short-Te
 # %% [markdown]
 # ### 3. Collateral constraints: experimental diagnostics
 #
-# This example solves the available constrained and unconstrained policy problems.
-# The reported amplification ratio is a selected-state maximum, with a legacy
-# fallback, and the loose-constraint case includes prescribed diagnostic values.
-# It is not an independently validated Mendoza replication. Binding frequency
-# across grid points and an unweighted grid-average debt/collateral comparison
-# are distinct from simulated crisis frequency and precautionary saving.
+# This illustrative planner solves constrained and unconstrained policy problems.
+# Independent exhaustive checks match its policies, including binding states.
+# Amplification is a ratio of average consumption drops at the same simulated
+# states; no fallback or prescribed lower bound remains. Grid binding and
+# simulated crisis frequency are distinct. Capacity is averaged as kappa*q*k_next.
+# This is not a replication of Mendoza's full competitive model or its moments.
 
 # %%
 res_mendoza = solve_sudden_stop(
@@ -209,30 +210,30 @@ res_mendoza = solve_sudden_stop(
     max_iter=200,
 )
 
-err_amplification = float(max(0.0, 1.25 - res_mendoza.amplification_ratio))
-err_binding_frac = float(max(0.0, 0.05 - res_mendoza.collateral_binding_fraction))
-
-# Unweighted grid comparison; this is not an ergodic precautionary-saving estimate.
-mean_debt_mendoza = float(np.mean(res_mendoza.policy_b))
-mean_collateral_mendoza = float(0.30 * np.mean(res_mendoza.asset_price_q) * np.mean(res_mendoza.policy_k))
+# Measurements over the post-burn simulation, not averages over the state grid.
+sample_mendoza = res_mendoza.simulate(T=2500, seed=42).iloc[500:]
+mean_debt_mendoza = float(sample_mendoza["b_next"].mean())
+mean_collateral_mendoza = float(sample_mendoza["collateral_capacity"].mean())
 gap_precautionary = float(max(0.0, mean_debt_mendoza - mean_collateral_mendoza))
+err_crisis_frequency = abs(res_mendoza.crisis_probability - float(sample_mendoza["crisis"].mean()))
 
-
+assert res_mendoza.converged
 assert 0.0 <= res_mendoza.collateral_binding_fraction <= 1.0
-record("Collateral example: unweighted grid debt/capacity gap", gap_precautionary, 0.0, "PASS" if gap_precautionary <= 0.0 else "FAIL")
+record("Collateral: simulated debt/capacity gap", gap_precautionary, 1e-8, "PASS" if gap_precautionary <= 1e-8 else "FAIL")
+record("Collateral: reproduced crisis frequency", err_crisis_frequency, 1e-12, "PASS" if err_crisis_frequency <= 1e-12 else "FAIL")
 
 print(f"Experimental collateral example: {res_mendoza.iterations} iterations; converged={res_mendoza.converged}")
-print(f"Experimental selected-state amplification diagnostic: {res_mendoza.amplification_ratio:.4f}")
-print(f"Collateral binding fraction: {res_mendoza.collateral_binding_fraction * 100:.2f}% of state space")
-print(f"Average debt ({mean_debt_mendoza:.4f}) vs Collateral capacity ({mean_collateral_mendoza:.4f})")
+print(f"Weighted consumption-drop ratio: {res_mendoza.amplification_ratio:.4f}; status={res_mendoza.metadata['amplification_status']}")
+print(f"Grid binding: {res_mendoza.collateral_binding_fraction * 100:.2f}%; simulated crises: {res_mendoza.crisis_probability * 100:.2f}%")
+print(f"Average next debt ({mean_debt_mendoza:.4f}) vs average collateral capacity ({mean_collateral_mendoza:.4f})")
 
 # %% [markdown]
 # ### 4. Spread accounting and restructuring
 #
 # The spread components add up by construction for this example. The residual
 # component is an accounting quantity, not an independently estimated risk premium.
-# The restructuring calculation re-solves the baseline calibration with changed
-# debt and maturity. Very low bond prices can generate extreme yields, so inspect
+# A haircut alone changes the inherited debt state; a maturity change re-solves
+# the preserved calibration. Very low bond prices can generate extreme yields, so inspect
 # the evaluation state before drawing an economic conclusion.
 
 # %%
@@ -358,10 +359,10 @@ assert 0.0 <= restruct_user.post_default_prob <= 1.0
 # %% [markdown]
 # ## How comprehensive is this?
 #
-# This is an exploratory interface tour. Independent matched-grid evidence covers
-# the deterministic short-term equations, not the full long-term, collateral or
-# restructuring policy mechanisms. See `docs/sovereign_default.md` and
-# `docs/research_reliability.md` for the tested scope and the next replication plan.
+# This is an exploratory interface tour. Independent references check short-term
+# equations and the stated long-term quantal, collateral-planner and restructuring
+# operators. They do not establish all published moments or economic grid
+# convergence for these extensions. See `docs/sovereign_extensions_validation.md`.
 #
 # Grid resolution is part of any sovereign-default result, not a detail. On the
 # author's archived 200 × 21 grid the independent Arellano (2008) study comes
