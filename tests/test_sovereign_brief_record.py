@@ -9,6 +9,7 @@ read it and never re-run the sweep.
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import numpy as np
@@ -174,6 +175,7 @@ _EXAMPLE = "puremacro/examples/first_brief_sovereign.py"
 # the Windows fixes add explicit utf-8 encodings and platform guards.
 # Any further edit must be reviewed the same way and its hash added here.
 _EXAMPLE_HASHES = {
+    "51994374f6df3515d167147b93f6d455c561843edc81d3656489f4157cf1003d",  # resume validation only; solve and measurement are unchanged
     "4823e9efa4b98fd3f1cd309baf1d5f79ebe201b9c918e3f15f0a17b297fd5858",  # frozen (1752c83)
     "819b52aeac1762b1c93d3bd5ad18b7bd85d7de0e01097aa2a172725929b94d58",  # current: portable I/O and corrected presentation; numerical generation unchanged
 }
@@ -202,6 +204,41 @@ def _provenance_problems(recorded: dict, current: dict) -> list[str]:
 
 def test_record_sources_match_the_current_files(record):
     assert _provenance_problems(record["source_sha256"], brief.source_hashes()) == []
+
+
+@pytest.mark.parametrize("changed", [None, "overrides", "missing_overrides", "baseline"])
+def test_resume_reuses_only_the_same_scenario(record, tmp_path, monkeypatch, changed):
+    saved = deepcopy(record)
+    saved["source_sha256"] = brief.source_hashes()
+    saved["scenarios"] = {"custom": saved["scenarios"]["theta=0.15"]}
+    partial = tmp_path / "partial.json"
+    overrides = {"theta": .15}
+    if changed == "overrides":
+        overrides = {"theta": .50}
+    elif changed == "missing_overrides":
+        del saved["scenarios"]["custom"]["overrides"]
+    elif changed == "baseline":
+        saved["baseline"]["beta"] = .90
+    partial.write_text(json.dumps(saved), encoding="utf-8")
+    calls = []
+    fresh = deepcopy(record["scenarios"]["theta=0.5"]["cases"]["6401x641"])
+
+    def solve(parameters, n_b, n_y):
+        calls.append((parameters, n_b, n_y))
+        return object(), 0.
+
+    monkeypatch.setattr(brief, "solve_scenario", solve)
+    monkeypatch.setattr(brief, "measure_case", lambda *args, **kwargs: fresh)
+    resumed = brief.build_record([(6401, 641)], design=brief.DESIGN, partial=partial,
+                                 scenarios={"custom": overrides}, log=lambda message: None)
+    assert resumed["scenarios"]["custom"]["overrides"] == overrides
+    result = resumed["scenarios"]["custom"]["cases"]["6401x641"]
+    if changed is None:
+        assert not calls
+        assert result == saved["scenarios"]["custom"]["cases"]["6401x641"]
+    else:
+        assert calls == [(overrides, 6401, 641)]
+        assert result == fresh
 
 
 @pytest.mark.parametrize("path", [*_LIBRARY_SOURCES, _EXAMPLE])

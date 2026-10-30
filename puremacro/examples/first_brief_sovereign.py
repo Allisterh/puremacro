@@ -228,8 +228,8 @@ def build_record(grids: Sequence[tuple[int, int]], *, design: dict, partial: Pat
 
     After each case the record so far is written to ``partial`` (atomic replace).
     A run restarted with the same ``partial`` reuses its finished cases only if
-    their ``source_sha256`` and ``design`` match the current ones; otherwise the
-    file is discarded and every case is solved again.
+    their source hashes, simulation design, baseline and scenario overrides
+    match the current run. Cases from changed scenarios are solved again.
     """
     grids = [(int(n_b), int(n_y)) for n_b, n_y in grids]
     scenarios = SCENARIOS if scenarios is None else scenarios
@@ -243,12 +243,16 @@ def build_record(grids: Sequence[tuple[int, int]], *, design: dict, partial: Pat
             old = json.loads(partial.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             old = {}
-        if old.get("source_sha256") == hashes and old.get("design") == design:
-            finished = {name: s.get("cases", {}) for name, s in old.get("scenarios", {}).items()}
-            old_loads = old.get("load_averages", {})
+        if (old.get("source_sha256") == hashes and old.get("design") == design
+                and old.get("baseline") == BASELINE):
+            finished = {name: s.get("cases", {}) for name, s in old.get("scenarios", {}).items()
+                        if name in scenarios and s.get("overrides") == dict(scenarios[name])}
+            retained = {f"{name} {key}" for name, cases in finished.items() for key in cases}
+            old_loads = {key: load for key, load in old.get("load_averages", {}).items()
+                         if key in retained}
             log(f"Resuming {sum(map(len, finished.values()))} finished cases from {partial.name}")
         else:
-            log(f"Discarding {partial.name}: its source hashes or design differ from the current run")
+            log(f"Discarding {partial.name}: its source hashes, design or baseline differ from the current run")
     record: dict[str, Any] = {
         "schema": 1,
         "package_version": _package_version(),
