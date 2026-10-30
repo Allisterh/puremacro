@@ -32,7 +32,8 @@ Development version after 6.0.1; not a published distribution.
   `fred_consumption_growth` and `fred_risk_free`. Inputs are refused when they
   contain NaN/inf, look percent-scaled or mix frequencies. Estimates match
   statsmodels and linearmodels to 1e-8 where definitions coincide; the
-  remaining differences are documented. Bilingual guide `docs/asset_pricing.md`.
+  remaining differences are documented. Multi-period historical VaR/ES compound
+  simple returns; SDF/HJ reject rank-deficient systems before inference. Bilingual guide `docs/asset_pricing.md`.
 - Added `puremacro.fetch.kenfrench_factors.fetch` for the Fama-French three-
   and five-factor, momentum and 25 size/book-to-market files. Data are
   downloaded into the user cache and never bundled (registry entry

@@ -175,3 +175,25 @@ def test_report_quintet_and_plot():
     assert "HJ distance" in hj_distance(R, F, n_sim=2_000).summary()
     with pytest.raises(ValueError, match="stage"):
         sdf_gmm(R, F, stage="cue")
+
+
+@pytest.mark.parametrize('demeaned', [True, False])
+def test_sdf_rejects_unidentified_factor_loadings(demeaned):
+    R, F, _ = _null()
+    F['f1'] = .1 * F['f0']
+    with pytest.raises(ValueError, match='not identified|rank deficient'):
+        sdf_gmm(R, F, demeaned=demeaned)
+
+
+def test_hj_rejects_redundant_test_assets():
+    R, F, _ = _null()
+    R['p5'] = .1 * R['p0']
+    with pytest.raises(ValueError, match='test assets.*rank|rank.*test assets'):
+        hj_distance(R, F, n_sim=100)
+
+
+def test_hj_rejects_unidentified_factor_loadings():
+    R, F, _ = _null()
+    F['f1'] = .1 * F['f0']
+    with pytest.raises(ValueError, match='not identified|rank deficient'):
+        hj_distance(R, F, n_sim=100)

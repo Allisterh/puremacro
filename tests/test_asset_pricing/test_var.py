@@ -23,8 +23,8 @@ def test_historical_var_es_known_sample():
     np.testing.assert_allclose(var, -q, atol=1e-15)
     es = expected_shortfall(r, alpha=0.1)
     np.testing.assert_allclose(es, -r[r <= q].mean(), atol=1e-15)
-    # horizon: overlapping two-period sums
-    s2 = r.to_numpy()[1:] + r.to_numpy()[:-1]
+    # horizon: the return from investing across overlapping two-period paths
+    s2 = (1 + r.to_numpy()[1:]) * (1 + r.to_numpy()[:-1]) - 1
     np.testing.assert_allclose(value_at_risk(r, alpha=0.1, horizon=2),
                                -np.quantile(s2, 0.1), atol=1e-15)
     df = pd.DataFrame({"a": r, "b": 2 * r})
@@ -179,3 +179,21 @@ def test_garch_var_refuses_unconverged_fit(monkeypatch):
         value_at_risk(r, method="garch")
     with pytest.raises(ValueError, match="did not converge"):
         expected_shortfall(r, method="garch")
+
+
+@pytest.mark.parametrize('horizon', [2, 3])
+def test_historical_horizons_follow_invested_wealth(horizon):
+    # A +10%, -10% path loses 1%; it is not a zero-return path.
+    returns = np.array([.1, -.1, .04, -.06, .08, -.03])
+    paths = []
+    for start in range(len(returns) - horizon + 1):
+        wealth = 100.0
+        for ret in returns[start:start + horizon]:
+            wealth *= 1 + ret
+        paths.append(wealth / 100 - 1)
+    paths = np.array(paths)
+    q = np.quantile(paths, .2)
+    np.testing.assert_allclose(value_at_risk(returns, .2, horizon=horizon), -q,
+                               rtol=0, atol=1e-14)
+    np.testing.assert_allclose(expected_shortfall(returns, .2, horizon=horizon),
+                               -paths[paths <= q].mean(), rtol=0, atol=1e-14)

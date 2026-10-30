@@ -113,6 +113,11 @@ de ponderación de segundos momentos y el valor p de chi-cuadrado ponderada
 de Jagannathan-Wang (1996). Simula el valor p con la semilla `seed`, que
 queda registrada.
 
+La distancia HJ rechaza activos redundantes y ambos estimadores rechazan
+cargas factoriales no identificadas con `ValueError`. El VaR y el ES históricos
+componen rendimientos simples en ventanas superpuestas de varios períodos; el
+método normal conserva su aproximación aditiva iid.
+
 ## CAPM de consumo con datos macroeconómicos
 
 ```python

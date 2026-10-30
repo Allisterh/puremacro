@@ -107,6 +107,11 @@ pricing errors and the Hansen J test. `hj_distance` uses the second-moment
 weighting matrix and the Jagannathan-Wang (1996) weighted chi-square
 p-value. It simulates the p-value with the recorded `seed`.
 
+Redundant test assets in the HJ distance and unidentified factor loadings raise
+a clear `ValueError`; singular systems do not produce inference. Historical
+VaR and ES compound simple returns across overlapping multi-period paths. The
+normal method retains its additive iid approximation.
+
 ## Consumption CAPM with macro data
 
 ```python

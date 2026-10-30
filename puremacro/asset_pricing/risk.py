@@ -160,8 +160,8 @@ def _var_es_one(x: np.ndarray, alpha: float, method: str, horizon: int) -> tuple
 
     if method == "historical":
         if horizon > 1:
-            c = np.concatenate([[0.0], np.cumsum(x)])
-            x = c[horizon:] - c[:-horizon]
+            windows = np.lib.stride_tricks.sliding_window_view(1.0 + x, horizon)
+            x = np.prod(windows, axis=-1) - 1.0
         q = float(np.quantile(x, alpha, method="linear"))
         return -q, -float(x[x <= q].mean())
     if method == "normal":
@@ -215,9 +215,11 @@ def value_at_risk(returns: Any, alpha: float = 0.05, method: str = "historical",
     """Next-period value at risk, reported as a positive loss ``-q_alpha``.
 
     ``method="historical"``: the empirical ``alpha`` quantile
-    (``np.quantile(method="linear")``) of overlapping ``horizon``-period sums
-    of returns. ``"normal"``: ``-(h mu + sqrt(h) sigma Phi^-1(alpha))`` with
-    the sample mean and ``std(ddof=1)``. ``"garch"`` (``horizon=1`` only):
+    (``np.quantile(method="linear")``) of overlapping compounded
+    ``horizon``-period simple returns, ``prod(1 + r) - 1``. ``"normal"``:
+    ``-(h mu + sqrt(h) sigma Phi^-1(alpha))`` with the sample mean and
+    ``std(ddof=1)``; this is an additive iid normal approximation, not an
+    exact compounded-return distribution. ``"garch"`` (``horizon=1`` only):
     filtered historical simulation, ``-(mean + sigma_{T+1} q_alpha(z))`` with
     ``z`` the standardized residuals of a constant-mean
     :func:`puremacro.garch.garch11_fit` and

@@ -39,6 +39,17 @@ def _sym_sqrt(A: np.ndarray) -> np.ndarray:
     return (V * np.sqrt(np.clip(w, 0.0, None))) @ V.T
 
 
+def _require_full_rank(A: np.ndarray, label: str) -> np.ndarray:
+    """Check column rank without making identification depend on units."""
+    scale = np.max(np.abs(A), axis=0)
+    if np.any(scale == 0):
+        raise ValueError(f"{label}: rank deficient; parameters not identified")
+    normalized = A / scale
+    if np.linalg.matrix_rank(normalized) < A.shape[1]:
+        raise ValueError(f"{label}: rank deficient; parameters not identified")
+    return scale
+
+
 def sdf_gmm(
     excess_returns: Any,
     factors: Any,
@@ -77,7 +88,8 @@ def sdf_gmm(
     names = tuple(str(c) for c in Fdf.columns)
     if demeaned:
         D = R.T @ (F - fbar) / T
-        b0 = np.linalg.solve(D.T @ D, D.T @ Rbar)
+        scale = _require_full_rank(D, "sdf_gmm factor loadings")
+        b0 = np.linalg.lstsq(D / scale, Rbar, rcond=None)[0] / scale
 
         def moments(th, data):
             Rv, Fv = data
@@ -96,7 +108,8 @@ def sdf_gmm(
         pnames = names + tuple(f"mu_{n}" for n in names)
     else:
         D = R.T @ F / T
-        b0 = np.linalg.solve(D.T @ D, D.T @ Rbar)
+        scale = _require_full_rank(D, "sdf_gmm factor loadings")
+        b0 = np.linalg.lstsq(D / scale, Rbar, rcond=None)[0] / scale
 
         def moments(th, data):
             Rv, Fv = data
@@ -108,8 +121,11 @@ def sdf_gmm(
 
         theta0 = b0
         pnames = names
+    # Pricing moments are small relative to the factor-mean moments. Tighten
+    # stopping so the jointly estimated means do not distort the second-stage
+    # weight; the direct BFGS reference checks parameter agreement to 1e-6.
     fit = gmm(moments, theta0, (R, F), weighting=_STAGES[stage], hac_lags=hac_lags,
-              jacobian=jac, names=pnames)
+              jacobian=jac, names=pnames, tol=1e-12)
     b = fit.coefs[:K]
     cov_b = fit.cov[:K, :K]
     fc = F - fbar
@@ -182,9 +198,11 @@ def hj_distance(
     if N <= K:
         raise ValueError(f"hj_distance: need N > K test assets; got N = {N}, K = {K}")
     lags = _resolve_lags(hac_lags, T)
+    _require_full_rank(R, "hj_distance test assets")
     W = np.linalg.inv(R.T @ R / T)
     W = 0.5 * (W + W.T)
     D = R.T @ F / T
+    _require_full_rank(D, "hj_distance factor loadings")
     Rbar = R.mean(axis=0)
     DWD = D.T @ W @ D
     b = np.linalg.solve(DWD, D.T @ W @ Rbar)
