@@ -1,4 +1,4 @@
-"""Your first policy brief: a 10% US tariff on Chinese goods on the bundled OECD ICIO 2019 table, national EV with its price / factor-income / fiscal split, and synthetic household groups.
+"""Your first policy brief: a 10% US tariff across all modeled Chinese sectors on the bundled OECD ICIO 2019 table, national EV with its price / factor-income / fiscal split, and synthetic household groups.
 
 Run it with::
 
@@ -13,7 +13,7 @@ its endpoint split into purchaser prices, factor income and fiscal transfers
 (``compute_hicksian_welfare``), maps the same GE prices and incomes to
 household groups (``distributional_welfare_from_results``) and, on request,
 repeats the solve under one alternative assumption (``--experiment
-sigma=2``: substitution between intermediate input origins).
+sigma=2``: substitution across all country-sector intermediate inputs).
 
 The default household groups are SYNTHETIC, method illustration only: three
 groups built from the importer's national consumption basket by documented
@@ -209,6 +209,12 @@ def national_record(sol: BriefSolution) -> dict[str, float]:
     i, e = countries.index(sol.settings["importer"]), countries.index(sol.settings["exporter"])
     b, c = sol.base, sol.counterfactual
     wage_i, wage_e = _pct_change(b.w_sol, c.w_sol, i), _pct_change(b.w_sol, c.w_sol, e)
+    # C is the welfare basket; I and Cx are separate quantity changes valued
+    # at baseline purchaser prices, not additional consumption EV components.
+    nf = sol.calib.n_final_demand
+    final_change = (np.asarray(b.Pfd_final) * (np.asarray(c.c_sol) - np.asarray(b.c_sol)))
+    final_change = final_change.ravel(order="F").reshape(len(countries), nf)[i]
+    categories = list(sol.icio.fd_codes)
     return {
         "ev_musd": float(w.ev),
         "cv_musd": float(w.cv),
@@ -225,6 +231,8 @@ def national_record(sol: BriefSolution) -> dict[str, float]:
         "wage_pct_importer": wage_i,
         "wage_pct_exporter": wage_e,
         "relative_wage_pct": 100.0 * ((1.0 + wage_i / 100.0) / (1.0 + wage_e / 100.0) - 1.0),
+        "investment_change_base_prices_musd": float(final_change[categories.index("I")]),
+        "abroad_change_base_prices_musd": float(final_change[categories.index("Cx")]),
     }
 
 
@@ -391,7 +399,7 @@ def household_incidence(sol: BriefSolution, groups: pd.DataFrame) -> pd.DataFram
 # --- record, outputs and CLI ------------------------------------------------
 
 DEFAULT_OUTPUT = Path("output") / "first_brief_tariffs"
-EXPERIMENT_DESCRIPTION = "intermediate sourcing substitution elasticity (0 = Leontief)"
+EXPERIMENT_DESCRIPTION = "substitution across all country-sector intermediate inputs (0 = Leontief)"
 
 _TEXT = {
     "en": {
@@ -416,10 +424,10 @@ _TEXT = {
                      "Fiscal transfers (million USD)", "Equivalent variation (million USD)",
                      "Equivalent variation (% of baseline consumption)"),
         "measure": "Measure", "headline_col": "sigma = 0 (headline)", "exp_col": "sigma = {value:g}",
-        "exp_note": ("sigma is the substitution elasticity between origins of intermediate inputs "
+        "exp_note": ("sigma is the substitution elasticity across all country-sector intermediate inputs "
                      "(0 = Leontief, fixed sourcing); final-use origin baskets stay fixed."),
         "title": "First policy brief: {tariff:g}% tariff by {importer} on {what} from {exporter}",
-        "all_goods": "all goods", "sector_goods": "sector {sector} goods",
+        "all_goods": "all modeled sectors (including services)", "sector_goods": "sector {sector} output",
         "table": "Table: {citation}; {unit}, {year}.",
         "panel_national": "National EV split ({importer})", "panel_groups": "Group EV",
         "axis_pct_cons": "% of baseline consumption", "axis_pct_spend": "% of group spending",
@@ -451,10 +459,10 @@ _TEXT = {
                      "Transferencias fiscales (millones de USD)", "Variación equivalente (millones de USD)",
                      "Variación equivalente (% del consumo base)"),
         "measure": "Medida", "headline_col": "sigma = 0 (principal)", "exp_col": "sigma = {value:g}",
-        "exp_note": ("sigma es la elasticidad de sustitución entre orígenes de los insumos intermedios "
+        "exp_note": ("sigma es la elasticidad de sustitución entre todos los insumos intermedios país-sector "
                      "(0 = Leontief, abastecimiento fijo); las canastas de origen del uso final no cambian."),
         "title": "Primer informe de política: arancel de {tariff:g}% de {importer} a {what} de {exporter}",
-        "all_goods": "todos los bienes", "sector_goods": "los bienes del sector {sector}",
+        "all_goods": "todos los sectores modelados (incluidos servicios)", "sector_goods": "la producción del sector {sector}",
         "table": "Tabla: {citation}; {unit}, {year}.",
         "panel_national": "Descomposición de la VE nacional ({importer})", "panel_groups": "VE por grupo",
         "axis_pct_cons": "% del consumo base", "axis_pct_spend": "% del gasto del grupo",
@@ -589,7 +597,10 @@ def _headline_reading(record: dict[str, Any], lang: str) -> str:
     _require(nat["price_effect_musd"] < 0 and nat["factor_income_effect_musd"] < 0 and fiscal > 0
              and ev > 0 and relw < 0 and tot_i < 0 and tot_e >= 0, "headline_reading")
     v = {"pf": _num(pf, 3, lang), "fiscal": _num(fiscal, 3, lang), "ev": _num(ev, 3, lang, sign=True),
-         "relw": _num(abs(relw), 2, lang), "tot": _num(abs(tot_i), 2, lang)}
+         "relw": _num(abs(relw), 2, lang), "tot": _num(abs(tot_i), 2, lang),
+         "cons": _fmt_musd(nat["ev_musd"], lang),
+         "inv": _fmt_musd(nat["investment_change_base_prices_musd"], lang),
+         "abroad": _fmt_musd(nat["abroad_change_base_prices_musd"], lang)}
     if lang == "es":
         return ("Cómo leerla: el alza de los precios de comprador y la caída del ingreso de los factores "
                 f"de Estados Unidos cuestan juntas {v['pf']}% del consumo base. El ingreso arancelario, "
@@ -599,10 +610,13 @@ def _headline_reading(record: dict[str, Any], lang: str) -> str:
                 f"bajan sus precios: los salarios de Estados Unidos caen alrededor de {v['relw']}% respecto "
                 "a los salarios chinos, y los términos de intercambio de Estados Unidos (valores unitarios "
                 "de exportación sobre los de importación, antes de aranceles) empeoran alrededor de "
-                f"{v['tot']}%. La descomposición no identifica de dónde viene la ganancia neta. Es una "
-                "atribución entre los dos equilibrios, no un conjunto de canales causales separados (vea "
-                "[Bienestar hicksiano del consumo](trade_welfare.md)), y la VE valora solo la canasta de "
-                "consumo, no la inversión. El resultado es además unilateral: China no toma represalias "
+                f"{v['tot']}%. La mejora del consumo de {v['cons']} millones de USD acompaña cambios de "
+                f"{v['inv']} en inversión y {v['abroad']} en compras de residentes en el exterior, "
+                "valorados a precios base. La VE valora solo el consumo: la asignación entre usos "
+                "finales cambia. Un solucionador independiente reproduce el resultado y comprueba "
+                "el balance mundial de recursos; vea [la validación](tariff_validation.md). "
+                "La descomposición de la VE es una atribución entre equilibrios, no canales causales "
+                "separados. El resultado es además unilateral: China no toma represalias "
                 "aquí, y una respuesta lo cambiaría.")
     return ("Read it this way: higher purchaser prices and lower US factor income together cost "
             f"{v['pf']}% of baseline consumption. The tariff revenue, rebated lump sum to US residents, "
@@ -610,10 +624,12 @@ def _headline_reading(record: dict[str, Any], lang: str) -> str:
             "terms-of-trade gain. With fixed sourcing, Chinese producers do not cut their prices: US "
             f"wages fall by about {v['relw']}% relative to Chinese wages, and the US terms of trade "
             "(export over import unit values, before duties) worsen by about "
-            f"{v['tot']}%. The split does not identify where the net gain comes from. It is an endpoint "
-            "attribution, not a set of separate causal channels (see "
-            "[Hicksian consumption welfare](trade_welfare.md)), and EV values the consumption basket "
-            "only, not investment. The result is also unilateral: China does not retaliate here, and a "
+            f"{v['tot']}%. The consumption improvement of {v['cons']} million USD accompanies changes "
+            f"of {v['inv']} in investment and {v['abroad']} in residents' purchases abroad, valued at "
+            "baseline prices. EV values consumption only: allocation across final uses changes. "
+            "An independent solver reproduces the result and checks the world resource balance; "
+            "see [the validation](tariff_validation.md). The EV split is an endpoint attribution, "
+            "not separate causal channels. The result is also unilateral: China does not retaliate here, and a "
             "response would change it.")
 
 
@@ -768,7 +784,7 @@ def _figure(record: dict[str, Any], lang: str, path: Path) -> None:
         from matplotlib.ticker import FuncFormatter
         for axis in (left, right):
             axis.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: f"{x:g}".replace(".", ",")))
-    fig.suptitle(_title(record, lang), fontsize=11)
+    fig.suptitle(textwrap.fill(_title(record, lang), 95), fontsize=11)
     fig.tight_layout()
     fig.savefig(path, metadata={"Software": None})
 

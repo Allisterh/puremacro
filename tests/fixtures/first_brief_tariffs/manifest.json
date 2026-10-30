@@ -1,8 +1,8 @@
 {
-  "package_version": "6.0.1",
-  "python": "3.13.12",
-  "numpy": "2.5.4",
-  "pandas": "3.0.6",
+  "package_version": "6.1.0",
+  "python": "3.11.17",
+  "numpy": "2.4.6",
+  "pandas": "3.1.0",
   "table": {
     "file": "icio_oecd2023_2019_isic_g20.npz",
     "citation": "OECD (2023), OECD Inter-Country Input-Output Tables, http://oe.cd/icio",
@@ -40,12 +40,12 @@
       "converged": true,
       "solver_termination": "tolerance",
       "account_residuals": {
-        "goods": 3.6038545658811927e-06,
-        "foreign_balance": 3.581026248866692e-06,
-        "household_budget": 7.450580596923828e-09,
-        "government_budget": 5.541369318962097e-08,
-        "gdp_income_expenditure": 3.581575583666563e-06,
-        "physical_equations": 3.6038545658811927e-06
+        "goods": 3.4590138966450468e-06,
+        "foreign_balance": 3.4360054996795952e-06,
+        "household_budget": 1.1175870895385742e-08,
+        "government_budget": 5.168840289115906e-08,
+        "gdp_income_expenditure": 3.436347469687462e-06,
+        "physical_equations": 3.4590138966450468e-06
       }
     },
     "experiment_baseline": {
@@ -64,28 +64,28 @@
       "converged": true,
       "solver_termination": "tolerance",
       "account_residuals": {
-        "goods": 3.923378244508058e-08,
-        "foreign_balance": 3.958120942115784e-08,
-        "household_budget": 7.450580596923828e-09,
-        "government_budget": 4.656612873077393e-10,
-        "gdp_income_expenditure": 3.923196345567703e-08,
-        "physical_equations": 3.958120942115784e-08
+        "goods": 3.80168785341084e-08,
+        "foreign_balance": 3.848617780022323e-08,
+        "household_budget": 3.725290298461914e-09,
+        "government_budget": 2.3283064365386963e-10,
+        "gdp_income_expenditure": 3.789318725466728e-08,
+        "physical_equations": 3.848617780022323e-08
       }
     }
   },
   "timings": {
-    "load": 0.003450667005381547,
-    "calibration": 0.0013229579926701263,
-    "baseline": 0.007810082999640144,
-    "counterfactual": 4.850906916006352,
-    "welfare": 0.004473250010050833,
-    "households": 0.0298090830037836,
-    "experiment": 10.873243581998395
+    "load": 0.006588124990230426,
+    "calibration": 0.002873249992262572,
+    "baseline": 0.013758333021542057,
+    "counterfactual": 6.239820374990813,
+    "welfare": 0.0059527500125113875,
+    "households": 0.026701291993958876,
+    "experiment": 14.383540876006009
   },
   "experiment": {
     "name": "sigma",
     "value": 2.0,
-    "description": "intermediate sourcing substitution elasticity (0 = Leontief)",
+    "description": "substitution across all country-sector intermediate inputs (0 = Leontief)",
     "solver": {
       "method": "equilibrated_newton",
       "tol": 1e-05,
@@ -100,54 +100,54 @@
   },
   "lang": "en",
   "load_average": [
-    4.77,
-    5.53,
-    7.66
+    17.76,
+    29.5,
+    38.77
   ],
   "artifacts": {
     "national.md": {
-      "sha256": "085ab08ae720a397c628a53a16efbbfb5e80d81c2f315175a8bd478f7db54334",
-      "bytes": 607
+      "sha256": "bf6a966d86f02e9b877dd857decdfcffa58fe7062e41b6faa974c9778c18b86d",
+      "bytes": 638
     },
     "national.csv": {
-      "sha256": "e1f7e55bdcfa175ed95e43fd3ec9e3eab17b0d45733fd30db602623052334dbe",
-      "bytes": 274
+      "sha256": "3be5209f82483c2179754471daf19e499623f1f2546c0cb15304b0036ecfa97d",
+      "bytes": 278
     },
     "national.tex": {
-      "sha256": "770d617f2113f94cba34df38700989bcfc94ce738c2dbd40288d9b6b59a7b42f",
+      "sha256": "2df070c5d2a6aef5c79323d1e31d538ed8c1782d8c94d1d4770e89e5416571c6",
       "bytes": 377
     },
     "households.md": {
-      "sha256": "78c8f7acbd306bdf8434b7c57db0262f84ffab2eca1b4a85b31d74395c34dcca",
-      "bytes": 471
+      "sha256": "2976bf1e7d47ef7ffc1c788c025602063bf28ec7fed8e087c46f343ff2d0771c",
+      "bytes": 575
     },
     "households.csv": {
-      "sha256": "b847a4bf204d28540cfa48a3d21a730f2dd47b4a88a68cd7eb3f47afe8272e1d",
-      "bytes": 563
+      "sha256": "e1c4ee70c4504124e27318d7ce798eeae4650465fa3bff16a0fc0b79acdfffd1",
+      "bytes": 568
     },
     "households.tex": {
       "sha256": "63a89e33a6a8bedf7149b2d78b158d59158564636f4aec2d4303251d991ab8f2",
       "bytes": 319
     },
     "experiment.md": {
-      "sha256": "686ca401002c426c18bf5d12608ad6d59dd3ad319012e09fdad719d62c085093",
-      "bytes": 497
+      "sha256": "4c52942d07e8e7e3ce6680b6b7541e0a4c7aae00827debf1391b277d487535ef",
+      "bytes": 504
     },
     "experiment.csv": {
-      "sha256": "54e7cef65278028b37fd6151f9eea6225f7379d802fffe267aa6722051db7590",
-      "bytes": 402
+      "sha256": "3f90fd78749b25f79d1b05a954ef50b4558972df93ecc78dca2122552198c370",
+      "bytes": 405
     },
     "experiment.tex": {
-      "sha256": "15b575d24020bd6492ae31ba0a55a85653746b3e73df8ca828cc284dc0f034df",
-      "bytes": 550
+      "sha256": "dbc4159c7c7961c18a048a5b4c8689f41d6086e9d2d019efbc144f6986328938",
+      "bytes": 557
     },
     "first_brief.png": {
-      "sha256": "f300b7301c2ecd4dcf62b90b4eb7dcd78e28a647e940ec7ab8f82adc26f54244",
-      "bytes": 40600
+      "sha256": "ad7aaacf4f1cf166f927790a99848d27690967f28843d8c2920b92db674cedd9",
+      "bytes": 34809
     },
     "headline.json": {
-      "sha256": "8de5081696e60e4ac15c340374fc64084935911b5bf2133dd07a65effbe4fdd4",
-      "bytes": 2716
+      "sha256": "aed9be36d81a58b0e81d7d10e79eebbfbf80782b67f9cd3d30579a679781a09a",
+      "bytes": 2980
     }
   }
 }

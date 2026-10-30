@@ -3,7 +3,7 @@
 # Your first policy brief: tariffs and household welfare
 
 This page walks through one complete policy experiment on public data: the
-United States levies a 10% tariff on all goods from China. The brief solves a
+United States levies a 10% tariff on all modeled sectors from China, including services. The brief solves a
 general-equilibrium trade model on the OECD Inter-Country Input-Output table
 that ships with puremacro, reports the US welfare change with its price /
 factor-income / fiscal split, shows how three household groups would be
@@ -12,10 +12,11 @@ Nothing needs to be downloaded besides the package.
 
 ## 1. Install
 
-You need Python 3.11 or later.
+You need Python 3.11 or later. This example is in the 6.1 development source;
+6.0.1 is the latest published distribution. From a development checkout:
 
 ```bash
-python -m pip install "puremacro>=6.1.0"
+python -m pip install .
 ```
 
 ## 2. Run
@@ -64,7 +65,7 @@ Positive values are gains. The three lines are an endpoint attribution valued in
 ![First brief: national EV split and synthetic household groups](assets/first_brief_tariffs/first_brief_en.png)
 
 <!-- first-brief:headline_reading -->
-Read it this way: higher purchaser prices and lower US factor income together cost 0.157% of baseline consumption. The tariff revenue, rebated lump sum to US residents, adds 0.195%, so the net EV is small and positive (+0.038%). This is not a terms-of-trade gain. With fixed sourcing, Chinese producers do not cut their prices: US wages fall by about 0.14% relative to Chinese wages, and the US terms of trade (export over import unit values, before duties) worsen by about 0.04%. The split does not identify where the net gain comes from. It is an endpoint attribution, not a set of separate causal channels (see [Hicksian consumption welfare](trade_welfare.md)), and EV values the consumption basket only, not investment. The result is also unilateral: China does not retaliate here, and a response would change it.
+Read it this way: higher purchaser prices and lower US factor income together cost 0.157% of baseline consumption. The tariff revenue, rebated lump sum to US residents, adds 0.195%, so the net EV is small and positive (+0.038%). This is not a terms-of-trade gain. With fixed sourcing, Chinese producers do not cut their prices: US wages fall by about 0.14% relative to Chinese wages, and the US terms of trade (export over import unit values, before duties) worsen by about 0.04%. The consumption improvement of 6,427 million USD accompanies changes of -7,096 in investment and -467 in residents' purchases abroad, valued at baseline prices. EV values consumption only: allocation across final uses changes. An independent solver reproduces the result and checks the world resource balance; see [the validation](tariff_validation.md). The EV split is an endpoint attribution, not separate causal channels. The result is also unilateral: China does not retaliate here, and a response would change it.
 <!-- /first-brief:headline_reading -->
 
 ## 4. One experiment: let firms switch suppliers
@@ -73,11 +74,11 @@ Read it this way: higher purchaser prices and lower US factor income together co
 python -m puremacro.examples.first_brief_tariffs --experiment sigma=2 --output first_brief_sigma2
 ```
 
-`sigma` is the elasticity of substitution between the origins of
-intermediate inputs. The headline uses `sigma=0` (Leontief: each industry
-keeps its sourcing shares fixed); with `sigma=2` intermediate buyers in every
-country can shift between origins when relative prices change. Final-use
-origin baskets stay fixed in both runs. The table compares the two:
+`sigma` is the elasticity of substitution across all country-sector
+intermediate inputs. The headline uses `sigma=0` (Leontief); `sigma=2` lets
+buyers in every country change both source countries and input sectors.
+It is not an elasticity restricted to origins within the same sector.
+Final-use baskets stay fixed. The table compares the two:
 
 <!-- first-brief:experiment -->
 | Measure | sigma = 0 (headline) | sigma = 2 |
@@ -88,7 +89,7 @@ origin baskets stay fixed in both runs. The table compares the two:
 | Equivalent variation (million USD) | 6,427 | 23,498 |
 | Equivalent variation (% of baseline consumption) | 0.0383 | 0.1401 |
 
-sigma is the substitution elasticity between origins of intermediate inputs (0 = Leontief, fixed sourcing); final-use origin baskets stay fixed.
+sigma is the substitution elasticity across all country-sector intermediate inputs (0 = Leontief, fixed sourcing); final-use origin baskets stay fixed.
 <!-- /first-brief:experiment -->
 
 <!-- first-brief:experiment_reading -->
