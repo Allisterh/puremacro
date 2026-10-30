@@ -3,11 +3,12 @@
 The agreed order is **research reliability and replications**, then **economic
 models and policy applications**, then **teaching and usability**.
 
-## Current correction branch
+## Published corrections and current development
 
-The v6.0.0 source tag did not reach PyPI. As checked on 2026-10-26, the published
-package is 5.7.1. Use the development checkout for these corrections; a new
-release still needs the supported-platform CI matrix and publishing gates.
+Version **6.0.1** was published to PyPI on 2026-10-29 and includes the
+corrections below. Version **6.1.0** is under development; additions marked
+unreleased require a source checkout. The 5.8.0, 5.9.0 and 6.0.0 source tags
+were not published. See the [current roadmap and API policy](1.0_path.md).
 
 Native model adapters now preserve the supplied equations and loadings.
 First-order DSGE scores use Kalman sensitivities; DAG scores centrally difference
