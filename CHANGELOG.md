@@ -13,6 +13,15 @@ but not published; their additions are included in 6.0.1, published on
 
 Development version after 6.0.1; not a published distribution.
 
+- Independently validated the tariff brief's positive consumption EV with a
+  separate Leontief equilibrium solver and direct flow/budget/EV checks for
+  `sigma=0` and `sigma=2`. The national record now includes investment and
+  spending-abroad quantity changes at baseline prices; bilingual guides explain
+  the final-use reallocation and frozen resource-balance/closure checks. The
+  default tariff covers all modeled sectors including services; the CES input
+  composite substitutes across all country-sector inputs. Both descriptions
+  are corrected without changing the recorded equilibrium results.
+
 - Added `puremacro.inference.gmm`, a public generic GMM engine: user moment
   functions, two-step, iterated, identity or user weighting, Bartlett HAC
   long-run covariance (package default bandwidth), analytic or numerical

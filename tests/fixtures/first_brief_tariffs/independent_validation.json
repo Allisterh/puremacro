@@ -1,0 +1,234 @@
+{
+  "schema": 1,
+  "scenario": {
+    "importer": "USA",
+    "exporter": "CHN",
+    "tariff": 0.1,
+    "sectors": "all 20 modeled sectors, including services"
+  },
+  "categories": [
+    "C",
+    "I",
+    "Cx"
+  ],
+  "unit": "million USD at baseline prices",
+  "versions": {
+    "python": "3.11.17",
+    "numpy": "2.4.6",
+    "scipy": "1.17.1"
+  },
+  "tolerances": {
+    "ev_musd": 1e-05,
+    "normalized_equilibrium": 1e-09,
+    "scaled_state": 1e-08,
+    "world_resource_musd": 1e-05
+  },
+  "source_sha256": {
+    "tools/reference_validation/tariff_reference.py": "07b1cdb866c473de8909cc101a7f1543c4c06d40cca00d0d9704a922e15accc7",
+    "tools/reference_validation/check_tariff_welfare.py": "5c40663e85d6c289c072fc86fa98a60ac49673924745b3b9d2434915701205b0",
+    "puremacro/trade/_accounting.py": "99221d357d249360f35c7d6df3e39c8eecbb06f13df3a05995f4fd49a48bc79f",
+    "puremacro/trade/solver.py": "b5a98be8c88846a46870e0fe40e07c7124b443318194de25b43d62751e525b14",
+    "puremacro/examples/first_brief_tariffs.py": "93c9c7cd47174c03917e26d15e1ccbdf279977bbf8dc1ba6ea59b102b655bc4f"
+  },
+  "native": {
+    "0": {
+      "consumption_ev_musd": 6427.190468467182,
+      "ev_error_musd": 1.227817847393453e-10,
+      "baseline_errors": {
+        "goods": 3.291903972436934e-15,
+        "zero_profit": 2.4424906541753444e-15,
+        "labor": 1.2288953579479743e-15,
+        "capital": 9.216715184609807e-16,
+        "final_prices": 0.0,
+        "household_budget": 1.3375713593208908e-16,
+        "government_budget": 1.737192241324297e-17,
+        "external_balance": 7.303053997537297e-16
+      },
+      "counterfactual_errors": {
+        "goods": 6.731098368403741e-11,
+        "zero_profit": 1.6624475295715767e-14,
+        "labor": 8.570545635517127e-15,
+        "capital": 3.188847869177394e-14,
+        "final_prices": 0.0,
+        "household_budget": 3.6157115281155985e-15,
+        "government_budget": 4.714266035686698e-15,
+        "external_balance": 9.200821082489894e-12
+      },
+      "us_final_use_change_musd": [
+        6427.190468467182,
+        -7095.644847028042,
+        -466.69647939163764
+      ],
+      "world_final_use_change_musd": [
+        7058.135923001355,
+        -6726.59472050934,
+        -299.20938619460225
+      ],
+      "us_quantity_change_pct": [
+        0.03832284209739356,
+        -0.1416626693534373,
+        -0.2635077985123968
+      ],
+      "us_price_change_pct": [
+        0.027703282954516517,
+        0.19717121838909168,
+        0.3304152100957358
+      ],
+      "us_nominal_income_change_pct": 0.06603674173726315,
+      "passed": true
+    },
+    "2": {
+      "consumption_ev_musd": 23497.933904880723,
+      "ev_error_musd": 1.4366378309205174e-08,
+      "baseline_errors": {
+        "goods": 3.43349124006863e-15,
+        "zero_profit": 2.886579864025407e-15,
+        "labor": 1.2288953579479743e-15,
+        "capital": 9.216715184609807e-16,
+        "final_prices": 0.0,
+        "household_budget": 1.3375713593208908e-16,
+        "government_budget": 1.737192241324297e-17,
+        "external_balance": 9.170359498826776e-16
+      },
+      "counterfactual_errors": {
+        "goods": 7.401748722986635e-13,
+        "zero_profit": 1.5453667451499543e-15,
+        "labor": 4.608357592304903e-16,
+        "capital": 4.881968898250399e-16,
+        "final_prices": 0.0,
+        "household_budget": 4.30539325832419e-17,
+        "government_budget": 3.265505636416016e-17,
+        "external_balance": 1.0277748901959885e-13
+      },
+      "us_final_use_change_musd": [
+        23497.933904880723,
+        -2840.7830109643837,
+        1470.6933779401168
+      ],
+      "world_final_use_change_musd": [
+        15110.86095674359,
+        -15144.963495125623,
+        -1907.9225662716265
+      ],
+      "us_quantity_change_pct": [
+        0.14010905932688722,
+        -0.05671548013788108,
+        0.830388038951857
+      ],
+      "us_price_change_pct": [
+        1.062518489465214,
+        1.1357293524706824,
+        0.3706503582596943
+      ],
+      "us_nominal_income_change_pct": 1.2041162334528677,
+      "passed": true
+    }
+  },
+  "closure_sensitivity": {
+    "headline": {
+      "domestic_taxes": true,
+      "foreign_balances": true,
+      "us_final_use_change_musd": [
+        6427.190467815393,
+        -7095.644847021466,
+        -466.69647951376936
+      ],
+      "world_final_use_change_musd": [
+        7058.135923376831,
+        -6726.594719286804,
+        -299.209386014727
+      ],
+      "world_factor_resource_change_musd": [
+        6761.056894787002,
+        -6493.6913985711935,
+        -267.3654962403914
+      ],
+      "world_factor_resource_total_musd": -2.458227754686959e-08,
+      "maximum_factor_gap": 1.4784745872020721e-08,
+      "native_scaled_errors": {
+        "baseline_p": 2.6278978992877455e-13,
+        "baseline_y": 9.011922903081604e-14,
+        "baseline_w": 2.616795669041494e-13,
+        "baseline_c": 2.8350175703550347e-13,
+        "baseline_P": 2.6013756069983067e-13,
+        "baseline_transfers": 2.639249546248601e-13,
+        "counterfactual_p": 5.435631127197074e-11,
+        "counterfactual_y": 7.317641387009868e-11,
+        "counterfactual_w": 5.432720939779756e-11,
+        "counterfactual_c": 5.92836376221073e-11,
+        "counterfactual_P": 5.435040018719302e-11,
+        "counterfactual_transfers": 5.4330176012697177e-11
+      },
+      "native_ev_error_musd": 6.516656867461279e-07,
+      "passed": true
+    },
+    "no_domestic_taxes": {
+      "domestic_taxes": false,
+      "foreign_balances": true,
+      "us_final_use_change_musd": [
+        6500.053136096536,
+        -7213.141792522572,
+        -475.59406568856974
+      ],
+      "world_final_use_change_musd": [
+        7139.329934759311,
+        -6831.4656824532985,
+        -307.86425229966375
+      ],
+      "world_factor_resource_change_musd": [
+        6868.977615004528,
+        -6580.338253334005,
+        -288.6393616639206
+      ],
+      "world_factor_resource_total_musd": 6.6038481350005895e-09,
+      "maximum_factor_gap": 1.1175870895385742e-08,
+      "passed": true
+    },
+    "zero_foreign_balances": {
+      "domestic_taxes": true,
+      "foreign_balances": false,
+      "us_final_use_change_musd": [
+        5892.062929618588,
+        -6410.855934920921,
+        -666.6394503678683
+      ],
+      "world_final_use_change_musd": [
+        6628.490081832634,
+        -6121.912919168323,
+        -481.8666560797294
+      ],
+      "world_factor_resource_change_musd": [
+        4480.817970418198,
+        -4096.101391471988,
+        -384.7165789598256
+      ],
+      "world_factor_resource_total_musd": -1.3615647276310483e-08,
+      "maximum_factor_gap": 1.8510036170482635e-08,
+      "passed": true
+    },
+    "neither": {
+      "domestic_taxes": false,
+      "foreign_balances": false,
+      "us_final_use_change_musd": [
+        5923.45762257778,
+        -6476.018401426143,
+        -688.1395705414151
+      ],
+      "world_final_use_change_musd": [
+        6677.754773591909,
+        -6175.208778207764,
+        -502.5459953879305
+      ],
+      "world_factor_resource_change_musd": [
+        4487.214413943665,
+        -4068.405902405197,
+        -418.80851154349426
+      ],
+      "world_factor_resource_total_musd": -5.02649299960467e-09,
+      "maximum_factor_gap": 1.594889909029007e-08,
+      "passed": true
+    }
+  },
+  "table_sha256": "a4c6489194d23c6a12e4644de92e87d9af515bd1acf92a5f0f24bac4b223023c",
+  "passed": true
+}

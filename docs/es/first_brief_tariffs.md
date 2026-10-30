@@ -3,8 +3,8 @@
 # Su primer informe de política: aranceles y bienestar de los hogares
 
 Esta página recorre un experimento de política completo con datos públicos:
-Estados Unidos impone un arancel de 10% a todos los bienes procedentes de
-China. El informe resuelve un modelo de comercio de equilibrio general sobre
+Estados Unidos impone un arancel de 10% a todos los sectores modelados
+procedentes de China, incluidos servicios. El informe resuelve un modelo de comercio de equilibrio general sobre
 la tabla insumo-producto interpaíses de la OCDE que se distribuye con
 puremacro, reporta el cambio de bienestar de Estados Unidos con su
 descomposición en precios, ingreso de los factores y transferencias fiscales,
@@ -14,10 +14,11 @@ paquete.
 
 ## 1. Instalación
 
-Necesita Python 3.11 o posterior.
+Necesita Python 3.11 o posterior. El ejemplo pertenece al código de desarrollo
+6.1; la distribución publicada más reciente es 6.0.1. Desde un checkout de desarrollo:
 
 ```bash
-python -m pip install "puremacro>=6.1.0"
+python -m pip install .
 ```
 
 ## 2. Ejecución
@@ -68,7 +69,7 @@ Los valores positivos son ganancias. Las tres líneas son una atribución entre 
 ![Primer informe: descomposición de la VE nacional y grupos de hogares sintéticos](../assets/first_brief_tariffs/first_brief_es.png)
 
 <!-- first-brief:headline_reading -->
-Cómo leerla: el alza de los precios de comprador y la caída del ingreso de los factores de Estados Unidos cuestan juntas 0,157% del consumo base. El ingreso arancelario, devuelto como suma fija a los residentes de Estados Unidos, agrega 0,195%, de modo que la VE neta es pequeña y positiva (+0,038%). No es una ganancia de términos de intercambio. Con abastecimiento fijo, los productores chinos no bajan sus precios: los salarios de Estados Unidos caen alrededor de 0,14% respecto a los salarios chinos, y los términos de intercambio de Estados Unidos (valores unitarios de exportación sobre los de importación, antes de aranceles) empeoran alrededor de 0,04%. La descomposición no identifica de dónde viene la ganancia neta. Es una atribución entre los dos equilibrios, no un conjunto de canales causales separados (vea [Bienestar hicksiano del consumo](trade_welfare.md)), y la VE valora solo la canasta de consumo, no la inversión. El resultado es además unilateral: China no toma represalias aquí, y una respuesta lo cambiaría.
+Cómo leerla: el alza de los precios de comprador y la caída del ingreso de los factores de Estados Unidos cuestan juntas 0,157% del consumo base. El ingreso arancelario, devuelto como suma fija a los residentes de Estados Unidos, agrega 0,195%, de modo que la VE neta es pequeña y positiva (+0,038%). No es una ganancia de términos de intercambio. Con abastecimiento fijo, los productores chinos no bajan sus precios: los salarios de Estados Unidos caen alrededor de 0,14% respecto a los salarios chinos, y los términos de intercambio de Estados Unidos (valores unitarios de exportación sobre los de importación, antes de aranceles) empeoran alrededor de 0,04%. La mejora del consumo de 6 427 millones de USD acompaña cambios de -7 096 en inversión y -467 en compras de residentes en el exterior, valorados a precios base. La VE valora solo el consumo: la asignación entre usos finales cambia. Un solucionador independiente reproduce el resultado y comprueba el balance mundial de recursos; vea [la validación](tariff_validation.md). La descomposición de la VE es una atribución entre equilibrios, no canales causales separados. El resultado es además unilateral: China no toma represalias aquí, y una respuesta lo cambiaría.
 <!-- /first-brief:headline_reading -->
 
 ## 4. Un experimento: que las empresas cambien de proveedor
@@ -77,12 +78,11 @@ Cómo leerla: el alza de los precios de comprador y la caída del ingreso de los
 python -m puremacro.examples.first_brief_tariffs --experiment sigma=2 --lang es --output first_brief_sigma2
 ```
 
-`sigma` es la elasticidad de sustitución entre los orígenes de los insumos
-intermedios. El resultado principal usa `sigma=0` (Leontief: cada industria
-mantiene fijas sus proporciones de abastecimiento); con `sigma=2` los
-compradores de insumos intermedios de todos los países pueden cambiar de
-origen cuando cambian los precios relativos. Las canastas de origen del uso final no cambian en ninguna de las
-dos ejecuciones. La tabla compara ambas:
+`sigma` es la elasticidad de sustitución entre todos los insumos intermedios
+país-sector. El resultado principal usa `sigma=0` (Leontief); con `sigma=2`
+los compradores de todos los países pueden cambiar tanto países proveedores
+como sectores de insumos. No se restringe a orígenes dentro del mismo sector.
+Las canastas finales siguen fijas. La tabla compara ambas variantes:
 
 <!-- first-brief:experiment -->
 | Medida | sigma = 0 (principal) | sigma = 2 |
@@ -93,7 +93,7 @@ dos ejecuciones. La tabla compara ambas:
 | Variación equivalente (millones de USD) | 6 427 | 23 498 |
 | Variación equivalente (% del consumo base) | 0,0383 | 0,1401 |
 
-sigma es la elasticidad de sustitución entre orígenes de los insumos intermedios (0 = Leontief, abastecimiento fijo); las canastas de origen del uso final no cambian.
+sigma es la elasticidad de sustitución entre todos los insumos intermedios país-sector (0 = Leontief, abastecimiento fijo); las canastas de origen del uso final no cambian.
 <!-- /first-brief:experiment -->
 
 <!-- first-brief:experiment_reading -->
