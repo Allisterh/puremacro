@@ -10,6 +10,9 @@ Bellman calculations match equations, prices and policies on two grids.
 This is not yet a replication of published calibration moments. See the
 [research reliability plan](research_reliability.md).
 
+For illustrative comparative statics on this validated model, see the
+[sovereign-risk policy brief](brief_sovereign_risk.md).
+
 Long-term debt uses a smoothed debt choice and needs a separate reference.
 `dq_db` differentiates the fitted price interpolant, not the entire equilibrium.
 Monotonicity is optionally imposed; the independent reference disables it.

@@ -69,6 +69,37 @@ Development version after 6.0.1; not a published distribution.
   floating-point data allow only the documented cross-platform rounding bound.
 - `check_arellano_grids.paired_comparison` accepts a `tolerances` mapping;
   its default is unchanged.
+### Added
+
+- A bilingual sovereign-risk policy brief,
+  [`docs/brief_sovereign_risk.md`](docs/brief_sovereign_risk.md) (Spanish:
+  `docs/es/brief_sovereign_risk.md`). It shows how the market-reentry
+  probability, income volatility and income persistence move average debt,
+  spreads, default frequency and the value of market access in the validated
+  short-term Arellano model. These are illustrative comparative statics of the
+  public calibration, not a claim about any country. Every number is shown with
+  its 95% interval across 16 seeds and its paired 3,201 -> 6,401 grid change.
+  The numbers come from a frozen converged sweep,
+  `tests/fixtures/sovereign_brief/sweep.json`.
+- `puremacro.sovereign.ergodic_moments(result, *, periods=500_000,
+  seeds=range(1979, 1995), burn=1_000)`: raw ergodic debt (% of mean quarterly
+  income), mean spread,
+  annual default-entry frequency and spread SD, per seed and with 95%
+  t-intervals. It reproduces `SovereignDefaultResult.simulate` draw for draw
+  and runs 16 x 500,000 quarters in seconds. Continuing exclusion is not counted
+  as default.
+- `puremacro.sovereign.value_of_market_access(result)`: the
+  consumption-equivalent value (in %) of market access at zero debt, compared
+  with permanent autarky without a default cost.
+- Example `python -m puremacro.examples.first_brief_sovereign`:
+  `--scenario theta=0.15` (one scenario on the converged 6,401 x 641 grid),
+  `--sweep --coarse` (all seven scenarios at 801 x 161 in minutes, with a
+  coarse-grid caveat), `--output DIR`, `--lang en|es`, `--grid`, `--periods`,
+  `--n-seeds`, `--from-record PATH`, and `--freeze PATH` for maintainers.
+
+- Sovereign brief outputs use explicit UTF-8 and portable resource diagnostics.
+  Custom scenarios appear in figures, and effect directions compare numerical
+  values while treating indistinguishable displayed values as flat.
 
 ## 6.0.1 (2026-10-29)
 
