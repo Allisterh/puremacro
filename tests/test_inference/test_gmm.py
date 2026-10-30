@@ -252,3 +252,31 @@ def test_package_attribute_is_the_function():
 
     assert inf.gmm is f
     assert "gmm" in inf.__all__ and "GMMFitResult" in inf.__all__
+
+
+@pytest.mark.parametrize("scale", [1e-9, 1e-6, 1.0, 1e6])
+@pytest.mark.parametrize("weighting", ["identity", "two_step", "iterated"])
+def test_common_moment_units_do_not_change_the_estimate(scale, weighting):
+    data = np.array([1.0, 3.0])
+    result = gmm(lambda th, d: scale * (d - th[0])[:, None], [0.0], data,
+                 weighting=weighting, hac_lags=0)
+    assert result.converged
+    np.testing.assert_allclose(result.coefs, [2.0], rtol=0, atol=1e-8)
+    np.testing.assert_allclose(result.se, [np.sqrt(0.5)], rtol=1e-7)
+
+
+@pytest.mark.parametrize("analytic", [False, True])
+def test_proportional_jacobian_columns_are_unidentified(analytic):
+    rng = np.random.default_rng(19)
+    y = rng.normal(2.0, 1.0, 100)
+    z = rng.normal(size=(100, 3)) + [1.0, 2.0, 3.0]
+
+    def moments(th, data):
+        return data[1] * (data[0] - th[0] - 0.1 * th[1])[:, None]
+
+    def jacobian(th, data):
+        return -data[1].mean(axis=0)[:, None] * np.array([[1.0, 0.1]])
+
+    with pytest.raises(ValueError, match="not identified|rank deficient"):
+        gmm(moments, [0.0, 0.0], (y, z), weighting="identity", hac_lags=0,
+            jacobian=jacobian if analytic else None)

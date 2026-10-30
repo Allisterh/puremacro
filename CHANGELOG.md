@@ -19,6 +19,8 @@ Development version after 6.0.1; not a published distribution.
   Jacobians, sandwich standard errors, Hansen J and Wald tests. Returns
   `GMMFitResult`. Linear IV estimates, standard errors and J match
   linearmodels `IV2SLS`/`IVGMM` and `inference.hansen_j` to 1e-8.
+  Optimizer stopping is invariant to common changes of moment units, and a
+  rank check rejects unidentified parameter combinations before inference.
 
 ## 6.0.1 (2026-10-29)
 
