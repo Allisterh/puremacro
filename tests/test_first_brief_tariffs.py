@@ -482,3 +482,21 @@ def test_pages_show_frozen_record(frozen, lang):
     for phrase in expected:
         assert phrase in flat, phrase
     assert "relative to the rest of the world" not in flat and "respecto al resto del mundo" not in flat
+
+
+def test_load_average_is_none_without_getloadavg(monkeypatch):
+    import puremacro.examples.first_brief_tariffs as brief
+
+    monkeypatch.delattr(brief.os, "getloadavg", raising=False)
+    assert brief._load_average() is None
+
+
+def test_rerun_without_experiment_removes_obsolete_experiment_outputs(solved, tmp_path):
+    households = fb.household_incidence(solved, fb.synthetic_groups(solved.icio, 'USA'))
+    for suffix in ('md', 'csv', 'tex'):
+        (tmp_path / f'experiment.{suffix}').write_text('old experiment', encoding='utf-8')
+    (tmp_path / 'analyst_notes.md').write_text('keep me', encoding='utf-8')
+    manifest = fb.write_outputs(solved, households, tmp_path)
+    assert manifest['experiment'] is None
+    assert not list(tmp_path.glob('experiment.*'))
+    assert (tmp_path / 'analyst_notes.md').read_text(encoding='utf-8') == 'keep me'

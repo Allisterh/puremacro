@@ -135,6 +135,8 @@ las transferencias se reembolsa de dos maneras, lado a lado: en proporción al
 gasto base (para estos grupos coincide con la VE nacional) y como un monto igual por hogar (que
 favorece a quienes gastan menos).
 
+Normalice explícitamente las participaciones redondeadas dentro de cada fila antes de guardar el CSV; la comprobación exige que cada suma difiera de uno en menos de `1e-6`.
+
 Para usar sus propios grupos, escriba un CSV con las columnas `group`,
 `population_weight`, `annual_spending` y una columna por sección CIIU de `A` a
 `T` con proporciones de gasto (cada una mayor o igual a 0 y cada fila sumando

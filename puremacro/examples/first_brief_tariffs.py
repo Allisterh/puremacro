@@ -764,6 +764,10 @@ def _figure(record: dict[str, Any], lang: str, path: Path) -> None:
     right.set_xlabel(t["axis_pct_spend"])
     right.set_title(f"{t['panel_groups']}\n" + textwrap.fill(_label(hh, lang), 48), fontsize=9)
     right.legend(fontsize=8, loc="best")
+    if lang == "es":
+        from matplotlib.ticker import FuncFormatter
+        for axis in (left, right):
+            axis.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: f"{x:g}".replace(".", ",")))
     fig.suptitle(_title(record, lang), fontsize=11)
     fig.tight_layout()
     fig.savefig(path, metadata={"Software": None})
@@ -774,9 +778,12 @@ def _sha256(path: Path) -> str:
 
 
 def _load_average() -> list[float] | None:
+    getloadavg = getattr(os, "getloadavg", None)  # not available on Windows
+    if getloadavg is None:
+        return None
     try:
-        return [round(x, 2) for x in os.getloadavg()]
-    except (AttributeError, OSError):  # not available on Windows
+        return [round(x, 2) for x in getloadavg()]
+    except OSError:
         return None
 
 
@@ -818,6 +825,11 @@ def write_outputs(sol: BriefSolution, households: pd.DataFrame, output: str | Pa
         write("experiment.md", page_block(record, "experiment", lang))
         write("experiment.csv", exp.to_csv())
         write("experiment.tex", f"% {t['exp_note']}\n" + df_to_latex(exp, digits=4))
+    else:
+        # These are generated artifacts owned by this example. A new baseline
+        # run must not leave an old experiment beside its current manifest.
+        for suffix in ("md", "csv", "tex"):
+            (output / f"experiment.{suffix}").unlink(missing_ok=True)
     _figure(record, lang, output / "first_brief.png")
     files.append("first_brief.png")
     write("headline.json", json.dumps(record, indent=2, ensure_ascii=False))

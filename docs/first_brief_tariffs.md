@@ -128,6 +128,8 @@ this engine. The change in transfers is rebated two ways, side by side:
 in proportion to baseline spending (for these groups this matches the national EV) and as an
 equal amount per household (which favours low spenders).
 
+Rounded survey shares should be normalized explicitly within each row before saving the CSV; the input check requires a row sum within `1e-6` of one.
+
 To use your own groups, write a CSV with the columns `group`,
 `population_weight`, `annual_spending` and one column per ISIC section `A` to
 `T` holding budget shares (each at least 0, each row summing to 1), and no

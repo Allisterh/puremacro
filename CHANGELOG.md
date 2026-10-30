@@ -25,6 +25,9 @@ Development version after 6.0.1; not a published distribution.
   brief" shows the frozen result, which a test re-renders from the fixture.
   Credit the table as OECD (2023), OECD Inter-Country Input-Output Tables.
 
+- Tariff-brief resource diagnostics work on Windows; reruns remove obsolete
+  generated experiment tables and Spanish figures use decimal commas.
+
 ## 6.0.1 (2026-10-29)
 
 **Reliability release: corrected sovereign timing and model fidelity, a
