@@ -19,6 +19,8 @@ Development version after 6.0.1; not a published distribution.
   Jacobians, sandwich standard errors, Hansen J and Wald tests. Returns
   `GMMFitResult`. Linear IV estimates, standard errors and J match
   linearmodels `IV2SLS`/`IVGMM` and `inference.hansen_j` to 1e-8.
+  Optimizer stopping is invariant to common changes of moment units, and a
+  rank check rejects unidentified parameter combinations before inference.
 - Added `puremacro.asset_pricing` (macro-finance): `to_returns`,
   `excess_returns`, `compound` and annualization helpers; `risk_summary`
   (Sharpe ratio with a Lo 2002 HAC standard error, Sortino, moments,

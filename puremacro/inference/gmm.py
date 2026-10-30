@@ -14,7 +14,8 @@ Conventions
   bandwidth ``floor(4 (T/100)^(2/9))``; ``hac_lags=0`` is the iid
   (heteroskedasticity-robust) case.
 * Estimation minimizes ``gbar' W gbar`` with :func:`scipy.optimize.least_squares`
-  on ``chol(W)' gbar``.
+  on ``chol(W)' gbar``. A fixed common residual scale per optimization makes
+  the stopping tolerances insensitive to common changes of moment units.
 * Covariance: ``B G' W S(theta_hat) W G B / T`` with ``B = (G' W G)^-1``,
   ``W`` the last weight used and ``G`` the Jacobian of the moment means at
   ``theta_hat``. This is the efficient form ``(G' S^-1 G)^-1 / T`` when
@@ -230,9 +231,16 @@ def gmm(
         except np.linalg.LinAlgError:
             raise ValueError("gmm: weighting matrix is not positive definite") from None
         Lt = L.T
+        # A common scalar leaves the minimizer and relative moment weights
+        # unchanged. Without it, a change of units can make the absolute
+        # gradient tolerance accept an arbitrary starting value immediately.
+        scale = max(float(np.max(np.abs(Lt @ gbar(start)))),
+                    float(np.max(np.abs(Lt @ G_of(start)))))
+        if scale == 0.0:
+            scale = 1.0
         sol = optimize.least_squares(
-            lambda th: Lt @ gbar(th), start,
-            jac=lambda th: Lt @ G_of(th),
+            lambda th: (Lt @ gbar(th)) / scale, start,
+            jac=lambda th: (Lt @ G_of(th)) / scale,
             method="trf", xtol=tol, ftol=tol, gtol=tol, max_nfev=2000 * max(p, 1),
         )
         return np.asarray(sol.x, dtype=float), bool(sol.success)
@@ -273,6 +281,21 @@ def gmm(
     S = _long_run_cov(g_hat, lags)
     G = G_of(theta)
     Wsym = 0.5 * (W + W.T)
+    # Check the Jacobian itself before squaring its condition number in G'WG.
+    # An invertible floating-point normal matrix does not establish local
+    # identification. Column normalization avoids rejecting a parameter just
+    # because it is expressed in different units. Finite-difference scores
+    # need a tolerance reflecting their O(eps**(2/3)) numerical resolution.
+    weighted_G = np.linalg.cholesky(Wsym).T @ G
+    column_scale = np.max(np.abs(weighted_G), axis=0)
+    if np.any(column_scale == 0.0):
+        raise ValueError("gmm: parameters not identified (rank deficient Jacobian)")
+    singular_values = np.linalg.svd(weighted_G / column_scale, compute_uv=False)
+    resolution = (np.finfo(float).eps if jacobian is not None
+                  else np.finfo(float).eps ** (2.0 / 3.0))
+    rank_tol = max(q, p) * resolution * singular_values[0]
+    if singular_values[-1] <= rank_tol:
+        raise ValueError("gmm: parameters not identified (rank deficient Jacobian)")
     B = _sym_inv(G.T @ Wsym @ G, "G' W G (parameters not identified)")
     meat = G.T @ Wsym @ S @ Wsym @ G
     cov = B @ meat @ B / T
