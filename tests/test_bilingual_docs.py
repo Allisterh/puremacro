@@ -113,6 +113,7 @@ _USER_DOCS = [
     "smc_inference.md",
     "hank_ssj_and_aggregate_risk.md",
     "sovereign_default.md",
+    "sovereign_fiscal_rules.md",
     "distributional_lp.md",
     "network_spatial_climate_iam.md",
     # Macro-finance: returns, risk and asset-pricing tests.

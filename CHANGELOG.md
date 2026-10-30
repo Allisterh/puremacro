@@ -40,6 +40,35 @@ Development version after 6.0.1; not a published distribution.
   `kenfrench.factors`, not redistributable). A network test reproduces the
   Fama and French (2015) GRS of the three-factor model on the 25 portfolios
   (3.57 against the published 3.62).
+### Added
+
+- `puremacro.sovereign.solve_fiscal_sovereign_default`: a fiscal block on the
+  short-term Arellano solver. A fixed tax share `tau` funds public spending
+  `g = tau*y - b + q(b', y) b'`, valued as `psi * v(g)` next to private
+  consumption `(1 - tau) y`. `FiscalSovereignResult` adds spending,
+  primary-balance and debt-to-output policies, private consumption, and a
+  `simulate()` built on a vectorized path engine with common random numbers.
+  The certified monotone search is the default. With `tau=1` and private
+  consumption off the solver is bit-identical to `solve_sovereign_default`.
+  `tau` and `psi` have no defaults; `tau=0.2, psi=1` is an illustrative
+  calibration, not fitted to any target. Guide:
+  [fiscal block](docs/sovereign_fiscal_rules.md).
+- `tools/reference_validation/check_fiscal_grids.py`: a paired-seed grid
+  ladder for the illustrative fiscal calibration, frozen in
+  `tests/fixtures/sovereign_fiscal/fiscal_grid_convergence.json`.
+
+### Internal
+
+- `solve_sovereign_default` now calls a private Bellman core parameterized by
+  resources, a choice utility and an income-only flow. Results are
+  bit-identical to 6.0.1 (pinned against a verbatim copy of the 6.0.1 solver,
+  dense and monotone, short- and long-term debt).
+- Fiscal grid caches now include the effective calibration and policy-search
+  settings in both solution and simulation identities. The 6.0.1 parity harness
+  independently pins the legacy simulation algorithm on each platform; archived
+  floating-point data allow only the documented cross-platform rounding bound.
+- `check_arellano_grids.paired_comparison` accepts a `tolerances` mapping;
+  its default is unchanged.
 
 ## 6.0.1 (2026-10-29)
 

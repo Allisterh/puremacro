@@ -84,6 +84,9 @@ llamada con `policy_search="monotone"` para la malla convergida.
 La columna `default` incluye entrada y continuación de la exclusión; su media
 no es una frecuencia de nuevos impagos. El estudio cuenta las entradas aparte.
 
+Una versión del modelo a corto plazo con gasto público, y políticas de gasto, saldo
+primario y deuda sobre producto, está en la [guía del bloque fiscal](sovereign_fiscal_rules.md).
+
 ## Experimentos de reestructuración
 
 Una quita cambia el estado de deuda. `maturity_extension` es un **aumento fraccional

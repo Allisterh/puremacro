@@ -83,6 +83,9 @@ that guide gives the `policy_search="monotone"` call for the converged grid.
 The path's `default` flag includes entry and continuing exclusion; its mean is
 not a default-entry frequency. The validation study counts entries separately.
 
+A government-spending version of the short-term model, with spending, primary-balance
+and debt-to-output policies, is in the [fiscal block guide](sovereign_fiscal_rules.md).
+
 ## Restructuring experiments
 
 A haircut changes the debt state. `maturity_extension` is a **fractional duration

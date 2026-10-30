@@ -12,7 +12,7 @@ Implements:
 """
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping, NamedTuple
 
 import numpy as np
 from scipy.stats import norm
@@ -112,6 +112,297 @@ def _compute_dq_db_dualarray(q: np.ndarray, b_grid: np.ndarray) -> np.ndarray:
     d[0] = np.where(delta[0] <= 0.0, delta[0], 0.0)
     d[-1] = np.where(delta[-1] <= 0.0, delta[-1], 0.0)
     return np.minimum(d, 0.0)
+
+
+def _crra_utility(gamma: float) -> Callable[[np.ndarray], np.ndarray]:
+    """CRRA utility with a linear barrier for consumption at or below 1e-6."""
+    def u_func(c_arr: np.ndarray) -> np.ndarray:
+        c_safe = np.maximum(c_arr, 1e-6)
+        if abs(gamma - 1.0) < 1e-4:
+            val = np.log(c_safe)
+        else:
+            val = (c_safe ** (1.0 - gamma) - 1.0) / (1.0 - gamma)
+        return np.where(c_arr <= 1e-6, -1e12 + 1e6 * c_arr, val)
+
+    return u_func
+
+
+def _make_debt_grid(b_min: float, b_max: float, n_b: int) -> tuple[np.ndarray, int]:
+    """Validated debt grid with an exact zero node; returns ``(b_grid, zero_idx)``."""
+    if n_b < 2 or b_min >= b_max or not b_min <= 0.0 <= b_max:
+        raise ValueError("The debt grid must be increasing, have at least two points and include zero")
+    if b_min < 0.0 < b_max and n_b < 3:
+        raise ValueError("n_b must be >= 3 to represent zero debt and both saving/borrowing bounds")
+    b_grid = np.linspace(b_min, b_max, n_b)
+    if b_min < 0.0 < b_max:
+        # Reentry must be the same state in Bellman iteration and simulation.
+        # Preserve endpoints and shape instead of snapping to a nonzero debt.
+        b_grid[1 + int(np.argmin(np.abs(b_grid[1:-1])))] = 0.0
+    zero_idx = int(np.argmin(np.abs(b_grid)))
+    return b_grid, zero_idx
+
+
+class _CoreSolution(NamedTuple):
+    """Converged objects of the Bellman and bond-price fixed point."""
+
+    v_rep: np.ndarray
+    v_def: np.ndarray
+    v_exp: np.ndarray
+    q: np.ndarray
+    p_def: np.ndarray
+    m_opt: np.ndarray
+    residual: float
+    converged: bool
+    iterations: int
+    certification_gap: float | None
+    exhaustive_residual: float | None
+    q_rf: float
+
+
+def _solve_bellman(
+    *,
+    b_grid: np.ndarray,
+    p_trans: np.ndarray,
+    resources: np.ndarray,
+    resources_default: np.ndarray,
+    choice_utility: Callable[[np.ndarray], np.ndarray],
+    flow_repay: np.ndarray | None,
+    flow_default: np.ndarray | None,
+    beta: float,
+    r_star: float,
+    delta: float,
+    kappa: float,
+    sigma_eps: float,
+    theta: float,
+    tol: float,
+    max_iter: int,
+    damping: float,
+    recovery_rate: float,
+    howard_steps: int,
+    enforce_monotonicity: bool,
+    policy_search: str,
+) -> _CoreSolution:
+    """Solve the sovereign Bellman equations and the bond-price schedule.
+
+    The government chooses debt to maximise ``choice_utility(c) + beta * EV``
+    with ``c = resources - service * b + q * (b' - retention * b)``; the
+    income-only flows ``flow_repay`` / ``flow_default`` (``(n_y,)`` or
+    ``None``) are added to the repayment and default values but do not depend
+    on the choice. ``None`` flows leave every floating-point operation as in
+    the original short-term/long-term solver.
+    """
+    n_b = b_grid.shape[0]
+    n_y = resources.shape[0]
+    monotone = policy_search == "monotone"
+    u_func = choice_utility
+
+    def with_flow(x: np.ndarray) -> np.ndarray:
+        # Exact no-op when there is no flow term.
+        return x if flow_repay is None else x + flow_repay[None, :]
+
+    u_def = u_func(resources_default)
+    if flow_default is not None:
+        u_def = u_def + flow_default
+    v_def = u_def / (1.0 - beta)
+
+    # Risk-free bond price bound: q_rf = (delta + (1-delta)*kappa) / (r_star + delta)
+    q_rf = (delta + (1.0 - delta) * kappa) / (r_star + delta)
+    q = np.full((n_b, n_y), q_rf, dtype=np.float64)
+
+    # Initial repayment value
+    c_init = np.maximum(1e-4, resources[None, :] - (delta + (1.0 - delta) * kappa) * b_grid[:, None])
+    v_rep = with_flow(u_func(c_init)) / (1.0 - beta)
+
+    # Grid broadcast tensors for vectorized policy search
+    # b_cur: (n_b, 1, 1), b_next: (1, n_b, 1), y_cur: (1, 1, n_y)
+    b_cur = b_grid[:, None, None]
+    b_next = b_grid[None, :, None]
+    y_cur = resources[None, None, :]
+
+    converged = False
+    residual = 1.0
+    iteration = 0
+
+    m_opt = np.zeros((n_b, n_y), dtype=int)
+    v_rep_new = np.zeros_like(v_rep)
+    v_def_new = np.zeros_like(v_def)
+    p_def = np.zeros((n_b, n_y), dtype=np.float64)
+    v_exp = np.zeros((n_b, n_y), dtype=np.float64)
+
+    service_coeff = delta + (1.0 - delta) * kappa
+    retention_coeff = 1.0 - delta
+
+    # Vectorized policy search with smooth choice temperature for long-term debt
+    tau_b = min(0.005, max(1e-4, sigma_eps / 2.0))
+
+    for it in range(max_iter):
+        iteration = it + 1
+
+        # sigma_eps=0 recovers the original deterministic default decision.
+        if sigma_eps == 0.0:
+            p_def = (v_def[None, :] > v_rep).astype(float)
+            v_exp = np.maximum(v_rep, v_def[None, :])
+        else:
+            diff = np.clip((v_rep - v_def[None, :]) / sigma_eps, -60.0, 60.0)
+            p_def = 1.0 / (1.0 + np.exp(diff))
+            v_exp = sigma_eps * np.logaddexp(v_rep / sigma_eps, v_def[None, :] / sigma_eps)
+
+        # Expected continuation value EV = V @ P_trans.T of shape (n_b, n_y)
+        ev = v_exp @ p_trans.T
+
+        if monotone:
+            if min_candidate_consumption(b_grid, resources, q) <= 1e-6:
+                raise ValueError('Candidate consumption reaches the 1e-6 utility barrier, where '
+                                 'utility is not concave; use policy_search="dense"')
+            v_rep_new, m_opt = maximize(b_grid, resources, q, ev, beta, u_func)
+            v_rep_new = with_flow(v_rep_new)
+            c_opt = (resources[None, :] - 1.0 * b_grid[:, None]) + np.take_along_axis(q, m_opt, axis=0) * b_grid[m_opt]
+        else:
+            # Full tensor consumption c: shape (n_b, n_b, n_y)
+            # c(i, m, j) = y_j - service * b_i + q(m, j) * [b_m - retention * b_i]
+            q_next = q[None, :, :]
+            c_tensor = y_cur - service_coeff * b_cur + q_next * (b_next - retention_coeff * b_cur)
+
+            # Bellman objective
+            w_tensor = u_func(c_tensor) + beta * ev[None, :, :]
+            m_opt = np.argmax(w_tensor, axis=1)
+
+        if delta < 0.999:
+            # Long-term debt: smooth choice eliminates grid chattering and secures residual < 1e-7
+            w_max = np.max(w_tensor, axis=1, keepdims=True)
+            exp_w = np.exp(np.clip((w_tensor - w_max) / tau_b, -50.0, 50.0))
+            prob_b = exp_w / np.sum(exp_w, axis=1, keepdims=True)
+            v_rep_new = with_flow(np.sum(prob_b * w_tensor, axis=1))
+            q_tomorrow = np.sum(prob_b * q[None, :, :], axis=1)
+        else:
+            # Short-term debt (Arellano 2008): delta = 1.0, retention = 0.0
+            if not monotone:
+                v_rep_new = with_flow(np.take_along_axis(w_tensor, m_opt[:, None, :], axis=1).squeeze(axis=1))
+                c_opt = np.take_along_axis(c_tensor, m_opt[:, None, :], axis=1).squeeze(axis=1)
+            # Howard policy iteration steps for fast convergence
+            for _ in range(howard_steps):
+                if sigma_eps == 0.0:
+                    v_exp_h = np.maximum(v_rep_new, v_def[None, :])
+                else:
+                    v_exp_h = sigma_eps * np.logaddexp(v_rep_new / sigma_eps, v_def[None, :] / sigma_eps)
+                ev_h = v_exp_h @ p_trans.T
+                ev_opt = np.take_along_axis(ev_h, m_opt, axis=0)
+                v_rep_new = with_flow(u_func(c_opt) + beta * ev_opt)
+            q_tomorrow = np.take_along_axis(q, m_opt, axis=0)
+
+        # Update default value
+        # Re-entry wipes out debt. The first grid point need not be zero
+        # when the government can save (negative debt).
+        v_zero = np.array([np.interp(0.0, b_grid, v_exp[:, j]) for j in range(n_y)])
+        ev0 = v_zero @ p_trans.T
+        v_def_new = u_def + beta * (theta * ev0 + (1.0 - theta) * (v_def @ p_trans.T))
+
+        # Update bond price schedule
+        payoff_tomorrow = (1.0 - p_def) * (service_coeff + retention_coeff * q_tomorrow) + p_def * recovery_rate
+        q_target = (payoff_tomorrow @ p_trans.T) / (1.0 + r_star)
+        q_target = np.clip(q_target, 0.0, q_rf)
+
+        if enforce_monotonicity:
+            q_target = np.minimum.accumulate(q_target, axis=0)
+
+        err_v = max(float(np.max(np.abs(v_rep_new - v_rep))), float(np.max(np.abs(v_def_new - v_def))))
+        err_q = float(np.max(np.abs(q_target - q)))
+        residual = max(err_v, err_q)
+
+        v_rep = v_rep_new
+        v_def = v_def_new
+        q = (1.0 - damping) * q + damping * q_target
+
+        if residual < tol:
+            converged = True
+            break
+
+    # Report default decisions and total value at the returned value functions.
+    if sigma_eps == 0.0:
+        p_def = (v_def[None, :] > v_rep).astype(float)
+        v_exp = np.maximum(v_rep, v_def[None, :])
+    else:
+        p_def = 1.0 / (1.0 + np.exp(np.clip((v_rep-v_def[None, :])/sigma_eps, -60.0, 60.0)))
+        v_exp = sigma_eps * np.logaddexp(v_rep/sigma_eps, v_def[None, :]/sigma_eps)
+
+    certification_gap = exhaustive_residual = None
+    if monotone:
+        # Certify the accelerator against every candidate at the returned prices.
+        ev_final = v_exp @ p_trans.T
+        accelerated, _ = maximize(b_grid, resources, q, ev_final, beta, u_func)
+        exhaustive, _ = exhaustive_maximize(b_grid, resources, q, ev_final, beta, u_func)
+        certification_gap = float(np.max(np.abs(accelerated - exhaustive)))
+        if certification_gap > 1e-11:
+            raise RuntimeError(f"Monotone policy search failed exhaustive certification: gap {certification_gap:.3e}")
+        exhaustive_residual = float(np.max(np.abs(with_flow(exhaustive) - v_rep)))
+
+    return _CoreSolution(
+        v_rep=v_rep, v_def=v_def, v_exp=v_exp, q=q, p_def=p_def, m_opt=m_opt,
+        residual=residual, converged=converged, iterations=iteration,
+        certification_gap=certification_gap, exhaustive_residual=exhaustive_residual, q_rf=q_rf,
+    )
+
+
+def _spread_schedule(q: np.ndarray, delta: float, kappa: float, r_star: float) -> np.ndarray:
+    """Annualized spread ``4 * max(0, service / q - delta - r_star)`` per (b', y)."""
+    service_coeff = delta + (1.0 - delta) * kappa
+    # Sovereign spread over risk-free rate
+    # Yield R(b', y) = service_coeff / q - delta
+    # Quarterly spread = max(0, R - r_star), annualized = 4 * spread
+    q_safe = np.maximum(1e-8, q)
+    yield_quarterly = service_coeff / q_safe - delta
+    return 4.0 * np.maximum(0.0, yield_quarterly - r_star)
+
+
+def _ergodic_spread_statistics(
+    p_def: np.ndarray,
+    m_opt: np.ndarray,
+    spread: np.ndarray,
+    p_trans: np.ndarray,
+    y_grid: np.ndarray,
+    theta: float,
+    zero_idx: int,
+) -> tuple[float, float, str, int]:
+    """Mean spread, spread-income correlation, its status and the observation count.
+
+    One 1,500-period path with seed 42 from zero debt and the middle income
+    node; reentry happens before the current period's decision.
+    """
+    n_y = y_grid.shape[0]
+    sim_rng = np.random.default_rng(42)
+    cur_y = n_y // 2
+    cur_b = zero_idx
+    in_def = False
+    sim_spreads: list[float] = []
+    sim_ys: list[float] = []
+    for _ in range(1500):
+        cur_y = int(sim_rng.choice(n_y, p=p_trans[cur_y]))
+        y_val = float(y_grid[cur_y])
+        if in_def:
+            if sim_rng.random() < theta:
+                in_def = False
+                cur_b = zero_idx
+        # A successful reentry draw gives access now, rather than consuming
+        # another excluded period: V_D = u_D + beta E[theta V(0) + (1-theta)V_D].
+        if not in_def:
+            p_d = float(p_def[cur_b, cur_y])
+            if sim_rng.random() < p_d:
+                in_def = True
+            else:
+                b_next_idx = int(m_opt[cur_b, cur_y])
+                s_val = float(spread[b_next_idx, cur_y])
+                sim_spreads.append(s_val)
+                sim_ys.append(y_val)
+                cur_b = b_next_idx
+
+    spread_mean = float(np.mean(sim_spreads)) if sim_spreads else float("nan")
+    if len(sim_spreads) > 50 and float(np.std(sim_spreads)) > 1e-7 and float(np.std(sim_ys)) > 1e-7:
+        spread_y_corr = float(np.corrcoef(sim_spreads, sim_ys)[0, 1])
+        corr_status = "simulated"
+    else:
+        spread_y_corr = float("nan")
+        corr_status = "undefined_zero_variation" if len(sim_spreads) > 50 else "insufficient_observations"
+    return spread_mean, spread_y_corr, corr_status, len(sim_spreads)
 
 
 def solve_sovereign_default(
@@ -238,158 +529,18 @@ def solve_sovereign_default(
     y_grid, p_trans, stat_dist = _discretize_endowment(n_y, rho_y, sigma_y, m=m_tauchen)
     y_def = _compute_default_penalty(y_grid, penalty_type=y_penalty_type, d0=d0, d1=d1,
                                      mean_y=float(stat_dist @ y_grid))
-    if n_b < 2 or b_min >= b_max or not b_min <= 0.0 <= b_max:
-        raise ValueError("The debt grid must be increasing, have at least two points and include zero")
-    if b_min < 0.0 < b_max and n_b < 3:
-        raise ValueError("n_b must be >= 3 to represent zero debt and both saving/borrowing bounds")
-    b_grid = np.linspace(b_min, b_max, n_b)
-    if b_min < 0.0 < b_max:
-        # Reentry must be the same state in Bellman iteration and simulation.
-        # Preserve endpoints and shape instead of snapping to a nonzero debt.
-        b_grid[1 + int(np.argmin(np.abs(b_grid[1:-1])))] = 0.0
-    zero_idx = int(np.argmin(np.abs(b_grid)))
+    b_grid, zero_idx = _make_debt_grid(b_min, b_max, n_b)
 
-    # CRRA utility function with linear barrier for c <= 1e-6
-    def u_func(c_arr: np.ndarray) -> np.ndarray:
-        c_safe = np.maximum(c_arr, 1e-6)
-        if abs(gamma - 1.0) < 1e-4:
-            val = np.log(c_safe)
-        else:
-            val = (c_safe ** (1.0 - gamma) - 1.0) / (1.0 - gamma)
-        return np.where(c_arr <= 1e-6, -1e12 + 1e6 * c_arr, val)
-
-    u_def = u_func(y_def)
-    v_def = u_def / (1.0 - beta)
-
-    # Risk-free bond price bound: q_rf = (delta + (1-delta)*kappa) / (r_star + delta)
-    q_rf = (delta + (1.0 - delta) * kappa) / (r_star + delta)
-    q = np.full((n_b, n_y), q_rf, dtype=np.float64)
-
-    # Initial repayment value
-    c_init = np.maximum(1e-4, y_grid[None, :] - (delta + (1.0 - delta) * kappa) * b_grid[:, None])
-    v_rep = u_func(c_init) / (1.0 - beta)
-
-    # Grid broadcast tensors for vectorized policy search
-    # b_cur: (n_b, 1, 1), b_next: (1, n_b, 1), y_cur: (1, 1, n_y)
-    b_cur = b_grid[:, None, None]
-    b_next = b_grid[None, :, None]
-    y_cur = y_grid[None, None, :]
-
-    converged = False
-    residual = 1.0
-    iteration = 0
-
-    m_opt = np.zeros((n_b, n_y), dtype=int)
-    v_rep_new = np.zeros_like(v_rep)
-    v_def_new = np.zeros_like(v_def)
-    p_def = np.zeros((n_b, n_y), dtype=np.float64)
-    v_exp = np.zeros((n_b, n_y), dtype=np.float64)
-
-    service_coeff = delta + (1.0 - delta) * kappa
-    retention_coeff = 1.0 - delta
-
-    # Vectorized policy search with smooth choice temperature for long-term debt
-    tau_b = min(0.005, max(1e-4, sigma_eps / 2.0))
-
-    for it in range(max_iter):
-        iteration = it + 1
-
-        # sigma_eps=0 recovers the original deterministic default decision.
-        if sigma_eps == 0.0:
-            p_def = (v_def[None, :] > v_rep).astype(float)
-            v_exp = np.maximum(v_rep, v_def[None, :])
-        else:
-            diff = np.clip((v_rep - v_def[None, :]) / sigma_eps, -60.0, 60.0)
-            p_def = 1.0 / (1.0 + np.exp(diff))
-            v_exp = sigma_eps * np.logaddexp(v_rep / sigma_eps, v_def[None, :] / sigma_eps)
-
-        # Expected continuation value EV = V @ P_trans.T of shape (n_b, n_y)
-        ev = v_exp @ p_trans.T
-
-        if monotone:
-            if min_candidate_consumption(b_grid, y_grid, q) <= 1e-6:
-                raise ValueError('Candidate consumption reaches the 1e-6 utility barrier, where '
-                                 'utility is not concave; use policy_search="dense"')
-            v_rep_new, m_opt = maximize(b_grid, y_grid, q, ev, beta, u_func)
-            c_opt = (y_grid[None, :] - 1.0 * b_grid[:, None]) + np.take_along_axis(q, m_opt, axis=0) * b_grid[m_opt]
-        else:
-            # Full tensor consumption c: shape (n_b, n_b, n_y)
-            # c(i, m, j) = y_j - service * b_i + q(m, j) * [b_m - retention * b_i]
-            q_next = q[None, :, :]
-            c_tensor = y_cur - service_coeff * b_cur + q_next * (b_next - retention_coeff * b_cur)
-
-            # Bellman objective
-            w_tensor = u_func(c_tensor) + beta * ev[None, :, :]
-            m_opt = np.argmax(w_tensor, axis=1)
-
-        if delta < 0.999:
-            # Long-term debt: smooth choice eliminates grid chattering and secures residual < 1e-7
-            w_max = np.max(w_tensor, axis=1, keepdims=True)
-            exp_w = np.exp(np.clip((w_tensor - w_max) / tau_b, -50.0, 50.0))
-            prob_b = exp_w / np.sum(exp_w, axis=1, keepdims=True)
-            v_rep_new = np.sum(prob_b * w_tensor, axis=1)
-            q_tomorrow = np.sum(prob_b * q[None, :, :], axis=1)
-        else:
-            # Short-term debt (Arellano 2008): delta = 1.0, retention = 0.0
-            if not monotone:
-                v_rep_new = np.take_along_axis(w_tensor, m_opt[:, None, :], axis=1).squeeze(axis=1)
-                c_opt = np.take_along_axis(c_tensor, m_opt[:, None, :], axis=1).squeeze(axis=1)
-            # Howard policy iteration steps for fast convergence
-            for _ in range(howard_steps):
-                if sigma_eps == 0.0:
-                    v_exp_h = np.maximum(v_rep_new, v_def[None, :])
-                else:
-                    v_exp_h = sigma_eps * np.logaddexp(v_rep_new / sigma_eps, v_def[None, :] / sigma_eps)
-                ev_h = v_exp_h @ p_trans.T
-                ev_opt = np.take_along_axis(ev_h, m_opt, axis=0)
-                v_rep_new = u_func(c_opt) + beta * ev_opt
-            q_tomorrow = np.take_along_axis(q, m_opt, axis=0)
-
-        # Update default value
-        # Re-entry wipes out debt. The first grid point need not be zero
-        # when the government can save (negative debt).
-        v_zero = np.array([np.interp(0.0, b_grid, v_exp[:, j]) for j in range(n_y)])
-        ev0 = v_zero @ p_trans.T
-        v_def_new = u_def + beta * (theta * ev0 + (1.0 - theta) * (v_def @ p_trans.T))
-
-        # Update bond price schedule
-        payoff_tomorrow = (1.0 - p_def) * (service_coeff + retention_coeff * q_tomorrow) + p_def * recovery_rate
-        q_target = (payoff_tomorrow @ p_trans.T) / (1.0 + r_star)
-        q_target = np.clip(q_target, 0.0, q_rf)
-
-        if enforce_monotonicity:
-            q_target = np.minimum.accumulate(q_target, axis=0)
-
-        err_v = max(float(np.max(np.abs(v_rep_new - v_rep))), float(np.max(np.abs(v_def_new - v_def))))
-        err_q = float(np.max(np.abs(q_target - q)))
-        residual = max(err_v, err_q)
-
-        v_rep = v_rep_new
-        v_def = v_def_new
-        q = (1.0 - damping) * q + damping * q_target
-
-        if residual < tol:
-            converged = True
-            break
-
-    # Report default decisions and total value at the returned value functions.
-    if sigma_eps == 0.0:
-        p_def = (v_def[None, :] > v_rep).astype(float)
-        v_exp = np.maximum(v_rep, v_def[None, :])
-    else:
-        p_def = 1.0 / (1.0 + np.exp(np.clip((v_rep-v_def[None, :])/sigma_eps, -60.0, 60.0)))
-        v_exp = sigma_eps * np.logaddexp(v_rep/sigma_eps, v_def[None, :]/sigma_eps)
-
-    certification_gap = exhaustive_residual = None
-    if monotone:
-        # Certify the accelerator against every candidate at the returned prices.
-        ev_final = v_exp @ p_trans.T
-        accelerated, _ = maximize(b_grid, y_grid, q, ev_final, beta, u_func)
-        exhaustive, _ = exhaustive_maximize(b_grid, y_grid, q, ev_final, beta, u_func)
-        certification_gap = float(np.max(np.abs(accelerated - exhaustive)))
-        if certification_gap > 1e-11:
-            raise RuntimeError(f"Monotone policy search failed exhaustive certification: gap {certification_gap:.3e}")
-        exhaustive_residual = float(np.max(np.abs(exhaustive - v_rep)))
+    core = _solve_bellman(
+        b_grid=b_grid, p_trans=p_trans, resources=y_grid, resources_default=y_def,
+        choice_utility=_crra_utility(gamma), flow_repay=None, flow_default=None,
+        beta=beta, r_star=r_star, delta=delta, kappa=kappa, sigma_eps=sigma_eps, theta=theta,
+        tol=tol, max_iter=max_iter, damping=damping, recovery_rate=recovery_rate,
+        howard_steps=howard_steps, enforce_monotonicity=enforce_monotonicity,
+        policy_search=policy_search,
+    )
+    v_rep, v_def, v_exp, q, p_def, m_opt = core.v_rep, core.v_def, core.v_exp, core.q, core.p_def, core.m_opt
+    residual, converged, iteration = core.residual, core.converged, core.iterations
 
     # Final policy b'(b, y)
     policy_b = b_grid[m_opt]
@@ -397,47 +548,11 @@ def solve_sovereign_default(
     # Exact PCHIP node derivatives dq/db'(b', y)
     dq_db = _compute_dq_db_dualarray(q, b_grid)
 
-    # Sovereign spread over risk-free rate
-    # Yield R(b', y) = service_coeff / q - delta
-    # Quarterly spread = max(0, R - r_star), annualized = 4 * spread
-    q_safe = np.maximum(1e-8, q)
-    yield_quarterly = service_coeff / q_safe - delta
-    spread_annualized = 4.0 * np.maximum(0.0, yield_quarterly - r_star)
+    spread_annualized = _spread_schedule(q, delta, kappa, r_star)
 
     # Ergodic simulation to compute spread_mean and countercyclical correlation
-    sim_rng = np.random.default_rng(42)
-    cur_y = n_y // 2
-    cur_b = zero_idx
-    in_def = False
-    sim_spreads: list[float] = []
-    sim_ys: list[float] = []
-    for _ in range(1500):
-        cur_y = int(sim_rng.choice(n_y, p=p_trans[cur_y]))
-        y_val = float(y_grid[cur_y])
-        if in_def:
-            if sim_rng.random() < theta:
-                in_def = False
-                cur_b = zero_idx
-        # A successful reentry draw gives access now, rather than consuming
-        # another excluded period: V_D = u_D + beta E[theta V(0) + (1-theta)V_D].
-        if not in_def:
-            p_d = float(p_def[cur_b, cur_y])
-            if sim_rng.random() < p_d:
-                in_def = True
-            else:
-                b_next_idx = int(m_opt[cur_b, cur_y])
-                s_val = float(spread_annualized[b_next_idx, cur_y])
-                sim_spreads.append(s_val)
-                sim_ys.append(y_val)
-                cur_b = b_next_idx
-
-    spread_mean = float(np.mean(sim_spreads)) if sim_spreads else float("nan")
-    if len(sim_spreads) > 50 and float(np.std(sim_spreads)) > 1e-7 and float(np.std(sim_ys)) > 1e-7:
-        spread_y_corr = float(np.corrcoef(sim_spreads, sim_ys)[0, 1])
-        corr_status = "simulated"
-    else:
-        spread_y_corr = float("nan")
-        corr_status = "undefined_zero_variation" if len(sim_spreads) > 50 else "insufficient_observations"
+    spread_mean, spread_y_corr, corr_status, spread_observations = _ergodic_spread_statistics(
+        p_def, m_opt, spread_annualized, p_trans, y_grid, theta, zero_idx)
 
     metadata: dict[str, Any] = {
         "theta": theta,
@@ -448,8 +563,8 @@ def solve_sovereign_default(
         "sigma_y": sigma_y,
         "y_penalty_type": y_penalty_type,
         "policy_search": policy_search,
-        "monotone_certification_gap": certification_gap,
-        "exhaustive_bellman_residual": exhaustive_residual,
+        "monotone_certification_gap": core.certification_gap,
+        "exhaustive_bellman_residual": core.exhaustive_residual,
         "d0": d0,
         "d1": d1,
         "m_tauchen": m_tauchen,
@@ -461,8 +576,8 @@ def solve_sovereign_default(
         "max_iter": max_iter,
         "y_default_vec": y_def,
         "stationary_dist": stat_dist,
-        "q_rf": q_rf,
-        "spread_observations": len(sim_spreads),
+        "q_rf": core.q_rf,
+        "spread_observations": spread_observations,
         "spread_y_corr_status": corr_status,
         "simulation_reentry_timing": "before_current_decision",
         "simulation_reset_debt": float(b_grid[zero_idx]),

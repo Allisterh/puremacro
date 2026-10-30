@@ -119,6 +119,9 @@ PAGES = [
     # Macro-finance (English and Spanish, identical code).
     "docs/asset_pricing.md",
     "docs/es/asset_pricing.md",
+    # The sovereign fiscal block (English and Spanish, identical code).
+    "docs/sovereign_fiscal_rules.md",
+    "docs/es/sovereign_fiscal_rules.md",
 ]
 
 _FENCE = re.compile(r"```python\n(.*?)```", re.S)
