@@ -111,3 +111,24 @@ def test_fiscal_guides_tabulate_the_frozen_record(guide, thousands, decimal):
           for name in ("fiscal_6401_321", "fiscal_6401_641")]
     drift = " → ".join(f"{v:.3f}".replace(".", decimal) for v in sd)
     assert drift in text, drift
+
+
+@pytest.mark.parametrize("changed", ["calibration", "search"])
+def test_cached_solution_and_simulation_follow_effective_calibration(tmp_path, monkeypatch, changed):
+    from argparse import Namespace
+    from tools.reference_validation import check_fiscal_grids as grids
+
+    args = Namespace(output=tmp_path, replications=2, periods=2000, burn=100)
+    source_hash = "fixed-solver-source"
+    first = grids.case(31, 7, args, source_hash)
+    assert grids.case(31, 7, args, source_hash) == first
+    if changed == "calibration":
+        monkeypatch.setattr(grids, "ILLUSTRATIVE", {**grids.ILLUSTRATIVE, "tau": 0.3})
+    else:
+        monkeypatch.setattr(grids, "POLICY_SEARCH", "dense")
+    second = grids.case(31, 7, args, source_hash)
+    assert second["design"] != first["design"]
+    manifest = json.loads((tmp_path / "fiscal_31_7_solution.json").read_text(encoding="utf-8"))
+    assert manifest["calibration"] == grids._calibration()
+    assert second["design"]["solution_identity"] == manifest["solution_identity"]
+    assert manifest["scalars"]["tau"] == grids.ILLUSTRATIVE["tau"]

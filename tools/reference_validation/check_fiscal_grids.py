@@ -103,12 +103,17 @@ def _json_metadata(result: FiscalSovereignResult) -> dict:
 
 def case(n_b: int, n_y: int, args, source_hash: str) -> dict:
     name = f"fiscal_{n_b}_{n_y}"
+    calibration = _calibration()
+    identity = dict(schema=1, source_sha256=source_hash, calibration=calibration,
+                    n_b=n_b, n_y=n_y)
+    solution_identity = hashlib.sha256(json.dumps(
+        identity, sort_keys=True, allow_nan=False).encode("utf-8")).hexdigest()
     manifest_path = args.output / (name + "_solution.json")
     arrays_path = args.output / (name + ".npz")
     result = diagnostics = None
     if manifest_path.exists() and arrays_path.exists():
-        manifest = json.loads(manifest_path.read_text())
-        if (manifest["source_sha256"] == source_hash
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if (manifest.get("solution_identity") == solution_identity
                 and manifest["arrays_sha256"] == hashlib.sha256(arrays_path.read_bytes()).hexdigest()):
             result, diagnostics = _load(arrays_path, manifest), manifest["diagnostics"]
             print(name, "reused verified solution", flush=True)
@@ -121,15 +126,17 @@ def case(n_b: int, n_y: int, args, source_hash: str) -> dict:
         scalars = {key: (getattr(result, key).item() if isinstance(getattr(result, key), np.generic)
                          else getattr(result, key)) for key in _SCALARS}
         manifest_path.write_text(json.dumps(dict(
+            solution_identity=solution_identity, calibration=calibration,
             source_sha256=source_hash, arrays_sha256=hashlib.sha256(arrays_path.read_bytes()).hexdigest(),
-            diagnostics=diagnostics, scalars=scalars, metadata=_json_metadata(result)), indent=2) + "\n")
+            diagnostics=diagnostics, scalars=scalars, metadata=_json_metadata(result)), indent=2) + "\n", encoding="utf-8")
     print(name, "solved", diagnostics, flush=True)
     design = dict(seeds=list(range(1979, 1979 + args.replications)), periods=args.periods, burn=args.burn,
                   start="zero debt, income node n_y // 2", source_sha256=source_hash,
+                  solution_identity=solution_identity,
                   arrays_sha256=hashlib.sha256(arrays_path.read_bytes()).hexdigest())
     record_path = args.output / (name + "_simulation.json")
     if record_path.exists():
-        record = json.loads(record_path.read_text())
+        record = json.loads(record_path.read_text(encoding="utf-8"))
         if record["design"] == design:
             print(name, "reused verified simulation", flush=True)
             return record
@@ -144,7 +151,7 @@ def case(n_b: int, n_y: int, args, source_hash: str) -> dict:
     diagnostics = dict(diagnostics, simulate_seconds=time.perf_counter() - start)
     record = dict(name=name, n_b=n_b, n_y=n_y, design=design, diagnostics=diagnostics,
                   simulation=dict(runs=runs, moments=summary))
-    record_path.write_text(json.dumps(record, indent=2, allow_nan=False) + "\n")
+    record_path.write_text(json.dumps(record, indent=2, allow_nan=False) + "\n", encoding="utf-8")
     print(name, {key: round(value["mean"], 5) for key, value in summary.items()}, flush=True)
     return record
 

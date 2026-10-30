@@ -6,8 +6,9 @@ scalar and metadata entry must match exactly, dense and monotone.
 
 The legacy copy builds the *live* ``SovereignDefaultResult``, so comparing
 ``simulate()`` frames between the two solvers cannot catch a change to that
-method. ``test_simulate_matches_frozen_6_0_1_frame`` pins one frame generated
-from a clean c7002ecd (6.0.1) checkout instead.
+method. A separate verbatim simulator therefore provides exact same-platform
+comparisons; the frozen c7002ecd frame additionally checks portable numeric
+agreement, allowing last-bit libm/BLAS differences between environments.
 """
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ import pytest
 from puremacro.sovereign import solve_sovereign_default
 
 from ._legacy_arellano_6_0_1 import solve_sovereign_default as legacy_solve
+from ._legacy_simulate_6_0_1 import legacy_simulate
 
 FROZEN_FRAME = Path(__file__).resolve().parents[1] / "fixtures" / "sovereign_fiscal" / "simulate_6_0_1_defaults_300.json"
 
@@ -84,6 +86,8 @@ def test_solver_bit_identical_to_legacy(name: str, search: str) -> None:
     assert_results_identical(current, legacy)
     pd.testing.assert_frame_equal(current.simulate(periods=300), legacy.simulate(periods=300),
                                   check_exact=True)
+    pd.testing.assert_frame_equal(current.simulate(periods=300), legacy_simulate(current, periods=300),
+                                  check_exact=True)
 
 
 def test_identity_helper_detects_one_ulp_change() -> None:
@@ -102,19 +106,31 @@ def test_identity_helper_detects_one_ulp_change() -> None:
 
 
 def _frozen_frame() -> pd.DataFrame:
-    record = json.loads(FROZEN_FRAME.read_text())
+    record = json.loads(FROZEN_FRAME.read_text(encoding="utf-8"))
     frame = pd.DataFrame({name: record["data"][name] for name in record["columns"]})
     return frame.astype(record["dtypes"])
 
 
 def test_simulate_matches_frozen_6_0_1_frame() -> None:
     frame = solve_sovereign_default(**CALIBRATIONS["defaults"][0]).simulate(periods=300)
-    pd.testing.assert_frame_equal(frame, _frozen_frame(), check_exact=True)
+    expected = _frozen_frame()
+    for column in frame:
+        # Basis points magnify a last-bit price/yield difference by 10,000.
+        # Discrete events and frame structure remain exact; numerical units
+        # are checked far below any economically meaningful change.
+        if frame[column].dtype.kind == "f":
+            atol = 1e-9 if column == "spread_bps" else 1e-13
+            pd.testing.assert_series_equal(frame[column], expected[column],
+                                           check_exact=False, rtol=1e-13, atol=atol)
+        else:
+            pd.testing.assert_series_equal(frame[column], expected[column], check_exact=True)
 
 
-def test_frozen_frame_detects_a_one_row_change() -> None:
-    frame = solve_sovereign_default(**CALIBRATIONS["defaults"][0]).simulate(periods=300)
-    changed = _frozen_frame()
+def test_independent_simulator_detects_a_one_ulp_change() -> None:
+    result = solve_sovereign_default(**CALIBRATIONS["defaults"][0])
+    frame = result.simulate(periods=300)
+    changed = legacy_simulate(result, periods=300)
+    pd.testing.assert_frame_equal(frame, changed, check_exact=True)
     changed.loc[150, "consumption"] = np.nextafter(changed.loc[150, "consumption"], np.inf)
     with pytest.raises(AssertionError):
         pd.testing.assert_frame_equal(frame, changed, check_exact=True)

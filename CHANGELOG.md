@@ -36,6 +36,10 @@ Development version after 6.0.1; not a published distribution.
   resources, a choice utility and an income-only flow. Results are
   bit-identical to 6.0.1 (pinned against a verbatim copy of the 6.0.1 solver,
   dense and monotone, short- and long-term debt).
+- Fiscal grid caches now include the effective calibration and policy-search
+  settings in both solution and simulation identities. The 6.0.1 parity harness
+  independently pins the legacy simulation algorithm on each platform; archived
+  floating-point data allow only the documented cross-platform rounding bound.
 - `check_arellano_grids.paired_comparison` accepts a `tolerances` mapping;
   its default is unchanged.
 
