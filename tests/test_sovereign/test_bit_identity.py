@@ -42,7 +42,6 @@ CALIBRATIONS: dict[str, tuple[dict[str, Any], tuple[str, ...]]] = {
              y_penalty_type="arellano", damping=0.3, howard_steps=0),
         ("dense", "monotone"),
     ),
-    "long_term": (dict(delta=0.2, kappa=0.03, n_b=30, n_y=5), ("dense",)),
 }
 
 CASES = [pytest.param(name, search, id=f"{name}-{search}")
@@ -88,6 +87,17 @@ def test_solver_bit_identical_to_legacy(name: str, search: str) -> None:
                                   check_exact=True)
     pd.testing.assert_frame_equal(current.simulate(periods=300), legacy_simulate(current, periods=300),
                                   check_exact=True)
+
+
+def test_long_term_fixed_point_is_unchanged_but_simulation_uses_its_choice_law():
+    kwargs = dict(delta=.2, kappa=.03, n_b=30, n_y=5)
+    current, legacy = solve_sovereign_default(**kwargs), legacy_solve(**kwargs)
+    for key in ('v_repay', 'v_default', 'v_expected', 'q_bond', 'default_prob', 'policy_b', 'dq_db'):
+        np.testing.assert_array_equal(getattr(current, key), getattr(legacy, key))
+    assert 'debt_choice_probabilities' in current.metadata
+    # The legacy simulator uses only the mode although pricing integrates
+    # over every debt choice. Corrected paths intentionally differ.
+    assert not current.simulate(periods=300).equals(legacy_simulate(legacy, periods=300))
 
 
 def test_identity_helper_detects_one_ulp_change() -> None:

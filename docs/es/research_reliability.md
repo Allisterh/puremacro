@@ -44,7 +44,7 @@ la validez económica del modelo.
 
 | Comparación | Resultado en las mallas probadas | Pendiente |
 |---|---|---|
-| Ecuaciones Arellano de deuda corta y default determinista | Ecuaciones y archivos Fortran/MATLAB contrastados; reingreso e inicio con deuda cero corregidos; mallas de la calibración pública convergidas con 6.401 × 641, y el solucionador público alcanza esa malla con una búsqueda monótona certificada | Diferencias de momentos publicados y deuda larga |
+| Ecuaciones Arellano de deuda corta y default determinista | Ecuaciones y archivos Fortran/MATLAB contrastados; reingreso e inicio con deuda cero corregidos; mallas de la calibración pública convergidas con 6.401 × 641, y el solucionador público alcanza esa malla con una búsqueda monótona certificada | Diferencias de momentos publicados y convergencia económica de extensiones |
 | Bloque de hogares de un activo | Políticas y consumo coinciden con los autores SSJ dentro de 5e-11; jacobianos de rendimientos dentro de 4e-4 | Convergencia económica de mallas, equilibrio publicado y transiciones no lineales |
 
 Las referencias, hashes y procedencia están en
@@ -78,11 +78,13 @@ habría bastado para esa conclusión.
 
 Así se obtiene un resultado revisable desde ecuaciones hasta tablas de política.
 
-Los diagnósticos de colateral y paradas repentinas requieren corrección y una
-referencia independiente: la amplificación incluye un valor de sustitución
-heredado y la rama de restricción holgada prescribe diagnósticos. El residuo de
-la estructura temporal es contable, no una prima de riesgo identificada.
-El cuaderno 73 y la [guía soberana](sovereign_default.md) explican estos límites.
+Las [referencias de extensiones soberanas](sovereign_extensions_validation.md)
+contrastan independientemente el operador suavizado de deuda larga, estados tras
+quitas/vencimientos y políticas del planificador con colateral. Simulación y
+valoración usan la misma distribución de decisiones de deuda. Los diagnósticos
+se miden sobre trayectorias, con amplificación indefinida explícita y sin valores
+sustitutos impuestos. El residuo temporal es un ajuste de capitalización. Son
+contrastes de ecuaciones en mallas pequeñas, no replicaciones de momentos publicados.
 
 ## Después: incidencia sobre hogares y docencia
 

@@ -56,15 +56,22 @@ def _simulate_arrays(result: SovereignDefaultResult, periods: int, seed: int) ->
     default_prob = array("d", np.asarray(result.default_prob, dtype=float).ravel().tolist())
     next_idx = _next_debt_index(result)
     next_flat = array("q", next_idx.ravel().tolist())
+    probabilities = result.metadata.get('debt_choice_probabilities')
+    debt_cdf = None
+    if probabilities is not None:
+        cumulative = np.cumsum(np.asarray(probabilities), axis=1)
+        cumulative /= cumulative[:, -1:, :]
+        debt_cdf = cumulative.transpose(0, 2, 1).reshape(-1, len(result.b_grid)).tolist()
     theta = float(result.metadata.get("theta", 0.282))
     zero_idx = int(np.argmin(np.abs(result.b_grid)))
 
     rng = np.random.default_rng(seed)
-    # At most three draws per quarter (income, reentry, default), consumed in order.
-    u = rng.random(3 * periods).tolist()
+    # Long-term repayment also draws the smoothed debt choice used in pricing.
+    u = rng.random((3 if debt_cdf is None else 4) * periods).tolist()
 
     y_path = array("q", bytes(8 * periods))
     b_path = array("q", bytes(8 * periods))
+    bp_path = array("q", bytes(8 * periods)) if debt_cdf is not None else None
     state = array("b", bytes(periods))
     y_idx, b_idx, excluded, k = n_y // 2, zero_idx, False, 0
     for t in range(periods):
@@ -88,7 +95,13 @@ def _simulate_arrays(result: SovereignDefaultResult, periods: int, seed: int) ->
             continue
         k += 1
         state[t] = _REPAID
-        b_idx = next_flat[flat]
+        if debt_cdf is None:
+            b_idx = next_flat[flat]
+        else:
+            b_idx = bisect_right(debt_cdf[flat], u[k])
+            k += 1
+            assert bp_path is not None
+            bp_path[t] = b_idx
 
     yi = np.frombuffer(y_path, dtype=np.int64)
     bi = np.frombuffer(b_path, dtype=np.int64)
@@ -99,6 +112,10 @@ def _simulate_arrays(result: SovereignDefaultResult, periods: int, seed: int) ->
     b = np.where(code == _EXCLUDED, 0.0, b_grid[bi])
     b_next = np.where(repaid, np.asarray(result.policy_b, dtype=float)[bi, yi], 0.0)
     spread = np.where(repaid, np.asarray(result.spread, dtype=float)[next_idx[bi, yi], yi], np.nan)
+    if bp_path is not None:
+        bpi = np.frombuffer(bp_path, dtype=np.int64)
+        b_next = np.where(repaid, b_grid[bpi], 0.)
+        spread = np.where(repaid, np.asarray(result.spread, dtype=float)[bpi, yi], np.nan)
     return {
         "y": np.asarray(result.y_grid, dtype=float)[yi],
         "default": ~repaid,

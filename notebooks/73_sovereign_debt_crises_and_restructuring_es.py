@@ -49,12 +49,13 @@
 # período. `dq_db` deriva el interpolante de precios ajustado, no todo el equilibrio
 # respecto de un parámetro. La proyección predeterminada impone monotonicidad.
 #
-# El ejemplo de colateral impone $b'\leq\kappa q k'$. Su amplificación es un máximo
-# de comparaciones entre estados e incluye un valor de sustitución si no hay
-# comparaciones válidas. Es un diagnóstico experimental, no una elasticidad de
-# crisis medida. La estructura temporal valora derechos de supervivencia y llama
-# `risk_premium_component` a un residuo; la aditividad no identifica una prima de
-# riesgo económica.
+# La deuda larga usa una política probabilística suavizada cuyo valor es el
+# objetivo ponderado, no un valor inclusivo. Simulación y valoración usan las
+# mismas probabilidades; la política de deuda mostrada es su moda.
+# El colateral impone $b'\leq\kappa q k'$. La amplificación divide caídas medias
+# de consumo en los mismos estados simulados de deuda y capital. Puede ser menor
+# que uno o indefinida. `risk_premium_component` es un ajuste de capitalización
+# discreta de derechos de supervivencia, no una prima económica identificada.
 
 # %% [markdown]
 # ## Intuición
@@ -125,7 +126,7 @@ res_arellano = solve_sovereign_default(
     sigma_eps=0.01,
     n_b=30,
     n_y=9,
-    max_iter=250,
+    max_iter=2000,
 )
 
 q_max_rf = 1.0 / (1.0 + 0.015)
@@ -164,7 +165,7 @@ res_ce = solve_sovereign_default(
     sigma_eps=0.01,
     n_b=30,
     n_y=9,
-    max_iter=250,
+    max_iter=2000,
 )
 
 err_ce_res = float(res_ce.residual)
@@ -176,7 +177,7 @@ med_b_idx = len(res_ce.b_grid) // 2
 spread_lt = float(np.mean(res_ce.spread[med_b_idx, :]) * 10000.0)
 spread_st = float(np.mean(res_arellano.spread[med_b_idx, :]) * 10000.0)
 
-record("Chatterjee-Eyigungor: Bellman residual", err_ce_res, 1e-7, "PASS" if err_ce_res <= 1e-7 else "FAIL")
+record("Long-term quantal operator: residual", err_ce_res, 1e-7, "PASS" if err_ce_res <= 1e-7 else "FAIL")
 record("Long-term: projected interpolant derivative dq/db <= 0", err_dq_db_mono, 0.0, "PASS" if err_dq_db_mono <= 0.0 else "FAIL")
 
 print(f"Long-term example solved in {res_ce.iterations} iterations.")
@@ -186,13 +187,12 @@ print(f"Average spread at median debt: Long-Term = {spread_lt:.1f} bps, Short-Te
 # %% [markdown]
 # ### 3. Restricciones de colateral: diagnósticos experimentales
 #
-# El ejemplo resuelve los problemas de política disponibles con y sin restricción.
-# La amplificación es un máximo entre estados seleccionados, con un valor de
-# sustitución heredado; el caso de restricción holgada incluye diagnósticos
-# prescritos. No es una replicación independiente de Mendoza. La frecuencia de
-# restricción entre puntos de malla y la comparación de promedios no ponderados
-# de deuda y colateral difieren de una frecuencia simulada de crisis y del ahorro
-# precautorio.
+# El planificador ilustrativo resuelve problemas con y sin restricción.
+# Las políticas coinciden con una referencia exhaustiva, con estados vinculantes.
+# La amplificación divide caídas medias de consumo en los mismos estados
+# simulados, sin sustitutos ni límites inferiores impuestos. La fracción vinculante
+# de malla y la frecuencia simulada de crisis son distintas. La capacidad promedia
+# kappa*q*k_next. No es una replicación del modelo competitivo completo de Mendoza.
 
 # %%
 res_mendoza = solve_sudden_stop(
@@ -209,30 +209,30 @@ res_mendoza = solve_sudden_stop(
     max_iter=200,
 )
 
-err_amplification = float(max(0.0, 1.25 - res_mendoza.amplification_ratio))
-err_binding_frac = float(max(0.0, 0.05 - res_mendoza.collateral_binding_fraction))
-
-# Unweighted grid comparison; this is not an ergodic precautionary-saving estimate.
-mean_debt_mendoza = float(np.mean(res_mendoza.policy_b))
-mean_collateral_mendoza = float(0.30 * np.mean(res_mendoza.asset_price_q) * np.mean(res_mendoza.policy_k))
+# Measurements over the post-burn simulation, not averages over the state grid.
+sample_mendoza = res_mendoza.simulate(T=2500, seed=42).iloc[500:]
+mean_debt_mendoza = float(sample_mendoza["b_next"].mean())
+mean_collateral_mendoza = float(sample_mendoza["collateral_capacity"].mean())
 gap_precautionary = float(max(0.0, mean_debt_mendoza - mean_collateral_mendoza))
+err_crisis_frequency = abs(res_mendoza.crisis_probability - float(sample_mendoza["crisis"].mean()))
 
-
+assert res_mendoza.converged
 assert 0.0 <= res_mendoza.collateral_binding_fraction <= 1.0
-record("Collateral example: unweighted grid debt/capacity gap", gap_precautionary, 0.0, "PASS" if gap_precautionary <= 0.0 else "FAIL")
+record("Collateral: simulated debt/capacity gap", gap_precautionary, 1e-8, "PASS" if gap_precautionary <= 1e-8 else "FAIL")
+record("Collateral: reproduced crisis frequency", err_crisis_frequency, 1e-12, "PASS" if err_crisis_frequency <= 1e-12 else "FAIL")
 
 print(f"Experimental collateral example: {res_mendoza.iterations} iterations; converged={res_mendoza.converged}")
-print(f"Experimental selected-state amplification diagnostic: {res_mendoza.amplification_ratio:.4f}")
-print(f"Collateral binding fraction: {res_mendoza.collateral_binding_fraction * 100:.2f}% of state space")
-print(f"Average debt ({mean_debt_mendoza:.4f}) vs Collateral capacity ({mean_collateral_mendoza:.4f})")
+print(f"Weighted consumption-drop ratio: {res_mendoza.amplification_ratio:.4f}; status={res_mendoza.metadata['amplification_status']}")
+print(f"Grid binding: {res_mendoza.collateral_binding_fraction * 100:.2f}%; simulated crises: {res_mendoza.crisis_probability * 100:.2f}%")
+print(f"Average next debt ({mean_debt_mendoza:.4f}) vs average collateral capacity ({mean_collateral_mendoza:.4f})")
 
 # %% [markdown]
 # ### 4. Contabilidad de diferenciales y reestructuración
 #
 # Los componentes del diferencial suman por construcción en este ejemplo. El
 # residuo es contable, no una prima de riesgo estimada independientemente. La
-# reestructuración vuelve a resolver la calibración con deuda y vencimiento
-# modificados. Precios de bonos cercanos a cero pueden producir rendimientos
+# quita sola cambia la deuda heredada; un cambio de vencimiento vuelve a resolver
+# la calibración conservada. Precios de bonos cercanos a cero pueden producir rendimientos
 # extremos: examine el estado de evaluación antes de interpretar el resultado.
 
 # %%
@@ -358,11 +358,10 @@ assert 0.0 <= restruct_user.post_default_prob <= 1.0
 # %% [markdown]
 # ## ¿Qué tan exhaustivo es esto?
 #
-# Es un recorrido exploratorio de la interfaz. La evidencia independiente en
-# mallas iguales cubre las ecuaciones deterministas de corto plazo, no todos los
-# mecanismos de deuda larga, colateral o reestructuración. Consulte
-# `docs/es/sovereign_default.md` y `docs/es/research_reliability.md` para conocer el
-# alcance verificado y el siguiente plan de replicación.
+# Es un recorrido exploratorio. Las referencias independientes contrastan deuda
+# corta y los operadores declarados de deuda larga, colateral y reestructuración.
+# No establecen todos los momentos publicados ni la convergencia económica de
+# las extensiones. Consulte `docs/es/sovereign_extensions_validation.md`.
 #
 # La resolución de la malla forma parte de cualquier resultado de default
 # soberano, no es un detalle. En la malla archivada de la autora, 200 × 21, el

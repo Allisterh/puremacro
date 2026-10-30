@@ -122,20 +122,27 @@ validation of all restructuring economics.
 
 ## Experimental extensions
 
-- **Long-term debt:** the risk-free coupon-bond price is
-  $[\delta+(1-\delta)\kappa]/(r^*+\delta)$. It is not the one-period price.
-  A nonpositive interpolant derivative under imposed monotonicity is not an
-  independent structural dilution test.
-- **Collateral model (`solve_sudden_stop`):** current amplification is a maximum
-  of selected state comparisons, with a legacy 1.35 fallback when no valid ratio
-  exists. The loose-constraint diagnostic branch also prescribes values. These
-  diagnostics require correction and an independent reference before quantitative
-  Mendoza-replication or policy claims. Grid binding fractions are not simulated
-  crisis frequencies.
-- **Term structure (`decompose_spread_term_structure`):** the routine prices
-  survival claims. `risk_premium_component` is a residual accounting quantity
-  after a log-survival loss component; it does not separately identify liquidity
-  or dilution premia. Additivity alone is not economic validation.
+- **Long-term debt:** an independent small-grid fixed point matches values,
+  prices and debt-choice probabilities. This is the existing smoothed quantal
+  policy operator, not a deterministic optimum or published-moment replication.
+  Simulation now draws from the pricing operator's debt-choice probabilities;
+  `policy_b` reports their mode. The risk-free price is
+  $[\delta+(1-\delta)\kappa]/(r^*+\delta)$.
+- **Collateral model (`solve_sudden_stop`):** exhaustive independent policy
+  checks pass for binding and loose constraints. Amplification uses average
+  consumption drops at identical simulated states, without prescribed values;
+  undefined cases return `NaN`. Grid binding and simulated crisis frequencies
+  remain distinct. This illustrative planner is not Mendoza's complete model.
+- **Restructuring:** haircuts reuse the equilibrium, maturity changes preserve
+  calibration, unconverged counterfactuals are rejected, and the recovery path
+  starts at the selected income state. Small-grid post-restructuring states
+  match an independent reference.
+- **Term structure:** survival-claim pricing uses the full debt-choice
+  distribution. The legacy `risk_premium_component` is a discrete-compounding
+  adjustment, not an identified economic risk premium.
+
+See [extension equations and measured diagnostics](sovereign_extensions_validation.md)
+for tolerances, frozen evidence and remaining economic limits.
 
 ## Validation workflow
 
@@ -153,6 +160,7 @@ flowchart TD
 
 Regeneration tools and pinned reference provenance are under
 `tools/reference_validation/` and `tests/fixtures/research_reliability/`.
-Notebook 73 provides an exploratory interface tour. The next milestone is a
-published short-term calibration, empirical-moment comparison, sampling
-uncertainty and grid convergence before extending policy conclusions.
+Notebook 73 provides an exploratory interface tour. The published short-term
+reference and public-calibration grid study are complete; the extension checks
+above are a separate, narrower result. Further quantitative policy claims need
+extension-specific grid convergence and empirical moments.

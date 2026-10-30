@@ -1,14 +1,19 @@
-"""Quantitative Sovereign Default Model with Endogenous Maturity and Taste Shocks.
+"""Sovereign default with fixed maturity parameters and default taste shocks.
 
 Implements:
 1. Arellano (2008) short-term debt sovereign default model (delta = 1.0, kappa = 0.0).
-2. Chatterjee & Eyigungor (2012) / Hatchondo & Martinez (2009) long-term maturing
-   coupon debt model (delta in (0, 1], kappa >= 0).
+2. A long-term maturing coupon-debt extension inspired by Chatterjee & Eyigungor
+   (2012) / Hatchondo & Martinez (2009), with smoothed quantal debt choices.
 3. Extreme-value (Gumbel) taste shocks sigma_eps > 0 for smooth logistic default
    probabilities and differentiable log-sum-exp value functions.
 4. Bond-price schedule derivatives dq(b', y)/db' from a monotone PCHIP
    interpolant (exact node tangents, vectorized).
 5. Optional monotonicity enforcement and unadjusted simulated spread diagnostics.
+
+The long-term repayment value averages objectives under smoothed choice
+weights without an entropy bonus. It is not a deterministic optimal policy or
+the inclusive value of a random-utility debt-choice model. See result metadata
+for its choice probabilities and deterministic-optimality gap.
 """
 from __future__ import annotations
 
@@ -362,6 +367,7 @@ def _ergodic_spread_statistics(
     y_grid: np.ndarray,
     theta: float,
     zero_idx: int,
+    debt_probabilities: np.ndarray | None = None,
 ) -> tuple[float, float, str, int]:
     """Mean spread, spread-income correlation, its status and the observation count.
 
@@ -389,7 +395,8 @@ def _ergodic_spread_statistics(
             if sim_rng.random() < p_d:
                 in_def = True
             else:
-                b_next_idx = int(m_opt[cur_b, cur_y])
+                b_next_idx = (int(m_opt[cur_b, cur_y]) if debt_probabilities is None else
+                              int(sim_rng.choice(len(m_opt), p=debt_probabilities[cur_b, :, cur_y])))
                 s_val = float(spread[b_next_idx, cur_y])
                 sim_spreads.append(s_val)
                 sim_ys.append(y_val)
@@ -550,9 +557,24 @@ def solve_sovereign_default(
 
     spread_annualized = _spread_schedule(q, delta, kappa, r_star)
 
+    debt_probabilities = None
+    deterministic_gap = None
+    if delta < .999:
+        # Pricing integrates over this smoothed policy. Simulating only its
+        # modal debt choice describes a different transition law.
+        service = delta + (1 - delta) * kappa
+        consumption = (y_grid[None, None, :] - service * b_grid[:, None, None]
+                       + q[None, :, :] * (b_grid[None, :, None] - (1 - delta) * b_grid[:, None, None]))
+        objective = _crra_utility(gamma)(consumption) + beta * (v_exp @ p_trans.T)[None, :, :]
+        best = np.max(objective, axis=1, keepdims=True)
+        temperature = min(.005, max(.0001, sigma_eps / 2))
+        weights = np.exp(np.clip((objective - best) / temperature, -50., 50.))
+        debt_probabilities = weights / weights.sum(axis=1, keepdims=True)
+        deterministic_gap = float(np.max(np.abs(best[:, 0, :] - v_rep)))
+
     # Ergodic simulation to compute spread_mean and countercyclical correlation
     spread_mean, spread_y_corr, corr_status, spread_observations = _ergodic_spread_statistics(
-        p_def, m_opt, spread_annualized, p_trans, y_grid, theta, zero_idx)
+        p_def, m_opt, spread_annualized, p_trans, y_grid, theta, zero_idx, debt_probabilities)
 
     metadata: dict[str, Any] = {
         "theta": theta,
@@ -588,6 +610,12 @@ def solve_sovereign_default(
         "spread_annualization": "4 * max(0, quarterly_yield - r_star)",
         "income_normalization": "stationary_mean_one",
     }
+    if debt_probabilities is not None:
+        metadata.update(debt_choice_probabilities=debt_probabilities,
+                        debt_choice_temperature=temperature,
+                        debt_choice_rule='smoothed_quantal_policy',
+                        reported_policy_b='modal_debt_choice',
+                        deterministic_optimality_gap=deterministic_gap)
 
     return SovereignDefaultResult(
         b_grid=b_grid,

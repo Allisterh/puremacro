@@ -13,6 +13,26 @@ but not published; their additions are included in 6.0.1, published on
 
 Development version after 6.0.1; not a published distribution.
 
+- Independently checked the stated long-term sovereign operator, haircut/maturity
+  states and collateral-planner policies on small grids. Long-term simulation,
+  spread diagnostics and survival pricing now use the debt-choice probabilities
+  used by the smoothed pricing operator; `policy_b` remains the modal choice.
+  Short-term values, prices and simulations retain exact 6.0.1 parity. The
+  long-term operator is explicitly documented as a quantal-policy approximation,
+  with its deterministic-optimality gap exposed.
+- Replaced prescribed collateral diagnostics with reproducible simulated
+  measurements. Amplification uses weighted consumption drops at identical
+  debt/capital states; undefined cases return `NaN` with a status, and no 1.35
+  fallback or lower bound remains. Crisis frequency and grid binding are distinct;
+  capacity averages the actual product `kappa*q*k_next`. Infeasible consumption
+  grids are rejected, and final Bellman residuals certify both policy problems.
+- Haircut-only restructuring reuses the original equilibrium; maturity changes
+  preserve its numerical budget and reject nonconvergence. Recovery starts at
+  the selected income state and reports debt-grid rounding. The legacy survival
+  spread `risk_premium_component` is documented as a compounding adjustment,
+  with independent risk-free/constant-hazard checks. Bilingual notebook 73 and
+  guides now use the corrected measurements and state their validation scope.
+
 - Added `puremacro.inference.gmm`, a public generic GMM engine: user moment
   functions, two-step, iterated, identity or user weighting, Bartlett HAC
   long-run covariance (package default bandwidth), analytic or numerical

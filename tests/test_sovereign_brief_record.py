@@ -9,6 +9,7 @@ read it and never re-run the sweep.
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import numpy as np
@@ -174,6 +175,7 @@ _EXAMPLE = "puremacro/examples/first_brief_sovereign.py"
 # the Windows fixes add explicit utf-8 encodings and platform guards.
 # Any further edit must be reviewed the same way and its hash added here.
 _EXAMPLE_HASHES = {
+    "51994374f6df3515d167147b93f6d455c561843edc81d3656489f4157cf1003d",  # resume validation only; solve and measurement are unchanged
     "4823e9efa4b98fd3f1cd309baf1d5f79ebe201b9c918e3f15f0a17b297fd5858",  # frozen (1752c83)
     "819b52aeac1762b1c93d3bd5ad18b7bd85d7de0e01097aa2a172725929b94d58",  # current: portable I/O and corrected presentation; numerical generation unchanged
 }
@@ -183,7 +185,20 @@ _EXAMPLE_HASHES = {
 # short-term solver and simulator bit for bit. The pinned original/new pairs
 # are supported by test_brief_scenarios_bit_identical_to_legacy and the full
 # 6.0.1 parity harness; unknown edits still invalidate the frozen record.
-_EQUIVALENT_LIBRARY_HASHES = {'puremacro/sovereign/arellano.py': ('d434bded913776d47a740ca5e35ce3b7a8e7047d3efbafce89b09d5e5b2655a2', '14bbdff97bd01789fffb1b06736077a1324039019a51804bd1d5ce7d69d6faa4'), 'puremacro/sovereign/_results.py': ('fc97e14a0e10a450f9e2cacf965cffc8f42a1acc5e6d1c18fae9cb61a1cec3db', '71f81ce1fd2d76d41d98105c02679d5c4cd570c5d4546043f03ecefd3c3d7ac3')}
+# The later extension corrections change only long-term debt simulations and
+# collateral diagnostics. Every brief calibration and short-term random path
+# remains bit-identical in the parity tests; measurement parity is also tested.
+_EQUIVALENT_LIBRARY_HASHES = {
+    'puremacro/sovereign/arellano.py': (
+        'd434bded913776d47a740ca5e35ce3b7a8e7047d3efbafce89b09d5e5b2655a2',
+        '0e70f71915c76dcdc93e628e3439592c66a75b5a43b55f6c82c77f631b850345'),
+    'puremacro/sovereign/_results.py': (
+        'fc97e14a0e10a450f9e2cacf965cffc8f42a1acc5e6d1c18fae9cb61a1cec3db',
+        '21e0bd69e131b5bf3171c96ed79bc0ebf2ed38e86f115a8de82cf6491e922a98'),
+    'puremacro/sovereign/measurement.py': (
+        '104c41d31181121ae543d9544c908726435bbaa15a3f605f4b2c071bb2957365',
+        '3a3588d95722c08b8c4392852d5bc41420d20bde29f12e514d876228b38c90a3'),
+}
 
 
 def _provenance_problems(recorded: dict, current: dict) -> list[str]:
@@ -202,6 +217,41 @@ def _provenance_problems(recorded: dict, current: dict) -> list[str]:
 
 def test_record_sources_match_the_current_files(record):
     assert _provenance_problems(record["source_sha256"], brief.source_hashes()) == []
+
+
+@pytest.mark.parametrize("changed", [None, "overrides", "missing_overrides", "baseline"])
+def test_resume_reuses_only_the_same_scenario(record, tmp_path, monkeypatch, changed):
+    saved = deepcopy(record)
+    saved["source_sha256"] = brief.source_hashes()
+    saved["scenarios"] = {"custom": saved["scenarios"]["theta=0.15"]}
+    partial = tmp_path / "partial.json"
+    overrides = {"theta": .15}
+    if changed == "overrides":
+        overrides = {"theta": .50}
+    elif changed == "missing_overrides":
+        del saved["scenarios"]["custom"]["overrides"]
+    elif changed == "baseline":
+        saved["baseline"]["beta"] = .90
+    partial.write_text(json.dumps(saved), encoding="utf-8")
+    calls = []
+    fresh = deepcopy(record["scenarios"]["theta=0.5"]["cases"]["6401x641"])
+
+    def solve(parameters, n_b, n_y):
+        calls.append((parameters, n_b, n_y))
+        return object(), 0.
+
+    monkeypatch.setattr(brief, "solve_scenario", solve)
+    monkeypatch.setattr(brief, "measure_case", lambda *args, **kwargs: fresh)
+    resumed = brief.build_record([(6401, 641)], design=brief.DESIGN, partial=partial,
+                                 scenarios={"custom": overrides}, log=lambda message: None)
+    assert resumed["scenarios"]["custom"]["overrides"] == overrides
+    result = resumed["scenarios"]["custom"]["cases"]["6401x641"]
+    if changed is None:
+        assert not calls
+        assert result == saved["scenarios"]["custom"]["cases"]["6401x641"]
+    else:
+        assert calls == [(overrides, 6401, 641)]
+        assert result == fresh
 
 
 @pytest.mark.parametrize("path", [*_LIBRARY_SOURCES, _EXAMPLE])
