@@ -25,10 +25,10 @@ python -m pip install puremacro
 
 **Status checked 2026-10-29:** **6.0.1** is published on [PyPI](https://pypi.org/project/puremacro/6.0.1/), and `pip install puremacro` installs it. It is the first published version since 5.7.1: the 5.8.0, 5.9.0 and 6.0.0 tags were never published (v6.0.0 failed CI). This `main` branch may contain unreleased work toward 6.1.0; a source tag alone does not establish publication.
 See the [recommended tests and next milestones](research_reliability.md).
-These examples describe the 6.0.0 API; see the [changelog](https://github.com/jalonso1979/puremacro/blob/main/CHANGELOG.md)
+These pages track the 6.1.0 development API; unreleased additions require a source install. see the [changelog](https://github.com/jalonso1979/puremacro/blob/main/CHANGELOG.md)
 for additions and fixes. Match your installed version to the documentation.
 
-New in v6.0.0: [Forward AD & Differentiable Model Protocol](autodiff_and_protocol.md), [Vectorized Tempered SMC](smc_inference.md), [Nonlinear HANK & 2nd-Order Aggregate Risk](hank_ssj_and_aggregate_risk.md), [Quantitative Sovereign Default](sovereign_default.md), [Distributional Local Projections](distributional_lp.md), and [Production Networks, Spatial Climate IAM & PolicyStudio](network_spatial_climate_iam.md).
+Available since 6.0.1 (introduced in the 6.0.0 source tag): [Forward AD & Differentiable Model Protocol](autodiff_and_protocol.md), [Vectorized Tempered SMC](smc_inference.md), [Nonlinear HANK & 2nd-Order Aggregate Risk](hank_ssj_and_aggregate_risk.md), [Quantitative Sovereign Default](sovereign_default.md), [Distributional Local Projections](distributional_lp.md), and [Production Networks, Spatial Climate IAM & PolicyStudio](network_spatial_climate_iam.md).
 
 Also included from previous cycles: [DSGE workflows and method selection](dsge_workflows.md), [nonlinear models](dsge_nonlinear.md), [transitions and announcements](dsge_transitions.md), and [local/global accuracy](dsge_global.md). Review the [experimental inference limits](dependence_bootstrap.md) and [audits of supported solved results](result_audits.md). Users of `STEADY_STATE()` in nonlinear trajectories should review the [correctness advisory](ADVISORY.md) and re-run affected calculations.
 
